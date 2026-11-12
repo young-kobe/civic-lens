@@ -3,7 +3,10 @@
     <nav class="pager" aria-label="@Label">
         <span>@Summary</span>
         <div class="pager-links">
-            <Button Small="true" Href="@NewerHref" OnClick="OnNewer" Disabled="@(!HasNewer)" rel="@(NewerHref is null ? null : "prev")">@NewerText</Button>
+            @if (!ForwardOnly)
+            {
+                <Button Small="true" Href="@NewerHref" OnClick="OnNewer" Disabled="@(!HasNewer)" rel="@(NewerHref is null ? null : "prev")">@NewerText</Button>
+            }
             <Button Small="true" Href="@OlderHref" OnClick="OnOlder" Disabled="@(!HasOlder)" rel="@(OlderHref is null ? null : "next")">@OlderText</Button>
         </div>
     </nav>
@@ -18,6 +21,8 @@
     [Parameter] public EventCallback OnOlder { get; set; }
     [Parameter] public string NewerText { get; set; } = "Newer";
     [Parameter] public string OlderText { get; set; } = "Older";
+    /// <summary>A list whose cursor pages forward only. It shows no back button, so no disabled button promises a way back.</summary>
+    [Parameter] public bool ForwardOnly { get; set; }
 
     private bool HasNewer => NewerHref is not null || OnNewer.HasDelegate;
     private bool HasOlder => OlderHref is not null || OnOlder.HasDelegate;

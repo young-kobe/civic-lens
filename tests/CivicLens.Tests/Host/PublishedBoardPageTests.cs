@@ -237,7 +237,7 @@ public sealed class PublishedBoardPageTests
     private static BoardMember Member(string name, int cast, int breaks, int missed, int held, bool earlierPage = false)
     {
         var official = new OfficialListing(new PublishedOfficialProfile { Id = name.ToLowerInvariant().Replace(' ', '-'), Name = name, Terms = [] }, 0);
-        return new(official, cast, breaks, new MissedVotes(PublishedChamber.House, missed, held, new DateOnly(2025, 1, 3), new DateOnly(2026, 10, 27)),
+        return new(official, cast, breaks, new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Missed = missed, Held = held, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) },
             earlierPage ? PublicationProtocol.OfficialCongressPagePath(official.Profile.Id, 118) : official.PagePath);
     }
 

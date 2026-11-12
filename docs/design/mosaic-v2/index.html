@@ -1,0 +1,120 @@
+<title>Civic Lens Themes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600&family=Newsreader:opsz,wght@6..72,600&display=swap">
+<style>
+/* Layout: one narrow column, a list of page cards, then notes. */
+:root{--bg:#f6f7fb;--fg:#1b2033;--muted:#555d78;--card:#ffffff;--line:#d9dce8;--accent:#2c3f9e;--warn:#8a5a00;--warnbg:#fff3d6;
+--display:"Newsreader",Georgia,serif;--body:"Instrument Sans",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11152a;--fg:#e6e8f2;--muted:#a5abc4;--card:#1a1f38;--line:#2e3555;--accent:#9db0ff;--warn:#ffd27a;--warnbg:#3a2e10;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#11152a;--fg:#e6e8f2;--muted:#a5abc4;--card:#1a1f38;--line:#2e3555;--accent:#9db0ff;--warn:#ffd27a;--warnbg:#3a2e10;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:16px/1.55 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px}
+main{max-width:720px;margin:0 auto;display:grid;gap:28px}
+h1{font:600 2.2rem/1.15 var(--display);margin:0;text-wrap:balance}
+h2{font:600 1.3rem/1.2 var(--display);margin:0 0 10px}
+p{margin:0;max-width:65ch}.muted{color:var(--muted)}
+.pages{display:grid;gap:10px;list-style:none;padding:0;margin:0}
+.pages a{display:grid;gap:2px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--fg);text-decoration:none}
+.pages a:hover,.pages a:focus-visible{border-color:var(--accent);outline:none}
+.pages b{color:var(--accent);font-weight:600}
+.pages span{color:var(--muted);font-size:.93rem}
+ul.notes{margin:0;padding-left:20px;display:grid;gap:6px}
+.ex{display:inline-block;font-size:.75rem;font-weight:600;letter-spacing:.06em;color:var(--warn);background:var(--warnbg);padding:1px 6px;border-radius:4px}
+</style>
+<main>
+<header style="display:grid;gap:10px">
+<p class="muted" style="letter-spacing:.06em;font-size:.8rem;text-transform:uppercase">Design prototype, 6 November 2026</p>
+<h1>Civic Lens redesign prototype</h1>
+<p>Seventeen pages of the new public site, built from real records. Check the look and the reader flow before step 2 code starts. Each page works at phone and desktop width, in light and dark.</p>
+</header>
+<section>
+<h2>Theme exploration</h2>
+<p>Each page has a theme switcher at the right of the prototype bar: Current, Poster, Newsroom and Mosaic. The words and data do not change. Only the look changes. Your choice stays as you move between pages. Start with <a href="home.html">Home</a>, <a href="vote.html">Vote</a> and <a href="official.html">Official</a>. The 5 core pages (home, home after ZIP, official, vote, bill) are fully themed. The other pages take the theme colors and fonts, but some spacing stays as before.</p>
+</section>
+<section>
+<h2>Pages</h2>
+<ul class="pages">
+<li><a href="home.html"><b>Home</b><span>This week in Congress, ZIP entry, issues. Flow gaps 1, 17, 18.</span></a></li>
+<li><a href="home-zip.html"><b>Home after a ZIP entry (02139)</b><span>Your members side by side, and how they voted on the latest roll calls.</span></a></li>
+<li><a href="official.html"><b>Official: Ayanna Pressley</b><span>Question sections, key figures, full record link. Gaps 2, 3, 8.</span></a></li>
+<li><a href="vote.html"><b>Vote: House roll call 308, H.R. 5334</b><span>AI summary slot, result, party split, what happened next, every member. Gaps 4, 10.</span></a></li>
+<li><a href="map.html"><b>Map: how the House voted on roll call 308</b><span>Districts or one tile per seat, filled by vote. Compare color by vote and by party.</span></a></li>
+<li><a href="bill.html"><b>Bill: H.R. 5334</b><span>Status, CRS summary, votes on the bill, glossary popovers. Gaps 5, 13.</span></a></li>
+<li><a href="issue.html"><b>Issue: Firearms</b><span>Counts, your members on the issue, recent records.</span></a></li>
+</ul>
+</section>
+<section>
+<h2>Added in round 2</h2>
+<ul class="notes">
+<li><b>Statements.</b> Official page: "What they said and how they voted", with date, source link and the related vote with the member's cast. Vote page: "Statements linked to this vote", with the line that a linked statement is the record's own words, not a reason Civic Lens gives.</li>
+<li><b>Trust labels.</b> A "Records as of" line on every page. "Status as of" beside the bill status. A vote kind block with glossary popovers on the vote page. A kind label on each vote row in the ZIP result.</li>
+<li><b>States.</b> Each page below has a "Prototype: show a page state" bar. Buttons switch the state, and the address takes #name.</li>
+</ul>
+<ul class="pages" style="margin-top:12px">
+<li><a href="home.html#unknown"><b>ZIP: unknown ZIP</b><span>Home. Says what we found and the next step.</span></a></li>
+<li><a href="home.html#busy"><b>ZIP: busy lookup</b><span>Home. Tells the reader the lookup retries.</span></a></li>
+<li><a href="home.html#failed"><b>ZIP: failed lookup</b><span>Home. Fault on our side, with a next step.</span></a></li>
+<li><a href="home-zip.html#cross"><b>ZIP: crosses a state line</b><span>Home after ZIP. Reader picks a state or keeps both.</span></a></li>
+<li><a href="home-zip.html#dc"><b>ZIP: DC delegate</b><span>Delegate can vote in committee, not on passage. No senators.</span></a></li>
+<li><a href="home-zip.html#territory"><b>ZIP: territory delegate</b><span>Guam example, same explanation.</span></a></li>
+<li><a href="official.html#nostmt"><b>Official: no statements yet</b><span>The real state of Pressley's page today, with next steps.</span></a></li>
+<li><a href="official.html#new"><b>Member: new, no votes yet</b></a></li>
+<li><a href="official.html#vacant"><b>Member: vacant seat</b><span>Uses the approved text "This seat is vacant."</span></a></li>
+<li><a href="official.html#left"><b>Member: left office</b></a></li>
+<li><a href="vote.html#procedural"><b>Vote: procedural kind block</b></a></li>
+<li><a href="vote.html#nolinked"><b>Vote: no linked statements</b></a></li>
+<li><a href="vote.html#corrected"><b>Vote: corrected record notice</b></a></li>
+<li><a href="vote.html#withdrawn"><b>Vote: withdrawn record notice</b></a></li>
+<li><a href="bill.html#corrected"><b>Bill: corrected record notice</b></a></li>
+<li><a href="bill.html#withdrawn"><b>Bill: withdrawn record notice</b></a></li>
+<li><a href="issue.html#empty"><b>Issue: empty sections with a next step</b><span>No bills by your members, none of your members on the issue.</span></a></li>
+</ul>
+</section>
+<section>
+<h2>Added in round 3</h2>
+<p class="muted">Pages for the flow gaps that had no design. Each page works with the header nav, which now links to Executive actions and Compare parties.</p>
+<ul class="pages">
+<li><a href="president.html"><b>President: Donald Trump</b><span>Actions grouped by type with counts, latest first. Gap 7.</span></a></li>
+<li><a href="exec-action.html"><b>Executive action: Executive order 14436</b><span>Type badge and explainer, AI summary slot, links to amended orders, Federal Register source. Gap 6.</span></a></li>
+<li><a href="boards.html"><b>Compare the parties</b><span>Four tabs, split-vote counts with their base, parties-agreed counts by vote kind. Gap 9.</span></a></li>
+<li><a href="search.html"><b>Search</b><span>Results first, bill number pinned, officials first, filters folded. Gaps 11, 12.</span></a></li>
+<li><a href="officials.html"><b>Officials list</b><span>Filters for chamber, state and party, 25 per page. Gap from the 542 cards page.</span></a></li>
+<li><a href="statement.html"><b>Statement</b><span>Quote, date or "Date not stated", source, linked votes.</span></a></li>
+<li><a href="doc-change.html"><b>Document change</b><span>Both versions, a redline excerpt and timing.</span></a></li>
+<li><a href="brief.html"><b>Weekly brief</b><span>Approved AI label, records used.</span></a></li>
+<li><a href="withdrawal.html"><b>Withdrawn record notice</b><span>Why, who decided, what to do next.</span></a></li>
+<li><a href="report.html"><b>Report a problem</b><span>Names the record, works with no JavaScript. Gap 15.</span></a></li>
+</ul>
+<p class="muted" style="margin-top:10px">Real: the President's action counts (605, by type), executive order 14436, the Kelly statement, the four party boards, the search results for "5334" and "Pressley", the officials list (542), and the records used in the brief. EXAMPLE: the AI summaries and wording marked so, the amended-order links, every document change, the brief text, the withdrawal, the linked vote slot, and the "Records as of" time. The live site holds no document change and no weekly brief today (search checked 6 Nov 2026).</p>
+</section>
+<section>
+<h2>Added in round 4: list pages</h2>
+<p class="muted">One list page for each kind of record, for owner approval before code. Each page has the same layout: filters, a count that names what it counts, 25 rows a page, and an empty state. The header nav links to the Votes, Bills, Statements and Executive actions lists. Tabs on each list link to the other lists.</p>
+<ul class="pages">
+<li><a href="votes.html"><b>Votes</b><span>Chamber, kind of vote, issue, bill number and dates. Tally bar on each row. Two pages, so the pager works.</span></a></li>
+<li><a href="votes.html?chamber=senate&amp;kind=Amendment"><b>Votes: filtered</b><span>Senate votes to change the text. The count names the chamber and the kind.</span></a></li>
+<li><a href="votes.html?issue=Firearms"><b>Votes: no match</b><span>The empty state with next steps.</span></a></li>
+<li><a href="bills.html"><b>Bills</b><span>Bill type, status, issue, policy area, sponsor, bill number and dates. Status badge on each row.</span></a></li>
+<li><a href="statements.html"><b>Statements</b><span>Official, issue and dates. Shows "Date not stated" rows last.</span></a></li>
+<li><a href="executive-actions.html"><b>Executive actions</b><span>Type of document and dates. Real rows from the President's page.</span></a></li>
+<li><a href="document-changes.html"><b>Document changes</b><span>Office, issue and dates, with example rows.</span></a></li>
+<li><a href="document-changes.html#live"><b>Document changes: none yet</b><span>The page as the live site is today, with no records.</span></a></li>
+</ul>
+</section>
+<section>
+<h2>What is real and what is EXAMPLE</h2>
+<ul class="notes">
+<li>Real: the vote kinds and casts on the vote rows, the Pressley casts and vote titles in the statement rows, the live finding that Pressley has no published statements, the 542 officials count, and the bill status time (5 Nov 2026, 09:57 UTC).</li>
+<li>Statements: the live site holds statements (for example from Mark Kelly and Alex Padilla, collected 29 to 30 Oct 2026), but none from Pressley, Clark or about H.R. 5334. Every statement slot in this prototype is <span class="ex">EXAMPLE</span>. A real record for format: <a href="https://civic-lens.info/records/ef40598104b8ef018bf6e3521e1b7aeee316cb4eecac665673617bdfac76636f.html">Kelly statement page</a>. The live data often has no statement date, so the slots show "Date not stated. Source seen ..." once.</li>
+<li><span class="ex">EXAMPLE</span>: the "Records as of" time, the new, vacant and former member pages, ZIPs 42223, 20001 and 96910, all correction and withdrawal details, and the popover wording. Notices change only the top of the page. The counts below them stay as in revision 1.</li>
+</ul>
+</section>
+<section>
+<h2>Read these first</h2>
+<ul class="notes">
+<li>Slots marked <span class="ex">EXAMPLE</span> hold sample values, not real data. They include the Clark, Markey and Warren sponsor counts, some issue counts, the "what Yes meant" text, and the "who it affects" summary.</li>
+<li>The ZIP demo knows only 02139.</li>
+<li>Not built yet: gaps 14, 16, 17 and 18.</li>
+<li>AI text always carries its label. Results, counts and dates come from code and the official source.</li>
+</ul>
+</section>
+</main>

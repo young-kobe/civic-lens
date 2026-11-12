@@ -28,6 +28,123 @@ internal static class PublishedEntries
         WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
         """;
 
+    private const string ReadCorrectionBootstrapCandidates = """
+        SELECT r.release_number AS "ReleaseNumber", r.directory_name AS "DirectoryName", r.published_at_utc_ticks AS "PublishedAtUtcTicks",
+               r.record_count AS "RecordCount", candidate."Kind", candidate."RecordId", candidate."RevisionNumber"
+          FROM unnest({0}::integer[]) AS selected(release_number)
+          JOIN publication_releases r ON r.release_number = selected.release_number
+          CROSS JOIN LATERAL (
+              SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
+                FROM publication_record_states s
+                LEFT JOIN release_correction_histories h ON h.release_number = r.release_number AND h.kind = s.kind AND h.record_id = s.record_id
+               WHERE s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)
+                 AND h.record_id IS NULL
+                 AND ({1} = 0 OR (r.release_number, s.kind, s.record_id) > ({1}, {2}, {3}))
+               ORDER BY s.kind, s.record_id
+               LIMIT {4}
+          ) candidate
+         WHERE r.release_number >= {1}
+         ORDER BY r.release_number, candidate."Kind", candidate."RecordId"
+         LIMIT {4}
+        """;
+
+    private const string ReadCorrectionVerificationCandidates = """
+        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber"
+          FROM publication_record_states s
+         WHERE s.first_release <= {0} AND (s.last_release IS NULL OR s.last_release >= {0})
+           AND ({1}::text = '' OR (s.kind, s.record_id) > ({1}::text, {2}::text))
+         ORDER BY s.kind, s.record_id
+         LIMIT {3}
+        """;
+
+    public static async Task<CorrectionHistoryVerificationPage> ReadCorrectionVerificationPageAsync(CollectionAttemptDbContext db,
+        CorrectionHistoryWalkStep step, int limit, CancellationToken cancellationToken)
+    {
+        if (limit == int.MaxValue) throw new ArgumentOutOfRangeException(nameof(limit));
+        if (step.Target is not { } release) return new(null, [], true, null, step.Skipped);
+        var rows = await db.Database.SqlQueryRaw<ReleaseStateRow>(ReadCorrectionVerificationCandidates, release.ReleaseNumber,
+            step.After is null ? "" : PublishedRecordReference.NameOf(step.After.Kind), step.After?.RecordId ?? "", limit + 1)
+            .ToArrayAsync(cancellationToken);
+        var hasMore = rows.Length > limit;
+        if (hasMore) rows = rows[..limit];
+        var keys = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).ToArray();
+        var facts = rows.Length == 0 ? new Dictionary<(string Kind, string RecordId, int RevisionNumber), PublishedEntryFacts>()
+            : await ReadFactsAsync(db, KeyArrays(keys), cancellationToken);
+        var firstPublished = rows.Length == 0 ? new Dictionary<PublishedRecordReference, DateTimeOffset>()
+            : await PublishedRecords.ReadAsync(db, [.. rows.Select(row => new PublishedRecordReference(KindOf(row.Kind), row.RecordId))], cancellationToken);
+        var bindings = rows.Select(row => new PublishedRevisionBinding(KindOf(row.Kind), row.RecordId, row.RevisionNumber)).ToArray();
+        var (histories, historyErrors) = await ReadVerificationHistoriesAsync(db, release.ReleaseNumber, bindings, cancellationToken);
+        var candidates = rows.Select(row =>
+        {
+            var reference = new PublishedRecordReference(KindOf(row.Kind), row.RecordId);
+            histories.TryGetValue(reference, out var storedHistory);
+            DateTimeOffset? firstPublishedAtUtc = firstPublished.TryGetValue(reference, out var firstTime) ? firstTime : null;
+            return new CorrectionHistoryVerificationCandidate(release,
+                new StoredReleaseRecord(reference.Kind, row.RecordId, row.RevisionNumber,
+                    firstPublishedAtUtc, facts.GetValueOrDefault((row.Kind, row.RecordId, row.RevisionNumber))),
+                storedHistory, historyErrors.Contains(reference) ? "recordInvalid" : null);
+        }).ToArray();
+        return new(release, candidates, !hasMore, step.Next, step.Skipped);
+    }
+
+    private static async Task<(IReadOnlyDictionary<PublishedRecordReference, StoredCorrectionHistory> Histories,
+        HashSet<PublishedRecordReference> Errors)> ReadVerificationHistoriesAsync(CollectionAttemptDbContext db, int releaseNumber,
+        PublishedRevisionBinding[] bindings, CancellationToken cancellationToken)
+    {
+        var errors = new HashSet<PublishedRecordReference>();
+        if (bindings.Length == 0) return (new Dictionary<PublishedRecordReference, StoredCorrectionHistory>(), errors);
+        try
+        {
+            return (await CorrectionHistoryCopies.ReadAsync(db, releaseNumber, bindings, cancellationToken), errors);
+        }
+        catch (InvalidDataException)
+        {
+            // Batch validation is the normal path. Retry records separately only to identify malformed rows without hiding valid peers.
+            var histories = new Dictionary<PublishedRecordReference, StoredCorrectionHistory>();
+            foreach (var binding in bindings)
+            {
+                var record = new PublishedRecordReference(binding.Kind, binding.RecordId);
+                try
+                {
+                    var history = await CorrectionHistoryCopies.ReadAsync(db, releaseNumber, [binding], cancellationToken);
+                    if (history.TryGetValue(record, out var stored)) histories.Add(record, stored);
+                }
+                catch (InvalidDataException) { errors.Add(record); }
+            }
+            return (histories, errors);
+        }
+    }
+
+    public static async Task<CorrectionHistoryBootstrapPage> ReadCorrectionBootstrapPageAsync(CollectionAttemptDbContext db,
+        CorrectionHistoryBootstrapCursor? after, IReadOnlyCollection<int> releaseNumbers, int limit, CancellationToken cancellationToken)
+    {
+        if (limit == int.MaxValue) throw new ArgumentOutOfRangeException(nameof(limit));
+        if (releaseNumbers.Count == 0) return new([], null);
+        var rows = await db.Database.SqlQueryRaw<CorrectionBootstrapRow>(ReadCorrectionBootstrapCandidates,
+            releaseNumbers.ToArray(), after?.ReleaseNumber ?? 0, after is null ? "" : PublishedRecordReference.NameOf(after.Kind),
+            after?.RecordId ?? "", limit + 1).ToArrayAsync(cancellationToken);
+        var hasMore = rows.Length > limit;
+        if (hasMore) rows = rows[..limit];
+        var distinctKeys = rows.Select(row => (row.Kind, row.RecordId, row.RevisionNumber)).Distinct().ToArray();
+        var keys = KeyArrays(distinctKeys);
+        var facts = rows.Length == 0 ? new Dictionary<(string Kind, string RecordId, int RevisionNumber), PublishedEntryFacts>()
+            : await ReadFactsAsync(db, keys, cancellationToken);
+        var firstPublished = rows.Length == 0 ? new Dictionary<PublishedRecordReference, DateTimeOffset>()
+            : await PublishedRecords.ReadAsync(db, distinctKeys.Select(key => new PublishedRecordReference(KindOf(key.Kind), key.RecordId)).Distinct().ToArray(), cancellationToken);
+        var candidates = rows.Select(row =>
+        {
+            firstPublished.TryGetValue(new PublishedRecordReference(KindOf(row.Kind), row.RecordId), out var firstTime);
+            return new CorrectionHistoryBootstrapCandidate(
+                new PublicationReleaseSummary(row.ReleaseNumber, row.DirectoryName,
+                    new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero), row.RecordCount),
+                new StoredReleaseRecord(KindOf(row.Kind), row.RecordId, row.RevisionNumber,
+                    firstPublished.ContainsKey(new PublishedRecordReference(KindOf(row.Kind), row.RecordId)) ? firstTime : null,
+                    facts.GetValueOrDefault((row.Kind, row.RecordId, row.RevisionNumber))));
+        }).ToArray();
+        var last = hasMore && rows.Length > 0 ? rows[^1] : null;
+        return new(candidates, last is null ? null : new(last.ReleaseNumber, KindOf(last.Kind), last.RecordId));
+    }
+
     private const string FillBillLines = """
         WITH locked AS (
             SELECT e.kind, e.record_id, e.revision_number, k.bill_line
@@ -68,7 +185,10 @@ internal static class PublishedEntries
                     AND e.kind = 'action' AND e.bill_line IS NULL) AS "LacksBillLine", EXISTS (
                 SELECT 1 FROM published_entries e
                 WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.kind = 'statement' AND e.approved_by IS NULL) AS "LacksStatementApprover"
+                    AND e.kind = 'statement' AND e.approved_by IS NULL) AS "LacksStatementApprover", EXISTS (
+                SELECT 1 FROM published_entries e
+                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                    AND e.approved_at_utc_ticks IS NULL) AS "LacksApprovalTime"
         FROM publication_record_states s
         ORDER BY s.kind, s.record_id, s.revision_number
         """;
@@ -78,7 +198,7 @@ internal static class PublishedEntries
     {
         var rows = await db.Database.SqlQueryRaw<CandidateRow>(ReadCandidates).ToArrayAsync(cancellationToken);
         return [.. rows.Select(row => new PublishedEntryCandidate(KindOf(row.Kind), row.RecordId,
-            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry, row.LacksBillLine, row.LacksStatementApprover))];
+            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry, row.LacksBillLine, row.LacksStatementApprover, row.LacksApprovalTime))];
     }
 
     public static async Task<IReadOnlyList<StoredReleaseRecord>> ReadReleaseAsync(CollectionAttemptDbContext db, int releaseNumber,
@@ -179,6 +299,27 @@ internal static class PublishedEntries
         return filled;
     }
 
+    public static async Task<int> FillApprovalTimesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
+        string conflictAdvice, CancellationToken cancellationToken)
+    {
+        var timed = entries.Where(entry => entry.ApprovedAtUtc is not null).ToArray();
+        if (timed.Length == 0) return 0;
+        var filled = await db.Database.ExecuteSqlRawAsync("""
+            WITH locked AS (
+                SELECT e.kind, e.record_id, e.revision_number, k.approved_at_utc_ticks
+                  FROM published_entries e
+                  JOIN unnest({0}::text[], {1}::text[], {2}::int[], {3}::bigint[]) AS k(kind, record_id, revision_number, approved_at_utc_ticks)
+                    ON e.kind = k.kind AND e.record_id = k.record_id AND e.revision_number = k.revision_number
+                 WHERE e.approved_at_utc_ticks IS NULL
+                 ORDER BY e.kind, e.record_id, e.revision_number FOR UPDATE OF e)
+            UPDATE published_entries e SET approved_at_utc_ticks = locked.approved_at_utc_ticks
+              FROM locked
+             WHERE e.kind = locked.kind AND e.record_id = locked.record_id AND e.revision_number = locked.revision_number
+            """, [.. KeyArrays(timed.Select(KeyOf)), timed.Select(entry => entry.ApprovedAtUtc!.Value.UtcTicks).ToArray()], cancellationToken);
+        await RequireSameAsync(db, [.. timed], conflictAdvice, cancellationToken);
+        return filled;
+    }
+
     private static string BuildInsertEntries()
     {
         var revisionColumns = Enum.GetValues<PublishedRecordKind>().Select(PublishedEntryRevisionColumns.For).ToArray();
@@ -187,13 +328,13 @@ internal static class PublishedEntries
         var values = kinds.SelectMany(kind => new[] { $"CASE WHEN k.kind = '{kind}' THEN k.record_id END", $"CASE WHEN k.kind = '{kind}' THEN k.revision_number END" });
         return $$"""
             INSERT INTO published_entries (kind, record_id, revision_number, {{string.Join(", ", columns)}}, headline, source_host, event_date, bill_title,
-                link_type, statement_record_id, target_kind, target_record_id, document_type, bill_line, approved_by, congress)
+                link_type, statement_record_id, target_kind, target_record_id, document_type, bill_line, approved_by, congress, approved_at_utc_ticks)
             SELECT k.kind, k.record_id, k.revision_number, {{string.Join(", ", values)}}, k.headline, k.source_host, k.event_date, k.bill_title,
-                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type, k.bill_line, k.approved_by, k.congress
+                k.link_type, k.statement_record_id, k.target_kind, k.target_record_id, k.document_type, k.bill_line, k.approved_by, k.congress, k.approved_at_utc_ticks
             FROM unnest({0}::text[], {1}::text[], {2}::int[], {3}::text[], {4}::text[], {5}::date[], {6}::text[], {7}::text[], {8}::text[],
-                {9}::text[], {10}::text[], {11}::text[], {12}::text[], {13}::text[], {14}::int[])
+                {9}::text[], {10}::text[], {11}::text[], {12}::text[], {13}::text[], {14}::int[], {15}::bigint[])
                 AS k(kind, record_id, revision_number, headline, source_host, event_date, bill_title, link_type, statement_record_id, target_kind,
-                    target_record_id, document_type, bill_line, approved_by, congress)
+                    target_record_id, document_type, bill_line, approved_by, congress, approved_at_utc_ticks)
             ON CONFLICT DO NOTHING
             RETURNING kind AS "Kind", record_id AS "RecordId", revision_number AS "RevisionNumber"
             """;
@@ -238,7 +379,7 @@ internal static class PublishedEntries
         var stored = await ReadFactsAsync(db, KeyArrays(entries.Select(KeyOf)), cancellationToken);
         foreach (var entry in entries)
         {
-            if (!stored.TryGetValue(KeyOf(entry), out var existing) || Serialize(existing with { ApprovedBy = entry.ApprovedBy is null ? null : existing.ApprovedBy }) != Serialize(FactsOf(entry)))
+            if (!stored.TryGetValue(KeyOf(entry), out var existing) || Serialize(existing with { ApprovedBy = entry.ApprovedBy is null ? null : existing.ApprovedBy, ApprovedAtUtcTicks = entry.ApprovedAtUtc is null ? null : existing.ApprovedAtUtcTicks }) != Serialize(FactsOf(entry)))
                 throw new PublicationConflictException(
                     $"The stored entry of {entry.RecordId} revision {entry.RevisionNumber} differs from the release entry. {conflictAdvice}");
         }
@@ -250,7 +391,7 @@ internal static class PublishedEntries
 
     private static PublishedEntryFacts FactsOf(PublishedRecordEntry entry) => new(entry.Headline, entry.SourceHost, entry.EventDate, entry.BillTitle, entry.LinkType,
         entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId, entry.DocumentType,
-        [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds, entry.BillLine, entry.ApprovedBy);
+        [.. entry.Officials.Select(official => official.Id)], entry.MatchedOfficialId, entry.IssueIds, entry.PolicyAreaIds, entry.BillLine, entry.ApprovedBy, entry.ApprovedAtUtc?.UtcTicks);
 
     private static object[] KeyArrays(IEnumerable<(string Kind, string RecordId, int RevisionNumber)> keys)
     {
@@ -271,7 +412,7 @@ internal static class PublishedEntries
             return new PublishedEntryFacts(row.Headline, row.SourceHost, row.EventDate, row.BillTitle, row.LinkType, row.StatementRecordId,
                 row.TargetKind is null ? null : KindOf(row.TargetKind), row.TargetRecordId, row.DocumentType, [.. officials[key].Select(official => official.OfficialId)],
                 officials[key].SingleOrDefault(official => official.IsMatched)?.OfficialId,
-                [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)], row.BillLine, row.ApprovedBy);
+                [.. issues[key].Select(issue => issue.Value)], [.. policyAreas[key].Select(area => area.Value)], row.BillLine, row.ApprovedBy, row.ApprovedAtUtcTicks);
         });
     }
 
@@ -297,7 +438,7 @@ internal static class PublishedEntries
         entries.Select(entry => entry.TargetKind is { } target ? PublishedRecordReference.NameOf(target) : null).ToArray(),
         entries.Select(entry => entry.TargetRecordId).ToArray(), entries.Select(entry => entry.DocumentType?.ToString()).ToArray(),
         entries.Select(entry => entry.BillLine).ToArray(), entries.Select(entry => entry.ApprovedBy?.ToString()).ToArray(),
-        entries.Select(ReleaseRecordOrder.CongressOf).ToArray()
+        entries.Select(ReleaseRecordOrder.CongressOf).ToArray(), entries.Select(entry => entry.ApprovedAtUtc?.UtcTicks).ToArray()
     ];
 
     private static (string Kind, string RecordId, int RevisionNumber) KeyOf(PublishedRecordEntry entry) =>
@@ -321,6 +462,17 @@ internal static class PublishedEntries
         public int RevisionNumber { get; set; }
     }
 
+    private sealed class CorrectionBootstrapRow
+    {
+        public int ReleaseNumber { get; set; }
+        public string DirectoryName { get; set; } = "";
+        public long PublishedAtUtcTicks { get; set; }
+        public int RecordCount { get; set; }
+        public string Kind { get; set; } = "";
+        public string RecordId { get; set; } = "";
+        public int RevisionNumber { get; set; }
+    }
+
     private sealed class CandidateRow
     {
         public string Kind { get; set; } = "";
@@ -331,6 +483,7 @@ internal static class PublishedEntries
         public bool HasEntry { get; set; }
         public bool LacksBillLine { get; set; }
         public bool LacksStatementApprover { get; set; }
+        public bool LacksApprovalTime { get; set; }
     }
 
     private sealed class EntryDayRow

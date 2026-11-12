@@ -1,0 +1,56 @@
+@using CivicLens.Publication.Contracts
+
+<li class="record-row">
+    <span class="record-row-icon @IconClass"><Icon Name="Icon" /></span>
+    <div>
+        <a href="@Href">
+            <span>@Headline</span>
+            @if (Label is not null)
+            {
+                <span class="muted small">@Label</span>
+            }
+            @if (Sponsor is not null)
+            {
+                <span class="muted small">Sponsor: @Sponsor</span>
+            }
+            <span class="muted small">@Meta</span>
+        </a>
+        @if (Yea is { } yea && Nay is { } nay)
+        {
+            <p class="record-counts"><span><b>@yea</b> Yes</span><span><b>@nay</b> No</span>@if (ResultWords is not null) {<span>@ResultWords</span>}</p>
+        }
+        else if (ResultWords is not null)
+        {
+            <p class="record-counts"><span>@ResultWords</span></p>
+        }
+        @if (BillLine is not null)
+        {
+            <p class="small muted"><PublishedBillLine Line="@BillLine" />@if (ShowBillLineSource) {<PublishedBillLineNote Inline="true" />}</p>
+        }
+        @if (Snippet is not null)
+        {
+            <p class="search-snippet">@Snippet</p>
+        }
+        @ChildContent
+    </div>
+</li>
+
+@code {
+    [Parameter, EditorRequired] public IconName Icon { get; set; }
+    [Parameter] public string? IconClass { get; set; }
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
+    [Parameter] public string? Label { get; set; }
+    /// <summary>The name of the bill sponsor, shown as "Sponsor: {name}" above the meta line.</summary>
+    [Parameter] public string? Sponsor { get; set; }
+    [Parameter, EditorRequired] public string Meta { get; set; } = string.Empty;
+    [Parameter] public int? Yea { get; set; }
+    [Parameter] public int? Nay { get; set; }
+    [Parameter] public string? ResultWords { get; set; }
+    [Parameter] public string? BillLine { get; set; }
+    [Parameter] public RenderFragment? Snippet { get; set; }
+    /// <summary>False when the page states the bill line source once for the whole list.</summary>
+    [Parameter] public bool ShowBillLineSource { get; set; } = true;
+    /// <summary>Extra lines under the row, such as a related vote or a status badge.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

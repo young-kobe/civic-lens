@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace CivicLens.Publication.Contracts;
 
 internal static class PublishedEvidenceRules
@@ -18,7 +20,7 @@ internal static class PublishedEvidenceRules
     private static bool IsWebUrl(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var url) && url.Scheme is "http" or "https";
 
-    public static void RequireSources(PublishedDocumentVersion[]? sources, int maximum, string noun)
+    public static void RequireSources([NotNull] PublishedDocumentVersion[]? sources, int maximum, string noun)
     {
         if (sources is null || sources.Length is 0 || sources.Length > maximum)
             throw new InvalidDataException($"Published {noun} requires 1 to {maximum} sources.");

@@ -8,14 +8,14 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedStatementView
 {
-    public const string StatementDateAnchor = "cite-statement-date";
+    public static string ShortName(PublishedStatement statement) => string.Join(", ", statement.Speakers.Select(speaker => speaker.Name));
 
     public static IReadOnlyList<Fact> Facts(PublishedStatement statement, PublicationCatalog catalog)
     {
         var facts = new List<Fact>();
         facts.AddRange(PublishedRecordView.Officials("Speakers", statement.Speakers));
         facts.AddRange(PublishedRecordView.Values(PublishedRecordLabels.OtherPeopleQuoted, statement.OtherSpeakers));
-        if (statement.StatementDate is { } date) facts.Add(new("Statement date", PublishedRecordLabels.StatementDate(statement, Moment.Day(date))));
+        if (statement.StatementDate is { } date) facts.Add(new("Statement date", PublishedRecordLabels.StatementDate(statement.ApprovedBy, statement.StatementDateEvidence is not null, Moment.Day(date))));
         facts.AddRange(PublishedRecordView.Issues("Issues", statement.IssueIds, catalog));
         facts.AddRange(PublishedRecordView.PolicyAreas(PublishedRecordLabels.StatementPolicyAreas(statement.ApprovedBy), statement.PolicyAreaIds, catalog));
         facts.AddRange(PublishedRecordView.Values("Bill numbers", statement.BillNumbers));
@@ -23,14 +23,5 @@ internal static class PublishedStatementView
         facts.AddRange(PublishedRecordLabels.StatementWording(statement));
         facts.Add(new("Revision", statement.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         return facts;
-    }
-
-    public static IReadOnlyList<CitedRange> Ranges(PublishedStatement statement)
-    {
-        var ranges = statement.Quotations.Select((quotation, index) =>
-            new CitedRange(PublishedRecordView.CitationAnchor(index), quotation.Start, quotation.Length));
-        if (statement.StatementDateEvidence is { } evidence)
-            ranges = ranges.Append(new CitedRange(StatementDateAnchor, evidence.Start, evidence.Length));
-        return [.. ranges];
     }
 }

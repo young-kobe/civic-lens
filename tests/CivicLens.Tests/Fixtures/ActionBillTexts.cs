@@ -30,6 +30,17 @@ internal static class ActionBillTexts
 
     public static readonly string Body = $"Section 1. This Act may be cited as the Rent Aid Act. {FirstSummary} {SecondSummary} {WhyItMatters}";
 
+    public const string SecretaryDefinition = "The term ``Secretary'' means the Secretary of Housing and Urban Development.";
+    public const string TenantDefinition = "The term ``eligible tenant'' means a tenant with low income.";
+    public const string LandlordDefinition = "The term ``landlord'' means the owner of a rental home.";
+    public const string AmendmentDefinition = "The term ``amendment'' means a change to this Act.";
+
+    /// <summary>A bill text with a definitions section, as GPO prints it: capital letter headings, and two grave accents for each double quote.
+    /// Section 3 repeats the Secretary definition, and it holds the payment words, so a quote that lies only in section 3 is not a definition.</summary>
+    public static readonly string BodyWithDefinitions = "Section 1. This Act may be cited as the Rent Aid Act. SEC. 2. DEFINITIONS. In this Act: " +
+        $"(1) Secretary.\u2014{SecretaryDefinition} (2) Eligible tenant.\u2014{TenantDefinition} (3) Landlord.\u2014{LandlordDefinition} " +
+        $"(4) Amendment.\u2014{AmendmentDefinition} SEC. 3. PAYMENTS. {FirstSummary} {SecondSummary} {WhyItMatters} In this section {SecretaryDefinition}";
+
     public static ActionDraftBillText Of(string? body = null, string extractionVersion = ExtractionVersion)
     {
         var type = new CongressBillTextVersion(PackageId, "Introduced in House", new DateTimeOffset(2025, 1, 3, 5, 0, 0, TimeSpan.Zero),
@@ -41,13 +52,14 @@ internal static class ActionBillTexts
     public static DocumentExtraction Extraction(ActionDraftBillText text) => new(Attempt, ExtractionVersion, text.Text);
 
     public static string Output((string Sentence, string Quote)[]? summary = null, (string Sentence, string Quote)[]? whyItMatters = null,
-        string[]? issueIds = null) => JsonSerializer.Serialize(new
+        string[]? issueIds = null, (string Term, string Quote)[]? keyTerms = null) => JsonSerializer.Serialize(new
         {
             headline = new { text = "H.R. 1 pays landlords for tenants with low income.", confidence = 0.8 },
             summary = new { sentences = (summary ?? [(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)]).Select(Item), confidence = 0.7 },
             whyItMatters = new { sentences = (whyItMatters ?? [(WhyPlain, WhyQuote)]).Select(Item), confidence = 0.6 },
-            issueIds = issueIds ?? ["rent"]
-        });
+            issueIds = issueIds ?? ["rent"],
+            keyTerms = keyTerms?.Select(item => new { term = item.Term, quote = item.Quote })
+        }, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
 
     private static object Item((string Sentence, string Quote) item) => new { sentence = item.Sentence, quote = item.Quote };
 }

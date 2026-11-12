@@ -1,9 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="compare.html" Title="Compare your members" Description="See how your representative and senators voted and which bills they introduced. Each fact links to its official source." RootPath="@RootPath">
-    <Breadcrumbs>
-        <PublicBreadcrumbs Items="breadcrumbs" RootPath="@RootPath" />
-    </Breadcrumbs>
+<PublicPage Section="null" CanonicalPath="compare.html" Title="Compare your members" Description="See how your representative and senators voted and which bills they introduced. Each fact links to its official source." RootPath="@RootPath">
     <Hero>
         <div class="home-hero home-preview-hero">
             <div class="home-intro">
@@ -26,12 +23,6 @@
 </PublicPage>
 
 @code {
-    private static readonly IReadOnlyList<PublicBreadcrumbItem> breadcrumbs =
-    [
-        new("Home", PublicationProtocol.HomePath),
-        new("Compare your members", null)
-    ];
-
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter] public string? BrowserApiUrl { get; set; }
 }

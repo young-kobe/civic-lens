@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-@foreach (var paragraph in Record.Paragraphs)
+@foreach (var paragraph in Paragraphs)
 {
     <p class="record-body">
         @paragraph.Text
@@ -12,6 +12,6 @@
 }
 
 @code {
-    [Parameter, EditorRequired] public PublishedBrief Record { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedBriefParagraph[] Paragraphs { get; set; } = [];
     [Parameter] public string BriefHref { get; set; } = string.Empty;
 }

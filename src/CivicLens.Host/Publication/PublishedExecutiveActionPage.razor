@@ -1,8 +1,9 @@
 @using CivicLens.Host.Components.Evidence
 @using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Publication
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedExecutiveActionView.Facts(Record)"
-                      Caveat="@PublishedExecutiveActionView.Caveat">
+<PublishedRecordFrame Kind="PublishedRecordKind.ExecutiveAction" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="" Facts="PublishedExecutiveActionView.Facts(Record)"
+                      Caveat="@ExecutiveActionWords.Caveat">
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
     <Panel Title="Sources" Id="sources-title" Padded="true">

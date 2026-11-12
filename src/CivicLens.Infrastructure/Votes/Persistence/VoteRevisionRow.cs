@@ -45,9 +45,11 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public string? Question { get; set; }
     public string Result { get; set; } = string.Empty;
     public bool ColumnsWritten { get; set; }
+    public short? PartyTallyCount { get; set; }
     public PublishedVoteAlignment? Alignment { get; set; }
     public string? DemocratMajority { get; set; }
     public string? RepublicanMajority { get; set; }
     public List<VoteRevisionFactRow> Facts { get; set; } = [];
     public List<VoteRevisionIssueRow> Issues { get; set; } = [];
+    public List<VoteRevisionPartyTallyRow> PartyTallies { get; set; } = [];
 }

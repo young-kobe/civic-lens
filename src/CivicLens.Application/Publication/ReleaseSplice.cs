@@ -36,7 +36,7 @@ internal static class ReleaseSplice
             .Select(entry => new PublishedRecordReference(entry.Kind, entry.RecordId)).FirstOrDefault();
     }
 
-    private static PublishedRecordEntry EntryOf(StoredReleaseRecord row, PublishedRecordEntry fromFile)
+    internal static PublishedRecordEntry EntryOf(StoredReleaseRecord row, PublishedRecordEntry fromFile)
     {
         var facts = row.Facts!;
         var names = fromFile.Officials.ToDictionary(official => official.Id, official => official.Name);
@@ -52,6 +52,7 @@ internal static class ReleaseSplice
             PolicyAreaIds = facts.PolicyAreaIds,
             SourceHost = facts.SourceHost,
             ApprovedBy = fromFile.ApprovedBy is null ? null : facts.ApprovedBy,
+            ApprovedAtUtc = fromFile.ApprovedAtUtc is null || facts.ApprovedAtUtcTicks is not { } ticks ? null : new DateTimeOffset(ticks, TimeSpan.Zero),
             EventDate = facts.EventDate,
             BillTitle = facts.BillTitle,
             LinkType = facts.LinkType,

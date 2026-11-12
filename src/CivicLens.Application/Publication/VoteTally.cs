@@ -14,16 +14,20 @@ internal sealed class VoteTally
 {
     private readonly Dictionary<string, string> partyBySourceId;
 
-    private VoteTally(PublishedVoteTotals? totals, PublishedPartyMajority[] partyMajorities, Dictionary<string, string> partyBySourceId)
+    private VoteTally(PublishedVoteTotals? totals, PublishedPartyMajority[] partyMajorities, PublishedPartyTally[]? partyTallies,
+        Dictionary<string, string> partyBySourceId)
     {
         Totals = totals;
         PartyMajorities = partyMajorities;
+        PartyTallies = partyTallies;
         this.partyBySourceId = partyBySourceId;
     }
 
     public PublishedVoteTotals? Totals { get; }
 
     public PublishedPartyMajority[] PartyMajorities { get; }
+
+    public PublishedPartyTally[]? PartyTallies { get; }
 
     public string PartyOf(string sourceId) => partyBySourceId[sourceId];
 
@@ -33,7 +37,12 @@ internal sealed class VoteTally
         var lines = membersText.Split('\n').Where(line => line.StartsWith(VoteMemberLine.Prefix, StringComparison.Ordinal))
             .Select(VoteMemberLine.Parse).ToArray();
         var partyBySourceId = lines.ToDictionary(line => line.SourceId, line => parties.PartyOn(line, chamber, day), StringComparer.Ordinal);
-        if (PublishedVote.IsCandidateVote(facts.Select(fact => fact.Text))) return new(null, [], partyBySourceId);
+        if (PublishedVote.IsCandidateVote(facts.Select(fact => fact.Text)))
+        {
+            var candidateTallies = HasCompleteCandidateCasts(facts, lines) ? Tallies(lines, partyBySourceId) : null;
+            if (candidateTallies?.Any(tally => tally.Yea != 0 || tally.Nay != 0) == true) candidateTallies = null;
+            return new(null, [], candidateTallies, partyBySourceId);
+        }
 
         var partyTotals = chamber == Chamber.Senate ? SenateTotals(recordId, facts) : HouseTotals(recordId, facts);
         var totals = Sum(partyTotals.Values);
@@ -41,11 +50,32 @@ internal sealed class VoteTally
             throw new ArgumentException($"Vote {recordId} has member lines that do not add up to its total lines.");
         if (chamber == Chamber.House) RequireLettersMatch(recordId, lines, partyTotals);
 
-        var majorities = lines.GroupBy(line => partyBySourceId[line.SourceId])
-            .Select(group => PublishedPartyMajority.Of(group.Key, group.Count(line => line.Cast == VoteCastKind.Yea),
-                group.Count(line => line.Cast == VoteCastKind.Nay)))
-            .OrderBy(majority => majority.Party, StringComparer.Ordinal).ToArray();
-        return new(totals, majorities, partyBySourceId);
+        var tallies = Tallies(lines, partyBySourceId);
+        var majorities = tallies.Select(tally => PublishedPartyMajority.Of(tally.Party, tally.Yea, tally.Nay)).ToArray();
+        return new(totals, majorities, tallies, partyBySourceId);
+    }
+
+    private static PublishedPartyTally[] Tallies(VoteMemberLine[] lines, Dictionary<string, string> partyBySourceId) =>
+        lines.GroupBy(line => partyBySourceId[line.SourceId])
+            .Select(group => new PublishedPartyTally
+            {
+                Party = group.Key,
+                Yea = group.Count(line => line.KnownCast == VoteCastKind.Yea),
+                Nay = group.Count(line => line.KnownCast == VoteCastKind.Nay),
+                Present = group.Count(line => line.KnownCast == VoteCastKind.Present),
+                NotVoting = group.Count(line => line.KnownCast == VoteCastKind.NotVoting),
+                Other = group.Count(line => line.KnownCast is null)
+            })
+            .OrderBy(tally => tally.Party, StringComparer.Ordinal).ToArray();
+
+    private static bool HasCompleteCandidateCasts(ImmutableArray<VoteFact> facts, VoteMemberLine[] lines)
+    {
+        var headerCounts = PublishedVote.CandidateCountsOf(facts.Select(fact => fact.Text));
+        if (headerCounts is null) return false;
+        var capturedCounts = lines.GroupBy(line => line.CastText, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        return capturedCounts.Keys.All(headerCounts.ContainsKey) &&
+            headerCounts.All(pair => capturedCounts.GetValueOrDefault(pair.Key) == pair.Value);
     }
 
     private static Dictionary<string, PublishedVoteTotals> SenateTotals(string recordId, ImmutableArray<VoteFact> facts)

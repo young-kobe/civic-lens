@@ -23,6 +23,7 @@ namespace CivicLens.Tests.PublicApi.Pages;
 public sealed class ServerPageTests(PostgresCollection postgres)
 {
     private const string UnknownPage = ServerPageEndpoints.Prefix + "/no-such-page";
+    private const string VoteKindsRoute = ServerPageEndpoints.Prefix + "/" + PublicationProtocol.VoteKindsPagePath;
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly SeededVote Vote = new('e', "2026-03-03");
     private static readonly DateTimeOffset PublishedAt = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
@@ -143,7 +144,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        foreach (var path in new[] { UnknownPage, ServerPageEndpoints.Prefix + "/compare" })
+        foreach (var path in new[] { UnknownPage, ServerPageEndpoints.Prefix + "/compare", VoteKindsRoute })
         {
             using var response = await host.Client.GetAsync(path);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
@@ -201,7 +202,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
         var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
-        var row = Assert.Single(page.QuerySelectorAll(".latest-rows li"));
+        var row = Assert.Single(page.QuerySelectorAll(".record-rows li"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Headline f", row.TextContent);
@@ -261,6 +262,44 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         request.Headers.IfNoneMatch.Add(response.Headers.ETag!);
         using var revalidated = await host.Client.SendAsync(request);
         Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheVoteKindIndexIsServedWithItsCanonicalPathAndTheReleaseETagAndRevalidatesTo304()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+
+        using var response = await host.Client.GetAsync(VoteKindsRoute);
+        var page = Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("https://civic-lens.test/" + PublicationProtocol.VoteKindsPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
+        Assert.Equal(VoteMeaning.Kinds.Count + 1, page.QuerySelectorAll("tbody tr").Length);
+        Assert.Contains("r4-", response.Headers.ETag!.ToString());
+        Assert.Equal(PageCache.CacheControl, response.Headers.CacheControl?.ToString());
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, VoteKindsRoute);
+        request.Headers.IfNoneMatch.Add(response.Headers.ETag!);
+        using var revalidated = await host.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/web/vote-kinds")]
+    [InlineData("/web/vote-kinds.html/extra")]
+    [InlineData("/web/Vote-Kinds.htm")]
+    public async Task ABadVoteKindIndexPathAnswers404ThroughTheSharedNotFoundPage(string path)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+
+        using var response = await host.Client.GetAsync(path);
+        var page = Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("Page not found", page.QuerySelector(".empty h3")!.TextContent.Trim());
+        Assert.Empty(page.QuerySelectorAll("tbody tr"));
     }
 
     [Fact]
@@ -335,8 +374,10 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var response = await host.Client.GetAsync(UnknownPage);
         var home = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
         using var compare = await host.Client.GetAsync(ServerPageEndpoints.Prefix + "/compare");
+        using var kinds = await host.Client.GetAsync(VoteKindsRoute);
 
         Assert.Equal(HttpStatusCode.NotFound, compare.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, kinds.StatusCode);
         Assert.Null(compare.Headers.ETag);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, home.StatusCode);

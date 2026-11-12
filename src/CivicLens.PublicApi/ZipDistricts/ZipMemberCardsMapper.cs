@@ -1,4 +1,6 @@
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicWeb.Publication;
+using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Votes;
 using CivicLens.Publication.Contracts;
 
@@ -8,7 +10,7 @@ namespace CivicLens.PublicApi.ZipDistricts;
 internal static class ZipMemberCardsMapper
 {
     public static ZipMemberCardsData Map(ZipDistrictAnswer answer, SharedMemberVoteAnswer? sharedVotes,
-        ZipMemberIssueOption[] issueOptions, string? selectedIssue)
+        IssueOption[] issueOptions, string? selectedIssue)
     {
         if (sharedVotes is not null && sharedVotes.Release != answer.Release)
             throw new InvalidDataException("ZIP members and shared votes must come from the same release.");
@@ -48,6 +50,7 @@ internal static class ZipMemberCardsMapper
                 figure.Party, figure.WithParty, figure.Cast, figure.FirstVotedOn, figure.LastVotedOn, figure.Scope))])
         {
             Bills = holder.Bills is { } bills ? new(bills.Congress, bills.Sponsored, bills.Scope) : null,
+            BillCountsAbsent = OfficialActivityFigures.BillCountsAbsent(holder.Bills, holder.Issues),
             Issues = holder.Issues is { } issues ? [.. issues.Issues.Select(issue => new ZipMemberIssueData(
                 string.IsNullOrWhiteSpace(issue.Name) ? issue.IssueId : issue.Name,
                 issues.Congress, issue.SponsoredBills, issue.VotesCast, issues.Scope,

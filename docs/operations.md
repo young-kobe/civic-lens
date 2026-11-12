@@ -16,7 +16,14 @@ python3 tools/render-architecture.py --check
 python3 tools/check-docs.py --check
 ```
 
-CI runs the tests in 4 parallel jobs, each with its own Postgres container. `tools/test-shards.py` assigns each test class to one job. It sorts classes by the seconds in `tools/test-shard-weights.json`, heaviest first, and gives each to the lightest shard. A class missing from the table gets the mean weight. To refresh the table, run the full suite with `--logger trx --results-directory /tmp/trx`, then run `python3 tools/test-shards.py --write-weights /tmp/trx/*.trx`. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
+CI runs the tests in 4 parallel jobs, each with its own Postgres container. A new push to a pull request cancels the CI run of its older head, as the image workflow already does. A later push does not cancel a running `main` workflow. A newer pending run can replace an older pending run. `tools/test-shards.py` assigns each test class to one job. It sorts classes by the seconds in `tools/test-shard-weights.json`, heaviest first, and gives each to the lightest shard. A class missing from the table gets the mean weight. To refresh the table, run the full suite with `--logger trx --results-directory /tmp/trx`, then run `python3 tools/test-shards.py --write-weights /tmp/trx/*.trx`. To run one job locally after the Release build, run `python3 tools/test-shards.py --shards 4 --index 0 --runsettings shard.runsettings`. Then run `dotnet test tests/CivicLens.Tests --configuration Release --no-build --settings shard.runsettings`.
+
+The district shapes of the vote map come from a Census file, not from the build. Download `cb_2024_us_cd119_20m.zip` from the URL in the tool, then run the tool on the local copy. The tool needs only Python 3 and never downloads. It stops when the size or the sha256 of the zip differs from the pinned values. `--check` makes the shapes in memory and fails when the committed asset differs. The tool test runs with `python3 -m unittest discover -s tests/tools`.
+
+```sh
+python3 tools/render-district-geometry.py --source /path/to/cb_2024_us_cd119_20m.zip
+python3 tools/render-district-geometry.py --source /path/to/cb_2024_us_cd119_20m.zip --check
+```
 
 Tests never call the paid Claude API. They use a fake model at each drafting port. The live tests, in category `LiveAi`, are skipped unless you set `CIVIC_LENS_LIVE_AI=1` and `ANTHROPIC_API_KEY`. CI does not set them. Each live test sends paid requests, so run them on request only:
 
@@ -208,6 +215,8 @@ A release that holds the correction field `factsUnchanged` needs the same order.
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
+The source `federal-register-text` reads the body text of each original document. It ships with `enabled: false`. Set it to `true` with `federal-register-documents` and restart the worker. Each new original then admits one text job at the `body_html_url` of its detail response. A document that was recorded earlier needs the [text backfill](#executive-action-text-backfill).
+
 The first run lists every document from `backfillFrom` 2024-10-29. It admits one job for each document, about 700 over two years. Each check after that runs every 6 hours and lists from 2 days before the newest stored publication date. Run `jobs list` and `jobs get` as in [managed collection jobs](#managed-collection-jobs) to see progress. A blocked job names its reason.
 
 To withdraw a record, open `/Review/ExecutiveActions/{id}` and use Take off site; see [take a record off the site](#take-a-record-off-the-site). Withdrawing approval alone does not change the public site.
@@ -259,6 +268,8 @@ What to watch:
 The first full run drafts every roll call that has a tracked senator. Code approves each draft after it checks the citations. A Senate vote from Voteview rests on Voteview data, and the record page names Voteview as the source.
 
 ## Postgres adapter and migrations
+
+`PublishedEntryApprovalTime` adds `published_entries.approved_at_utc_ticks`. Run `releases entries backfill` after this migration, and then `releases entries verify`. The backfill reads the kept record files. Until it runs, a publish of a revision that has an entry without a time stops with a conflict, and the correction commands report a stored time that differs. New manifests include `approvedAtUtc`; older images reject that field. Before rolling back an image, activate a kept release from before this field was written.
 
 `PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
 
@@ -689,7 +700,7 @@ The `worker` command drafts one action record for each bill that has a candidate
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 | `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT` | Optional. Set to `1` to draft a bill with no CRS summary from its official bill text. Unset means off. Any other value stops the worker with exit code 2. |
 
-Leave `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT` unset. The setting stays off until the owner reads the measured sample. With the setting on, code approves each text draft after its checks pass, and the next publish shows it with its label, as a bill text summary. A draft that fails a check waits for a person. With the setting off, the step writes the text by code, as before.
+Leave `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS` unset too. It is `1` or unset, and it needs the bill text setting. It adds up to five key terms to each text draft of a bill with a definitions section. It stays off until the owner reads the measured sample. Leave `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT` unset. The setting stays off until the owner reads the measured sample. With the setting on, code approves each text draft after its checks pass, and the next publish shows it with its label, as a bill text summary. A draft that fails a check waits for a person. With the setting off, the step writes the text by code, as before.
 
 The owner measures the text prompt before the setting goes on. The command calls the paid model, so run it on request only. It reads the 20 fixed bills of `config/action-text-measure-bills.json` from the database that `CIVIC_LENS_DATABASE` names. Point it at the dev database. It needs `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, `CIVIC_LENS_ISSUES_CONFIG`, and `ANTHROPIC_API_KEY`. The text prompt byte cap is the smaller of 100,000 and the call limit minus 16,000, where the call limit is the smaller of 120,000 and the daily limit. A daily limit below 116,000 lowers the cap. The other action prompts use the smaller of 100,000 and the call limit minus 4,000. Below a daily limit of 104,000 the text cap is 12,000 bytes below that cap. From 104,000 to 116,000 the gap is 116,000 minus the daily limit, so at 110,000 it is 6,000. A bill whose prompt passes the cap gets the code write.
 
@@ -697,7 +708,7 @@ The owner measures the text prompt before the setting goes on. The command calls
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text measure 1500000 config/action-text-measure-bills.json
 ```
 
-The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 77,000 tokens, so 20 bills can reserve 1,540,000 tokens. The command writes no database row. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence, its grade, and its quote in the report. The sentence grades are for information. The report gives the passage grade of each bill. The passage is the headline and the sentences read as one text. It gives the mean passage grade of the run. The target is a passage at grade 12 or below. A low grade is not enough, because a sentence can be easy to read and say nothing. Read each sentence against its quote. The prompt keeps the exact term of the bill and explains it in plain words. A sentence must never turn "shall be considered" into "is not treated as", or reverse a condition. Each bill also gives `textFigures` and `sentenceFigures`, the counts of dollar amounts and of dates or years in the sent bill text and in the accepted sentences. `losesFigures` is true when the text has at least one amount and the sentences have none, or the same for dates. For a flagged bill, `missingDates` lists the dates of the sent text that no accepted sentence writes the same way, for example `September 30, 2027`. The totals give `billsLosingFigures`, the number of flagged bills. A flag is a prompt to read that bill. Compare the sentences with the quotes, and check whether a central amount or date is missing. A year in a section number can cause a false flag. The flag never rejects a draft. Decide from the flagged count whether the code should reject sentences that drop figures. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
+To measure the key terms, set `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS=1` for the same command. The report then lists the definitions heading and the key terms of each bill, with the cut mark of each term. `droppedKeyTerms` lists the terms that code left out. Set the same value for the worker and for the `analysis` and `actions` commands, because the setting decides which drafts are stale. The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 77,000 tokens, so 20 bills can reserve 1,540,000 tokens. The command writes no database row. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence, its grade, and its quote in the report. The sentence grades are for information. The report gives the passage grade of each bill. The passage is the headline and the sentences read as one text. It gives the mean passage grade of the run. The target is a passage at grade 12 or below. A low grade is not enough, because a sentence can be easy to read and say nothing. Read each sentence against its quote. The prompt keeps the exact term of the bill and explains it in plain words. A sentence must never turn "shall be considered" into "is not treated as", or reverse a condition. Each bill also gives `textFigures` and `sentenceFigures`, the counts of dollar amounts and of dates or years in the sent bill text and in the accepted sentences. `losesFigures` is true when the text has at least one amount and the sentences have none, or the same for dates. For a flagged bill, `missingDates` lists the dates of the sent text that no accepted sentence writes the same way, for example `September 30, 2027`. The totals give `billsLosingFigures`, the number of flagged bills. A flag is a prompt to read that bill. Compare the sentences with the quotes, and check whether a central amount or date is missing. A year in a section number can cause a false flag. The flag never rejects a draft. Decide from the flagged count whether the code should reject sentences that drop figures. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
 
 Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
@@ -755,6 +766,26 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 
 Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
 
+### Executive action text backfill
+
+Original documents that were recorded before the text source was enabled have no text. The command needs the variables of the other owner commands. It also needs `CIVIC_LENS_COLLECTION_CONFIG` for a configuration where `federal-register-text` has `enabled` set to `true`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text backfill 100
+```
+
+The limit is 100 when you give none. The command admits one text job for each of the newest original documents that have a pinned body URL, no text row, and no text job, up to the limit. The job fetches that pinned URL. A rerun lists only the documents that still have no job, so it is safe to repeat. The jobs use the current configuration, not the configuration of the old document jobs. The worker fetches the bodies at the pacing of the origin. A text job uses no model budget. [Executive actions](architecture/executive-actions.md#text) holds the rules.
+
+If a job of `federal-register-documents` or `federal-register-text` is queued or leased, `pendingJobs` is above 0. The command then admits nothing and exits with code 1. Check `jobs list`, wait until those jobs end, and run the command again. So each run waits for the jobs of the run before it.
+
+A document recorded before the detail job pinned `body_html_url` has no pinned URL, about 700 in production. For each such original, up to the limit, the command admits one refetch job of its detail. The job key is `federal-register/{source}/document/{number}/body-url`. The refetch only fills the null URL. It changes no other column and never replaces a pinned URL. When it fills the URL, it admits the text job in the same transaction.
+
+Each list has its own limit. One run can admit up to the limit of text jobs and up to the limit of refetch jobs.
+
+The command prints `pendingJobs`, `examined`, `admitted`, `refetches`, and `noUrlWithRefetch`. `admitted` counts text jobs. `refetches` counts refetch jobs. `noUrlWithRefetch` counts the originals that have no body URL and already have a refetch job in any state. It is counted before the run admits its jobs.
+
+Run order: run the command and wait until its jobs end. Repeat until `examined` and `refetches` are both 0. Then read `noUrlWithRefetch`. A count above 0 after all jobs end means the origin gave no URL or a refetch job failed. Check `jobs list` for those jobs.
+
 ### Executive action revision backfill
 
 R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
@@ -769,6 +800,21 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the action `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
 
 Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
+
+### Executive action disposition target backfill
+
+The table `executive_action_revision_disposition_targets` holds the typed Amends and Revokes targets of each revision. Current code writes them with each new revision. Revisions from before the migration `ExecutiveActionDispositionTargets` that hold notes need a backfill. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets verify
+```
+
+`backfill <limit>` walks the revisions that have notes and no target row, in key order, in batches of 25. Each batch is one short transaction that holds the executive action review lock. It parses the stored notes with `ExecutiveActionDispositionTargets` and writes the target rows. `examined` and `moved` count the revisions that the run read, and `limit` bounds that count. They do not show how many revisions got a target. A revision whose notes hold no target stays in the walk, so each run examines it again and writes nothing. A run stops at `limit` or when the walk reaches the last revision, so it always ends. A rerun changes nothing. The exit code is 0.
+
+`verify` parses the notes of each revision again and compares the result to the stored rows. It writes nothing and takes no lock. A revision that has a target in its notes and no stored row counts as `legacy`. A revision whose stored rows differ from its notes, or that has rows and no notes, counts as a mismatch with the field name `dispositionTargets`. `verify` exits 1 while a legacy row or a mismatch remains.
+
+Run order: `db migrate`, then `backfill`, then `verify`. The public pages and the API do not read the table yet.
 
 ### Statement revision backfill
 
@@ -912,17 +958,9 @@ Enable the source `member-photos` to capture one portrait for each configured me
 
 The output lists the members to add and the configured people who left the roster. Edit the configuration by hand and commit it. Press sources of a new member are a manual step. See [roster](architecture/roster.md#proposals).
 
-### Import people into tables
-
-The tables `people`, `person_setting_revisions`, `person_office_revisions`, and `person_office_revision_terms` hold the people of the configuration. Run the import after `db migrate`, and again after each configuration change that adds a person. A person added to the configuration has no row until an import runs. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. It prints `added` and `alreadyKnown`. Two imports at the same time make the second fail with exit code 1 and write nothing, so run one at a time. A repeat adds nothing, so the import is safe to run again. It exits with code 2 and writes nothing when a bioguide ID or a Wikidata ID belongs to another person. Only the owner settings have a reader today. See [roster](architecture/roster.md#officials-in-tables).
-
-```sh
-dotnet run --no-build --configuration Release --project src/CivicLens.Host -- people import config/federal-coverage.json
-```
-
 ### Take down a member photo
 
-Run `people import` first when the person is new in the configuration. A takedown of a person with no row fails with "Person '<id>' is unknown. Run people import first." Then run `people photo withhold <person-id>`. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. Add `--note <text>` to name the reason. The command adds one setting revision and prints it. It needs no commit and no restart, because each publish reads the newest setting. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the setting. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues. Run `people photo restore <person-id>` and publish again to restore the newest photo. The revisions keep the history, with the owner, the time, and the note.
+A takedown of a person with no row fails with "Person '<id>' is unknown." A member gets a row when a roster snapshot first lists them. Run `people photo withhold <person-id>` for a person with a row. It needs `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`. Add `--note <text>` to name the reason. The command adds one setting revision and prints it. It needs no commit and no restart, because each publish reads the newest setting. Then run `releases publish <idempotency-key>` with no record. The command makes a release that applies the setting. When the person has no published record, no release shows their photo. The command then refuses with "Nothing to publish", and nothing needs to be done. The new release shows no photo for the person, and the official page shows the neutral line "No portrait is shown for this official." Collection continues. Run `people photo restore <person-id>` and publish again to restore the newest photo. The revisions keep the history, with the owner, the time, and the note.
 
 To set or clear the website of a person, run `people website set <person-id> <url>` or `people website clear <person-id>`. The URL must be an absolute https URL with no user info. A member with a valid roster URL keeps the roster URL. The command still saves the setting. Set `CIVIC_LENS_COLLECTION_CONFIG` to the collection configuration file. The command then reads the latest member roster. When the person is a member with a valid roster URL, the command prints one warning on standard error and exits with 0. The warning is "Warning: <person-id> has a roster website, <roster-url>. The roster website publishes, not this one." The saved URL publishes only after the person leaves the roster. Without the variable, the command prints no warning.
 
@@ -1040,20 +1078,98 @@ The command prints JSON with these keys:
 - `openRangesWithoutRow`: the open ranges that still have no row.
 - `closedRangesWithoutKeptFolder`: the closed ranges that no kept folder lists. These ranges get no row, and this is expected.
 - `readyRangesWithoutRow`: the open or closed ranges that passed every check but got no row, because the limit stopped the run.
+- `openStatementsWithoutApprover`: the open statement ranges that still have no approver.
+- `openRangesWithoutApprovalTime`: the open ranges whose row still has no approval time. The run fills a null time from the oldest kept record file and never changes a stored time. The limit bounds only the new rows, not the fills. Like the approver fill, the run reads one record file for each range with no time.
 
-The exit code is 0 only when `skipped`, `openRangesWithoutRow`, and `readyRangesWithoutRow` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+The exit code is 0 only when `skipped`, `openRangesWithoutRow`, `readyRangesWithoutRow`, `openStatementsWithoutApprover`, and `openRangesWithoutApprovalTime` are all 0. Otherwise it is 1. After a run with a limit that stops early, `readyRangesWithoutRow` is not 0. Run the command again until it exits with 0. A `firstPublishedMissing` skip means that `releases first-published backfill` must run first. A `recordFileDiffers` or `foldersDiffer` skip needs a person to look at the folder, because the command does not choose a value.
+
+### Correction history bootstrap
+
+Run this owner command before deploying the shared corrections reader. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. First fill missing entry and first-publication rows with the commands above.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases corrections backfill <limit> [cursor]
+```
+
+The limit caps candidate files examined, including failed reads. The command uses small keyset pages and prepares immutable history copies before taking final publication locks. It includes the current active and served releases and the releases kept by the retention policy. It reads private immutable record JSON, checks the exact revision and typed entry facts, and binds verified histories. Empty histories get bindings. It never rewrites a file, an existing history, or a conflicting binding.
+
+The JSON result contains `examined`, `added`, `alreadyPresent`, `failed`, `failures`, and `nextCursor`. The failure list holds at most 50 entries with release, kind, record ID, and a reason. Reasons are `recordMissing`, `recordUnreadable`, or `recordInvalid`. `alreadyPresent` counts exact bindings another run inserted before finalization. Copy the opaque `nextCursor` string into the next invocation. A null cursor ends this scan. The exit code is 1 when this run reports failed files, and 0 otherwise; it does not prove complete coverage.
+
+Continue from the cursor to reach later valid files. Inspect each reported failure. After an authorized repair, run again without a cursor to retry earlier failures. A fresh scan with zero examined files proves only that no missing bindings were selected. Verify existing typed histories and full coverage separately before enabling the reader. A changed retention or revision check stops binding rather than guessing; start a fresh scan after resolving the cause. No public request reads the conversion files.
+
+### Correction history verification
+
+Run `releases entries verify` to prove stored membership against the kept manifests. After correction bootstrap, verify every selected history before enabling the reader:
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases corrections verify <limit> [cursor]
+```
+
+The limit caps record files examined. The command includes existing bindings and checks the retained, active, and served releases. It compares exact revision facts and correction content, including order, UTC ticks, and original offsets. It writes nothing. Each database page covers one release in a short read-only repeatable-read transaction. File reads follow that transaction.
+
+A release and its correction bindings never change. The command therefore verifies one release at a time. The walk goes through the selected releases in release order. The cursor binds to one release, by number and directory name, and holds the record position and the failures already found in that release.
+
+The JSON result contains these fields:
+
+- `examined`, `verified`, `failed`, `failures`, and `nextCursor`. The first 50 failures give the release, kind, record ID, and the same reasons as bootstrap. `recordInvalid` also covers missing or corrupt typed histories. All failures count in `failed`, even when the list is full.
+- `verifiedReleases`. Each entry gives `releaseNumber` and `directoryName` of a release that this call finished with no failed record. The cursor carries failures from earlier calls, so a release with an earlier failure never appears here.
+- `skippedReleases`. Each entry gives `releaseNumber`, `directoryName`, and `reason`. The cursor named this release, but the selection no longer holds it. The reason is `notSelected` when the number left the selection. The reason is `directoryChanged` when the number is selected under another directory. The walk then continues with the next selected release.
+- `selection`. Each entry gives `releaseNumber`, `directoryName`, and `cursor`. The list is the current selection, read after the last file read. The `cursor` starts a walk at the first record of that release.
+
+Copy `nextCursor` into the next invocation until it is null. A null cursor ends the walk. Exit code 1 means a failed record. A skipped release does not change the exit code. Invalid input or owner identity gives 2. A zero exit code means this call passed, not that earlier calls passed.
+
+The controller keeps a ledger outside the database. The ledger maps each release number to a directory name. Follow these rules:
+
+1. After each call, add every entry of `verifiedReleases` to the ledger.
+2. Never add a release that is not in `verifiedReleases`. Never remove a failed release that the selection still holds from the work list. Repair the cause, then verify the release again from its `selection` cursor. Failures of a release that the selection no longer holds need no repair.
+3. Declare completion only when `nextCursor` is null and every entry of `selection` is in the ledger with the same `directoryName`. A ledger entry that the selection no longer holds does not matter.
+4. When `nextCursor` is null but a selected release is not in the ledger, start the next call with the `cursor` of the first such release in `selection`. Do this when a release is published during a long walk, or when a release was reported in `skippedReleases`. When that release appears in `verifiedReleases` or in `failures`, discard `nextCursor`. Then continue with the next selected release that is not in the ledger. A cursor walks on through every later release, so this rule stops repeated work.
+5. Do not restart without a cursor after the first complete walk. A full restart repeats work that the ledger already holds.
+6. The cursor is trusted. Pass back only a `nextCursor` or `selection` cursor value, unchanged. The command does not check that an edited cursor still covers every record of its release.
+
+A complete ledger proves agreement for the selected membership. It does not replace manifest membership verification.
+
+### Bill count backfill and verification
+
+Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261110190000` has no rows in `release_bill_counts` and `release_official_bill_counts`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts backfill <limit> [cursor]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts verify <limit> [cursor]
+```
+
+The limit caps releases examined. Each release is one write transaction. Before the write, the command reads the manifest, the officials file, and every action and vote record file of the release. It checks them against the tables. The write transaction then checks again that the release is still retained and that the same revisions are members. A release that already holds an exact snapshot counts as `alreadyPresent`. A partial or changed snapshot fails and the command never repairs it. A release with no Congress to count fails and writes nothing.
+
+The backfill JSON result holds `examined`, `added`, `alreadyPresent`, `skipped`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. A failure holds the release number, a reason, and a detail text. Reasons are `recordMissing`, `recordUnreadable`, `recordInvalid`, and `countsInvalid`. Copy the opaque `nextCursor` into the next run. A changed release selection reports `staleCursor`; restart without a cursor. Old numeric cursors restart from the beginning. Exact existing snapshots are reused. The exit code is 1 when a release failed or the cursor is stale.
+
+The verifier writes nothing. It repeats the file checks of the backfill. Then it compares the expected counts with the saved rows in both directions in one read-only transaction. A release with no saved rows fails as `countsMissing`. A release with a missing, extra, or changed row fails as `countsDifferent`. The result holds `examined`, `verified`, `skipped`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. Copy `nextCursor` into the next run until it is null. A stale cursor means the selected release set changed. Restart without a cursor. The exit code is 1 for a failure or a stale cursor. Readers may switch only after one complete scan under one fingerprint verifies every selected release.
+
+### Party line-up backfill and verification
+
+Run these owner commands for the active and retained rollback releases before the issue page reads the party line-up. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261111000000` has no rows in `release_issue_party_lineups` and `release_issue_party_counts`. The line-up counts the bills of the issues that hold counts in `release_issues`. The migration `ReleaseHomeIssueCounts` fills those counts. The line-up does not read the bill count tables, so the bill count commands are not a prerequisite.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases lineups backfill <limit> [cursor]
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases lineups verify <limit> [cursor]
+```
+
+The limit caps releases examined. Each release is one write transaction. Before the write, the command reads the manifest, the officials file, and every action and vote record file of the release. It checks them against the tables. The write transaction then checks again that the release is still retained and that the same revisions are members. A release that already holds an exact snapshot counts as `alreadyPresent`. A release with no issue that holds counts needs no rows and writes none. It counts as `skipped`, so a converted release differs from a release with nothing to convert. A partial or changed snapshot fails and the command never repairs it.
+
+The backfill JSON result has the same keys as the bill count backfill: `examined`, `added`, `alreadyPresent`, `skipped`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. Reasons are `recordMissing`, `recordUnreadable`, `recordInvalid`, and `lineUpsInvalid`. Copy the opaque `nextCursor` into the next run. A changed release selection reports `staleCursor`; restart without a cursor. Old numeric cursors restart from the beginning. Exact existing snapshots are reused. The exit code is 1 when a release failed or the cursor is stale.
+
+The verifier writes nothing. It repeats the file checks of the backfill. Then it compares the expected rows with the saved rows in both directions in one read-only transaction, and it checks that the parts add up to the bill count of each issue. A release with expected rows and no saved rows fails as `lineUpsMissing`. A release with a forged, extra, or changed row fails as `lineUpsDifferent`. A release that expects no rows and holds none counts as `skipped`, not as `verified`, and the API serves a null `lineUp` for it. The result has the same keys as the bill count verifier: `examined`, `verified`, `skipped`, `failed`, `failures`, `nextCursor`, `staleCursor`, and `selectionFingerprint`. Copy `nextCursor` into the next run until it is null. A stale cursor means the selected release set changed. Restart without a cursor. The exit code is 1 for a failure or a stale cursor. The issue page may read the line-up only after one complete scan under one fingerprint verifies every selected release.
 
 ### Stored columns backfill
 
-The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, and the Congress of each entry. This command fills them for rows that earlier releases wrote.
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, and the bill link of each vote of a release. This command fills them for rows that earlier releases wrote.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
 ```
 
-Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Find the revisions that `openVoteRevisionsWithoutKeptFile` counts, restore their kept folders, and run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
+Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Two counts stop the deploy. `openVoteRevisionsWithoutKeptFile` counts the revisions that no kept folder holds. Restore their kept folders. `releasesWithUnreadableManifest` counts the kept releases whose manifest is invalid. Restore the folder of each such release from a backup, so that its manifest is whole. Then run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
 
-The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
+The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. A release takes the bill links of its votes from its manifest: each vote links the first action record on its bill that the release holds, as `ReleaseBillLines` gives it at publication. A release with no manifest folder is skipped. A release whose manifest cannot be read is skipped and counted in `releasesWithUnreadableManifest`. Until this command runs after the migration `ReleaseVoteBills`, the API shows a null bill link for the votes of the releases that the migration found. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
 
 The command prints JSON with these keys:
 
@@ -1061,9 +1177,36 @@ The command prints JSON with these keys:
 - `voteRevisionsWritten`: the revisions that this run wrote. A revision that the release gives null columns counts as written.
 - `openVoteRevisionsWithoutKeptFile`: the revisions in the active release range that no kept folder holds. They stay unwritten.
 - `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
-- `officialPhotoPathsFilled` and `entryCongressesFilled`: the rows that this run filled.
+- `officialPhotoPathsFilled`, `entryCongressesFilled`, and `voteBillLinksFilled`: the rows that this run filled.
+- `releasesWithUnreadableManifest`: the kept releases whose manifest is invalid. The run wrote no vote link for them. Restore the folder, then run the command again.
 
-The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` is 0. Otherwise it is 1.
+The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` and `releasesWithUnreadableManifest` are both 0. Otherwise it is 1.
+
+### Vote bills verify
+
+This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases vote-bills verify
+```
+
+For each kept release, the command reads the manifest once and computes the expected links with `ReleaseBillLines`. This is the old rule of the grouped view applied to the entries of the release: the lowest-ID action entry of the bill. Then it compares them with the rows of `release_vote_bills` in both directions. The JSON result holds `passed`, `failed`, `retired`, `failedByReason`, and `failedReleases`. A failed release holds its number, its folder, a reason, and the first vote as `vote:<id>`. Reasons are `manifestInvalid`, `linkMissing`, `linkExtra`, and `linkChanged`. A release with no manifest folder is counted in `retired` and does not fail. The exit code is 0 only when `failed` is 0. Otherwise it is 1.
+
+### Vote party tally verification
+
+`releases columns backfill` already converts the party cast tallies of retained vote revisions. It reads the immutable vote file of each revision and writes the typed group rows and the group count marker. Run the verifier after that backfill and before the vote page reads the typed tallies.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases tallies verify <limit> [cursor]
+```
+
+The production operator wrapper permits `releases tallies verify <count> [cursor]`, with a count from 1 through 9999. It forwards the optional cursor as one literal argument; the CLI owns cursor validation. Run it explicitly after conversion, continuing with each returned cursor. Deployment does not start this verifier automatically.
+
+The command needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. It writes nothing. The limit caps the revisions examined. It reads the stored rows in batches of 25 revisions, each in one read-only transaction. For each revision with a marker it reads the immutable vote file from the newest kept folder in the release range of that revision, as the backfill does. Then it compares the stored rows with the party tallies of that file in both directions. The member list is not evidence, because it holds tracked members only.
+
+The JSON result holds `examined`, `verified`, `unavailable`, `unresolved`, `openWithoutKeptFile`, `closedWithoutKeptFile`, `failed`, `failures`, and `nextCursor`. A failure holds the record, the revision number, a reason, and a detail text. The list holds at most 50 failures, and `failed` counts every failed revision. Reasons are `missingGroup`, `extraGroup`, `differentCounts`, `markerDiffersFromRows`, `markerDiffersFromFile`, `markerWithoutState`, and `rowsWithoutMarker`. `nextCursor` reads as `revision:recordId`. Pass it as `[cursor]` to continue after that revision. The cursor does not freeze the revision set. Restart from the beginning to include revisions added before its last key.
+
+An unknown count stays unknown. A revision with no marker counts as `unresolved`. This is normal for a revision that no kept folder holds. A revision with marker zero counts as `unavailable`, because its file had no complete tally. A zero marker is a failure when the kept file holds complete tallies. The command never writes a zero for an unknown count. Group rows on a revision with no marker or a zero marker are failures. A revision with a positive marker whose file no kept folder holds stays unproven. It counts as `openWithoutKeptFile` when its release range is still open, and as `closedWithoutKeptFile` when the range is closed. A zero marker on an open range with no file is an open miss too. The active folder always holds the file of an open range, so an open miss is a fault. A marker on a revision that no record state names fails with `markerWithoutState`, because both writers set a marker only on a revision with record states. Retention prunes the folders of closed ranges, so closed misses are normal. The command reads the release list once at its start. A revision that a publish adds during the scan, or a folder that retention prunes during it, can count as a miss for that run, so run it again before you act on a miss. The exit code is 1 only when `failed` is above 0. Before the vote page cutover, `failed` and `openWithoutKeptFile` must be 0, and `unresolved` must hold only revisions that you accept as unknown.
 
 ### Entries verify
 
@@ -1073,7 +1216,7 @@ This command proves that the entry, state, first publication, and withdrawal tab
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases entries verify
 ```
 
-The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line from the table. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
+The command reads each kept manifest once. It writes the file again with no change, and it checks the bytes. Then it checks the records of the state table against the entries of the file. Last, it rebuilds the manifest from the tables and compares the bytes with the file. The rebuild takes the bill line and the approval time from the table. A time that differs from the manifest fails the release with `bytesDiffer`. It takes only the official names, the five other optional entry fields, `publishedAtUtc`, and some withdrawals from the file.
 
 The command prints JSON with these keys:
 
@@ -1171,9 +1314,21 @@ To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in
 
 To give each page a canonical address, set `CIVIC_LENS_PUBLIC_BASE_URL` in the same environment, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. An invalid value stops `releases publish` with exit code 2. It also stops the worker at start when publishing is on, because that composition reads the value then. It stops the review workspace at start when `CIVIC_LENS_RELEASE_DIRECTORY` is set. With the variable set, a release holds `sitemap.xml`, `robots.txt`, `404.html`, and a canonical link and `og:url` on every page except `404.html`. Without it, a release holds none of these. The process reads the variable once, so restart the review workspace and the worker after a change. Set the variable before the first production publish. A page that a publish carries by hard link keeps the address it was written with.
 
-To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use its link "Report a problem with this record". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
+To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the process that publishes. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Publish, serve the release root, and open a record page. Use the footer link that starts with "Report a problem with this". Send the report, then run the pull command above to see it. Without the API address or the site key, `report.html` says that reporting is not available.
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1/128`. Each range needs a prefix length, and the service stops at start when one has none. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
+
+### Reset the search index
+
+Do this after a deploy that adds a column that only the ingest fills, such as `summary` of `records` (`005_record_summary.sql`). The ingest never fetches a stored revision again, so old rows keep a null column until the index is empty. The reset removes the indexed releases and records. It keeps `reader_reports` and `report_pull_state`. It also drops the earlier releases, so a search pinned to an older release answers 404 until the ingest stores it again. The ingest stores the active release only. The owner runs these steps on the production host:
+
+1. Deploy the commit. The new search service applies the migration at startup.
+2. Stop the search service: `sudo deploy/scripts/compose.sh stop search`. This stops the whole public API and the server pages until step 4. All `/v1` routes and all `/web` pages, such as `/compare.html`, are down.
+3. Empty the index tables: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="TRUNCATE active_release, records, releases"'`.
+4. Start the service: `sudo deploy/scripts/compose.sh up --detach search`. The start empties the cached manifest validators, so the first poll ingests the active release. Search answers 503 until that ingest ends.
+5. Check that the column is filled: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command="SELECT count(*) FROM records WHERE summary IS NULL AND kind IN ('"'"'statement'"'"', '"'"'documentChange'"'"', '"'"'action'"'"', '"'"'vote'"'"')"'` must print 0.
+
+On the dev machine, remove the search database as in [Run the search service](#run-the-search-service) and start it again.
 
 ## Container images
 
@@ -1192,7 +1347,9 @@ The `Dockerfile` in the repository root builds two images for linux-arm64. The w
 - After the first run on main, set the packages `civic-lens-host` and `civic-lens-search` to public in the ghcr package settings. Do this one time by hand. The Jetson then pulls without a token.
 - Each image has two tags: the full commit SHA and `main`. Deploy by the commit SHA. Pull one with `docker pull ghcr.io/young-kobe/civic-lens-host:<commit-sha>`. Check its attestation with `gh attestation verify oci://ghcr.io/young-kobe/civic-lens-host:<commit-sha> --repo young-kobe/civic-lens`.
 - Every base image is pinned by digest, and the tag is in a comment. The SDK image must equal the `global.json` version. The aspnet image must equal the runtime of that SDK (see the .NET release notes). To update a base image, change the digest and the comment together.
-- The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the distribution archive.
+- The `libgssapi-krb5-2` package is not pinned. Each build installs the current version from the Ubuntu archive or the fallback mirror.
+- If the apt update fails, the build retries once with the `mirrors.ocf.berkeley.edu` mirror and prints a warning in the build log. The GitHub runners use Azure DNS, which failed to resolve `*.ubuntu.com` on 2026-11-11. apt checks the Ubuntu archive signatures on each mirror. The image keeps the original source list.
+- A stale mirror can serve old packages with valid signatures. If the build log shows the fallback warning, rebuild after the Ubuntu archive works again.
 
 ## Web server
 
@@ -1437,7 +1594,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, `analyses redraft --stale` with an optional stage, `bills subjects backfill`, `bills status backfill`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, `releases entries verify`, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, reset a database, or name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, `analyses redraft --stale` with an optional stage, `bills subjects backfill`, `bills status backfill`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, `releases entries verify`, `releases tallies verify` with a bounded count and optional cursor, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, or reset a database. Publishing cannot name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

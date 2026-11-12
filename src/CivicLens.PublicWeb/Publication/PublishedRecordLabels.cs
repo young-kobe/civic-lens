@@ -34,6 +34,13 @@ public static class PublishedRecordLabels
 
     public const string DefaultOrder = "Default order";
 
+    /// <summary>The record kinds in the order that a kind filter lists them, as the Mosaic v2 search mockup has them. The one owner of that order.</summary>
+    public static IReadOnlyList<PublishedRecordKind> FilterOrder { get; } =
+    [
+        PublishedRecordKind.Action, PublishedRecordKind.ExecutiveAction, PublishedRecordKind.Statement, PublishedRecordKind.Vote,
+        PublishedRecordKind.Brief, PublishedRecordKind.DocumentChange, PublishedRecordKind.Relationship
+    ];
+
     public static IReadOnlyDictionary<string, string> KindLabels { get; } =
         Enum.GetValues<PublishedRecordKind>().ToDictionary(PublicationProtocol.KindText, Kind);
 
@@ -92,13 +99,18 @@ public static class PublishedRecordLabels
 
     public const string StatementModelWording = "An AI summary of this release.";
 
+    public const string StatementCheckedByPersonWording = "Drafted by an AI model from this source. A person checked it before publication.";
+
     public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
-        statement.ApprovedBy == PublishedApprover.Code ? Wording(statement.TextOrigin, StatementModelWording) : [];
+        statement.TextOrigin == PublishedTextOrigin.Model ? [new("Wording", StatementModelLabel(statement.ApprovedBy))] : [];
+
+    private static string StatementModelLabel(PublishedApprover approver) =>
+        approver == PublishedApprover.Code ? StatementModelWording : StatementCheckedByPersonWording;
 
     public const string ModelDateCheckedByCode = "Date found by an AI model and checked by code against the quote";
 
-    public static string StatementDate(PublishedStatement statement, string date) =>
-        statement.ApprovedBy == PublishedApprover.Code && statement.StatementDateEvidence is not null ? $"{date}. {ModelDateCheckedByCode}." : date;
+    public static string StatementDate(PublishedApprover approver, bool hasDateEvidence, string date) =>
+        approver == PublishedApprover.Code && hasDateEvidence ? $"{date}. {ModelDateCheckedByCode}." : date;
 
     public const string PersonApproval = "Approved";
 
@@ -128,7 +140,9 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Relationship type has no label.")
     };
 
-    public const string ReportRecordLink = "Report a problem with this record";
+    public const string ReportLinkStart = "Report a problem with this";
+
+    public static string ReportKindLink(PublishedRecordKind kind) => $"{ReportLinkStart} {Kind(kind).ToLowerInvariant()}";
 
     public const string ContactEmail = "contact@civic-lens.info";
 

@@ -17,6 +17,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Publication;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
@@ -30,18 +31,19 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     private const string LoginPassword = "test-only-password";
 
     private static readonly string[] BaseTables =
-        ["vote_revisions", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
+        ["vote_revisions", "vote_revision_party_tallies", "vote_revision_facts", "vote_member_list_entries", "vote_revision_issues", "publication_releases", "publication_record_states", "vote_drafts", "vote_member_lists",
          "brief_revisions", "relationship_revisions", "action_revisions", "action_revision_sponsorships", "action_revision_issues", "action_drafts", "published_entries", "zcta_districts", "roster_snapshots", "collection_attempts",
          "brief_revision_paragraphs", "brief_revision_citations", "brief_revision_paragraph_citations", "document_change_revisions",
          "document_comparisons", "document_comparison_hunks", "document_comparison_word_edits", "document_change_revision_citations",
          "document_change_revision_issues", "document_change_revision_officials",
          "document_extractions", "statement_revision_quotations",
-         "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas", "published_entry_officials",
+         "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_issue_party_counts", "release_bill_counts", "release_official_bill_counts", "release_policy_areas", "published_entry_officials",
          "published_bill_histories", "published_bill_history_actions", "release_bill_histories",
-         "release_bill_statuses", "statement_review_decisions", "statement_revisions", "statement_revision_speakers", "statement_revision_issues",
+         "release_bill_statuses", "release_vote_bills", "statement_review_decisions", "statement_revisions", "statement_revision_speakers", "statement_revision_issues",
          "statement_drafts", "statement_candidates", "executive_action_revisions", "executive_action_revision_notices", "executive_action_documents",
          "publication_withdrawals", "publication_withdrawal_corrections", "published_records", "release_correction_histories",
-         "published_correction_histories", "published_correction_history_entries"];
+         "published_correction_histories", "published_correction_history_entries",
+         "action_revision_sponsorship_citations", "action_revision_text_citations", "executive_action_revision_facts", "published_entry_issues", "published_entry_policy_areas"];
 
     private string connectionString = null!;
     private string[] roleAfterMigration = null!;
@@ -79,9 +81,11 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
-        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_bill_counts", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_policy_areas",
-            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
-            "executive_actions", "executive_action_notices", "withdrawals", "withdrawal_corrections", "record_correction_histories", "record_correction_history_entries" })
+        foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_sponsorship_parties", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
+            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statement_approvers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
+            "executive_actions", "executive_action_notices", "executive_action_targets", "withdrawals", "withdrawal_corrections",
+            "action_sources", "executive_action_sources", "record_entries", "record_officials", "record_issues", "record_policy_areas", "record_first_publications",
+            "record_correction_histories", "record_correction_history_entries" })
         {
             // Join and aggregate views reject writes before privilege checks. The simple release identity view reaches the missing-grant check.
             var sqlState = view == "active_release" ? "42501" : "55000";
@@ -113,10 +117,13 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             """, connectionString);
         Assert.Equal(
         [
+            $"action_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"active_records v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"active_release v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_key_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_sponsorship_parties v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -130,12 +137,13 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"document_change_word_edits v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"document_changes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_action_notices v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"executive_action_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"executive_action_targets v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"issue_sponsors v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"issue_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"member_votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_attendance v {Owner} {Role}:SELECT {{security_barrier=true}}",
-            $"official_bill_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_executive_actions v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_issue_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"official_party_lines v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -143,22 +151,34 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"party_agreement v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_correction_histories v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_correction_history_entries v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_entries v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_first_publications v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_headlines v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"record_links v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"record_policy_areas v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"release_bill_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_excludes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issue_includes v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"release_issue_party_lineups v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"release_official_bill_counts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_official_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_officials v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"release_policy_areas v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"statement_approvers v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_quotations v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_speakers v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statements v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"vote_evidence v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_facts v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_first_publications v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_issues v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_members v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"vote_party_tallies v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"vote_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"votes v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"withdrawal_corrections v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"withdrawals v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -259,28 +279,75 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.active_records"));
     }
 
+    // The links are the rows that the commit of each release writes. The old view grouped public_api.bills for each read, and OldBillLinkSql repeats that rule so the test proves that the pinned rows give the same value.
+    private const string VoteBillLinks = "SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id";
+
+    private const string OldBillLinkSql = """
+        SELECT left(a.record_id, 1) || ' ' || coalesce(left((SELECT min(b.record_id) FROM public_api.bills b
+                                                            WHERE b.congress = v.congress AND b.bill_type = v.bill_type AND b.bill_number = v.bill_number), 1), 'none')
+          FROM public_api.active_records a JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
+         WHERE a.kind = 'vote' ORDER BY a.record_id
+        """;
+
     [Fact]
-    public async Task VotesLinkOnlyToTheLowestIdMatchingBillInTheActivePublishedRelease()
+    public async Task VotesShowTheBillLinkThatTheActiveReleasePinnedAndItEqualsTheLowestIdMatchingBillOfThatRelease()
     {
         await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(connectionString,
             new SeededVote('7', "2026-03-03") { BillNumber = 7 },
             new SeededVote('8', "2026-03-02") { BillNumber = 8 },
-            new SeededVote('9', "2026-03-01") { BillType = null, BillNumber = null });
+            new SeededVote('9', "2026-03-01") { BillType = null, BillNumber = null },
+            new SeededVote('c', "2026-02-28") { BillNumber = 11 });
         await BillsSeed.AddBillsAsync(connectionString,
             new SeededBill('b', "2026-01-01") { BillNumber = 7, LastRelease = 1 },
             new SeededBill('d', "2026-01-01") { BillNumber = 7, LastRelease = 1 },
             new SeededBill('e', "2026-01-01") { BillNumber = 7, FirstRelease = 2 },
+            new SeededBill('f', "2026-01-01") { BillNumber = 11, FirstRelease = 2 },
             new SeededBill('0', "2026-01-01") { BillNumber = 7, Congress = 118 },
             new SeededBill('1', "2026-01-01") { BillNumber = 7, BillType = "s" });
+        await ViewsSeed.LinkVoteBillsAsync(connectionString, 1, ('7', 'b'));
 
-        Assert.Equal(["7 b", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+        Assert.Equal(["7 b", "8 none", "9 none", "c none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
 
         await ViewsSeed.ActivateReleaseAsync(connectionString, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
-        Assert.Equal(["7 e", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+        await ViewsSeed.LinkVoteBillsAsync(connectionString, 2, ('7', 'e'), ('c', 'f'));
+        Assert.Equal(["7 e", "8 none", "9 none", "c f"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
 
         await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
-        Assert.Equal(["7 b", "8 none", "9 none"], await PublicAsync("SELECT left(v.record_id, 1) || ' ' || coalesce(left(v.bill_record_id, 1), 'none') FROM public_api.votes v ORDER BY v.record_id"));
+        Assert.Equal(["7 b", "8 none", "9 none", "c none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(await PublicAsync(VoteBillLinks), await QueryAsync(OldBillLinkSql, connectionString));
+    }
+
+    // The rows come from PublishRelease and from the commit of PostgresPublicationStore. Only the review rows of the records are seeded, because the commit of this test holds no records.
+    [Fact]
+    public async Task APublishedReleaseGivesTheLinksOfTheOldRuleAndAHiddenBillGivesNullBecauseNoRouteServesThatBill()
+    {
+        var scenario = new PublicationScenario();
+        var (visibleLow, visibleHigh, hidden, visibleOther) = (scenario.AddAction('b'), scenario.AddAction('d'), scenario.AddAction('3'), scenario.AddAction('e'));
+        var linked = scenario.AddVote('1', billActionRecordIds: [visibleLow, visibleHigh]);
+        var hiddenFirst = scenario.AddVote('2', billType: "s", billActionRecordIds: [hidden, visibleOther]);
+        var noBill = scenario.AddVote('4', billType: null);
+        PublishedRecordReference[] references = [.. new[] { visibleLow, visibleHigh, hidden, visibleOther }.Select(id => new PublishedRecordReference(PublishedRecordKind.Action, id)),
+            .. new[] { linked, hiddenFirst, noBill }.Select(id => new PublishedRecordReference(PublishedRecordKind.Vote, id))];
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", references));
+        await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('1', "2026-03-03") { BillNumber = 7 }, new SeededVote('2', "2026-03-02") { BillType = "s", BillNumber = 7 },
+            new SeededVote('4', "2026-03-01") { BillType = null, BillNumber = null });
+        await BillsSeed.AddBillsAsync(connectionString, new SeededBill('b', "2026-01-01") { BillNumber = 7 }, new SeededBill('d', "2026-01-01") { BillNumber = 7 },
+            new SeededBill('3', "2026-01-01") { BillType = "s", Sponsorships = [] }, new SeededBill('e', "2026-01-01") { BillType = "s" });
+
+        var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var published = scenario.Publications.LastCommit!;
+        var commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications,
+            new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", published.Records, []) { Withdrawals = [], Names = ReleaseNameFixtures.None, AddedEntries = published.AddedEntries, VoteBills = published.VoteBills });
+        await publications.CommitAsync("auth0|owner", commit, "key", new string('1', 64), default);
+
+        Assert.Equal(["1 b", "2 none", "4 none"], await PublicAsync(VoteBillLinks));
+        Assert.Equal(["1 b", "2 e", "4 none"], await QueryAsync(OldBillLinkSql, connectionString));
+        Assert.Equal((await QueryAsync(OldBillLinkSql, connectionString)).Where(row => !row.StartsWith("2 ", StringComparison.Ordinal)),
+            (await PublicAsync(VoteBillLinks)).Where(row => !row.StartsWith("2 ", StringComparison.Ordinal)));
+        Assert.Equal(["3"], await QueryAsync($"SELECT left(bill_record_id, 1) FROM release_vote_bills WHERE vote_record_id = '{hiddenFirst}'", connectionString));
     }
 
     [Fact]
@@ -491,7 +558,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await ExecuteAsync($"""
             REVOKE SELECT ON ALL TABLES IN SCHEMA public_api FROM {Role};
             REVOKE USAGE ON SCHEMA public_api FROM {Role};
-            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_revision_facts, vote_member_list_entries, vote_revision_issues,
+            REVOKE SELECT ON publication_releases, publication_record_states, vote_revisions, vote_revision_party_tallies, vote_revision_facts, vote_member_list_entries, vote_revision_issues,
                 action_revisions, action_revision_sponsorships, action_revision_issues, zcta_districts, roster_snapshots, collection_attempts FROM {Owner};
             ALTER ROLE {Role} RESET ALL;
             ALTER ROLE {Role} CONNECTION LIMIT -1;
@@ -574,6 +641,31 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.briefs ORDER BY 1"));
         Assert.Equal(["1"], await PublicAsync("SELECT DISTINCT release_number::text FROM public_api.briefs"));
         Assert.Equal(["2026-05-04"], await PublicAsync("SELECT DISTINCT week_start::text FROM public_api.briefs"));
+    }
+
+    [Fact]
+    public async Task ABriefShowsItsCoverageItsCutoffItsPublishedApprovalTimeAndNotALaterApprovalAndItsFirstPublicationTime()
+    {
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+              VALUES (1, '000001-00000000000000000000000000000001', 'test', 1, 1, true);
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 1, NULL);
+            INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, run_id, revision_json, created_at_utc_ticks,
+                week_start, window_start_utc_ticks, window_end_utc_ticks, first_release_number, cutoff_release_number, fingerprint, headline, text_origin,
+                coverage_considered, coverage_sent_to_model)
+              VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'test', 'Person', NULL, '{}', 1, '2026-05-04', 0, 6048000000000, 1, 4, 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'Headline', 'Person', 9, 6);
+            INSERT INTO brief_review_decisions (decision_id, record_id, revision_number, review_state_version, actor_subject, kind, created_at_utc_ticks) VALUES
+              ('00000000000000000000000000000001', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 1, 'test', 'Approve', 100),
+              ('00000000000000000000000000000002', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 2, 'test', 'Approve', 200),
+              ('00000000000000000000000000000003', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 3, 'test', 'RequestChanges', 300);
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 50);
+            INSERT INTO published_entries (kind, record_id, revision_number, brief_record_id, brief_revision_number, headline, approved_at_utc_ticks)
+              VALUES ('brief', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'Headline', 100);
+            """);
+
+        Assert.Equal(["4|9|6|100|50"], await PublicAsync(
+            "SELECT cutoff_release_number || '|' || coverage_considered || '|' || coverage_sent_to_model || '|' || approved_at_utc_ticks || '|' || first_published_at_utc_ticks FROM public_api.briefs"));
     }
 
     [Fact]
@@ -712,6 +804,27 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task KeyTermsReachTheViewInOrderForModelTextThatCitesBillTextOnlyBecauseAPersonEditOrATextFreeRevisionNeedsNoAiTerms()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
+              VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2025-01-03',
+                      'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', 'x', 85000, 59987);
+            UPDATE action_revisions SET text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It pays landlords.' WHERE record_id IN ('A', 'M');
+            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
+              SELECT record_id, revision_number, 1, 'grant', 'x', 100, 30, 'The term grant means a payment.', true FROM action_revisions WHERE record_id IN ('A', 'M', 'C')
+              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', 'x', 10, 30, 'The term Secretary means the Secretary.', false FROM action_revisions WHERE record_id IN ('A', 'M', 'C');
+            """);
+
+        Assert.Equal(["M|0|Secretary|The term Secretary means the Secretary.|false", "M|1|grant|The term grant means a payment.|true"],
+            await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition || '|' || cut FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
+        Assert.Equal(["Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms."],
+            await PublicAsync("SELECT DISTINCT label FROM public_api.bill_key_terms"));
+    }
+
+    [Fact]
     public async Task EventDateAndCosponsorCountEqualTheStoredColumnsBecauseCSharpWritesThemOnceAndTheViewMustNotComputeThem()
     {
         var revision = ActionRevisionFixtures.Model() with
@@ -809,6 +922,10 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO release_issue_includes (release_number, issue_id, "position", text) VALUES (1, 'housing', 0, 'Old include'), (2, 'housing', 0, 'New include');
             INSERT INTO release_issue_excludes (release_number, issue_id, "position", text) VALUES (1, 'housing', 0, 'Old exclude'), (2, 'housing', 0, 'New exclude');
             INSERT INTO release_policy_areas (release_number, policy_area_id, name) VALUES (1, 'land-use', 'Land'), (2, 'land-use', 'Land use');
+            INSERT INTO release_issue_party_lineups (release_number, issue_id, unknown_bills) VALUES (1, 'housing', 1), (2, 'housing', 0);
+            INSERT INTO release_issue_party_counts (release_number, issue_id, party, bills) VALUES (1, 'housing', 'Old party', 2), (2, 'housing', 'New party', 3);
+            INSERT INTO release_bill_counts (release_number, congress, bills, expected_member_row_count) VALUES (1, 119, 5, 1), (2, 119, 7, 1), (2, 120, 0, 0);
+            INSERT INTO release_official_bill_counts (release_number, congress, official_id, sponsored, cosponsored) VALUES (1, 119, 'mayor', 4, 1), (2, 119, 'mayor', 6, 2);
             """);
 
         Assert.Equal(["2 New Name"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_officials"));
@@ -817,10 +934,18 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(["New include"], await PublicAsync("SELECT text FROM public_api.release_issue_includes"));
         Assert.Equal(["New exclude"], await PublicAsync("SELECT text FROM public_api.release_issue_excludes"));
         Assert.Equal(["2 Land use"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_policy_areas"));
+        Assert.Equal(["2 housing 0 New party 3"], await PublicAsync("SELECT release_number || ' ' || issue_id || ' ' || unknown_bills || ' ' || party || ' ' || bills FROM public_api.release_issue_party_lineups"));
+        Assert.Equal(["2 119 7 1", "2 120 0 0"], await PublicAsync("SELECT release_number || ' ' || congress || ' ' || bills || ' ' || expected_member_row_count FROM public_api.release_bill_counts ORDER BY congress"));
+        Assert.Equal(["2 119 mayor 6 2"], await PublicAsync("SELECT release_number || ' ' || congress || ' ' || official_id || ' ' || sponsored || ' ' || cosponsored FROM public_api.release_official_bill_counts"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
         Assert.Equal(["1 Old Name"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_officials"));
+        Assert.Equal(["1 housing 1 Old party 2"], await PublicAsync("SELECT release_number || ' ' || issue_id || ' ' || unknown_bills || ' ' || party || ' ' || bills FROM public_api.release_issue_party_lineups"));
+        Assert.Equal(["1 119 5"], await PublicAsync("SELECT release_number || ' ' || congress || ' ' || bills FROM public_api.release_bill_counts"));
+        Assert.Equal(["1 119 mayor 4 1"], await PublicAsync("SELECT release_number || ' ' || congress || ' ' || official_id || ' ' || sponsored || ' ' || cosponsored FROM public_api.release_official_bill_counts"));
         await ExecuteAsync("UPDATE publication_releases SET is_active = false");
+        Assert.Empty(await PublicAsync("SELECT congress FROM public_api.release_bill_counts"));
+        Assert.Empty(await PublicAsync("SELECT official_id FROM public_api.release_official_bill_counts"));
         Assert.Empty(await PublicAsync("SELECT official_id FROM public_api.release_officials"));
     }
 

@@ -109,10 +109,9 @@ public sealed class ChangePersonSettingTests
             return Task.FromResult(new PersonSettingRevision(personId, Writes.Count, Current.WithholdPhoto, Current.Website));
         }
 
-        public Task<PeopleImport> ImportAsync(IReadOnlyList<PersonConfiguration> people, string actorSubject, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
         public Task<IReadOnlyDictionary<string, PersonSetting>> ReadNewestSettingsAsync(IReadOnlyCollection<string> personIds,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<PersonKey>> ReadKeysAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

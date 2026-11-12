@@ -13,4 +13,6 @@ public sealed record PublishedEntriesBackfillResult(int Examined, int Added, int
     int OpenRangesWithoutRow, int ClosedRangesWithoutKeptFolder, int ReadyRangesWithoutRow)
 {
     public int OpenStatementsWithoutApprover { get; init; }
+
+    public int OpenRangesWithoutApprovalTime { get; init; }
 }

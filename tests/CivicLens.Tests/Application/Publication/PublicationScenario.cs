@@ -329,7 +329,7 @@ internal sealed class PublicationScenario
         $"Summary version: 00\nAction date: 2026-01-03\nAction: Introduced in House\nUpdated: 2026-01-05T08:00:00Z\nText:\n{text}";
 
     /// <summary>Turns an approved action into a text draft: its summary comes from bill text and it cites that text.</summary>
-    public void DraftActionFromBillText(string recordId)
+    public void DraftActionFromBillText(string recordId, bool withKeyTerm = false)
     {
         var publishable = Actions.Publishable[recordId];
         var text = Extraction("Package: BILLS-119hr7ih\nText:\nThe program ends on December 31, 2030.", "action-bill-text", "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm");
@@ -345,7 +345,8 @@ internal sealed class PublicationScenario
                 Cite(ActionTextPart.Summary, start, 16, "One."),
                 Cite(ActionTextPart.Summary, start, 16, "Two."),
                 Cite(ActionTextPart.WhyItMatters, start, 16, "Three.")
-            ]
+            ],
+            KeyTerms = withKeyTerm ? [new ActionKeyTerm("program", new(text.ExtractionId, start, 16), "The program ends", Cut: false)] : default
         };
         Actions.Publishable[recordId] = publishable with
         {
@@ -639,6 +640,8 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public List<PublicationReleaseSummary> Committed { get; } = [];
     public PublicationCommit? LastCommit { get; private set; }
+    public List<VoteColumnGap> VoteColumnGaps { get; } = [];
+    public List<VoteStoredColumns[]> VoteColumnWrites { get; } = [];
     public bool ConflictOnCommit { get; set; }
     public Exception? FailOnCommit { get; set; }
     public PublicationReleaseSummary? ConcurrentWinner { get; set; }
@@ -735,20 +738,27 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillBillLinesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
-    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<IReadOnlyList<VoteColumnGap>> ReadVoteColumnGapsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<VoteColumnGap>>([.. VoteColumnGaps]);
 
-    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+    public Task WriteVoteColumnsAsync(IReadOnlyCollection<VoteStoredColumns> columns, CancellationToken cancellationToken)
+    {
+        VoteColumnWrites.Add([.. columns]);
+        return Task.CompletedTask;
+    }
 
     public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        Task.FromResult<IReadOnlyList<PublishedEntryDay>>([]);
 
     public Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Dictionary<string, PublishedBillStatus> BillStatuses { get; } = [];
@@ -756,6 +766,25 @@ internal sealed class FakePublicationStore : IPublicationStore
     public List<BillHistoryCapture> PreparedHistories { get; } = [];
     public Dictionary<int, Dictionary<PublishedRecordReference, StoredCorrectionHistory>> CorrectionHistories { get; } = [];
     public List<PublicationCorrectionHistory> PreparedCorrectionHistories { get; } = [];
+    public List<CorrectionHistoryBootstrapCandidate> CorrectionBootstrapCandidates { get; } = [];
+    public int CorrectionBootstrapPageReads { get; private set; }
+    public List<PublicationReleaseSummary> BillCountReleases { get; } = [];
+    public Dictionary<int, ReleaseBillCountSource> BillCountSources { get; } = [];
+    public Dictionary<int, Exception> BillCountCommitFailures { get; } = [];
+    public Dictionary<int, BillCountStatus> BillCountStatuses { get; } = [];
+    public HashSet<int> ExistingBillCounts { get; } = [];
+    public List<(int ReleaseNumber, IReadOnlyCollection<PublishedRevisionBinding> Members)> CommittedBillCounts { get; } = [];
+    public List<int> VerifiedBillCounts { get; } = [];
+    public Dictionary<int, Exception> PartyLineUpCommitFailures { get; } = [];
+    public Dictionary<int, BillCountStatus> PartyLineUpStatuses { get; } = [];
+    public HashSet<int> ExistingPartyLineUps { get; } = [];
+    public HashSet<int> NoPartyLineUpRows { get; } = [];
+    public List<int> CommittedPartyLineUps { get; } = [];
+    public List<int> VerifiedPartyLineUps { get; } = [];
+    public Action? BeforeReadingVerificationFingerprint { get; set; }
+    public Action? BeforeReadingVerificationSelection { get; set; }
+    public Action<int>? BeforeReadingVerificationPage { get; set; }
+    public int VerificationPageReads { get; private set; }
     public Action? BeforePreparingHistories { get; set; }
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
 
@@ -796,7 +825,164 @@ internal sealed class FakePublicationStore : IPublicationStore
             new CorrectionHistoryBinding(history.Record, PublishedCorrectionHistoryIdentity.Of(history.Corrections)))]);
     }
 
+    public Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        ReadBootstrapPage(after, limit);
+
+    public Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BeforeReadingVerificationPage?.Invoke(++VerificationPageReads);
+        var step = CorrectionHistoryWalk.Resolve(CorrectionSelection(), after);
+        if (step.Target is not { } release) return Task.FromResult(new CorrectionHistoryVerificationPage(null, [], true, null, step.Skipped));
+        var ordered = CorrectionBootstrapCandidates.Where(candidate => candidate.Release.ReleaseNumber == release.ReleaseNumber)
+            .OrderBy(candidate => PublishedRecordReference.NameOf(candidate.Record.Kind), StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Record.RecordId, StringComparer.Ordinal)
+            .Where(candidate => step.After is null || ComparePosition(candidate, step.After) > 0)
+            .Take(limit + 1).ToArray();
+        var candidates = ordered.Take(limit).Select(candidate =>
+        {
+            var histories = CorrectionHistories.GetValueOrDefault(candidate.Release.ReleaseNumber) ?? [];
+            histories.TryGetValue(new(candidate.Record.Kind, candidate.Record.RecordId), out var stored);
+            return new CorrectionHistoryVerificationCandidate(candidate.Release, candidate.Record, stored);
+        }).ToArray();
+        return Task.FromResult(new CorrectionHistoryVerificationPage(release, candidates, ordered.Length <= limit, step.Next, step.Skipped));
+    }
+
+    public Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BeforeReadingVerificationSelection?.Invoke();
+        return Task.FromResult<IReadOnlyList<PublicationReleaseSummary>>(CorrectionSelection());
+    }
+
+    private PublicationReleaseSummary[] CorrectionSelection() => [.. CorrectionBootstrapCandidates.Select(candidate => candidate.Release)
+        .DistinctBy(release => release.ReleaseNumber).OrderBy(release => release.ReleaseNumber)];
+
+    private static int ComparePosition(CorrectionHistoryBootstrapCandidate candidate, PublishedRecordReference position)
+    {
+        var kind = StringComparer.Ordinal.Compare(PublishedRecordReference.NameOf(candidate.Record.Kind), PublishedRecordReference.NameOf(position.Kind));
+        return kind != 0 ? kind : StringComparer.Ordinal.Compare(candidate.Record.RecordId, position.RecordId);
+    }
+
+    public Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        BeforeReadingVerificationFingerprint?.Invoke();
+        return Task.FromResult(VerificationFingerprint());
+    }
+
+    public Task<BillCountReleasePage> ReadBillCountReleasePageAsync(int afterReleaseNumber, string? selectionFingerprint, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var fingerprint = VerificationFingerprint();
+        if (selectionFingerprint is not null && selectionFingerprint != fingerprint)
+            return Task.FromResult(new BillCountReleasePage([], fingerprint, false, true));
+        var following = BillCountReleases.OrderBy(release => release.ReleaseNumber)
+            .Where(release => release.ReleaseNumber > afterReleaseNumber).Take(limit + 1).ToArray();
+        return Task.FromResult(new BillCountReleasePage([.. following.Take(limit)], fingerprint, following.Length > limit));
+    }
+
+    public List<VotePartyTallyEvidence> TallyEvidence { get; } = [];
+
+    public Task<VotePartyTallyPage> ReadVotePartyTallyEvidenceAsync(VotePartyTallyVerificationCursor? after, int limit, CancellationToken cancellationToken)
+    {
+        var rest = TallyEvidence.OrderBy(item => item.RecordId, StringComparer.Ordinal).ThenBy(item => item.RevisionNumber)
+            .Where(item => after is null || string.CompareOrdinal(item.RecordId, after.RecordId) > 0 ||
+                (item.RecordId == after.RecordId && item.RevisionNumber > after.RevisionNumber)).ToArray();
+        return Task.FromResult(new VotePartyTallyPage([.. rest.Take(limit)], rest.Length > limit));
+    }
+
+    public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        Task.FromResult(BillCountSources.GetValueOrDefault(releaseNumber) ?? new ReleaseBillCountSource([], [], [], []));
+
+    public Task<ReleaseSnapshotWrite> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        if (BillCountCommitFailures.TryGetValue(release.ReleaseNumber, out var failure)) throw failure;
+        CommittedBillCounts.Add((release.ReleaseNumber, validatedMembers));
+        return Task.FromResult(ExistingBillCounts.Contains(release.ReleaseNumber) ? ReleaseSnapshotWrite.AlreadyPresent : ReleaseSnapshotWrite.Added);
+    }
+
+    public Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        VerifiedBillCounts.Add(release.ReleaseNumber);
+        return Task.FromResult(BillCountStatuses.GetValueOrDefault(release.ReleaseNumber, BillCountStatus.Verified));
+    }
+
+    public Task<ReleaseSnapshotWrite> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        if (PartyLineUpCommitFailures.TryGetValue(release.ReleaseNumber, out var failure)) throw failure;
+        CommittedPartyLineUps.Add(release.ReleaseNumber);
+        return Task.FromResult(ExistingPartyLineUps.Contains(release.ReleaseNumber) ? ReleaseSnapshotWrite.AlreadyPresent
+            : NoPartyLineUpRows.Contains(release.ReleaseNumber) ? ReleaseSnapshotWrite.NothingExpected : ReleaseSnapshotWrite.Added);
+    }
+
+    public Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken)
+    {
+        VerifiedPartyLineUps.Add(release.ReleaseNumber);
+        return Task.FromResult(PartyLineUpStatuses.GetValueOrDefault(release.ReleaseNumber, BillCountStatus.Verified));
+    }
+
+    private string VerificationFingerprint()
+    {
+        var selection = CorrectionBootstrapCandidates.Select(candidate => candidate.Release).Concat(BillCountReleases)
+            .DistinctBy(release => release.ReleaseNumber).OrderBy(release => release.ReleaseNumber);
+        var fields = selection.Select(release => string.Concat(release.ReleaseNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), ":",
+            release.DirectoryName.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), ":", release.DirectoryName));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", fields))))
+            .ToLowerInvariant();
+    }
+
+    private Task<CorrectionHistoryBootstrapPage> ReadBootstrapPage(CorrectionHistoryBootstrapCursor? after, int limit)
+    {
+        CorrectionBootstrapPageReads++;
+        var ordered = CorrectionBootstrapCandidates.OrderBy(candidate => candidate.Release.ReleaseNumber)
+            .ThenBy(candidate => PublishedRecordReference.NameOf(candidate.Record.Kind), StringComparer.Ordinal)
+            .ThenBy(candidate => candidate.Record.RecordId, StringComparer.Ordinal)
+            .Where(candidate => after is null || Compare(candidate, after) > 0).Take(limit + 1).ToArray();
+        var hasMore = ordered.Length > limit;
+        var page = ordered.Take(limit).ToArray();
+        var last = hasMore ? page[^1] : null;
+        return Task.FromResult(new CorrectionHistoryBootstrapPage(page, last is null ? null :
+            new(last.Release.ReleaseNumber, last.Record.Kind, last.Record.RecordId)));
+    }
+
+    private static int Compare(CorrectionHistoryBootstrapCandidate candidate, CorrectionHistoryBootstrapCursor cursor)
+    {
+        var release = candidate.Release.ReleaseNumber.CompareTo(cursor.ReleaseNumber);
+        if (release != 0) return release;
+        var kind = StringComparer.Ordinal.Compare(PublishedRecordReference.NameOf(candidate.Record.Kind),
+            PublishedRecordReference.NameOf(cursor.Kind));
+        return kind != 0 ? kind : StringComparer.Ordinal.Compare(candidate.Record.RecordId, cursor.RecordId);
+    }
+
+    public Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) =>
+        Task.FromResult((bindings.Count, 0));
+
     public Dictionary<int, List<PublishedBillStatus>> BackfilledBillStatuses { get; } = [];
+
+    public Dictionary<int, List<ReleaseVoteBill>> StoredVoteBills { get; } = [];
+
+    public Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken)
+    {
+        if (!StoredVoteBills.TryGetValue(releaseNumber, out var stored)) StoredVoteBills[releaseNumber] = stored = [];
+        var missing = voteBills.Where(voteBill => stored.All(link => link.VoteRecordId != voteBill.VoteRecordId)).ToArray();
+        stored.AddRange(missing);
+        return Task.FromResult(missing.Length);
+    }
+
+    public Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ReleaseVoteBill>>(StoredVoteBills.TryGetValue(releaseNumber, out var stored) ? [.. stored] : []);
 
     public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken)
     {
@@ -859,6 +1045,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public int BeginCount { get; private set; }
     public int DiscardedStagings { get; set; }
     public string? Active { get; set; }
+    public Dictionary<string, Exception> ReadFailures { get; } = [];
     public Exception? FailOnDelete { get; set; }
     public Exception? FailOnDeleteRetired { get; set; }
     public List<string> Retired { get; } = [];
@@ -876,6 +1063,7 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
         CancellationToken cancellationToken)
     {
         ReadPaths.Add(relativePath);
+        if (ReadFailures.TryGetValue(relativePath, out var failure)) throw failure;
         Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
         var content = Directories.TryGetValue(directoryName, out var directory) && directory.TryGetValue(relativePath, out var file)
             ? file

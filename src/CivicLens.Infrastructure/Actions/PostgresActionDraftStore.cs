@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using CivicLens.Application;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions.Persistence;
@@ -25,17 +26,21 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue;
+    private readonly AnalysisCurrentVersions currentVersions;
 
-    public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion)
+    /// <summary><paramref name="draftsKeyTerms"/> is the key term setting. It picks the current versions, so a draft is stale only against the prompt that the setting sends.</summary>
+    public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion, bool draftsKeyTerms)
         : this(contextFactory, new PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun>(contextFactory, new ActionDraftQueueMapping(
-            AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action), codeVersion)))
+            AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action), codeVersion)),
+            ActionDraftTask.CurrentVersions(draftsKeyTerms))
     { }
 
     private PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue) : base(queue)
+        PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue, AnalysisCurrentVersions currentVersions) : base(queue)
     {
         this.contextFactory = contextFactory;
         this.queue = queue;
+        this.currentVersions = currentVersions;
     }
 
     public async Task<ActionDraftRun?> GetRunAsync(string runId, CancellationToken cancellationToken)
@@ -62,7 +67,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         var current = await ActionDraftRows.ReadCurrentAsync(db, recordId, cancellationToken);
         var hasNewerCandidate = await ActionDraftRows.HasNewerCandidateAsync(db, candidate, cancellationToken);
         var hasStaleDraft = current is not null && !hasNewerCandidate &&
-            (await StaleCandidateIdsAsync(db, [candidateId], cancellationToken)).Contains(candidateId);
+            (await StaleCandidateIdsAsync(db, [candidateId], currentVersions, cancellationToken)).Contains(candidateId);
         return new(candidate, StoredJobDefinition.Find(revisions, row.ConfigurationRevisionId), await ReadPagesAsync(db, row.DetailJobId, row.IncludesSummaries, row.IncludesSubjects, cancellationToken),
             current, hasNewerCandidate, hasStaleDraft, await ActionDraftRows.IsRejectedAsync(db, recordId, cancellationToken), readStateVersion,
             withBillText ? await ReadBillTextAsync(db, row.DetailJobId, cancellationToken) : null);
@@ -89,7 +94,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
             var ids = settled.Select(row => row.CandidateId).ToArray();
-            var stale = await StaleCandidateIdsAsync(db, ids, token);
+            var stale = await StaleCandidateIdsAsync(db, ids, currentVersions, token);
             return settled.Where(row => stale.Contains(row.CandidateId));
         }, cancellationToken);
 
@@ -118,7 +123,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     }
 
     private static async Task<HashSet<string>> StaleCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
-        CancellationToken cancellationToken)
+        AnalysisCurrentVersions currentVersions, CancellationToken cancellationToken)
     {
         var stale = await (from candidate in db.Set<ActionCandidateRow>().AsNoTracking()
                            where candidateIds.Contains(candidate.CandidateId) && !(
@@ -143,7 +148,7 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
                            where newestDraftRunId != null
                            select new { candidate.CandidateId, newestDraftRunId }).ToArrayAsync(cancellationToken);
         var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<ActionAnalysisRunRow>(db,
-            [.. stale.Select(candidate => candidate.newestDraftRunId).Distinct()], ActionDraftTask.CurrentVersions, cancellationToken);
+            [.. stale.Select(candidate => candidate.newestDraftRunId).Distinct()], currentVersions, cancellationToken);
         return stale.Where(candidate => staleRunIds.Contains(candidate.newestDraftRunId)).Select(candidate => candidate.CandidateId)
             .ToHashSet(StringComparer.Ordinal);
     }

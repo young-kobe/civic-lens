@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Issues;
 namespace CivicLens.PublicApi.ZipDistricts;
 
 using CivicLens.PublicApi.Votes;
@@ -10,7 +11,7 @@ public sealed record ZipLookup(ZipDistrictAnswer? Answer, ZipLookupMiss? Miss)
     /// <summary>The number of votes first published since the requested release that involve a current ZIP member.</summary>
     public long? NewVoteCount { get; init; }
     /// <summary>The issue filters published in the same release snapshot as the member view.</summary>
-    public ZipMemberIssueOption[] IssueOptions { get; init; } = [];
+    public IssueOption[] IssueOptions { get; init; } = [];
     public static ZipLookup NoRelease { get; } = new(null, ZipLookupMiss.NoRelease);
     public static ZipLookup NoNames { get; } = new(null, ZipLookupMiss.NoNames);
     public static ZipLookup NotFound { get; } = new(null, ZipLookupMiss.NotFound);

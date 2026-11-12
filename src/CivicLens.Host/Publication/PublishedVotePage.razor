@@ -3,7 +3,7 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublishedRecordFrame Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record, Catalog)"
+<PublishedRecordFrame Kind="PublishedRecordKind.Vote" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" ShortName="@PublishedVoteView.RollCall(Record.Chamber, Record.RollCallNumber)" Headline="@Record.Headline" Summary="@Record.Summary" Facts="PublishedVoteView.Facts(Record, Catalog)"
                       Caveat="@PublishedVoteView.Caveat(Record)">
     @{ var wording = PublishedVoteView.Wording(Record); }
     <Panel Title="@VoteMeaning.Heading" Id="meaning-title" Padded="true">
@@ -50,7 +50,7 @@
     @if (PublishedVoteView.Breakers(Record).ToArray() is { Length: > 0 } breakers)
     {
         <Panel Title="Members who voted against most of their party" Id="breakers-title" Padded="true">
-            <p class="muted small">@PublishedVoteView.BreakMeaning</p>
+            <p class="muted small">@VoteWords.BreakMeaning</p>
             @foreach (var party in breakers)
             {
                 <section class="member-group">
@@ -89,7 +89,7 @@
     </Panel>
 
     <Panel Title="Sources" Id="sources-title" Padded="true">
-        <SourceLinesNote>@PublishedVoteView.SavedData(Record)</SourceLinesNote>
+        <SourceLinesNote>@VoteFacts.SavedData(Record.Source)</SourceLinesNote>
         @for (var index = 0; index < Record.Sources.Length; index++)
         {
             var source = Record.Sources[index];

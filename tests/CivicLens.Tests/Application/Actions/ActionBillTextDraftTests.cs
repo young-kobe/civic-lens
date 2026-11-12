@@ -1,3 +1,4 @@
+using CivicLens.Application.Collection;
 using System.Text.Json;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
@@ -243,10 +244,10 @@ public sealed class ActionBillTextDraftTests
 
         Assert.DoesNotContain("``", request.UserPrompt, StringComparison.Ordinal);
         Assert.Contains("eligible tenant\\\" means", request.UserPrompt, StringComparison.Ordinal);
-        Assert.True(text.CharsRead > BillTextQuotes.Normalize(text.Body).Length);
+        Assert.True(text.CharsRead > GpoQuoteMarks.Normalize(text.Body).Length);
         using var facts = JsonDocument.Parse(request.UserPrompt["Facts:\n".Length..]);
         var counts = facts.RootElement.GetProperty("billText");
-        Assert.Equal(BillTextQuotes.Normalize(text.Body).Length, counts.GetProperty("charactersRead").GetInt32());
+        Assert.Equal(GpoQuoteMarks.Normalize(text.Body).Length, counts.GetProperty("charactersRead").GetInt32());
         Assert.Equal(counts.GetProperty("charactersRead").GetInt32(), counts.GetProperty("charactersTotal").GetInt32());
         var citation = resolved.Accepted!.TextCitations[0];
         Assert.Equal(stored, text.Text.Substring(citation.Span.Start, citation.Span.Length));
@@ -260,7 +261,7 @@ public sealed class ActionBillTextDraftTests
     [InlineData("`one' 'two`", "`one' 'two`")]
     [InlineData("```x", "\"`x")]
     public void TheMarkRuleTurnsEachPairIntoOnePlainQuoteAndLeavesSingleMarksAlone(string text, string expected) =>
-        Assert.Equal(expected, BillTextQuotes.Normalize(text));
+        Assert.Equal(expected, GpoQuoteMarks.Normalize(text));
 
     [Fact]
     public async Task AQuoteThatLiesInTheStoredTextWithManyMarksNeverPassesTheQuoteLength()
@@ -269,7 +270,7 @@ public sealed class ActionBillTextDraftTests
         var text = Of($"Section 1. {marks}{SecondSummary} {WhyItMatters}");
         var whole = await ContextAsync();
         var context = whole with { Evidence = whole.Evidence with { BillText = text } };
-        var quote = BillTextQuotes.Normalize(marks.TrimEnd());
+        var quote = GpoQuoteMarks.Normalize(marks.TrimEnd());
 
         var result = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (SecondPlain, quote)]), context, "run", DateTimeOffset.UnixEpoch);
 
@@ -366,7 +367,7 @@ public sealed class ActionBillTextDraftTests
         using var facts = JsonDocument.Parse(user["Facts:\n".Length..]);
         var sent = facts.RootElement.GetProperty("billText");
         var body = sent.GetProperty("text").GetString()!;
-        Assert.True(body.Length <= CongressBillRenderer.TextWindowLength);
+        Assert.True(body.Length <= TextWindow.Length);
         Assert.Equal(text.CharsRead, body.Length);
         Assert.StartsWith("word word", body, StringComparison.Ordinal);
         Assert.Equal((text.CharsRead, long_.Length), (sent.GetProperty("charactersRead").GetInt32(), sent.GetProperty("charactersTotal").GetInt32()));

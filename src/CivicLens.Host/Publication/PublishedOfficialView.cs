@@ -11,7 +11,7 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedOfficialView
 {
-    public static string Office(PublishedOfficeTerm term) => Role(term) + Place(term);
+    public static string Office(PublishedOfficeTerm term) => Role(term) + Place(term, OfficeLede.Place);
 
     private static string Role(PublishedOfficeTerm term) => term.Office switch
     {
@@ -22,28 +22,23 @@ internal static class PublishedOfficialView
         _ => term.Office
     };
 
-    private static string Place(PublishedOfficeTerm term) => term.Office switch
+    private static string Place(PublishedOfficeTerm term, Func<string?, int?, string> place) => term.Office switch
     {
-        MemberRosterParser.Senate => $" for {term.State}",
-        MemberRosterParser.House when term.District is { } district => $" for {term.State}, district {district}",
-        MemberRosterParser.House => $" for {term.State}",
+        MemberRosterParser.Senate => place(term.State, null),
+        MemberRosterParser.House => place(term.State, term.District),
         _ => ""
     };
 
     public static string CardOffice(PublishedOfficeTerm term, DateTimeOffset publishedAtUtc) =>
         HasEnded(term.End, publishedAtUtc) ? $"Former {Office(term)}" : Office(term);
 
-    private static bool HasEnded(DateOnly? end, DateTimeOffset publishedAtUtc) => end is { } day && day < DateOnly.FromDateTime(publishedAtUtc.UtcDateTime);
+    private static bool HasEnded(DateOnly? end, DateTimeOffset publishedAtUtc) => OfficeLede.HasEnded(end, DateOnly.FromDateTime(publishedAtUtc.UtcDateTime));
 
     public static string? Lede(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
         if (LatestTerm(terms, publishedAtUtc) is not { } term) return null;
-        var role = string.Join(' ', new[] { HasEnded(term.End, publishedAtUtc) ? "former" : null, term.Party is { } party ? PartyAdjective(party) : null, Role(term).ToLowerInvariant() }.OfType<string>());
-        var caucus = term.Party is { } caucusParty && CaucusWith(caucusParty, term.Caucus) is { } with ? $", {with}" : "";
-        return $"{char.ToUpperInvariant(role[0])}{role[1..]}{Place(term)}{caucus}";
+        return OfficeLede.Of(HasEnded(term.End, publishedAtUtc), term.Party, Role(term).ToLowerInvariant(), Place(term, OfficeLede.LedePlace), term.Caucus);
     }
-
-    private static string PartyAdjective(string party) => party == PublishedPartyMajority.Democrat ? "Democratic" : party;
 
     public static string? Tenure(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc)
     {
@@ -133,10 +128,7 @@ internal static class PublishedOfficialView
     };
 
     public static string PartyLine(string party, string? caucus) =>
-        CaucusWith(party, caucus) is { } with ? $"Party: {party}, {with}" : $"Party: {party}";
-
-    private static string? CaucusWith(string party, string? caucus) =>
-        caucus is null || caucus == party ? null : $"caucuses with {PublishedPartyNames.Members(caucus)}";
+        OfficeLede.CaucusWith(party, caucus) is { } with ? $"Party: {party}, {with}" : $"Party: {party}";
 
     public static PublishedOfficeTerm? LatestTerm(IEnumerable<PublishedOfficeTerm> terms, DateTimeOffset publishedAtUtc) =>
         Started(terms, publishedAtUtc).OrderBy(term => term.Start).LastOrDefault();
@@ -209,10 +201,6 @@ internal static class PublishedOfficialView
     public static string CountFilterNotice(string subject, string issueName, int congress) =>
         $"Filtered to {subject} on {issueName} in the {CongressCalendar.Ordinal(congress)} Congress";
 
-    public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";
-
-    public const string NoLinks = "No reviewed links between their statements and their bills or votes yet.";
-
     public const string NoVoteOnRecord = "No vote on record";
 
     public const string NotAVote = "Not a vote";
@@ -232,12 +220,6 @@ internal static class PublishedOfficialView
         return $"Missed {missed.Missed} of the {missed.Held} roll call {Noun(missed.Held, "vote")} of {ChamberName(missed.Chamber)} on this site{share}, {days} ({CongressCalendar.Ordinal(congress)} Congress).";
     }
 
-    public static readonly string BothMajorities = $"most {PublishedPartyMajority.Democrat}s and most {PublishedPartyMajority.Republican}s who cast Yes or No";
-
-    public static readonly string SplitVoteMeaning = $"A split vote is a substantive roll call vote where {BothMajorities} voted on opposite sides.";
-
-    public static readonly string PartiesAgreedMeaning = $"A vote where both parties agreed is a substantive roll call vote where {BothMajorities} voted the same way.";
-
     public static string SplitVoteCount(int count, int cast)
     {
         var share = TalkAndActionProfile.ShareOf(count, cast) is not null ? $" ({Percent(count, cast)})" : "";
@@ -247,8 +229,6 @@ internal static class PublishedOfficialView
     public static string PartyOf(VotesWithParty votes) => PartyOf(votes.Chamber, votes.Party);
 
     public static string PartyOf(PublishedChamber chamber, string party) => PublishedPartyNames.PartyOf(chamber, party);
-
-    public static string PartyMemberOf(PublishedChamber chamber, string party) => $"{chamber} {party}";
 
     private static string ChamberName(PublishedChamber chamber) => chamber == PublishedChamber.Senate ? "the Senate" : "the House of Representatives";
 
@@ -266,7 +246,7 @@ internal static class PublishedOfficialView
 
     public static string RollCall(PublishedOfficialVote vote)
     {
-        var roll = $"{vote.Chamber} roll call {vote.RollCallNumber}, Congress {vote.Congress}, session {vote.Session}";
-        return vote.BillType is null ? roll : $"{roll}, {ActionCodeText.BillNumber(vote.BillType, vote.BillNumber!.Value)}";
+        var roll = $"{PublishedVoteView.RollCall(vote.Chamber, vote.RollCallNumber)}, Congress {vote.Congress}, session {vote.Session}";
+        return vote.BillType is null ? roll : $"{roll}, {BillNumbers.Of(vote.BillType, vote.BillNumber!.Value)}";
     }
 }

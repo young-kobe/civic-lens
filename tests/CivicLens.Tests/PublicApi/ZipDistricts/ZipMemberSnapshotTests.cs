@@ -1,5 +1,7 @@
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicApi.ZipDistricts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi;
 using CivicLens.Tests.PublicApi.Votes;
@@ -50,6 +52,8 @@ public sealed class ZipMemberSnapshotTests(PostgresCollection postgres)
             await ZipSeed.AddNamesAsync(database, 2,
                 new SeededSeat("p0", "Pat Release Two", "Representative", "AL", 2),
                 new SeededSeat("p1", "Sam Release Two", "Senator", "AL", null));
+            await StoredBillCounts.FillAsync(database, 1, 119, onlyStoredRevisions: true);
+            await StoredBillCounts.FillAsync(database, 2, 119, onlyStoredRevisions: true);
             await using (var owner = new NpgsqlConnection(database))
             {
                 await owner.OpenAsync();
@@ -77,7 +81,7 @@ public sealed class ZipMemberSnapshotTests(PostgresCollection postgres)
 
                 Assert.NotNull(first.Answer);
                 Assert.Equal(1, first.Answer.Release);
-                Assert.Equal([new ZipMemberIssueOption("health", "Health Release One"), new ZipMemberIssueOption("zero", "Zero Votes")], first.IssueOptions);
+                Assert.Equal([new IssueOption("health", "Health Release One"), new IssueOption("zero", "Zero Votes")], first.IssueOptions);
                 Assert.Equal("Pat Release One", first.Answer.Districts[0].Representative!.Name);
                 Assert.Equal("Sam Release One", first.Answer.States[0].Senators[0]!.Name);
                 var firstHouseAttendance = Assert.Single(first.Answer.Districts[0].Representative!.MissedVotes);
@@ -99,7 +103,7 @@ public sealed class ZipMemberSnapshotTests(PostgresCollection postgres)
 
                 var second = await store.FindMembersAsync(request, "health", null, default);
                 Assert.NotNull(second.Answer);
-                Assert.Equal([new ZipMemberIssueOption("health", "Health Release Two"), new ZipMemberIssueOption("zero", "New Zero Votes")], second.IssueOptions);
+                Assert.Equal([new IssueOption("health", "Health Release Two"), new IssueOption("zero", "New Zero Votes")], second.IssueOptions);
                 Assert.Equal(2, second.Answer.Release);
                 Assert.Equal("Pat Release Two", second.Answer.Districts[0].Representative!.Name);
                 Assert.Equal("Sam Release Two", second.Answer.States[0].Senators[0]!.Name);

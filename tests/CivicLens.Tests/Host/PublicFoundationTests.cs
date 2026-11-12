@@ -26,10 +26,10 @@ public sealed class PublicFoundationTests
         var navigationForms = document.QuerySelectorAll("nav[aria-label='Site']");
         Assert.Equal(2, navigationForms.Length);
         Assert.All(navigationForms, navigation =>
-            Assert.Equal(["Officials", "Issues", "Votes and bills"], navigation.QuerySelectorAll("a").Select(link => link.TextContent)));
-        Assert.Equal(["How we check records", "Glossary", "About", "Report a problem"],
+            Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Compare parties"], navigation.QuerySelectorAll("a").Select(link => link.TextContent)));
+        Assert.Equal(["How we check records", "Glossary", "About", "Report a problem with this page"],
             document.QuerySelectorAll("nav[aria-label='Footer'] a").Select(link => link.TextContent));
-        Assert.Equal("Civic Lens", document.QuerySelector("footer .public-footer-name")!.TextContent);
+        Assert.Empty(document.QuerySelectorAll("footer > :not(nav)"));
         Assert.NotNull(document.QuerySelector("a.skip[href='#main']"));
     }
 

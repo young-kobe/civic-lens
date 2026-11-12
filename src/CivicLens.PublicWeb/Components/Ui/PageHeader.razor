@@ -4,6 +4,10 @@
         <div class="page-header-portrait">@Portrait</div>
     }
     <div>
+        @if (Eyebrow is not null)
+        {
+            <p class="page-header-eyebrow">@Eyebrow</p>
+        }
         <h1>@Title</h1>
         @if (Lede is not null)
         {
@@ -28,6 +32,8 @@
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? RecordId { get; set; }
     [Parameter] public string? Lede { get; set; }
+    /// <summary>A short line above the title that names the scope of the page, such as its Congress.</summary>
+    [Parameter] public string? Eyebrow { get; set; }
     [Parameter] public RenderFragment? Portrait { get; set; }
     [Parameter] public RenderFragment? Meta { get; set; }
     [Parameter] public RenderFragment? Actions { get; set; }

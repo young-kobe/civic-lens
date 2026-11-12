@@ -25,6 +25,7 @@ internal sealed class ExecutiveActionDocumentRowConfiguration : IEntityTypeConfi
         builder.Property(row => row.NoticeUrl).HasColumnName("notice_url").HasMaxLength(ExecutiveActionRevision.MaximumFieldLength);
         SourceSpanColumns.Configure(builder, "executive_action_documents", "NoticeCitation", "notice_citation", optional: true);
         builder.Property(row => row.PublishedOn).HasColumnName("published_on").HasColumnType("date");
+        builder.Property(row => row.BodyHtmlUrl).HasColumnName("body_html_url").HasMaxLength(ExecutiveActionRevision.MaximumFieldLength);
         builder.Property(row => row.DocumentJobId).HasColumnName("document_job_id").HasMaxLength(128).IsRequired();
         builder.HasIndex(row => new { row.SourceId, row.PublishedOn }).HasDatabaseName("ix_executive_action_documents_published");
         builder.HasOne<ExecutiveActionRevisionRow>().WithMany()

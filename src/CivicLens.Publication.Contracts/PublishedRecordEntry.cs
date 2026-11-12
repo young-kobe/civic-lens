@@ -15,6 +15,7 @@ public sealed record PublishedRecordEntry
     public required string[] IssueIds { get; init; }
     public required string[] PolicyAreaIds { get; init; }
     public PublishedApprover? ApprovedBy { get; init; }
+    public DateTimeOffset? ApprovedAtUtc { get; init; }
     public string? SourceHost { get; init; }
     public DateOnly? EventDate { get; init; }
     public string? BillTitle { get; init; }

@@ -2,7 +2,7 @@
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
-<PublicPage CanonicalPath="@PublicationProtocol.SearchPagePath" NoIndex="true" Title="Search records" Description="Search the published records of Civic Lens by words, official, issue, kind, and date.">
+<PublicPage Section="null" CanonicalPath="@PublicationProtocol.SearchPagePath" NoIndex="true" Title="Search records" Description="Search the published records of Civic Lens by words, official, issue, kind, and date.">
     <PageHeader Title="Search records" Lede="@($"Release {Release.ReleaseNumber}, published {Moment.Full(Release.PublishedAtUtc)}.")" />
     @if (PublicApiUrl is null)
     {
@@ -27,7 +27,7 @@
                     <Field Label="Kind" For="search-kind">
                         <select id="search-kind" name="kind">
                             <option value="">Any</option>
-                            @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+                            @foreach (var kind in PublishedRecordLabels.FilterOrder)
                             {
                                 <option value="@PublicationProtocol.KindText(kind)">@PublishedRecordLabels.Kind(kind)</option>
                             }

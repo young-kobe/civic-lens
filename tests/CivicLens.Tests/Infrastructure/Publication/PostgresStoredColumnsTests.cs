@@ -9,6 +9,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
+using CivicLens.Tests.Application.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,32 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
+
+    [Fact]
+    public async Task PartyTallyMigrationUsesTheConfiguredPrimaryAndForeignKeyNames()
+    {
+        await using var db = new CollectionAttemptDbContext(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+        var entity = db.Model.FindEntityType("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow")!;
+        var names = new[] { entity.FindPrimaryKey()!.GetName()!, Assert.Single(entity.GetForeignKeys()).GetConstraintName()! };
+        Assert.Equal(names.Order(StringComparer.Ordinal),
+            await ReadAsync("SELECT conname FROM pg_constraint WHERE conrelid = 'vote_revision_party_tallies'::regclass AND contype IN ('f', 'p') ORDER BY conname"));
+    }
+
+    [Fact]
+    public async Task TallyForeignKeyRejectsAMissingRevisionAfterSparseLegacyFixtureSetup()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other) VALUES ('{published.Vote.RecordId}', 99, 'Unknown', 1, 0, 0, 0, 0)"));
+
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, exception.SqlState);
+        await using var db = new CollectionAttemptDbContext(
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
+        var entity = db.Model.FindEntityType("CivicLens.Infrastructure.Votes.Persistence.VoteRevisionPartyTallyRow")!;
+        Assert.Equal(Assert.Single(entity.GetForeignKeys()).GetConstraintName(), exception.ConstraintName);
+    }
 
     // The roster holds two term rows for the switch. Real legislators data puts an in-term switch inside one term, which the parser does not split. See the roster Limits.
     [Theory]
@@ -95,6 +122,73 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     [Fact]
+    public async Task PartyTalliesPersistEveryBucketOncePerRevisionAndRejectConflictingReplay()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, throughRevision: 2);
+        var tallies = ImmutableArray.Create(
+            new PublishedPartyTally { Party = "Independent", Yea = 1, Nay = 2, Present = 3, NotVoting = 4, Other = 5 },
+            new PublishedPartyTally { Party = "Unknown", Yea = 6, Nay = 7, Present = 8, NotVoting = 9, Other = 10 });
+        var columns = VoteStoredColumns.From(published.Vote) with { PartyTallies = tallies };
+
+        await publications.WriteVoteColumnsAsync([columns], default);
+        await publications.WriteVoteColumnsAsync([columns], default);
+
+        Assert.Equal(["Independent|1|2|3|4|5", "Unknown|6|7|8|9|10"], await ReadAsync("SELECT party || '|' || yea || '|' || nay || '|' || present || '|' || not_voting || '|' || other FROM vote_revision_party_tallies WHERE revision_number = 1 ORDER BY party"));
+        Assert.Equal(["2", ""], await ReadAsync("SELECT coalesce(party_tally_count::text, '') FROM vote_revisions ORDER BY revision_number"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync([columns with { PartyTallies = [tallies[0] with { Other = 6 }, tallies[1]] }], default));
+        Assert.Equal(2, await ScalarIntAsync("SELECT count(*) FROM vote_revision_party_tallies"));
+    }
+
+    [Fact]
+    public async Task UnavailableTalliesAreFrozenAndMalformedGroupsWriteNothing()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, throughRevision: 2);
+        var unavailable = VoteStoredColumns.From(published.Vote) with { PartyTallies = default };
+        await publications.WriteVoteColumnsAsync([unavailable], default);
+
+        var invalidEmpty = unavailable with { RevisionNumber = 2, PartyTallies = [] };
+        var invalidNull = unavailable with { RevisionNumber = 2, PartyTallies = [null!] };
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.WriteVoteColumnsAsync([invalidEmpty], default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.WriteVoteColumnsAsync([invalidNull], default));
+
+        Assert.Equal(["0", ""], await ReadAsync("SELECT coalesce(party_tally_count::text, '') FROM vote_revisions ORDER BY revision_number"));
+        Assert.Equal(0, await ScalarIntAsync("SELECT count(*) FROM vote_revision_party_tallies"));
+    }
+
+    [Fact]
+    public async Task BackfillSelectsAnAlreadyWrittenRevisionWhoseTallyMarkerIsStillUnresolved()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))], otherLines: [], totals: [PublicationScenario.DefaultPartyTotal]);
+        await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
+        await ExecuteAsync("UPDATE vote_revisions SET columns_written = true WHERE revision_number = 1");
+
+        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal(1, result.VoteRevisionsExamined);
+        Assert.Equal(published.Vote.PartyTallies!.Length.ToString(), (await ReadAsync("SELECT party_tally_count::text FROM vote_revisions WHERE revision_number = 1"))[0]);
+    }
+
+    [Fact]
+    public async Task TallyWriteRejectsPreexistingRowsForUnresolvedMarkersAndPartialRowsForFrozenMarkers()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, throughRevision: 2);
+        var first = VoteStoredColumns.From(published.Vote) with { RevisionNumber = 1 };
+        var second = VoteStoredColumns.From(published.Vote) with { RevisionNumber = 2 };
+        await ExecuteAsync($"INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other) VALUES ('{published.Vote.RecordId}', 1, 'Unknown', 1, 0, 0, 0, 0)");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync([first], default));
+
+        await ExecuteAsync("UPDATE vote_revisions SET party_tally_count = 2 WHERE revision_number = 2");
+        await ExecuteAsync($"INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other) VALUES ('{published.Vote.RecordId}', 2, 'Unknown', 1, 0, 0, 0, 0)");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync([second], default));
+
+        Assert.Equal(["", "2"], await ReadAsync("SELECT coalesce(party_tally_count::text, '') FROM vote_revisions ORDER BY revision_number"));
+        Assert.Equal(2, await ScalarIntAsync("SELECT count(*) FROM vote_revision_party_tallies"));
+    }
+
+    [Fact]
     public async Task AWriteNeverChangesThePartiesOfAListThatHoldsThemAndStillWritesTheColumnsOfItsRevisionBecauseThePartyOfAVoteDayIsFixed()
     {
         RosterMember[] roster = [Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Republican"))];
@@ -135,11 +229,11 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         var good = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}", [], []) { Withdrawals = [], Names = ReleaseNameFixtures.None, VoteColumns = published.Commit.VoteColumns };
 
         await Assert.ThrowsAnyAsync<Exception>(() => publications.CommitAsync("auth0|owner", failing, "key", new string('6', 64), default));
-        var afterFailure = (await ReadAsync("SELECT columns_written::text || '|' || (SELECT count(*) FROM publication_releases) FROM vote_revisions"))[0];
+        var afterFailure = (await ReadAsync("SELECT columns_written::text || '|' || coalesce(party_tally_count::text, '') || '|' || (SELECT count(*) FROM vote_revision_party_tallies) || '|' || (SELECT count(*) FROM publication_releases) FROM vote_revisions"))[0];
         await publications.CommitAsync("auth0|owner", good, "key2", new string('7', 64), default);
 
-        Assert.Equal("false|0", afterFailure);
-        Assert.Equal("true|1", (await ReadAsync("SELECT columns_written::text || '|' || (SELECT count(*) FROM publication_releases) FROM vote_revisions"))[0]);
+        Assert.Equal("false||0|0", afterFailure);
+        Assert.Equal($"true|{published.Vote.PartyTallies!.Length}|{published.Vote.PartyTallies.Length}|1", (await ReadAsync("SELECT columns_written::text || '|' || party_tally_count || '|' || (SELECT count(*) FROM vote_revision_party_tallies) || '|' || (SELECT count(*) FROM publication_releases) FROM vote_revisions"))[0]);
     }
 
     [Fact]
@@ -180,7 +274,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         RosterMember[] roster = [Member("M000001", Term(0, "2025-01-03", "2025-03-31", "Democrat"), Term(1, "2025-04-01", "2027-01-03", "Republican")), Member(Second, Term(0, "2025-01-03", "2027-01-03", "Democrat"))];
         var published = await PublishVoteAsync(roster);
         await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
-        var backfill = new BackfillStoredColumns(publications, published.Scenario.Releases);
+        var backfill = new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes);
 
         var first = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var stored = await StoredPartiesAsync(published);
@@ -192,6 +286,9 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         Assert.Equal(["Republican"], stored);
         Assert.Equal(ExpectedParties(published.Vote), stored);
         Assert.Equal(ExpectedRevisionColumns(published.Vote), columns);
+        var expectedTallies = published.Vote.PartyTallies!.OrderBy(tally => tally.Party, StringComparer.Ordinal)
+            .Select(tally => $"{tally.Party}|{tally.Yea}|{tally.Nay}|{tally.Present}|{tally.NotVoting}|{tally.Other}");
+        Assert.Equal(expectedTallies, await ReadAsync("SELECT party || '|' || yea || '|' || nay || '|' || present || '|' || not_voting || '|' || other FROM vote_revision_party_tallies ORDER BY party"));
         Assert.Equal(stored, await StoredPartiesAsync(published));
         Assert.Equal(columns, await StoredRevisionColumnsAsync(published));
         Assert.Equal(0, second.VoteRevisionsExamined);
@@ -205,7 +302,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
         published.Scenario.Releases.Directories.Clear();
 
-        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal((1, 0, 0), (result.OpenVoteRevisionsWithoutKeptFile, result.VoteRevisionsWritten, result.ClosedVoteRevisionsWithoutKeptFile));
         Assert.Equal([""], await StoredPartiesAsync(published));
@@ -222,7 +319,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         var second = FileOf(published, 2, "Republican");
         await SeedReleasesAsync(published, (1, first, 1), (2, second, null));
 
-        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal((2, 2), (result.VoteRevisionsExamined, result.VoteRevisionsWritten));
         Assert.Equal(["Democrat"], await ReadAsync("SELECT coalesce(party, '') FROM vote_member_list_entries"));
@@ -240,7 +337,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         await SeedReleasesAsync(published, (1, null, 1), (2, second, null));
         var releases = published.Scenario.Releases;
 
-        var result = await new BackfillStoredColumns(publications, releases).ExecuteAsync(PublicationScenario.Owner);
+        var result = await new BackfillStoredColumns(publications, releases, new FakeVoteReviewStore()).ExecuteAsync(PublicationScenario.Owner);
         var exit = await ExitOfBackfillAsync(releases);
 
         Assert.Equal((2, 1, 0, 1), (result.VoteRevisionsExamined, result.VoteRevisionsWritten, result.OpenVoteRevisionsWithoutKeptFile, result.ClosedVoteRevisionsWithoutKeptFile));
@@ -261,7 +358,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         var recording = DispatchProxy.Create<IPublicationStore, RecordingStore>();
         ((RecordingStore)recording).Start(publications, writes);
 
-        var result = await new BackfillStoredColumns(recording, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        var result = await new BackfillStoredColumns(recording, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal((revisions, revisions), (result.VoteRevisionsExamined, result.VoteRevisionsWritten));
         Assert.Equal([25, 2], writes.Select(write => write.Length));
@@ -291,7 +388,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         await SeedAsync(published, 1, throughRevision: 2);
         await SeedReleasesAsync(published, (1, null, 1), (2, FileOf(published, 1, "Democrat"), null));
 
-        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner);
+        var result = await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal((0, 1, 1), (result.VoteRevisionsWritten, result.OpenVoteRevisionsWithoutKeptFile, result.ClosedVoteRevisionsWithoutKeptFile));
         Assert.Equal(["false", "false"], await ReadAsync("SELECT columns_written::text FROM vote_revisions ORDER BY revision_number"));
@@ -307,7 +404,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         await ExecuteAsync("UPDATE release_officials SET photo_path = NULL");
         var releases = new FakeReleaseDirectory();
         releases.Directories[commit.DirectoryName] = new() { [PublicationProtocol.OfficialsPath] = JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficials { Officials = officials }, PublicationProtocol.JsonOptions) };
-        var backfill = new BackfillStoredColumns(publications, releases);
+        var backfill = new BackfillStoredColumns(publications, releases, new FakeVoteReviewStore());
 
         var first = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var second = await backfill.ExecuteAsync(PublicationScenario.Owner);
@@ -327,7 +424,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         await ExecuteAsync("ALTER TABLE published_entries DISABLE TRIGGER ALL");
         await publications.CommitAsync("auth0|owner", EntriesCommit(entries), "key", new string('4', 64), default);
         await ExecuteAsync("UPDATE published_entries SET congress = NULL");
-        var backfill = new BackfillStoredColumns(publications, new FakeReleaseDirectory());
+        var backfill = new BackfillStoredColumns(publications, new FakeReleaseDirectory(), new FakeVoteReviewStore());
 
         var firstRun = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var secondRun = await backfill.ExecuteAsync(PublicationScenario.Owner);
@@ -336,6 +433,94 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         Assert.Equal(0, secondRun.EntryCongressesFilled);
         Assert.Equal(entries.OrderBy(entry => entry.RecordId, StringComparer.Ordinal).Select(entry => ReleaseRecordOrder.CongressOf(entry)?.ToString() ?? ""),
             await ReadAsync("SELECT coalesce(congress::text, '') FROM published_entries ORDER BY record_id COLLATE \"C\""));
+    }
+
+    [Fact]
+    public async Task TheTallyVerifierComparesTheStoredGroupsWithTheKeptVoteFileWhoseFullRollHoldsUntrackedMembersAndReportsForgedMissingAndExtraRowsWithoutWriting()
+    {
+        // The member list holds the tracked member only, while the file tallies the full roll, so the untracked Republican exists only in the file.
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))]);
+        await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
+        await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+        var verify = new VerifyVotePartyTallies(publications, published.Scenario.Releases);
+        const string snapshotSql = "SELECT coalesce(string_agg(t.party || t.yea || t.nay || t.present || t.not_voting || t.other, ',' ORDER BY t.party), '') || '/' || (SELECT coalesce(max(party_tally_count), -1) FROM vote_revisions) FROM vote_revision_party_tallies t";
+
+        var exact = await verify.ExecuteAsync(PublicationScenario.Owner, 10, null);
+        await ExecuteAsync("UPDATE vote_revision_party_tallies SET yea = yea + 1 WHERE party = 'Democrat'");
+        var before = await ReadAsync(snapshotSql);
+        var forged = await verify.ExecuteAsync(PublicationScenario.Owner, 10, null);
+        var after = await ReadAsync(snapshotSql);
+        await ExecuteAsync("UPDATE vote_revision_party_tallies SET yea = yea - 1 WHERE party = 'Democrat'; DELETE FROM vote_revision_party_tallies WHERE party = 'Republican'");
+        var missing = await verify.ExecuteAsync(PublicationScenario.Owner, 10, null);
+        await ExecuteAsync("INSERT INTO vote_revision_party_tallies VALUES (" + $"'{published.Vote.RecordId}', 1, 'Republican', 0, 1, 0, 0, 0), ('{published.Vote.RecordId}', 1, 'Forged', 1, 0, 0, 0, 0)");
+        var extra = await verify.ExecuteAsync(PublicationScenario.Owner, 10, null);
+
+        Assert.Equal((1, 1, 0, 0), (exact.Examined, exact.Verified, exact.Failed, exact.Failures.Count));
+        Assert.Equal([VotePartyTallyFailure.DifferentCounts], forged.Failures.Select(failure => failure.Reason));
+        Assert.Equal(before, after);
+        Assert.Equal([VotePartyTallyFailure.MarkerWithoutRows, VotePartyTallyFailure.MissingGroup], missing.Failures.Select(failure => failure.Reason).Order(StringComparer.Ordinal));
+        Assert.Equal([VotePartyTallyFailure.ExtraGroup, VotePartyTallyFailure.MarkerWithoutRows], extra.Failures.Select(failure => failure.Reason).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheTallyVerifierMergesTheReleaseRangeOfEveryStateRowSoAFileThatOnlyTheOlderFolderHoldsStillProvesTheGroups()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))]);
+        await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
+        await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+        // The revision leaves release 1 and comes back in release 2, whose folder does not hold the file. The merged range is 1 to open.
+        var newer = $"000002-{Guid.NewGuid():N}";
+        published.Scenario.Releases.Directories[newer] = new();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            UPDATE publication_record_states SET last_release = 1;
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (2, '{newer}', 'test', 2, 1, false);
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{published.Vote.RecordId}', 2, {published.Vote.RevisionNumber}, NULL);
+            """);
+
+        var result = await new VerifyVotePartyTallies(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner, 10, null);
+
+        Assert.Equal((1, 1, 0, 0, 0), (result.Examined, result.Verified, result.OpenWithoutKeptFile, result.ClosedWithoutKeptFile, result.Failed));
+    }
+
+    [Fact]
+    public async Task TheTallyVerifierKeepsAnUnknownCountNullAndNeverWritesZeroWhenNoKeptFileProvesIt()
+    {
+        var published = await PublishVoteAsync([Member("M000001", Term(0, "2025-01-03", "2027-01-03", "Democrat"))], otherLines: [], totals: [PublicationScenario.DefaultPartyTotal]);
+        await SeedAsync(published, published.Vote.RevisionNumber, inRelease: true);
+        published.Scenario.Releases.Directories.Clear();
+        await new BackfillStoredColumns(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+
+        var result = await new VerifyVotePartyTallies(publications, published.Scenario.Releases).ExecuteAsync(PublicationScenario.Owner, 10, null);
+
+        Assert.Equal((1, 1, 0, 0), (result.Examined, result.Unresolved, result.Verified + result.Unavailable + result.Failed, result.Failures.Count));
+        Assert.Equal([""], await ReadAsync("SELECT coalesce(party_tally_count::text, '') FROM vote_revisions"));
+        Assert.Equal(0, await ScalarIntAsync("SELECT count(*) FROM vote_revision_party_tallies"));
+    }
+
+    [Fact]
+    public async Task TheTallyVerifierPagesByRevisionAndReadsEachRevisionOnceBecauseTheCursorIsAKeysetOnRecordAndRevision()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, throughRevision: 3);
+        // Each revision sits in its own closed release range, and no kept folder holds a file, so each zero marker stays unavailable.
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET party_tally_count = 0;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
+            VALUES ('vote', '{published.Vote.RecordId}', 1, 1, 1), ('vote', '{published.Vote.RecordId}', 2, 2, 2), ('vote', '{published.Vote.RecordId}', 3, 3, 3);
+            """);
+        var verify = new VerifyVotePartyTallies(publications, published.Scenario.Releases);
+
+        var first = await verify.ExecuteAsync(PublicationScenario.Owner, 1, null);
+        var second = await verify.ExecuteAsync(PublicationScenario.Owner, 1, VotePartyTallyVerificationCursor.Parse(first.NextCursor));
+        var third = await verify.ExecuteAsync(PublicationScenario.Owner, 5, VotePartyTallyVerificationCursor.Parse(second.NextCursor));
+
+        Assert.Equal($"1:{published.Vote.RecordId}", first.NextCursor);
+        Assert.Equal($"2:{published.Vote.RecordId}", second.NextCursor);
+        Assert.Equal((1, 1, 1, 3), (first.Examined, second.Examined, third.Examined, first.Unavailable + second.Unavailable + third.Unavailable));
+        Assert.Null(third.NextCursor);
     }
 
     private sealed record PublishedVoteRun(PublicationScenario Scenario, PublicationReleaseSummary Release, PublishedVote Vote, PublicationCommit Commit);
@@ -390,6 +575,16 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
                 ('{vote.RecordId}', {number}, 'test', 'Person', 1, 'Headline', 'Summary', 'Person', 'src', 'CongressGov', 'House', {vote.Congress}, 1, 100, 'cand', 1,
                 '{vote.VotedOn:yyyy-MM-dd}', 'ext', 0, 1, 'Passage', '{list}', '{new string('a', 64)}', '{new string('b', 64)}', true, 'Passed')
                 """))};
+            DO $fixture$
+            DECLARE legacy_trigger record;
+            BEGIN
+                FOR legacy_trigger IN
+                    SELECT t.tgname FROM pg_trigger t JOIN pg_constraint c ON c.oid = t.tgconstraint
+                    WHERE t.tgrelid = 'vote_revisions'::regclass AND c.conrelid = 'vote_revisions'::regclass AND c.contype = 'f'
+                LOOP
+                    EXECUTE format('ALTER TABLE vote_revisions DISABLE TRIGGER %I', legacy_trigger.tgname);
+                END LOOP;
+            END $fixture$;
             """);
         if (!inRelease) return;
         var directory = $"000001-{Guid.NewGuid():N}";
@@ -429,13 +624,18 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         new(index, "rep", DateOnly.Parse(start), DateOnly.Parse(end), "MA", 1, null, party, null);
 
     // A vote file of a revision. The revision number and the member parties differ. A later revision swaps the Yea and Nay counts of the parties, so its columns differ too.
-    private static PublishedVote FileOf(PublishedVoteRun published, int revision, string party) =>
-        published.Vote with
+    private static PublishedVote FileOf(PublishedVoteRun published, int revision, string party)
+    {
+        var vote = published.Vote with
         {
             RevisionNumber = revision,
             Members = [.. published.Vote.Members.Select(member => member with { Party = party })],
-            PartyMajorities = [.. published.Vote.PartyMajorities.Select(majority => revision == 1 ? majority : PublishedPartyMajority.Of(majority.Party, majority.NayCount, majority.YeaCount))]
+            PartyMajorities = [.. published.Vote.PartyMajorities.Select(majority => revision == 1 ? majority : PublishedPartyMajority.Of(majority.Party, majority.NayCount, majority.YeaCount))],
+            PartyTallies = published.Vote.PartyTallies?.Select(tally => revision == 1 ? tally : tally with { Yea = tally.Nay, Nay = tally.Yea }).ToArray()
         };
+        vote.Validate();
+        return vote;
+    }
 
     // Revision n sits in release n. A null file leaves the folder of that release without the record file. A null last release leaves the range open.
     private async Task SeedReleasesAsync(PublishedVoteRun published, params (int Revision, PublishedVote? File, int? LastRelease)[] revisions)
@@ -458,7 +658,7 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     }
 
     private async Task<int> ExitOfBackfillAsync(FakeReleaseDirectory releases) => await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!,
-        null!, new BackfillStoredColumns(publications, releases), null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
+        null!, new BackfillStoredColumns(publications, releases, new FakeVoteReviewStore()), null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
     private async Task ExecuteAsync(string sql)
     {
@@ -466,6 +666,14 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<int> ScalarIntAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
     }
 
     private async Task<string[]> ReadAsync(string sql)

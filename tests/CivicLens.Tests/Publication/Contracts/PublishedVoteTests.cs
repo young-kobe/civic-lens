@@ -19,6 +19,51 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void EvidenceValidatorAcceptsASourceCitedOnlyByAMember()
+    {
+        var vote = Vote();
+        const string memberOnlyText = "Member: C000001, Pat Example, I, ZZ, Present\n";
+        var memberOnlySource = Source(new string('3', 64), "https://example.gov/members", memberOnlyText);
+        var memberCitation = Cite(memberOnlySource.ExtractionId, memberOnlyText, "Member: C000001, Pat Example, I, ZZ, Present");
+
+        PublishedVote.ValidateEvidence(
+            [vote.Sources[0], memberOnlySource], vote.VotedOn, vote.Kind, vote.KindCitation,
+            vote.VotedOnCitation, vote.Result, vote.Facts, [("Present", memberCitation)]);
+    }
+
+    [Fact]
+    public void EvidenceValidatorRejectsMalformedFactsCitationsAndMissingKindOrMemberCitations()
+    {
+        var vote = Vote();
+        const string astralText = "Result: \U0001D11E";
+        var astralSource = Source(new string('3', 64), "https://example.gov/astral", astralText);
+        var splitPair = new PublishedCitation
+        {
+            ExtractionId = astralSource.ExtractionId,
+            Start = "Result: ".Length + 1,
+            Length = 1,
+            Quote = "\uDD1E"
+        };
+
+        var mismatchedFacts = vote.Facts.ToArray();
+        mismatchedFacts[0] = mismatchedFacts[0] with { Text = "incorrect" };
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, vote.Result, mismatchedFacts, MemberEvidence(vote)));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence([.. vote.Sources, astralSource], vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, vote.Result,
+            [.. vote.Facts, new PublishedVoteFact { Text = "\uDD1E", Citation = splitPair }], MemberEvidence(vote)));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            null, vote.VotedOnCitation, vote.Result, vote.Facts, MemberEvidence(vote)));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, vote.Result, vote.Facts, [.. MemberEvidence(vote), ("Yea", vote.Members[0].Citation with { ExtractionId = new string('9', 64) })]));
+        Assert.Throws<InvalidDataException>(() => PublishedVote.ValidateEvidence(vote.Sources, vote.VotedOn, vote.Kind,
+            vote.KindCitation, vote.VotedOnCitation, "Missing", vote.Facts, MemberEvidence(vote)));
+    }
+
+    private static (string? Cast, PublishedCitation? Citation)[] MemberEvidence(PublishedVote vote) =>
+        vote.Members.Select(member => ((string?)member.Cast, (PublishedCitation?)member.Citation)).ToArray();
+
+    [Fact]
     public void TheEntryNamesNoOfficialUntilAnOfficialPageOrSearchServiceIndexesVotesAndDatesTheVoteByItsDay()
     {
         var entry = Vote().ToEntry();
@@ -210,9 +255,11 @@ public sealed class PublishedVoteTests
     {
         var vote = Vote();
         var cast = new string('y', PublishedVote.MaximumCastLength + 1);
-        var member = vote.Members[0] with { Cast = cast, Citation = vote.Members[0].Citation with { Quote = "Member: A000055, Robert Aderholt, R, AL, " + cast } };
+        var quote = "Member: A000055, Robert Aderholt, R, AL, " + cast;
+        var source = vote.Sources[1] with { Text = MembersText + quote + "\n" };
+        var member = vote.Members[0] with { Cast = cast, Citation = Cite(source.ExtractionId, source.Text, quote) };
 
-        var error = Assert.Throws<InvalidDataException>((vote with { Members = [member, vote.Members[1]] }).Validate);
+        var error = Assert.Throws<InvalidDataException>((vote with { Sources = [vote.Sources[0], source], Members = [member, vote.Members[1]] }).Validate);
 
         Assert.Contains($"at most {PublishedVote.MaximumCastLength} characters", error.Message, StringComparison.Ordinal);
     }
@@ -347,6 +394,31 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void PartyTalliesPreserveZeroSideCountsAndMustMatchTheWholeChamberTotals()
+    {
+        var vote = Vote() with
+        {
+            Totals = new() { Yea = 1, Nay = 1, Present = 1, NotVoting = 0 },
+            PartyTallies =
+            [
+                new() { Party = "Democrat", Yea = 0, Nay = 1, Present = 0, NotVoting = 0, Other = 0 },
+                new() { Party = "Republican", Yea = 1, Nay = 0, Present = 0, NotVoting = 0, Other = 0 },
+                new() { Party = "Independent", Yea = 0, Nay = 0, Present = 1, NotVoting = 0, Other = 0 }
+            ],
+            PartyMajorities =
+            [
+                PublishedPartyMajority.Of("Democrat", 0, 1),
+                PublishedPartyMajority.Of("Republican", 1, 0),
+                PublishedPartyMajority.Of("Independent", 0, 0)
+            ]
+        };
+
+        vote.Validate();
+        Assert.Throws<InvalidDataException>((vote with { PartyTallies = [.. vote.PartyTallies!, vote.PartyTallies![2]] }).Validate);
+        Assert.Throws<InvalidDataException>((vote with { PartyTallies = [vote.PartyTallies![0], vote.PartyTallies[1] with { Present = 1 }, vote.PartyTallies[2]] }).Validate);
+    }
+
+    [Fact]
     public void RejectsAMemberWhoseNamedPartyHasNoMajorityEntry()
     {
         var vote = Vote();
@@ -428,6 +500,90 @@ public sealed class PublishedVoteTests
     }
 
     [Fact]
+    public void CandidateVoteTalliesMustMatchTheCitedCandidateTotalCounts()
+    {
+        var vote = CandidateVoteWithTallies();
+        vote.Validate();
+
+        Assert.Throws<InvalidDataException>(() => (vote with
+        {
+            PartyTallies = [vote.PartyTallies![1] with { Other = 4 }]
+        }).Validate());
+        Assert.Throws<InvalidDataException>(() => (vote with
+        {
+            PartyTallies = [vote.PartyTallies![0], vote.PartyTallies[1] with { Other = 217, Present = 1 }]
+        }).Validate());
+    }
+
+    [Fact]
+    public void CandidateVoteTalliesPreserveCitedPresentAndNotVotingCounts()
+    {
+        var vote = CandidateVoteWithTallies();
+        var detail = vote.Sources[0].Text + "Candidate total Present: 1\nCandidate total Not Voting: 1\n";
+        (vote with
+        {
+            PartyTallies = [vote.PartyTallies![0], vote.PartyTallies[1] with { Present = 1, NotVoting = 1 }],
+            Facts = [.. vote.Facts,
+                new() { Text = "Candidate total Present: 1", Citation = Cite(DetailId, detail, "Candidate total Present: 1") },
+                new() { Text = "Candidate total Not Voting: 1", Citation = Cite(DetailId, detail, "Candidate total Not Voting: 1") }],
+            Sources = [vote.Sources[0] with { Text = detail }, vote.Sources[1]]
+        }).Validate();
+    }
+
+    [Fact]
+    public void KnownPartyTalliesMustCoverTrackedCastsEvenWhenTheAggregateCountsMatch()
+    {
+        var vote = Vote() with
+        {
+            PartyTallies = [new() { Party = "Democrat", Yea = 0, Nay = 1, Present = 0, NotVoting = 0, Other = 0 },
+                new() { Party = "Republican", Yea = 1, Nay = 0, Present = 0, NotVoting = 0, Other = 0 }]
+        };
+        vote.Validate();
+
+        Assert.Throws<InvalidDataException>(() => (vote with
+        {
+            Members = [vote.Members[0] with { Party = "Democrat" }, vote.Members[1]]
+        }).Validate());
+    }
+
+    [Fact]
+    public void KnownCandidateTalliesMustContainEveryTrackedParty()
+    {
+        var vote = CandidateVoteWithTallies();
+        vote.Validate();
+
+        Assert.Throws<InvalidDataException>(() => (vote with
+        {
+            PartyTallies = [vote.PartyTallies![0] with { Party = "Independent" }, vote.PartyTallies[1]]
+        }).Validate());
+    }
+
+    [Fact]
+    public void KnownPartyTalliesRecognizeTheRecordedAyeAndNoAliases()
+    {
+        var vote = Vote();
+        var members = MembersText.Replace("Yea", "Aye", StringComparison.Ordinal).Replace("Nay", "No", StringComparison.Ordinal);
+        (vote with
+        {
+            PartyTallies = [new() { Party = "Democrat", Yea = 0, Nay = 1, Present = 0, NotVoting = 0, Other = 0 },
+                new() { Party = "Republican", Yea = 1, Nay = 0, Present = 0, NotVoting = 0, Other = 0 }],
+            Members = [vote.Members[0] with { Cast = "Aye", Citation = Cite(MembersId, members, "Member: A000055, Robert Aderholt, R, AL, Aye") },
+                vote.Members[1] with { Cast = "No", Citation = Cite(MembersId, members, "Member: B000001, Ann Roe, D, MA, No") }],
+            Sources = [vote.Sources[0], vote.Sources[1] with { Text = members }]
+        }).Validate();
+    }
+
+    [Fact]
+    public void OldVoteJsonKeepsItsSerializedShapeUntilTalliesAreKnown()
+    {
+        var vote = Vote();
+        var json = JsonSerializer.Serialize(vote, PublicationProtocol.JsonOptions);
+
+        Assert.DoesNotContain("partyTallies", json, StringComparison.Ordinal);
+        Assert.Contains("\"partyTallies\"", JsonSerializer.Serialize(vote with { PartyTallies = [] }, PublicationProtocol.JsonOptions), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ACandidateTotalVoteWithTotalsIsRefusedBecauseItsCastsAreNotYeaOrNay()
     {
         var vote = CandidateVote();
@@ -480,6 +636,20 @@ public sealed class PublishedVoteTests
         };
 
         Assert.Throws<InvalidDataException>(mixed.Validate);
+    }
+
+    private static PublishedVote CandidateVoteWithTallies()
+    {
+        var vote = CandidateVote();
+        const string members = "Member: A000055, Robert Aderholt, R, AL, Johnson (LA)\nMember: B000001, Ann Roe, D, MA, Emmer\n";
+        return vote with
+        {
+            PartyTallies = [new() { Party = "Democrat", Yea = 0, Nay = 0, Present = 0, NotVoting = 0, Other = 1 },
+                new() { Party = "Republican", Yea = 0, Nay = 0, Present = 0, NotVoting = 0, Other = 218 }],
+            Members = [vote.Members[0] with { Cast = "Johnson (LA)", Citation = Cite(MembersId, members, "Member: A000055, Robert Aderholt, R, AL, Johnson (LA)") },
+                vote.Members[1] with { Cast = "Emmer", Citation = Cite(MembersId, members, "Member: B000001, Ann Roe, D, MA, Emmer") }],
+            Sources = [vote.Sources[0], vote.Sources[1] with { Text = members }]
+        };
     }
 
     private static PublishedVote CandidateVote()

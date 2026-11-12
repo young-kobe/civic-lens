@@ -27,12 +27,12 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
             "statement_revision_issues", "statement_revision_other_speakers", "statement_revision_policy_areas", "statement_revision_quotations",
             "statement_revision_speakers", "statement_revisions"]),
         ("actions", ["action_analysis", "action_analysis_budget", "action_analysis_runs", "action_drafts", "action_review_decision_resolutions", "action_review_decisions",
-            "action_revision_issues", "action_revision_sponsorship_citations", "action_revision_sponsorships", "action_revision_text_citations", "action_revisions"]),
+            "action_revision_issues", "action_revision_key_terms", "action_revision_sponsorship_citations", "action_revision_sponsorships", "action_revision_text_citations", "action_revisions"]),
         ("votes", ["vote_analysis", "vote_analysis_budget", "vote_analysis_runs", "vote_candidates", "vote_drafts", "vote_member_list_entries",
             "vote_member_lists", "vote_review_decision_resolutions", "vote_review_decisions", "vote_revision_facts", "vote_revision_issues",
-            "vote_revisions", "vote_versions"]),
+            "vote_revision_party_tallies", "vote_revisions", "vote_versions"]),
         ("executive-actions", ["executive_action_documents", "executive_action_drafts", "executive_action_review_decision_resolutions", "executive_action_review_decisions",
-            "executive_action_revision_facts", "executive_action_revision_notices", "executive_action_revisions"]),
+            "executive_action_revision_disposition_targets", "executive_action_revision_facts", "executive_action_revision_notices", "executive_action_revisions", "executive_action_texts"]),
         ("relationships", ["relationship_analysis", "relationship_analysis_budget", "relationship_analysis_runs", "relationship_drafts",
             "relationship_review_decision_resolutions", "relationship_review_decisions", "relationship_revisions"]),
         ("briefs", ["brief_analysis", "brief_analysis_budget", "brief_analysis_runs", "brief_check_flags", "brief_drafts",
@@ -47,7 +47,8 @@ public sealed partial class SchemaReferenceTests(PostgresCollection postgres) : 
         ("publication", ["publication_record_states", "publication_releases", "publication_withdrawal_corrections", "publication_withdrawals",
             "published_entries", "published_entry_issues", "published_entry_officials", "published_entry_policy_areas", "published_records",
             "published_bill_histories", "published_bill_history_actions", "published_correction_histories", "published_correction_history_entries",
-            "release_correction_histories", "release_bill_histories", "release_bill_statuses", "release_issue_excludes", "release_issue_includes", "release_issues", "release_official_terms", "release_officials", "release_policy_areas"])
+            "release_correction_histories", "release_bill_histories", "release_bill_statuses", "release_vote_bills", "release_bill_counts", "release_official_bill_counts",
+            "release_issue_excludes", "release_issue_includes", "release_issue_party_counts", "release_issue_party_lineups", "release_issues", "release_official_terms", "release_officials", "release_policy_areas"])
     ];
 
     private string connectionString = null!;

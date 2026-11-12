@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicWeb.Publication;
@@ -25,6 +27,7 @@ public static class ZipDistrictEndpoints
             return ApiResults.Json(answer);
         }));
         v1.MapGet("/zip-districts/{zcta}/members", MembersAsync);
+        v1.MapGet("/zip-districts/{zcta}/bills/{recordId}", BillMembersAsync);
     }
 
     private static Task<IResult> MembersAsync(string zcta, HttpContext http, ZipDistrictStore zips, PageRenderer renderer, PublicApiOptions options,
@@ -36,19 +39,34 @@ public static class ZipDistrictEndpoints
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
             var issue = QueryValues.Filter(http.Request.Query, "issue");
             var view = QueryValues.Value(http.Request.Query, "view") ?? string.Empty;
-            if (view is not "" and not "compare" and not "strip")
-                throw new ArgumentException("view must be empty, compare, or strip.", "view");
+            if (view is not "" and not "compare" and not "strip" and not "issue")
+                throw new ArgumentException("view must be empty, compare, strip, or issue.", "view");
+            if (view == "issue" && issue is null)
+                throw new ArgumentException("The issue view needs an issue.", "issue");
             if (view == "strip" && issue is not null)
                 throw new ArgumentException("The strip view has no issue filter.", "issue");
+            if (view == "issue" && http.Request.Query.ContainsKey("sinceRelease"))
+                throw new ArgumentException("The issue view has no release marker.", "sinceRelease");
             var sinceRelease = QueryValues.Number(http.Request.Query, "sinceRelease", 1, int.MaxValue);
-            var lookup = view == "strip"
-                ? await zips.FindStripAsync(request, sinceRelease, cancellationToken)
-                : await zips.FindMembersAsync(request, issue, sinceRelease, cancellationToken);
+            var lookup = view switch
+            {
+                "strip" => await zips.FindStripAsync(request, sinceRelease, cancellationToken),
+                "issue" => await zips.FindIssueVotesAsync(request, issue!, cancellationToken),
+                _ => await zips.FindMembersAsync(request, issue, sinceRelease, cancellationToken)
+            };
             if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
+            var data = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue);
+            var rootPath = options.PublicBaseUrl?.Join(string.Empty) ?? "/";
+            if (view == "issue")
+                return Results.Content(await renderer.RenderAsync<IssueMemberVotes>(new Dictionary<string, object?>
+                {
+                    [nameof(IssueMemberVotes.Data)] = data,
+                    [nameof(IssueMemberVotes.RootPath)] = rootPath
+                }), "text/html; charset=utf-8");
             var html = await renderer.RenderAsync<ZipMemberCards>(new Dictionary<string, object?>
             {
-                [nameof(ZipMemberCards.Data)] = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue),
-                [nameof(ZipMemberCards.RootPath)] = options.PublicBaseUrl?.Join(string.Empty) ?? "/",
+                [nameof(ZipMemberCards.Data)] = data,
+                [nameof(ZipMemberCards.RootPath)] = rootPath,
                 [nameof(ZipMemberCards.View)] = view,
                 [nameof(ZipMemberCards.SinceRelease)] = sinceRelease,
                 [nameof(ZipMemberCards.NewVoteCount)] = lookup.NewVoteCount,
@@ -56,6 +74,22 @@ public static class ZipDistrictEndpoints
                     ? null
                     : options.PublicBaseUrl?.Join("compare.html")
             });
+            return Results.Content(html, "text/html; charset=utf-8");
+        });
+    }
+
+    /// <summary>The private fragment of the bill page card "Your members and this bill". Like the member cards, it names the members of one ZIP area, so no cache keeps it.</summary>
+    private static Task<IResult> BillMembersAsync(string zcta, string recordId, HttpContext http, BillMembersReader reader, PageRenderer renderer, CancellationToken cancellationToken)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        return ApiResults.GuardAsync(async () =>
+        {
+            var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
+            if (!PublicationProtocol.IsAnyRecordId(recordId)) return ApiResults.RecordNotFound();
+            var answer = await reader.ReadAsync(request, recordId, cancellationToken);
+            if (answer.Miss is { } miss) return Miss(miss);
+            if (answer.Data is not { } data) return ApiResults.RecordNotFound();
+            var html = await renderer.RenderAsync<BillMembersFragment>(new Dictionary<string, object?> { [nameof(BillMembersFragment.Data)] = data });
             return Results.Content(html, "text/html; charset=utf-8");
         });
     }

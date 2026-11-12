@@ -34,6 +34,23 @@ public sealed class FederalRegisterParserTests
     }
 
     [Fact]
+    public void ADocumentKeepsItsPinnedBodyUrlAndADocumentOfAnEarlierFieldListHasNone()
+    {
+        Assert.Equal(FederalRegisterFixtures.ProclamationBodyUrl, FederalRegisterFixtures.Document(FederalRegisterFixtures.BidenProclamation).BodyHtmlUrl);
+        Assert.Null(FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder).BodyHtmlUrl);
+        Assert.Null(FederalRegisterFixtures.Document(FederalRegisterFixtures.WithBodyUrl(FederalRegisterFixtures.TrumpOrder, "x").Replace("\"x\"", "null", StringComparison.Ordinal)).BodyHtmlUrl);
+    }
+
+    [Theory]
+    [InlineData("http://www.federalregister.gov/documents/full_text/html/2025/01/29/2025-01953.html")]
+    [InlineData("https://evil.example/documents/full_text/html/2025/01/29/2025-01953.html")]
+    [InlineData("not a url")]
+    public void APinnedBodyUrlOffTheHttpsFederalRegisterHostIsInvalid(string bodyUrl)
+    {
+        Assert.Throws<InvalidDataException>(() => FederalRegisterFixtures.Document(FederalRegisterFixtures.WithBodyUrl(FederalRegisterFixtures.TrumpOrder, bodyUrl)));
+    }
+
+    [Fact]
     public void AListThatRepeatsADocumentIsInvalid()
     {
         var json = FederalRegisterFixtures.List.Replace("2025-01901", "2025-01900");

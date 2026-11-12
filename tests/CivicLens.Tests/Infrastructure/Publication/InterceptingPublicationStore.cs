@@ -49,8 +49,17 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         inner.FillStatementApproversAsync(entries, cancellationToken);
 
+    public Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+        inner.FillApprovalTimesAsync(entries, cancellationToken);
+
     public Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken) =>
         inner.AddBillStatusesAsync(releaseNumber, statuses, cancellationToken);
+
+    public Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken) =>
+        inner.AddVoteBillsAsync(releaseNumber, voteBills, cancellationToken);
+
+    public Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        inner.ReadVoteBillsAsync(releaseNumber, cancellationToken);
 
     public Task<StoredRelease> ReadReleaseAsync(int releaseNumber, CancellationToken cancellationToken) => inner.ReadReleaseAsync(releaseNumber, cancellationToken);
 
@@ -102,6 +111,52 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<IReadOnlyList<CorrectionHistoryBinding>> PrepareCorrectionHistoriesAsync(
         IReadOnlyCollection<PublicationCorrectionHistory> histories, CancellationToken cancellationToken) =>
         inner.PrepareCorrectionHistoriesAsync(histories, cancellationToken);
+
+    public Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadCorrectionHistoryBootstrapPageAsync(after, limit, readServedDirectory, cancellationToken);
+
+    public Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadCorrectionHistoryVerificationPageAsync(after, limit, readServedDirectory, cancellationToken);
+
+    public Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadRetainedReleaseSelectionAsync(readServedDirectory, cancellationToken);
+
+    public Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) => inner.ReadRetainedReleaseFingerprintAsync(readServedDirectory, cancellationToken);
+
+    public Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken) =>
+        inner.CommitCorrectionHistoryBootstrapAsync(release, bindings, readServedDirectory, cancellationToken);
+
+    public Task<BillCountReleasePage> ReadBillCountReleasePageAsync(int afterReleaseNumber, string? selectionFingerprint, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.ReadBillCountReleasePageAsync(afterReleaseNumber, selectionFingerprint, limit, readServedDirectory, cancellationToken);
+
+    public Task<VotePartyTallyPage> ReadVotePartyTallyEvidenceAsync(VotePartyTallyVerificationCursor? after, int limit, CancellationToken cancellationToken) =>
+        inner.ReadVotePartyTallyEvidenceAsync(after, limit, cancellationToken);
+
+    public Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken) =>
+        inner.ReadBillCountSourceAsync(releaseNumber, cancellationToken);
+
+    public Task<ReleaseSnapshotWrite> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.CommitBillCountsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
+    public Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.VerifyBillCountsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
+    public Task<ReleaseSnapshotWrite> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.CommitPartyLineUpsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
+
+    public Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken) =>
+        inner.VerifyPartyLineUpsAsync(release, validatedMembers, readServedDirectory, cancellationToken);
 
     public Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken) => inner.FindReplayAsync(actorSubject, idempotencyKey, payloadHash, cancellationToken);

@@ -61,6 +61,7 @@ public sealed class PostgresExecutiveActionRevisionColumnsTests(PostgresCollecti
         Assert.Equal(json, await ScalarAsync("SELECT revision_json FROM executive_action_revisions"));
         Assert.Equal(original, (await ReviewStore().GetAsync(recordId, default))!.Review.CurrentRevision.DispositionNotes);
         Assert.Equal(0, (await VerifyAsync()).Mismatched);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM executive_action_revision_disposition_targets WHERE relation = 'Revokes' AND number = '14056'"));
     }
 
     [Fact]

@@ -291,11 +291,13 @@
             || fragment.dataset.sinceRelease !== (sinceRelease === null ? "" : String(sinceRelease))
             || (hasSince !== hasCount)
             || (hasCount && (typeof count !== "string" || count.length > 19 || !/^(0|[1-9][0-9]*)$/.test(count) || BigInt(count) > 9223372036854775807n))
-            || expectedView !== "strip" && (stripTemplates.length !== 1 || stripTemplateContent.childElementCount !== 1
+            || expectedView !== "strip" && expectedView !== "issue" && (stripTemplates.length !== 1 || stripTemplateContent.childElementCount !== 1
                 || !stripTemplateContent.firstElementChild.matches("div[data-member-strip-content]"))
             || (expectedView === "strip"
                 ? fragment.childElementCount !== 1 || !fragment.firstElementChild.matches("div[data-member-strip-content]")
-                : !fragment.querySelector(".zip-member-cards > li")))
+                : expectedView === "issue"
+                    ? !fragment.querySelector(".shared-vote-rows, [data-member-votes-empty]")
+                    : !fragment.querySelector(".zip-member-cards > li")))
             throw new TypeError("Invalid ZIP lookup answer.");
         return fragment;
     };
@@ -330,6 +332,92 @@
         return message;
     };
 
+    const memberFailureWithRetry = (zip, status, officialsPage, retry) => {
+        const again = document.createElement("button");
+        again.type = "button";
+        again.textContent = "Try again";
+        again.addEventListener("click", retry);
+        return [memberFailure(zip, status, officialsPage), again];
+    };
+
+    // The one owner of loading a member fragment. It keeps the stale-ZIP guard (snapshot, current, refresh) for every caller.
+    // A caller supplies the render hooks: onFragment(fragment, call) returns false when the page could not keep the answer,
+    // onFailure(call, status) shows the failure, onLoading(call) and onSettled(call) are optional.
+    // run() resolves to true when the answer was shown, false when it was not, and null when a newer run replaced it.
+    const memberLoader = (remembered, { api, view, requireSnapshot = false, onLoading, onFragment, onFailure, onSettled }) => {
+        let request = 0;
+        let active = null;
+        const cancel = () => {
+            request++;
+            active?.abort();
+            active = null;
+        };
+        const run = async (zip, options = {}) => {
+            const mine = ++request;
+            active?.abort();
+            active = null;
+            const startingState = remembered.snapshot();
+            if (requireSnapshot && startingState.zip !== zip) { remembered.refresh(); return false; }
+            const marker = "since" in options ? options.since : startingState.zip === zip ? startingState.release : null;
+            const abort = new AbortController();
+            active = abort;
+            const call = { ...options, zip, startingState, marker };
+            onLoading?.(call);
+            try {
+                const { status, fragment } = await readMemberFragment(api, zip, options.issue ?? null, view, marker, abort.signal);
+                if (mine !== request) return null;
+                if (fragment === null) { onFailure(call, status); return false; }
+                if (!remembered.current(startingState) || onFragment(fragment, call) === false) { remembered.refresh(); return false; }
+                return true;
+            } catch {
+                if (mine !== request) return null;
+                onFailure(call, 0);
+                return false;
+            } finally {
+                if (mine === request) { active = null; onSettled?.(call); }
+            }
+        };
+        return { run, cancel };
+    };
+
+    // Loads one member fragment into a slot and follows the remembered ZIP. A view supplies frame(nodes), nodeOf(fragment), and optional onShow and onClear hooks.
+    const followMemberSlot = (remembered, slot, { api, view, issue = null, sinceMarker = true, frame, nodeOf, accepts, onShow, onClear }) => {
+        const loader = memberLoader(remembered, {
+            api,
+            view,
+            requireSnapshot: true,
+            onLoading: () => {
+                onShow?.();
+                slot.setAttribute("aria-busy", "true");
+                if (slot.childElementCount !== 0) return;
+                const loading = document.createElement("p");
+                loading.textContent = "Looking up your officials.";
+                slot.replaceChildren(frame([loading]));
+            },
+            onFragment: fragment => {
+                if (accepts && !accepts(fragment)) { slot.replaceChildren(); onClear?.(); return true; }
+                slot.replaceChildren(nodeOf(fragment));
+            },
+            onFailure: (call, status) => slot.replaceChildren(frame(memberFailureWithRetry(call.zip, status, slot.dataset.officialsPage, () => run(call.zip)))),
+            onSettled: () => slot.removeAttribute("aria-busy")
+        });
+        const clear = () => {
+            loader.cancel();
+            slot.removeAttribute("aria-busy");
+            slot.replaceChildren();
+            onClear?.();
+        };
+        const run = zip => {
+            if (zip !== remembered.zip()) return;
+            if (!validZip(zip)) { clear(); return; }
+            loader.run(zip, sinceMarker ? { issue } : { issue, since: null });
+        };
+        remembered.onForget(clear);
+        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
+        const initial = remembered.zip();
+        if (initial !== null) run(initial);
+    };
+
     const initZipLookup = (form, remembered) => {
         const api = form.dataset.zipApi;
         const view = form.dataset.zipView === "compare" ? "compare" : "";
@@ -349,7 +437,7 @@
             return node;
         };
         const show = (nodes, listed = false) => { panel.hidden = false; notes.hidden = !listed; body.replaceChildren(...nodes); };
-        const showProblem = node => { panel.hidden = true; problem.replaceChildren(node); };
+        const showProblem = (...nodes) => { panel.hidden = true; problem.replaceChildren(...nodes); };
         const reveal = () => {
             panel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
             heading.focus({ preventScroll: true });
@@ -372,7 +460,6 @@
             }
             strip.replaceChildren(source.content.firstElementChild.cloneNode(true));
         };
-        const failure = (zip, status) => memberFailure(zip, status, form.dataset.officialsPage);
         const submitLabel = submit.textContent;
         const loadingText = "Looking up your officials.";
         const setBusy = busy => {
@@ -382,46 +469,30 @@
             else body.removeAttribute("aria-busy");
             body.querySelectorAll("[data-member-issue]").forEach(button => { button.disabled = busy; });
         };
-        let lookup = 0;
-        let lookupAbort = null;
         let renderedSinceRelease = null;
-        const look = async (zip, request, revealAnswer, persist, issue, filtered) => {
-            const failed = status => {
-                if (request !== lookup) return;
-                if (filtered) problem.replaceChildren(failure(zip, status));
-                else showProblem(failure(zip, status));
-            };
-            try {
-                const startingState = remembered.snapshot();
-                const since = filtered ? renderedSinceRelease : startingState.zip === zip ? startingState.release : null;
-                const abort = new AbortController();
-                lookupAbort = abort;
-                const { status, fragment } = await readMemberFragment(api, zip, issue, view, since, abort.signal);
-                if (request !== lookup) return false;
-                if (fragment === null) { failed(status); return false; }
-                if (!remembered.current(startingState)) { remembered.refresh(); return false; }
+        const loader = memberLoader(remembered, {
+            api,
+            view,
+            onFragment: (fragment, call) => {
                 showAnswer(fragment);
-                if (request === lookup) {
-                    mountStrip(fragment);
-                    if (!filtered) {
-                        renderedSinceRelease = since;
-                        if (!remembered.complete(zip, Number(fragment.dataset.release), startingState, persist)) { remembered.refresh(); return false; }
-                    }
+                mountStrip(fragment);
+                if (!call.filtered) {
+                    renderedSinceRelease = call.marker;
+                    if (!remembered.complete(call.zip, Number(fragment.dataset.release), call.startingState, call.persist)) return false;
                 }
-                if (request !== lookup) return false;
-                if (filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
-                if (revealAnswer) reveal();
-                return true;
-            }
-            catch {
-                failed(0);
-                return false;
-            }
-        };
+                if (call.filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
+                if (call.revealAnswer) reveal();
+            },
+            onFailure: (call, status) => {
+                const nodes = memberFailureWithRetry(call.zip, status, form.dataset.officialsPage,
+                    () => runLookup(call.zip, call.revealAnswer, call.persist, call.issue, call.filtered));
+                if (call.filtered) problem.replaceChildren(...nodes);
+                else showProblem(...nodes);
+            },
+            onSettled: () => setBusy(false)
+        });
         const runLookup = async (zip, revealAnswer, persist = true, issue = null, filtered = false) => {
-            const request = ++lookup;
-            lookupAbort?.abort();
-            lookupAbort = null;
+            loader.cancel();
             problem.replaceChildren();
             if (!validZip(zip)) {
                 showProblem(element("p", "Enter a ZIP code with 5 digits."));
@@ -431,12 +502,10 @@
             }
             setBusy(true);
             if (!filtered) show([element("p", loadingText)]);
-            try {
-                const found = await look(zip, request, revealAnswer, persist, issue, filtered);
-                if (!found && request === lookup && revealAnswer) input.focus();
-            } finally {
-                if (request === lookup) { setBusy(false); lookupAbort = null; }
-            }
+            const options = { issue, filtered, persist, revealAnswer };
+            if (filtered) options.since = renderedSinceRelease;
+            const found = await loader.run(zip, options);
+            if (found === false && revealAnswer) input.focus();
         };
         body.addEventListener("click", event => {
             const button = event.target.closest("button[data-member-issue]");
@@ -459,9 +528,7 @@
         });
         input.addEventListener("input", () => {
             const wasBusy = body.hasAttribute("aria-busy");
-            lookup++;
-            lookupAbort?.abort();
-            lookupAbort = null;
+            loader.cancel();
             setBusy(false);
             if (wasBusy) {
                 panel.hidden = true;
@@ -470,9 +537,7 @@
             }
         });
         const clearLookup = () => {
-            lookup++;
-            lookupAbort?.abort();
-            lookupAbort = null;
+            loader.cancel();
             renderedSinceRelease = null;
             setBusy(false);
             input.value = "";
@@ -498,69 +563,90 @@
         }
     };
 
+    // The bill page card holds no ZIP or member data in the cached page. A remembered ZIP fills it from the private fragment of the browser API.
+    // A failed read shows the shared lookup failure text, because the reader already gave a ZIP. Only a reader with no ZIP sees the prompt.
+    const initBillMembers = (remembered, card, strip) => {
+        const api = strip?.dataset.membersApi;
+        const body = card.querySelector("[data-bill-members-body]");
+        const prompt = card.querySelector("[data-bill-members-prompt]");
+        let request = 0;
+        const clear = () => { request++; body.replaceChildren(); prompt.hidden = false; };
+        const fail = (zip, status) => { body.replaceChildren(memberFailure(zip, status, strip.dataset.officialsPage)); prompt.hidden = true; };
+        const run = async () => {
+            const zip = remembered.zip();
+            if (!validZip(zip) || !api) { clear(); return; }
+            const mine = ++request;
+            try {
+                const response = await fetch(`${api}/v1/zip-districts/${zip}/bills/${encodeURIComponent(card.dataset.recordId)}`, { headers: { Accept: "text/html" } });
+                if (!response.ok) { if (mine === request) fail(zip, response.status); return; }
+                if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? "")) throw new TypeError("Invalid bill members answer.");
+                const template = document.createElement("template");
+                template.innerHTML = await response.text();
+                const fragment = template.content.firstElementChild;
+                if (mine !== request) return;
+                if (template.content.childElementCount !== 1 || !fragment.matches("div[data-bill-members-fragment]")
+                    || fragment.dataset.zcta !== zip || fragment.dataset.recordId !== card.dataset.recordId || !positiveRelease(fragment.dataset.release))
+                    throw new TypeError("Invalid bill members answer.");
+                // The backers and votes of the page cover one release. A fragment of another release would disagree with them.
+                if (fragment.dataset.release !== card.dataset.release) { clear(); return; }
+                body.replaceChildren(fragment);
+                prompt.hidden = true;
+            } catch {
+                if (mine === request) fail(zip, 0);
+            }
+        };
+        remembered.onForget(clear);
+        remembered.onChange(run);
+        run();
+    };
+
     const initMemberStrip = (remembered, slot) => {
         if (document.querySelector("[data-zip-api]")) return;
         const api = slot.dataset.membersApi;
         if (!api) return;
-        let request = 0;
-        let active = null;
-        const showState = (...nodes) => {
-            const content = document.createElement("div");
-            content.className = "members-strip-content";
-            const controls = document.createElement("div");
-            controls.className = "members-strip-nav";
-            controls.append(...nodes);
-            content.append(controls);
-            slot.replaceChildren(content);
-        };
-        const showError = (zip, status) => {
-            const message = memberFailure(zip, status, slot.dataset.officialsPage);
-            const retry = document.createElement("button");
-            retry.type = "button";
-            retry.textContent = "Try again";
-            retry.addEventListener("click", () => run(zip));
-            showState(message, retry);
-        };
-        const clear = () => {
-            request++;
-            active?.abort();
-            active = null;
-            slot.removeAttribute("aria-busy");
-            slot.replaceChildren();
-        };
-        const run = async zip => {
-            if (zip !== remembered.zip()) return;
-            const mine = ++request;
-            active?.abort();
-            active = null;
-            if (!validZip(zip)) { slot.replaceChildren(); slot.removeAttribute("aria-busy"); return; }
-            const startingState = remembered.snapshot();
-            if (startingState.zip !== zip) { remembered.refresh(); return; }
-            const since = startingState.release;
-            const abort = new AbortController();
-            active = abort;
-            slot.setAttribute("aria-busy", "true");
-            if (slot.childElementCount === 0) {
-                const loading = document.createElement("p");
-                loading.textContent = "Looking up your officials.";
-                showState(loading);
+        followMemberSlot(remembered, slot, {
+            api,
+            view: "strip",
+            frame: nodes => {
+                const content = document.createElement("div");
+                content.className = "members-strip-content";
+                const controls = document.createElement("div");
+                controls.className = "members-strip-nav";
+                controls.append(...nodes);
+                content.append(controls);
+                return content;
+            },
+            nodeOf: fragment => fragment.firstElementChild.cloneNode(true)
+        });
+    };
+
+    const initIssueMembers = (remembered, slot) => {
+        const api = slot.dataset.membersApi;
+        const issue = slot.dataset.issueMembers;
+        const prompt = document.querySelector("[data-issue-members-prompt]");
+        if (!api || !issue) return;
+        followMemberSlot(remembered, slot, {
+            api,
+            view: "issue",
+            issue,
+            sinceMarker: false,
+            frame: nodes => {
+                const content = document.createElement("div");
+                content.append(...nodes);
+                return content;
+            },
+            nodeOf: fragment => fragment,
+            // The vote list of the page covers one release and Congress. A fragment of another release or Congress would disagree with it.
+            accepts: fragment => fragment.dataset.release === slot.dataset.release && (!slot.dataset.congress || fragment.dataset.congress === slot.dataset.congress),
+            onShow: () => {
+                if (prompt) prompt.hidden = true;
+                slot.hidden = false;
+            },
+            onClear: () => {
+                slot.hidden = true;
+                if (prompt) prompt.hidden = false;
             }
-            try {
-                const { status, fragment } = await readMemberFragment(api, zip, null, "strip", since, abort.signal);
-                if (mine !== request) return;
-                if (fragment === null) { showError(zip, status); return; }
-                if (!remembered.current(startingState)) { remembered.refresh(); return; }
-                slot.replaceChildren(fragment.firstElementChild.cloneNode(true));
-            } catch {
-                if (mine === request) showError(zip, 0);
-            } finally {
-                if (mine === request) { slot.removeAttribute("aria-busy"); active = null; }
-            }
-        };
-        remembered.onForget(clear);
-        remembered.onChange(zip => { if (zip === null) clear(); else { slot.replaceChildren(); run(zip); } });
-        const initial = remembered.zip();
-        if (initial !== null) run(initial);
+        });
     };
 
     const initOfficialsFilter = controls => {
@@ -588,6 +674,9 @@
         for (const button of buttons) button.addEventListener("click", () => { office = button.dataset.filterValue; apply(); });
         state.addEventListener("change", apply);
         name.addEventListener("input", apply);
+        // The search page links here with ?name= so the list opens on the officials that match the typed name.
+        const linkedName = new URLSearchParams(location.search).get("name");
+        if (linkedName) name.value = linkedName;
         controls.hidden = false;
         apply();
     };
@@ -914,7 +1003,39 @@
         commit(null);
     };
 
+    // A link to a line inside a closed fold, such as a member row Source link, does nothing without this. Without script the anchor still reaches the page.
+    const hashTarget = () => {
+        try { return document.getElementById(decodeURIComponent(location.hash.slice(1))); }
+        catch { return null; }
+    };
+    const openFoldOfHash = () => {
+        const closed = [];
+        for (let fold = hashTarget()?.closest("details"); fold; fold = fold.parentElement?.closest("details")) if (!fold.open) closed.push(fold);
+        if (closed.length === 0) return;
+        closed.forEach(fold => { fold.open = true; });
+        hashTarget().scrollIntoView();
+    };
+    window.addEventListener("hashchange", openFoldOfHash);
+    openFoldOfHash();
+
+    // The vote map shows the shapes on a wide screen and the tiles on a narrow one. The view buttons override that choice. Without script the width chooses.
+    const initVoteMapView = map => {
+        const views = map.querySelector("[data-vote-map-views]");
+        const buttons = Array.from(views.querySelectorAll("[data-view]"));
+        const show = view => {
+            map.dataset.view = view;
+            buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+        };
+        buttons.forEach(button => button.addEventListener("click", () => show(button.dataset.view)));
+        const narrow = matchMedia("(max-width: 719px)");
+        const showWidthView = () => show(narrow.matches ? "tile" : "shape");
+        narrow.addEventListener("change", showWidthView);
+        showWidthView();
+        views.hidden = false;
+    };
+
     document.querySelectorAll("table[data-paged]").forEach(initPaged);
+    document.querySelectorAll("[data-vote-map]").forEach(initVoteMapView);
     document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);
@@ -923,5 +1044,8 @@
     document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
     const membersStrip = document.querySelector("#members-strip");
     if (membersStrip) initMemberStrip(rememberedMembers, membersStrip);
+    document.querySelectorAll("[data-bill-members]").forEach(card => initBillMembers(rememberedMembers, card, membersStrip));
+    const issueMembers = document.querySelector("[data-issue-members]");
+    if (issueMembers) initIssueMembers(rememberedMembers, issueMembers);
     new Set(Array.from(document.querySelectorAll("th[data-sort]"), header => header.closest("table"))).forEach(initSortable);
 })();

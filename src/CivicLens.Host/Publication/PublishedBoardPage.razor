@@ -21,27 +21,27 @@
     @if (Agreement is { } agreement)
     {
         <Panel Title="@PublishedBoardView.AgreementTitle(agreement)" Padded="true">
-            <p>@PublishedBoardView.AgreementLead(agreement)</p>
+            <p>@BoardWords.AgreementLead(agreement.Chamber, agreement.Congress, agreement.Agreed, agreement.Total)</p>
             @if (agreement.Total > 0)
             {
                 <DataTable Roles="true" Items="PublishedBoardView.AgreementRows(agreement)" Caption="@PublishedBoardView.AgreementCaption">
-                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@PublishedVoteView.PartiesAgreedText</TableCell></Head>
+                    <Head><TableCell Header>@PublishedBoardView.AgreementKindHeader</TableCell><TableCell Header>@VoteWords.PartiesAgreedBadge</TableCell></Head>
                     <Row Context="row">
                         <TableCell Main>@row.Label</TableCell>
-                        <TableCell Label="@PublishedVoteView.PartiesAgreedText">@row.Count</TableCell>
+                        <TableCell Label="@VoteWords.PartiesAgreedBadge">@row.Count</TableCell>
                     </Row>
                 </DataTable>
-                <p>@PublishedBoardView.AgreementSplit(agreement)</p>
+                <p>@BoardWords.AgreementSplit(agreement.Split, agreement.Total)</p>
                 @if (agreement.Mixed > 0)
                 {
-                    <p>@PublishedBoardView.AgreementMixed(agreement)</p>
+                    <p>@BoardWords.AgreementMixed(agreement.Mixed, agreement.Total)</p>
                 }
-                @if (PublishedBoardView.ShowsNominationNote(agreement))
+                @if (BoardWords.ShowsNominationNote(agreement.Nominations, agreement.Total))
                 {
-                    <p class="muted small">@PublishedBoardView.NominationNote(agreement)</p>
+                    <p class="muted small">@BoardWords.NominationNote(agreement.Total)</p>
                 }
             }
-            <p class="muted small">@PublishedOfficialView.PartiesAgreedMeaning @PublishedBoardView.AgreementCaution</p>
+            <p class="muted small">@VoteWords.PartiesAgreedMeaning @BoardWords.AgreementCaution</p>
             <p class="muted small"><a href="@(PublicationProtocol.MethodPagePath + PublishedBoardView.AgreementAnchor)">@PublishedBoardView.AgreementLinkText</a></p>
         </Panel>
     }
@@ -49,14 +49,14 @@
     {
         @if (Page.NewerCongress is { } newer)
         {
-            <p>@PublishedBoardView.KeptCongress(newer, congress)</p>
+            <p>@BoardWords.KeptCongress(newer, congress)</p>
         }
         @if (Page.NewestRollCall is { } newest)
         {
-            <p class="muted small">@PublishedBoardView.NewestRollCall(congress, newest)</p>
+            <p class="muted small">@BoardWords.NewestRollCall(congress, newest)</p>
         }
         <Panel Title="@PublishedBoardView.BreakersTitle(Board)" Padded="true">
-            <p>@PublishedOfficialView.SplitVoteMeaning</p>
+            <p>@VoteWords.SplitMeaning</p>
             <p class="muted small">@PublishedBoardView.RankingRule(Board) @PublishedBoardView.ReadingNote</p>
             @Split(Page.Breakers, PublishedBoardView.BreakersTitle(Board), PublishedBoardView.AgainstShareHeader(Board), member => member.Breaks, member => member.BreakShare, congress)
         </Panel>
@@ -71,7 +71,7 @@
                 <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" DefaultSort="true">Missed votes</TableCell></Head>
                 <Row Context="member">
                     <TableCell Main><CellTitle Href="@member.PagePath">@member.Official.Profile.Name</CellTitle></TableCell>
-                    <TableCell Label="Missed votes" SortValue="@member.Missed!.Missed.ToString()">@PublishedOfficialView.MissedVotes(member.Missed, congress)</TableCell>
+                    <TableCell Label="Missed votes" SortValue="@member.Missed!.Missed.ToString()">@PublishedOfficialView.MissedVotes(new MissedVotes(member.Missed.Chamber, member.Missed.Missed, member.Missed.Held, member.Missed.First, member.Missed.Last), congress)</TableCell>
                 </Row>
                 <Empty><EmptyState Title="No roll calls yet" Text="@PublishedBoardView.NoMissedList(Board)" /></Empty>
             </DataTable>

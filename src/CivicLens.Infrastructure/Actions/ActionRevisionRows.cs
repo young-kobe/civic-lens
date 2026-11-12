@@ -67,6 +67,7 @@ internal static class ActionRevisionRows
         row.CosponsorCount = revision.CosponsorCount();
         row.Issues = [.. IssueIds(revision).Select((issueId, position) => IssueRow(revision, issueId, position))];
         row.TextCitations = [.. revision.TextCitations.IsDefault ? [] : revision.TextCitations.Select((citation, position) => TextCitationRow(revision, citation, position))];
+        row.KeyTerms = [.. revision.KeyTermList.Select((term, position) => KeyTermRow(revision, term, position))];
         row.Sponsorships = [.. revision.Sponsorships.Select((sponsorship, position) => SponsorshipRow(revision, sponsorship, position))];
     }
 
@@ -107,7 +108,9 @@ internal static class ActionRevisionRows
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(citation => (citation.RecordId, citation.RevisionNumber, citation.SponsorshipPosition));
         var textCitations = (await db.Set<ActionRevisionTextCitationRow>().FromSqlRaw(ReviewQueries.RevisionChildren("action_revision_text_citations"), recordIds, numbers)
             .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(citation => (citation.RecordId, citation.RevisionNumber));
-        return new(rows, issues, sponsorships, citations, textCitations);
+        var keyTerms = (await db.Set<ActionRevisionKeyTermRow>().FromSqlRaw(ReviewQueries.RevisionChildren("action_revision_key_terms"), recordIds, numbers)
+            .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(term => (term.RecordId, term.RevisionNumber));
+        return new(rows, issues, sponsorships, citations, textCitations, keyTerms);
     }
 
     /// <summary>The failure of a reader that meets an action revision row with null columns. Only the backfill fixes such a row.</summary>
@@ -136,6 +139,40 @@ internal static class ActionRevisionRows
             """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking();
         var revisions = await ReadDraftRevisionsAsync(db, rows, cancellationToken);
         return revisions.Length == requested.Length ? revisions : throw CitedRevisions.NotStored(PublishedRecordKind.Action);
+    }
+
+    /// <summary>Reads an exact bounded batch and validates the stored count projection against its rebuilt revision. It returns the projection of each revision.</summary>
+    public static async Task<IReadOnlyList<BillCountActionProjection>> ValidateBillCountBindingsAsync(CollectionAttemptDbContext db,
+        IReadOnlyCollection<PublishedRevisionBinding> named, CancellationToken cancellationToken)
+    {
+        var requested = named.Distinct().ToArray();
+        if (requested.Length == 0) return [];
+        CitedRevisions.RequireKind(PublishedRecordKind.Action, requested, nameof(named));
+        var rows = db.Set<ActionRevisionRow>().FromSqlRaw("""
+            SELECT r.* FROM action_revisions r JOIN unnest({0}, {1}) AS k(id, number) ON r.record_id = k.id AND r.revision_number = k.number
+            """, requested.Select(binding => binding.RecordId).ToArray(), requested.Select(binding => binding.RevisionNumber).ToArray()).AsNoTracking();
+        var page = await ReadPageAsync(db, rows, cancellationToken);
+        if (page.Rows.Count != requested.Length)
+            throw CitedRevisions.NotStored(PublishedRecordKind.Action);
+        var projections = new List<BillCountActionProjection>(page.Rows.Count);
+        foreach (var row in page.Rows)
+        {
+            ActionDraftRevision rebuilt;
+            try
+            {
+                rebuilt = page.Rebuild(row);
+                rebuilt.ValidateShape();
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or InvalidOperationException)
+            {
+                throw new BillCountRefusedException($"Action revision {row.RecordId} {row.RevisionNumber} cannot produce a valid bill count projection.", exception);
+            }
+            var cosponsorIds = rebuilt.CosponsorIds();
+            if (row.EventOn != rebuilt.EventOn() || row.CosponsorCount != cosponsorIds.Length)
+                throw new BillCountRefusedException($"Action revision {row.RecordId} {row.RevisionNumber} has a mismatched bill count projection.");
+            projections.Add(new(row.RecordId, row.RevisionNumber, rebuilt.Congress, row.EventOn, rebuilt.SponsorIds(), cosponsorIds));
+        }
+        return projections;
     }
 
     private static IEnumerable<string> IssueIds(ActionDraftRevision revision) =>
@@ -174,6 +211,19 @@ internal static class ActionRevisionRows
         CitationStart = citation.Span.Start,
         CitationLength = citation.Span.Length,
         Sentence = citation.Sentence
+    };
+
+    private static ActionRevisionKeyTermRow KeyTermRow(ActionDraftRevision revision, ActionKeyTerm term, int position) => new()
+    {
+        RecordId = revision.RecordId,
+        RevisionNumber = revision.RevisionNumber,
+        Position = (short)position,
+        Term = term.Term,
+        CitationExtractionId = term.Span.ExtractionId,
+        CitationStart = term.Span.Start,
+        CitationLength = term.Span.Length,
+        Definition = term.Definition,
+        Cut = term.Cut
     };
 
     private static ActionRevisionSponsorshipCitationRow CitationRow(ActionDraftRevision revision, short sponsorshipPosition, SourceSpan citation, int position) => new()

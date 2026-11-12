@@ -10,7 +10,26 @@ public static class PlainVoteWords
     public const string No = "No";
     public const string Present = "Present";
     public const string NotVoting = "Not voting";
+    public const string OtherCast = "Other";
     public const string OtherKind = "Other question";
+
+    /// <summary>The approved category term for the vote-kind index record column. Other has no single term.</summary>
+    public static string? RecordTerm(PublishedVoteKind kind) => kind switch
+    {
+        PublishedVoteKind.Rule => "Rule",
+        PublishedVoteKind.PreviousQuestion => "Previous question",
+        PublishedVoteKind.MotionToRecommit => "Motion to recommit",
+        PublishedVoteKind.Amendment => "Amendment",
+        PublishedVoteKind.Suspension => "Suspension of the rules",
+        PublishedVoteKind.Passage => "Passage or agreement",
+        PublishedVoteKind.ConferenceReport => "Conference report",
+        PublishedVoteKind.VetoOverride => "Veto override",
+        PublishedVoteKind.Nomination => "Nomination",
+        PublishedVoteKind.Cloture => "Cloture",
+        PublishedVoteKind.MotionToProceed => "Motion to proceed",
+        PublishedVoteKind.Other => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Vote kind has no record term.")
+    };
 
     private static readonly (string Ending, string Words)[] ResultByEnding =
     [

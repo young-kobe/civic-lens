@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
@@ -74,7 +75,7 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["official-z", "official-a"], rows['a'].GetProperty("speakerIds").EnumerateArray().Select(id => id.GetString()!).ToArray());
         Assert.Equal(PublishedRecordLabels.StatementModelWording, rows['a'].GetProperty("label").GetString());
         Assert.Equal("model", rows['b'].GetProperty("textOrigin").GetString());
-        Assert.Equal(JsonValueKind.Null, rows['b'].GetProperty("label").ValueKind);
+        Assert.Equal(PublishedRecordLabels.StatementCheckedByPersonWording, rows['b'].GetProperty("label").GetString());
         Assert.Equal("person", rows['c'].GetProperty("textOrigin").GetString());
         Assert.Equal(JsonValueKind.Null, rows['c'].GetProperty("label").ValueKind);
     }
@@ -189,7 +190,7 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
         }
     }
 
-    private static Task AddDetailEvidenceAsync(string database, string recordId, string extractionId, string text,
+    internal static Task AddDetailEvidenceAsync(string database, string recordId, string extractionId, string text,
         int quoteStart, int quoteLength, int dateStart, int dateLength) => ViewsSeed.ExecuteAsync(database, $"""
             SET session_replication_role = replica;
             INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,

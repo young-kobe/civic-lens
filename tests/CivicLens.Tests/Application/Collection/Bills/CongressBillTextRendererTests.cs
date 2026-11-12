@@ -1,10 +1,11 @@
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 
 namespace CivicLens.Tests.Application.Collection.Bills;
 
 public sealed class CongressBillTextRendererTests
 {
-    private const int Window = CongressBillRenderer.TextWindowLength;
+    private const int Window = TextWindow.Length;
     private static readonly CongressBillListItem Bill = new(119, "hr", 7, default);
     private static readonly CongressBillTextVersion Introduced = new("BILLS-119hr7ih", "Introduced in House",
         new DateTimeOffset(2025, 3, 1, 5, 0, 0, TimeSpan.Zero), "https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm");

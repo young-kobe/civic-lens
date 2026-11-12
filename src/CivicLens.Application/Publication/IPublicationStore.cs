@@ -53,8 +53,15 @@ public interface IPublicationStore
     Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken);
 
     Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
+    Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken);
 
     Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken);
+
+    /// <summary>Adds the vote links of one release and returns the number of rows added.</summary>
+    Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken);
+
+    /// <summary>The vote links that the store holds for one release.</summary>
+    Task<IReadOnlyList<ReleaseVoteBill>> ReadVoteBillsAsync(int releaseNumber, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds, CancellationToken cancellationToken);
 
@@ -65,6 +72,45 @@ public interface IPublicationStore
 
     Task<IReadOnlyList<CorrectionHistoryBinding>> PrepareCorrectionHistoriesAsync(
         IReadOnlyCollection<PublicationCorrectionHistory> histories, CancellationToken cancellationToken);
+
+    Task<CorrectionHistoryBootstrapPage> ReadCorrectionHistoryBootstrapPageAsync(CorrectionHistoryBootstrapCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<CorrectionHistoryVerificationPage> ReadCorrectionHistoryVerificationPageAsync(CorrectionHistoryVerificationCursor? after, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PublicationReleaseSummary>> ReadRetainedReleaseSelectionAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken);
+
+    Task<string> ReadRetainedReleaseFingerprintAsync(Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken);
+
+    Task<(int Added, int AlreadyPresent)> CommitCorrectionHistoryBootstrapAsync(PublicationReleaseSummary release,
+        IReadOnlyCollection<CorrectionHistoryBinding> bindings, Func<CancellationToken, Task<string?>> readServedDirectory,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the next retained, active, or served releases after <paramref name="afterReleaseNumber"/>. A fingerprint that differs from the current selection marks the page stale.</summary>
+    Task<BillCountReleasePage> ReadBillCountReleasePageAsync(int afterReleaseNumber, string? selectionFingerprint, int limit,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<ReleaseBillCountSource> ReadBillCountSourceAsync(int releaseNumber, CancellationToken cancellationToken);
+
+    /// <summary>Writes the bill counts of one release in one transaction. It reports an exact existing snapshot as already present.</summary>
+    Task<ReleaseSnapshotWrite> CommitBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<BillCountStatus> VerifyBillCountsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    /// <summary>Writes the party line-up of one release in one transaction. It reports a release that needs no rows apart from one that already holds an exact snapshot.</summary>
+    Task<ReleaseSnapshotWrite> CommitPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    Task<BillCountStatus> VerifyPartyLineUpsAsync(PublicationReleaseSummary release, IReadOnlyCollection<PublishedRevisionBinding> validatedMembers,
+        Func<CancellationToken, Task<string?>> readServedDirectory, CancellationToken cancellationToken);
+
+    /// <summary>Reads, in one read-only transaction, the next vote revisions after <paramref name="after"/> with their stored tally groups and the release range of their record states.</summary>
+    Task<VotePartyTallyPage> ReadVotePartyTallyEvidenceAsync(VotePartyTallyVerificationCursor? after, int limit, CancellationToken cancellationToken);
 
     Task<PublicationReleaseSummary?> FindReplayAsync(string actorSubject, string idempotencyKey, string payloadHash,
         CancellationToken cancellationToken);

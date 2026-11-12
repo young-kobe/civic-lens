@@ -7,7 +7,7 @@ using Npgsql;
 namespace CivicLens.PublicApi.Officials;
 
 /// <summary>
-/// Reads the views <c>public_api.officials</c>, <c>official_attendance</c>, <c>official_party_lines</c>, <c>official_bill_counts</c>, <c>official_issue_counts</c>, and <c>official_executive_actions</c>,
+/// Reads the views <c>public_api.officials</c>, <c>official_attendance</c>, <c>official_party_lines</c>, <c>official_issue_counts</c>, and <c>official_executive_actions</c>,
 /// and the name view <c>release_official_terms</c>. The kind rule of the vote counts is <see cref="PublishedVoteKindExtensions.IsSubstantive"/>.
 /// </summary>
 public sealed class OfficialStore(NpgsqlDataSource views)
@@ -45,20 +45,24 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<OfficialPage?> ListAsync(OfficialRequest request, CancellationToken cancellationToken)
     {
+        if (request.ExactNameFirst && (request.NamePrefix is null || request.Cursor is not null))
+            throw new ArgumentException("An exact name first order needs a name and no cursor.", nameof(request));
         await using var command = views.CreateCommand(ListSql(request));
         AddParameters(command, request);
         var rows = new List<OfficialRow>();
         int? release = null;
+        var listed = 0;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader, 1));
+                listed = reader.GetInt32(1);
+                if (!reader.IsDBNull(2)) rows.Add(ReadRow(reader, 2));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? OfficialCursor.Of(active, page[^1]).Encode() : null;
-        return new(active, OfficialScopes.RecordCount, page, next);
+        return new(active, OfficialScopes.RecordCount, listed, OfficialScopes.OfficialsInRelease, page, next);
     }
 
     /// <summary>Reads one official. Null means that no release is active or that the active release names no such official.
@@ -67,6 +71,12 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        return (await ReadDetailAsync(connection, transaction, officialId, cancellationToken))?.Detail;
+    }
+
+    /// <summary>Reads one official and the publish time of the release inside the caller's snapshot, so a page that reads more views shares the release of its figures.</summary>
+    internal static async Task<(OfficialDetail Detail, long? PublishedAtUtcTicks)?> ReadDetailAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    {
         var found = await ReadOfficialAsync(connection, transaction, officialId, cancellationToken);
         if (found is not var (release, publishedAtUtcTicks, official)) return null;
         var terms = await ReadTermsAsync(connection, transaction, officialId, cancellationToken);
@@ -81,25 +91,30 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         var bills = activity?.Bills;
         var issues = activity?.Issues;
         var executive = official.Kind == PublishedOfficeKind.Executive ? await ReadExecutiveActionsAsync(connection, transaction, officialId, cancellationToken) : null;
-        return new(release, official, OfficialScopes.RecordCount, terms, congress, missed, partyLines, bills, issues, executive);
+        return (new(release, official, OfficialScopes.RecordCount, terms, congress, missed, partyLines, bills, issues, executive), publishedAtUtcTicks);
     }
 
+    // The view is read once. The CTE feeds both the count of the whole release and the filtered page.
     private static string ListSql(OfficialRequest request) => $"""
-        SELECT a.release_number, {Columns}
+        WITH listed AS MATERIALIZED (SELECT * FROM public_api.officials)
+        SELECT a.release_number, (SELECT count(*) FROM listed) AS officials_in_release, {Columns}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT o.* FROM public_api.officials o
+               SELECT o.* FROM listed o
                 WHERE TRUE{Filters(request)}
-                ORDER BY {Order} LIMIT @take) o
+                ORDER BY {OrderOf(request)} LIMIT @take) o
             ON TRUE
-         ORDER BY {Order}
+         ORDER BY {OrderOf(request)}
         """;
+
+    // An exact name match sorts first. The cursor does not carry that rule, so the request refuses the two together.
+    private static string OrderOf(OfficialRequest request) => request.ExactNameFirst ? $"(lower(o.name) = @name_prefix) DESC, {Order}" : Order;
 
     private static string Filters(OfficialRequest request) =>
         (request.Kind is null ? "" : " AND o.kind = @kind") +
         (request.State is null ? "" : " AND o.state = @state") +
         (request.Party is null ? "" : " AND lower(o.party) = @party") +
-        (request.NamePrefix is null ? "" : " AND starts_with(lower(o.name), @name_prefix)") +
+        (request.NamePrefix is null ? "" : " AND strpos(' ' || lower(o.name), ' ' || @name_prefix) > 0") +
         (request.Cursor is null ? "" : " AND (o.name, o.official_id) > (@cursor_name, @cursor_id)");
 
     private static void AddParameters(NpgsqlCommand command, OfficialRequest request)
@@ -115,7 +130,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         parameters.AddWithValue("cursor_id", cursor.OfficialId);
     }
 
-    private async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    private static async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(DetailSql, connection);
         command.Transaction = transaction;

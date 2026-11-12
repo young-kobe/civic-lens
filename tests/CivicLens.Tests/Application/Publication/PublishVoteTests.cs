@@ -325,6 +325,8 @@ public sealed class PublishVoteTests
         Assert.Equal(new PublishedVoteTotals { Yea = 3, Nay = 1, Present = 1, NotVoting = 1 }, record.Totals);
         Assert.Equal([("Democrat", 1, 0, "Yea"), ("Republican", 2, 1, "Yea")],
             record.PartyMajorities.Select(party => (party.Party, party.YeaCount, party.NayCount, party.Majority)));
+        Assert.Equal([("Democrat", 1, 0, 0, 0, 0), ("Republican", 2, 1, 1, 1, 0)],
+            record.PartyTallies!.Select(party => (party.Party, party.Yea, party.Nay, party.Present, party.NotVoting, party.Other)));
         var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
         Assert.Equal(("Passed", "Democrat", "Yea", 3), (row.Result, row.Party, row.PartyMajority, row.Totals!.Yea));
         Assert.False(row.SplitVote);
@@ -608,10 +610,43 @@ public sealed class PublishVoteTests
 
         var record = ReadVote(scenario, summary, vote);
         Assert.Equal(("Johnson (LA)", null, 0), (record.Result, record.Totals, record.PartyMajorities.Length));
+        Assert.Null(record.PartyTallies);
         var member = Assert.Single(record.Members);
         Assert.Equal(("Democrat", "Johnson (LA)"), (member.Party, member.Cast));
         var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
         Assert.Equal(("Johnson (LA)", null, "Democrat", null, "Johnson (LA)", false), (row.Result, row.Totals, row.Party, row.PartyMajority, row.Cast, row.SplitVote));
+    }
+
+    [Fact]
+    public async Task ACompleteCandidateHeaderFreezesEveryCapturedCastByResolvedPartyIncludingUntrackedMembers()
+    {
+        var scenario = new PublicationScenario();
+        var vote = scenario.AddVote('d', totalLines: ["Candidate total Johnson (LA): 1", "Candidate total Emmer: 1", "Candidate total Present: 1", "Candidate total Not Voting: 1", "Candidate total No selections: 0"],
+            otherMemberLines: ["Member: X1, A, R, AL, Emmer", "Member: X2, B, R, AL, Present", "Member: X3, C, Q, AL, Not Voting"],
+            cast: "Johnson (LA)", result: "Johnson (LA)");
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
+
+        var record = ReadVote(scenario, summary, vote);
+        Assert.Equal([("Democrat", 0, 0, 0, 1), ("Republican", 1, 0, 0, 1), ("Unknown", 0, 1, 0, 0)],
+            record.PartyTallies!.Select(party => (party.Party, party.Present, party.NotVoting, party.Yea, party.Other)));
+        Assert.Single(record.Members);
+    }
+
+    [Fact]
+    public async Task ACompleteCandidateHeaderMustMatchTheCastMapAndHaveUnambiguousLabels()
+    {
+        var mismatched = new PublicationScenario();
+        var mismatchedVote = mismatched.AddVote('d', totalLines: ["Candidate total Johnson: 2", "Candidate total Emmer: 0"],
+            otherMemberLines: ["Member: X1, A, R, AL, Emmer"], cast: "Johnson", result: "Johnson");
+        var commaLabel = new PublicationScenario();
+        var commaVote = commaLabel.AddVote('e', totalLines: ["Candidate total Johnson, Jr.: 1"], cast: "Johnson, Jr.", result: "Johnson, Jr.");
+
+        var mismatchedSummary = await mismatched.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", mismatchedVote));
+        var commaSummary = await commaLabel.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", commaVote));
+
+        Assert.Null(ReadVote(mismatched, mismatchedSummary, mismatchedVote).PartyTallies);
+        Assert.Null(ReadVote(commaLabel, commaSummary, commaVote).PartyTallies);
     }
 
     // A stray candidate line beside party totals must not skip the total and party letter checks.

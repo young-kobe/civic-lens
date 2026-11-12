@@ -288,6 +288,35 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task ACommitWritesTheApprovalTimeOfEachKindAndAnEntryWithNoTimeWritesNoneBecauseTheViewsReadTheStoredTime()
+    {
+        await SeedActionAsync(A);
+        await SeedVoteAsync(B);
+        await SeedExecutiveActionAsync(C);
+        var approved = First.AddHours(5);
+
+        await CommitAsync(1, null, [PublishedEntryFixtures.Action(A, First) with { ApprovedAtUtc = approved },
+            PublishedEntryFixtures.Vote(B, First) with { ApprovedAtUtc = approved.AddMinutes(1) },
+            PublishedEntryFixtures.ExecutiveAction(C, First)], []);
+
+        Assert.Equal([$"action|{approved.UtcTicks}", $"executiveAction|none", $"vote|{approved.AddMinutes(1).UtcTicks}"],
+            await ReadAsync("SELECT kind || '|' || coalesce(approved_at_utc_ticks::text, 'none') FROM published_entries ORDER BY kind"));
+    }
+
+    [Fact]
+    public async Task APublishOfTheSameRevisionWithAnotherApprovalTimeConflictsAndWritesNoReleaseBecauseTheStoredTimeIsNeverReplaced()
+    {
+        await SeedActionAsync(A);
+        var entry = PublishedEntryFixtures.Action(A, First) with { ApprovedAtUtc = First.AddHours(5) };
+        await CommitAsync(1, null, entry);
+
+        await Assert.ThrowsAsync<PublicationConflictException>(() => CommitAsync(2, 1, entry with { ApprovedAtUtc = First.AddHours(6) }));
+
+        Assert.Equal([$"{First.AddHours(5).UtcTicks}"], await ReadAsync("SELECT approved_at_utc_ticks FROM published_entries"));
+        Assert.Equal(["1"], await ReadAsync("SELECT count(*) FROM publication_releases"));
+    }
+
+    [Fact]
     public async Task ARevisionWithNoRevisionRowIsRefusedByTheKeyAndTheReleaseIsNotWritten()
     {
         await ExecuteAsync(ActionDraftSql(A));
@@ -513,7 +542,7 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
     {
         foreach (var (id, index) in ids.Select((id, index) => (id, index)))
         {
-            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(id));
+            await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model() with { RecordId = id });
             await ExecuteAsync(ActionDraftSql(id, index + 1));
         }
     }
@@ -562,7 +591,7 @@ public sealed class PostgresPublishedEntriesTests(PostgresCollection postgres) :
             """);
         if (withTargetTime)
         {
-            await ExecuteAsync(PublishedEntryFixtures.InsertActionRevisionSql(C));
+            await ActionRevisionSeeder.AddAsync(connectionString, ActionRevisionFixtures.Model() with { RecordId = C });
             await ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('action', '{C}', 1)");
         }
         var seedEntries = new List<PublishedRecordEntry>

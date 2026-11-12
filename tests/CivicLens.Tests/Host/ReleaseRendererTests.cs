@@ -87,7 +87,7 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("not published", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Contains("src=\"../assets/js/app.js\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"../all.html\"", html, StringComparison.Ordinal);
+        Assert.Contains($"href=\"../{PublicSections.StaticBoardsPath}\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//)"), html);
         Assert.Contains("rel=\"noopener noreferrer nofollow\"", html, StringComparison.Ordinal);
     }
@@ -133,7 +133,7 @@ public sealed class ReleaseRendererTests
         Assert.True(form.Closest("section")!.HasAttribute("hidden"));
         Assert.Equal(["q", "kind", "official", "issue", "policyArea", "source", "from", "to"],
             form.QuerySelectorAll("input, select").Select(control => control.GetAttribute("name")));
-        Assert.Equal(["", "documentChange", "statement", "action", "brief", "vote", "relationship", "executiveAction"],
+        Assert.Equal(["", "action", "executiveAction", "statement", "vote", "brief", "documentChange", "relationship"],
             document.QuerySelectorAll("#search-kind option").Select(option => option.GetAttribute("value")));
     }
 
@@ -207,16 +207,82 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task ARecordPageOffersTheReportLinkOnceBelowTheRecordSoTheTopOfThePageHoldsTheRecord()
+    public async Task TheFooterReportLinkOfEachRecordKindNamesItsKindAndTitleAndUsesTheProtocolLinkOfItsRecord()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var record = Record();
+        var vote = Vote();
+
+        var pages = new[]
+        {
+            ("Report a problem with this document change", PublishedRecordKind.DocumentChange, record.RecordId, record.RevisionNumber, record.Headline, await renderer.RenderRecordAsync(record, PublicationCatalogs.None, CancellationToken.None)),
+            ("Report a problem with this vote", PublishedRecordKind.Vote, vote.RecordId, vote.RevisionNumber, vote.Headline, await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None))
+        };
+
+        foreach (var (text, kind, recordId, revision, headline, html) in pages)
+        {
+            var document = new HtmlParser().ParseDocument(html);
+            var footer = Assert.Single(document.QuerySelectorAll("footer a[href^='../report.html']"));
+            var expected = new ReportedRecord(recordId, revision, kind, headline);
+            Assert.Equal("../" + PublicationProtocol.ReportPageLink(recordId, revision, headline), footer.GetAttribute("href"));
+            Assert.Equal("../" + expected.ReportPath, footer.GetAttribute("href"));
+            Assert.Equal(text, footer.FirstChild!.TextContent);
+            Assert.Equal(": " + headline, footer.QuerySelector(".visually-hidden")!.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task TheTrailOfAVoteAndABillPageNamesTheirSectionAndEndsWithTheShortRecordName()
+    {
+        var renderer = new ReleaseRenderer(null, null);
+        var vote = Vote();
+        var action = Action();
+
+        var pages = new[]
+        {
+            (await renderer.RenderVoteAsync(vote, null, [], PublicationCatalogs.None, CancellationToken.None), "Votes", $"House roll call {vote.RollCallNumber}"),
+            (await renderer.RenderActionAsync(action, null, [], PublicationCatalogs.None, CancellationToken.None), "Bills", "H.R. 7")
+        };
+
+        foreach (var (html, section, shortName) in pages)
+        {
+            var trail = new HtmlParser().ParseDocument(html).QuerySelector("main nav[aria-label=Breadcrumb]")!;
+            Assert.Equal(["Home", section], trail.QuerySelectorAll("a").Select(link => link.TextContent));
+            Assert.Equal(shortName, trail.QuerySelector("[aria-current=page]")!.TextContent);
+        }
+    }
+
+    [Fact]
+    public async Task NoCrumbOfAnyPageTypeLinksToThePageItself()
+    {
+        foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
+        {
+            var trail = new HtmlParser().ParseDocument(html).QuerySelector("main nav[aria-label=Breadcrumb]");
+            if (trail is null) continue;
+
+            Assert.All(trail.QuerySelectorAll("a"), link => Assert.NotEqual(pagePath, ReleasePath(pagePath, link.GetAttribute("href")!)));
+        }
+    }
+
+    [Fact]
+    public async Task ARecordPageOffersOneReportLinkInTheFooterAndNoneInTheBody()
     {
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None);
 
         var document = new HtmlParser().ParseDocument(html);
-        var links = document.QuerySelectorAll("main a[href^='../report.html']");
 
-        var link = Assert.Single(links);
-        Assert.Equal(PublishedRecordLabels.ReportRecordLink, link.TextContent);
-        Assert.True(document.QuerySelector("main .facts, main dl")!.CompareDocumentPosition(link).HasFlag(DocumentPositions.Following));
+        Assert.Empty(document.QuerySelectorAll("main a[href*='report.html']"));
+        var link = Assert.Single(document.QuerySelectorAll("a[href*='report.html']"));
+        Assert.NotNull(link.Closest("footer"));
+        Assert.StartsWith(PublishedRecordLabels.ReportLinkStart, link.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AboutTellsTheReaderToUseTheFooterReportLinkOfARecord()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderAboutAsync(CancellationToken.None)).QuerySelector("main")!.ShownText();
+
+        Assert.Contains($"Open the record. Use the link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\".", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -229,7 +295,7 @@ public sealed class ReleaseRendererTests
 
         Assert.Equal("Find the record first", panel.QuerySelector("h3")!.TextContent);
         Assert.Equal([PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath], panel.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Contains($"has the link \"{PublishedRecordLabels.ReportRecordLink}\"", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains($"has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\"", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
         AssertMailtoPanelIsAlwaysShown(document);
         AssertMailtoPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
@@ -268,7 +334,7 @@ public sealed class ReleaseRendererTests
         var headline = "Rep. <b>Smith</b> & \"others\" vote on H.R. 1";
         var html = await new ReleaseRenderer(null, null).RenderRecordAsync(Record() with { Headline = headline }, PublicationCatalogs.None, CancellationToken.None);
 
-        var href = new HtmlParser().ParseDocument(html).QuerySelector("main a[href^='../report.html']")!.GetAttribute("href")!;
+        var href = new HtmlParser().ParseDocument(html).QuerySelector("footer a[href^='../report.html']")!.GetAttribute("href")!;
 
         var title = System.Web.HttpUtility.ParseQueryString(href[(href.IndexOf('?') + 1)..])[ReaderReportProtocol.TitleParameter];
         Assert.Equal(headline, title);
@@ -290,7 +356,8 @@ public sealed class ReleaseRendererTests
 
         Assert.Contains("Here, code means software that we wrote. It follows fixed rules. No AI decides an approval.", text, StringComparison.Ordinal);
         Assert.Contains("Code also approves a statement when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page.", text, StringComparison.Ordinal);
-        Assert.Contains("On a statement page, a summary that a model wrote has the label \"An AI summary of this release.\"", text, StringComparison.Ordinal);
+        Assert.Contains("a summary that a model wrote has this label when code approved it: \"An AI summary of this release.\" When a person approved it, the label is this: \"Drafted by an AI model from this source. A person checked it before publication.\"", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(".\".", text, StringComparison.Ordinal);
         Assert.Contains($"within {StatementCodeApproval.DateWindowDays} days before Civic Lens saved the page", text, StringComparison.Ordinal);
         Assert.Contains("and each statement that code does not approve", text, StringComparison.Ordinal);
     }
@@ -616,14 +683,17 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task APersonApprovedStatementKeepsItsApprovedWordingAndShowsNoAiLabel()
+    public async Task APersonApprovedStatementThatAPersonWroteKeepsItsApprovedWordingAndShowsNoAiLabel()
     {
-        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None);
+        var statement = Statement() with { TextOrigin = PublishedTextOrigin.Person, ApprovedBy = PublishedApprover.Person };
+
+        var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.StatementCheckedByPersonWording, text, StringComparison.Ordinal);
         Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
     }
 
@@ -649,7 +719,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndNoAiLabelBecauseAPersonApprovedIt()
+    public async Task AnAiStatementThatAPersonApprovedShowsApprovedAndTheCheckedByPersonAiLabelBecauseAnAiWroteItAndAPersonCheckedIt()
     {
         var statement = Statement() with { TextOrigin = PublishedTextOrigin.Model, ApprovedBy = PublishedApprover.Person };
 
@@ -657,7 +727,8 @@ public sealed class ReleaseRendererTests
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
+        Assert.Contains(PublishedRecordLabels.StatementCheckedByPersonWording, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1271,8 +1342,8 @@ public sealed class ReleaseRendererTests
         var breakers = (await RenderedAsync(vote)).QuerySelector("[aria-labelledby='breakers-title']")!;
 
         Assert.Empty(breakers.QuerySelectorAll("li"));
-        Assert.Contains("No tracked House Democrat voted against most House Democrats.", breakers.TextContent);
-        Assert.Contains("No tracked House Republican voted against most House Republicans.", breakers.TextContent);
+        Assert.Contains("House Democrats: no tracked member voted against most of the party.", breakers.TextContent);
+        Assert.Contains("House Republicans: no tracked member voted against most of the party.", breakers.TextContent);
         Assert.Empty(breakers.QuerySelectorAll("h3"));
         Assert.DoesNotContain("0 tracked", breakers.TextContent);
     }
@@ -1289,7 +1360,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Senate Democrats: 2 Yes, 1 No. Senate Republicans: 1 Yes, 3 No.", parties);
         var breakers = page.QuerySelector("[aria-labelledby='breakers-title']")!.TextContent;
         Assert.Contains("Senate Democrats: 1 tracked member voted against most of the party", breakers);
-        Assert.Contains("No tracked Senate Republican voted against most Senate Republicans.", breakers);
+        Assert.Contains("Senate Republicans: no tracked member voted against most of the party.", breakers);
     }
 
     [Fact]
@@ -1848,7 +1919,7 @@ public sealed class ReleaseRendererTests
 
         var panel = PanelOf(issue);
         Assert.Equal("Rent and home prices.", panel.QuerySelector("p")!.TextContent);
-        Assert.Equal([PublishedFacetSummaryView.IncludesLabel, PublishedFacetSummaryView.ExcludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Equal([PublishedWording.IssueIncludesLabel, PublishedWording.IssueExcludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
         Assert.Equal(panel.QuerySelectorAll("h3").Select(label => label.Id), panel.QuerySelectorAll("ul").Select(list => list.GetAttribute("aria-labelledby")));
         Assert.Equal(["Rent caps", "Eviction rules"], panel.QuerySelectorAll("ul")[0].QuerySelectorAll("li").Select(item => item.TextContent));
         Assert.Equal(["Zoning votes"], panel.QuerySelectorAll("ul")[1].QuerySelectorAll("li").Select(item => item.TextContent));
@@ -1863,7 +1934,7 @@ public sealed class ReleaseRendererTests
 
         var panel = PanelOf(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderFacetPageAsync(facet, 1, ReleaseBillLines.None, CancellationToken.None)));
 
-        Assert.Equal([PublishedFacetSummaryView.IncludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
+        Assert.Equal([PublishedWording.IssueIncludesLabel], panel.QuerySelectorAll("h3").Select(label => label.TextContent));
         Assert.Single(panel.QuerySelectorAll("ul"));
     }
 
@@ -2784,6 +2855,7 @@ public sealed class ReleaseRendererTests
     }
 
     // Written by ReleaseIndexPages and ReleaseOfficialPages. PublishReleaseTests pins them.
+    // The boards page is the one header link that the release does not write. The cutover PR maps it to the server page.
     private static readonly string[] WrittenRootPages =
     [
         PublicationProtocol.HomePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath,
@@ -2801,14 +2873,13 @@ public sealed class ReleaseRendererTests
             var currentByNavigation = document.QuerySelectorAll("nav[aria-label='Site'], nav[aria-label='Footer']")
                 .Select(navigation => navigation.QuerySelectorAll("[aria-current]")).ToArray();
             var current = currentByNavigation.SelectMany(links => links).ToArray();
-            var linkText = section == "All records" ? "Votes and bills" : section;
-            var expectedCount = section is null ? 0 : PublicSections.Header.Any(link => link.Text == linkText) ? 2 : 1;
+            var expectedCount = section is null or "All records" ? 0 : PublicSections.Header.Any(link => link.Text == section) ? 2 : 1;
 
             Assert.True(current.Length == expectedCount, name);
             Assert.All(currentByNavigation, links => Assert.InRange(links.Length, 0, 1));
             Assert.All(current, link =>
             {
-                Assert.Equal(linkText, link.TextContent);
+                Assert.Equal(section, link.TextContent);
                 Assert.Equal("page", link.GetAttribute("aria-current"));
             });
         }
@@ -2907,12 +2978,12 @@ public sealed class ReleaseRendererTests
         return
         [
             ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), "All records"),
-            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "All records"),
-            ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None), "All records"),
-            ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "All records"),
+            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), null),
+            ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None), "Bills"),
+            ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "Votes"),
             ("relationship", PublicationProtocol.RecordPagePath(relationship.RecordId), await renderer.RenderRelationshipAsync(relationship, PublicationCatalogs.None, CancellationToken.None), "All records"),
             ("brief", PublicationProtocol.RecordPagePath(Brief().RecordId), await renderer.RenderBriefAsync(Brief(), CancellationToken.None), null),
-            ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "All records"),
+            ("withdrawal", PublicationProtocol.RecordPagePath(withdrawal.RecordId), await renderer.RenderWithdrawalAsync(withdrawal, CancellationToken.None), "Bills"),
             ("home", PublicationProtocol.HomePath, await renderer.RenderHomeAsync(release, null, facets, NoHighlights(release) with { Votes = [release.Records[0] with { Kind = PublishedRecordKind.Vote, EventDate = new DateOnly(2026, 5, 1) }] }, CancellationToken.None), null),
             ("all records", PublicationProtocol.AllRecordsPagePath(1), await renderer.RenderAllRecordsAsync(release, 1, ReleaseBillLines.None, CancellationToken.None), "All records"),
             ("briefs", PublicationProtocol.BriefsPagePath(1), await renderer.RenderBriefsAsync(ReleaseOfBriefs(2), ReleaseOfBriefs(2).Records, 1, CancellationToken.None), null),

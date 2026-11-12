@@ -11,6 +11,8 @@ namespace CivicLens.Host.Publication;
 
 internal static class PublishedActionView
 {
+    public static string ShortName(PublishedAction action) => BillNumbers.Of(action.BillType, action.BillNumber);
+
     public static IReadOnlyList<Fact> Facts(PublishedAction action, PublishedBillStatus? billStatus, PublicationCatalog catalog) =>
     [
         new("Bill", ActionLabels.Bill(action.Congress, action.BillType, action.BillNumber)),
@@ -31,7 +33,7 @@ internal static class PublishedActionView
         [
             new("Latest action on Congress.gov", $"{BillStatusMeaning.Of(billStatus.Text, action.BillType)} Action date: {Moment.Day(billStatus.Date)}."),
             new("Status read on", $"{Moment.Full(billStatus.ObservedAtUtc)}. The bill can change after this time."),
-            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", SourcePages.Bill(action.Congress, action.BillType, action.BillNumber))])
+            Fact.LinkList("Official bill page", [new FactLink("Bill on Congress.gov", CongressGovBillPage.Url(action.Congress, action.BillType, action.BillNumber))])
         ];
     }
 
@@ -43,21 +45,21 @@ internal static class PublishedActionView
             .Select(fact => fact.CitedAt(action.PolicyAreaCitation is null ? null : PolicyAreaAnchor(action)));
 
     public static IReadOnlyList<CitedRange> RangesIn(PublishedAction action, PublishedDocumentVersion source) =>
-    [.. action.Citations().Select((citation, index) => (citation, anchor: PublishedRecordView.CitationAnchor(index)))
+    [.. action.Citations().Select((citation, index) => (citation, anchor: CitedText.Anchor(index)))
         .Where(item => item.citation.ExtractionId == source.ExtractionId)
         .Select(item => new CitedRange(item.anchor, item.citation.Start, item.citation.Length))];
 
     public static string SponsorshipAnchor(PublishedAction action, PublishedSponsorship sponsorship, int citationIndex) =>
-        PublishedRecordView.CitationAnchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
+        CitedText.Anchor(action.Sponsorships.TakeWhile(item => !ReferenceEquals(item, sponsorship))
             .Sum(item => item.Citations.Length) + citationIndex);
 
     public static string CitationAnchorOf(PublishedAction action, PublishedCitation citation) =>
-        PublishedRecordView.CitationAnchor(action.Citations().TakeWhile(item => !ReferenceEquals(item, citation)).Count());
+        CitedText.Anchor(action.Citations().TakeWhile(item => !ReferenceEquals(item, citation)).Count());
 
-    private static string PolicyAreaAnchor(PublishedAction action) => PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action));
+    private static string PolicyAreaAnchor(PublishedAction action) => CitedText.Anchor(SponsorshipCitationCount(action));
 
     public static string SummaryAnchor(PublishedAction action) =>
-        PublishedRecordView.CitationAnchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));
+        CitedText.Anchor(SponsorshipCitationCount(action) + (action.PolicyAreaCitation is null ? 0 : 1));
 
     private static int SponsorshipCitationCount(PublishedAction action) => action.Sponsorships.Sum(item => item.Citations.Length);
 }
