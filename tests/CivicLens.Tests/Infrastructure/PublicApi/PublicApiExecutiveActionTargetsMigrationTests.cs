@@ -87,12 +87,16 @@ public sealed class PublicApiExecutiveActionTargetsMigrationTests(PostgresCollec
     public async Task DowngradeDropsTheViewAndRevokesItsColumnsAndUpgradeWithGrantsRestoresThem()
     {
         var migration = new PublicApiExecutiveActionTargets();
+        // A later migration adds a view over executive_actions, so the test first rolls back to this migration, as a real rollback does.
+        await using (var migrated = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options))
+            await migrated.GetService<IMigrator>().MigrateAsync("20261111010000_PublicApiExecutiveActionTargets");
         await ApplyAsync(migration.DownOperations);
         Assert.Equal("false|false|true", await GrantStateAsync());
         Assert.Equal(["0"], await QueryAsync("SELECT count(*)::text FROM pg_indexes WHERE indexname = 'IX_executive_action_revisions_kind_presidential_number'", publicRole: false));
 
         await ApplyAsync(migration.UpOperations);
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
+        await db.GetService<IMigrator>().MigrateAsync();
         var grants = typeof(PublicApiExecutiveActionTargets).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
         await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
         Assert.Equal("true|true|false", await GrantStateAsync());
