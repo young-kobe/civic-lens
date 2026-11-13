@@ -19,6 +19,6 @@ public static class AiLabelWords
     /// <summary>The label of a statement summary that a model wrote and a person approved.</summary>
     public const string StatementCheckedByPersonWording = "Drafted by an AI model from this source. A person checked it before publication.";
 
-    /// <summary>The end of the check line under a model summary of a document change or an executive action.</summary>
+    /// <summary>The end of the check line under a model summary of a statement, a document change or an executive action.</summary>
     public const string ModelWroteOnlyThisSummary = "A model wrote only this summary.";
 }

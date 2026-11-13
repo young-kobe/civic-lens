@@ -13,7 +13,7 @@ public sealed class StatementDetailPageTests
 
         var summary = page.QuerySelector(".ai-summary-ai")!;
         Assert.Equal(StatementLabel, summary.QuerySelector(".ai-label")!.TextContent);
-        Assert.Contains("A model wrote only the summary above.", summary.QuerySelector(".ai-summary-check")!.TextContent);
+        Assert.Contains("A model wrote only this summary.", summary.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Contains(StatementPageView.CaptureCaveat, summary.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Equal("#source", summary.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
         Assert.Null(page.QuerySelector(".caveat"));
