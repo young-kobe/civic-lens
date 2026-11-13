@@ -41,6 +41,8 @@ public partial class RelationshipApprover : Migration
             {PublicApiSearchSources.RecordLinks}
             GRANT SELECT ON public_api.record_links TO civic_lens_public;
             """);
+        // The old constraint allows an approver on a statement only, so the rollback clears the approvers that relationship entries now hold.
+        migrationBuilder.Sql("UPDATE published_entries SET approved_by = NULL WHERE kind = 'relationship';");
         migrationBuilder.DropCheckConstraint(name: "ck_published_entries_approved_by", table: "published_entries");
         migrationBuilder.AddCheckConstraint(name: "ck_published_entries_approved_by", table: "published_entries",
             sql: "approved_by IS NULL OR (kind = 'statement' AND approved_by IN ('Code', 'Person'))");
