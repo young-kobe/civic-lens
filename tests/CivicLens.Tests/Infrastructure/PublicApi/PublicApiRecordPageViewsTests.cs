@@ -55,7 +55,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         await SeedBillAsync(Action4, 104, notYetActive: true);
         await ExecuteAsync($"""
             SET session_replication_role = replica;
-            {PublicRecordPageRows.PinnedStatus(1, Action1, "Received in the Senate.", "2026-02-13", 600)}
+            {PublicRecordPageRows.PinnedStatus(1, Action1, "Received in the Senate.", "2026-02-13", 600, "PassedHouse")}
             {PublicRecordPageRows.PinnedStatus(2, Action1, "Became Public Law No: 119-21.", "2026-04-01", 650)}
             {PublicRecordPageRows.PinnedStatus(1, Action2, "Motion to reconsider laid on the table.", "2026-01-14", 700)}
             {PublicRecordPageRows.PinnedStatus(1, Action4, "Referred to the Committee on Ways and Means.", "2026-01-12", 900)}
@@ -64,11 +64,11 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             """);
 
         var fromView = await PublicAsync("""
-            SELECT left(record_id, 1) || '|' || latest_action_text || '|' || latest_action_date || '|' || read_at_utc_ticks
+            SELECT left(record_id, 1) || '|' || latest_action_text || '|' || latest_action_date || '|' || read_at_utc_ticks || '|' || coalesce(status, 'null')
               FROM public_api.bill_status ORDER BY 1
             """);
 
-        Assert.Equal(["a|Received in the Senate.|2026-02-13|600", "b|Motion to reconsider laid on the table.|2026-01-14|700"], fromView);
+        Assert.Equal(["a|Received in the Senate.|2026-02-13|600|PassedHouse", "b|Motion to reconsider laid on the table.|2026-01-14|700|null"], fromView);
     }
 
     [Fact]

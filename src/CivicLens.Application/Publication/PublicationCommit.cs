@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Actions;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
@@ -20,7 +21,7 @@ public sealed record PublicationCommit(int ReleaseNumber, int? BaseReleaseNumber
     public required ReleaseNames Names { get; init; }
 
     /// <summary>The bill statuses that the release pins. They equal the rows of the status file of the release.</summary>
-    public ImmutableArray<PublishedBillStatus> BillStatuses { get; init; } = [];
+    public ImmutableArray<ActionBillStatus> BillStatuses { get; init; } = [];
 
     /// <summary>The action record that each vote of the release links. A vote with no action in the release has no link.</summary>
     public ImmutableArray<ReleaseVoteBill> VoteBills { get; init; } = [];

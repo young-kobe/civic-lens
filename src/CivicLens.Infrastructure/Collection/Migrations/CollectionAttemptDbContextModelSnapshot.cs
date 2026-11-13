@@ -5720,6 +5720,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("read_at_utc_ticks");
 
+                    b.Property<string>("Status")
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
                     b.HasKey("ReleaseNumber", "RecordId");
 
                     b.ToTable("release_bill_statuses", null, t =>
