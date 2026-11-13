@@ -14,6 +14,7 @@ using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicApi.PartyAgreement;
 using CivicLens.PublicApi.Records;
+using CivicLens.PublicApi.Relationships;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
@@ -65,6 +66,8 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));
         builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
+        builder.Services.AddSingleton(new RelationshipStore());
+        builder.Services.AddSingleton(provider => new RelationshipPageReader(provider.GetRequiredService<RelationshipStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new BriefStore(views));
         builder.Services.AddSingleton(provider => new BriefPageReader(provider.GetRequiredService<BriefStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new BriefListReader(views));

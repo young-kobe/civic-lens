@@ -3,26 +3,26 @@
 @using CivicLens.Publication.Contracts
 
 <PublishedRecordFrame Kind="PublishedRecordKind.Relationship" Corrections="Record.Corrections" RecordId="@Record.RecordId" RevisionNumber="@Record.RevisionNumber" Headline="@Record.Headline" Summary="@Record.Reason" Facts="PublishedRelationshipView.Facts(Record, Catalog)"
-                      Caveat="A person approved this link between a statement and a record. It states no verdict. It does not say that the statement is true or that it agrees with the record.">
+                      Caveat="@RelationshipPageView.Caveat">
     <PublishedTimeline Events="PublishedTimelineView.For(Record)" />
 
-    <Panel Title="Linked records" Id="linked-title" Padded="true">
-        <p class="muted small">Each row names the revision that was approved with this link. Its page shows the revision that the release holds.</p>
+    <Panel Title="@RelationshipPageView.LinkedHeading" Id="linked-title" Padded="true">
+        <p class="muted small">@RelationshipPageView.LinkedNote</p>
         <ul class="choices">
             @foreach (var cited in new[] { Record.Statement, Record.Target })
             {
                 <li>
                     <a href="@PublishedRecordView.RecordLink(cited.RecordId)">@cited.Headline</a>
-                    <span class="muted small">@PublishedRecordLabels.Kind(cited.Kind), revision @cited.RevisionNumber</span>
+                    <span class="muted small">@RelationshipPageView.CitedRevision(cited.Kind, cited.RevisionNumber)</span>
                 </li>
             }
         </ul>
     </Panel>
 
-    <Panel Title="Evidence" Id="evidence-title" Padded="true">
+    <Panel Title="@RelationshipPageView.EvidenceHeading" Id="evidence-title" Padded="true">
         <ul class="choices">
-            <li><CitationQuote Label="Quote from the statement" Quote="@Record.Quote" /></li>
-            <li><CitationQuote Label="@($"Fact of the {PublishedRecordLabels.Kind(Record.Target.Kind).ToLowerInvariant()}")" Quote="@Record.TargetFact" /></li>
+            <li><CitationQuote Label="@RelationshipPageView.QuoteLabel" Quote="@Record.Quote" /></li>
+            <li><CitationQuote Label="@RelationshipPageView.FactLabel(Record.Target.Kind)" Quote="@Record.TargetFact" /></li>
         </ul>
     </Panel>
 </PublishedRecordFrame>

@@ -13,6 +13,7 @@ using CivicLens.Tests.PublicApi.Briefs;
 using CivicLens.Tests.PublicApi.DocumentChanges;
 using CivicLens.Tests.PublicApi.Officials;
 using CivicLens.Tests.PublicApi.Records;
+using CivicLens.Tests.PublicApi.Relationships;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
 
@@ -235,6 +236,30 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheRelationshipRouteRendersTheReasonWithItsLabelBesideTheExactQuoteAndFactAndNamesItsSpeakersAndIssues()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await RelationshipSeed.SeedAsync(host.OperationalDatabase);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'Defined');");
+
+        var page = await GetPageAsync(host, Path(RelationshipSeed.BillLink));
+        // A link whose other end left the release has no page, because a withdrawn record never links.
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"SET session_replication_role = replica; UPDATE publication_record_states SET first_release = 2 WHERE kind = 'vote' AND record_id = '{RelationshipSeed.VoteId}';");
+        await GetPageAsync(host, Path(RelationshipSeed.VoteLink), HttpStatusCode.NotFound);
+
+        Assert.Equal("Doe on rent and Housing bill", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(RelationshipSeed.Reason, page.QuerySelector(".ai-summary p")!.TextContent);
+        Assert.Equal(PublishedRecordLabels.StatementCheckedByPersonWording, page.QuerySelector(".ai-summary-ai .ai-summary-label")!.TextContent);
+        Assert.Equal([RelationshipSeed.Quote, $"Summary: {RelationshipSeed.ActionSummary}"], page.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
+        Assert.Equal("Said on 1 May 2026.", page.QuerySelector(".detail-lede")!.TextContent);
+        Assert.Equal(["Doe on rent", "Housing bill", "Zed Zane", "Ann Able"], page.QuerySelectorAll(".detail-list a").Select(link => link.TextContent));
+        Assert.Equal(["Housing"], page.QuerySelectorAll(".detail-chips li").Select(item => item.TextContent.Trim()));
+    }
+
+    [Fact]
     public async Task ARecordOfAKindWithoutAPageAMalformedIdAndAnUnknownIdAnswerTheNotFoundPage()
     {
         await using var host = await StartAsync();
@@ -270,6 +295,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         PublishedRecordKind.Statement,
         PublishedRecordKind.ExecutiveAction,
         PublishedRecordKind.DocumentChange,
+        PublishedRecordKind.Relationship,
         PublishedRecordKind.Brief
     };
 
@@ -434,6 +460,9 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
                 await StatementEndpointsTests.AddDetailEvidenceAsync(database, Statement.RecordId, ExtractionId, Source,
                     Source.IndexOf("exact quote", StringComparison.Ordinal), "exact quote".Length, Source.IndexOf("Friday", StringComparison.Ordinal), 6);
                 return Statement.RecordId;
+            case PublishedRecordKind.Relationship:
+                await RelationshipSeed.SeedAsync(database);
+                return RelationshipSeed.BillLink;
             default:
                 await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
                 return ActionId;
