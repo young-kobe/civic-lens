@@ -22,7 +22,6 @@ public static class ActionDraftTask
     public const int MaximumTextOutputTokens = 16_000;
     public const int MaximumIssueOutputTokens = 3_000;
     public const int MaximumPromptBytes = AnalysisRunInput.MaximumPromptBytes;
-    public const int MaximumValidationPasses = 2;
     public const int MaximumSummaryPages = 20;
 
     /// <summary>The current versions for the key term setting. With the setting off, only the text prompt without key terms is current. With it on, both

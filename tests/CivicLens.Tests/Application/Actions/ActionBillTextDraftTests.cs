@@ -132,8 +132,8 @@ public sealed class ActionBillTextDraftTests
     {
         var accepted = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (Hard, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
 
-        Assert.True(ReadingGrade.Rounded(Hard) > ReadingGrade.MaximumGrade);
-        Assert.True(ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", FirstPlain, Hard, WhyPlain]) <= ReadingGrade.MaximumGrade);
+        Assert.True(ReadingGrade.Rounded(Hard) > AiTextRules.MaximumGrade);
+        Assert.True(ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", FirstPlain, Hard, WhyPlain]) <= AiTextRules.MaximumGrade);
         Assert.True(accepted.IsAccepted);
     }
 
@@ -146,8 +146,8 @@ public sealed class ActionBillTextDraftTests
 
         var passage = ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", Medium, Legal, WhyPlain]);
         var error = Assert.Single(refused.Errors);
-        Assert.True(passage > ReadingGrade.MaximumGrade);
-        Assert.Contains($"read at grade {ReadingGrade.Format(passage)} as one passage", error, StringComparison.Ordinal);
+        Assert.True(passage > AiTextRules.MaximumGrade);
+        Assert.Contains($"reads at grade {ReadingGrade.Format(passage)} as one passage", error, StringComparison.Ordinal);
         Assert.Contains("Write at grade 12 or below", error, StringComparison.Ordinal);
         Assert.Contains("The hardest sentence is \"Notwithstanding", error, StringComparison.Ordinal);
         Assert.Contains($"at grade {ReadingGrade.Format(ReadingGrade.Rounded(Legal))}", error, StringComparison.Ordinal);
@@ -171,8 +171,8 @@ public sealed class ActionBillTextDraftTests
 
         var accepted = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
 
-        Assert.True(ReadingGrade.OfPassage(pieces) > ReadingGrade.MaximumGrade);
-        Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.RoundedPassage(pieces));
+        Assert.True(ReadingGrade.OfPassage(pieces) > AiTextRules.MaximumGrade);
+        Assert.Equal(AiTextRules.MaximumGrade, ReadingGrade.RoundedPassage(pieces));
         Assert.True(accepted.IsAccepted);
     }
 
@@ -200,7 +200,7 @@ public sealed class ActionBillTextDraftTests
 
         var error = Assert.Single(refused.Errors);
         Assert.Equal(14.1, ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", disbursements, Jurisdictions, WhyPlain]));
-        Assert.Contains("read at grade 14.1 as one passage. Write at grade 12 or below.", error, StringComparison.Ordinal);
+        Assert.Contains("reads at grade 14.1 as one passage. Write at grade 12 or below.", error, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class ActionBillTextDraftTests
 
         var refused = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
 
-        Assert.True(ReadingGrade.RoundedPassage(plainPassage) <= ReadingGrade.MaximumGrade);
+        Assert.True(ReadingGrade.RoundedPassage(plainPassage) <= AiTextRules.MaximumGrade);
         var error = Assert.Single(refused.Errors);
         Assert.Contains("as one passage", error, StringComparison.Ordinal);
         Assert.Contains("The hardest sentence is \"H.R. 1 authorizes", error, StringComparison.Ordinal);
@@ -296,7 +296,7 @@ public sealed class ActionBillTextDraftTests
 
         var result = ActionDraftResolver.ResolveBillText(Output([(FirstPlain, FirstQuote), (SecondPlain, quote)]), context, "run", DateTimeOffset.UnixEpoch);
 
-        Assert.True(quote.Length <= ActionDraftRevision.MaximumTextQuoteLength);
+        Assert.True(quote.Length <= QuotedSentenceLimits.MaximumQuoteLength);
         Assert.False(result.IsAccepted);
         Assert.Contains(result.Errors, error => error.Contains("characters of the stored text", StringComparison.Ordinal));
     }

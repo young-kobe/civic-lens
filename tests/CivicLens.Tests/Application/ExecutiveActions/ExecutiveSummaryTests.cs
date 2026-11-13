@@ -156,7 +156,7 @@ public sealed class ExecutiveSummaryTests
         var resolution = Resolve(Output((ImportRule, FirstQuote), (regulations, SecondQuote)));
 
         Assert.Equal(14.1, ReadingGrade.RoundedPassage([ImportRule, regulations]));
-        Assert.Contains(resolution.Errors, error => error.Contains("read at grade 14.1 as one passage. Write at grade 12 or below.", StringComparison.Ordinal));
+        Assert.Contains(resolution.Errors, error => error.Contains("reads at grade 14.1 as one passage. Write at grade 12 or below.", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -305,7 +305,7 @@ public sealed class ExecutiveSummaryTests
 
         var failure = Assert.Throws<ArgumentException>(() => ExecutiveSummaryApproval.Validate(summary, extractions));
 
-        Assert.Equal("The summary reads at grade 14.1 as one passage. The limit is grade 14.0.", failure.Message);
+        Assert.Equal("The text reads at grade 14.1 as one passage. The limit is grade 14.0.", failure.Message);
     }
 
     [Fact]

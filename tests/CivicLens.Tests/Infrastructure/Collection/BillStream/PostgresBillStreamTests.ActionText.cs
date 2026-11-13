@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Core.Actions;
 using CivicLens.Tests.Fixtures;
@@ -147,13 +148,13 @@ public sealed partial class PostgresBillStreamTests
         var hard = "Comprehensive reauthorization notwithstanding administrative reconsideration necessitates multidimensional intergovernmental accountability.";
         var revision = TextRevision(candidate, stored);
         var citations = revision.TextCitations.SetItem(0, revision.TextCitations[0] with { Sentence = hard }).SetItem(1, revision.TextCitations[1] with { Sentence = hard });
-        Assert.True(ReadingGrade.RoundedPassage([revision.Headline, .. citations.Select(citation => citation.Sentence)]) > ReadingGrade.MaximumGrade);
+        Assert.True(ReadingGrade.RoundedPassage([revision.Headline, .. citations.Select(citation => citation.Sentence)]) > AiTextRules.MaximumGrade);
 
         await SettleTextRevisionAsync(candidate, revision with { TextCitations = citations, Summary = ActionTextCitation.Join(citations.Where(item => item.Part == ActionTextPart.Summary)) });
 
         Assert.Equal("AwaitingReview", await ScalarAsync("SELECT review_status FROM action_drafts"));
         Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM action_review_decisions"));
-        Assert.Contains("read at grade", (string)(await ScalarAsync("SELECT held_reason FROM action_drafts"))!, StringComparison.Ordinal);
+        Assert.Contains("reads at grade", (string)(await ScalarAsync("SELECT held_reason FROM action_drafts"))!, StringComparison.Ordinal);
     }
 
     [Fact]

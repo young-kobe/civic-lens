@@ -119,6 +119,20 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal("Span must fit within the extracted text.", await ScalarAsync("SELECT held_reason FROM vote_drafts"));
     }
 
+    [Theory]
+    [InlineData(GradePassages.PassingHeadline, "Approved", null)]
+    [InlineData(GradePassages.FailingHeadline, "AwaitingReview", GradePassages.ApprovalMessage)]
+    public async Task CodeApprovesVoteTextAtThirteenPointFiveAndHoldsTextAtFourteenPointOneForAPersonWithTheGrade(string headline, string status,
+        string? heldReason)
+    {
+        var candidate = await PendingCandidateAsync();
+
+        await SettleAsync(candidate, await RevisionAsync(candidate, 1) with { Headline = headline, Summary = GradePassages.Summary });
+
+        Assert.Equal((status, heldReason), ((string)(await ScalarAsync("SELECT review_status FROM vote_drafts"))!,
+            await ScalarAsync("SELECT held_reason FROM vote_drafts") as string));
+    }
+
     [Fact]
     public async Task AWorkerRevisionKeepsAnOpenConcernSoCodeDoesNotApproveIt()
     {

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
@@ -29,7 +30,7 @@ public sealed class ActionTextApprovalTests
 
         var error = Assert.Throws<ArgumentException>(() => ActionTextApproval.Validate(Revision("H.R. 1 reauthorizes housing assistance.", hard), Extractions));
 
-        Assert.Contains("read at grade 14.1 as one passage", error.Message, StringComparison.Ordinal);
+        Assert.Contains("reads at grade 14.1 as one passage", error.Message, StringComparison.Ordinal);
         Assert.Contains("limit is grade 14.0", error.Message, StringComparison.Ordinal);
     }
 
@@ -83,6 +84,32 @@ public sealed class ActionTextApprovalTests
 
         Assert.Throws<ArgumentException>(() => ActionTextApproval.Validate(revision, new Dictionary<string, DocumentExtraction>()));
     }
+
+    [Fact]
+    public void ModelTextFromTheCrsSummaryPassesAtThirteenPointFiveAndFailsAtFourteenPointOneWithTheOneApprovalMessage()
+    {
+        ActionTextApproval.Validate(SummaryRevision(GradePassages.PassingHeadline), Extractions);
+
+        var error = Assert.Throws<ArgumentException>(() => ActionTextApproval.Validate(SummaryRevision(GradePassages.FailingHeadline), Extractions));
+
+        Assert.Equal(GradePassages.ApprovalMessage, error.Message);
+    }
+
+    [Fact]
+    public void ACrsSummaryDraftThatAPersonEditedHasNoGradeCheck()
+    {
+        var revision = SummaryRevision(GradePassages.PassingHeadline);
+
+        ActionTextApproval.Validate(ActionRevisionFixtures.PersonEditOf(revision, GradePassages.FailingHeadline, GradePassages.Summary), Extractions);
+    }
+
+    // Model text drawn from the CRS summary: a headline and a summary with no bill text quotes.
+    private static ActionDraftRevision SummaryRevision(string headline) => ActionRevisionFixtures.Model() with
+    {
+        Headline = headline,
+        Summary = GradePassages.Summary,
+        Sponsorships = [ActionRevisionFixtures.Sponsorship() with { Citations = [new(ExtractionId, 0, 10), new(ExtractionId, 11, 10)] }]
+    };
 
     // One summary sentence of the given plain text, one more, and one why it matters sentence. Each quotes a different span of the body.
     private static ActionDraftRevision Revision(string headline, string firstSentence)

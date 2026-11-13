@@ -12,7 +12,6 @@ public static class StatementDraftTask
     public const string Model = "claude-sonnet-5-5";
     public const int MaximumOutputTokens = 16_000;
     public const int MaximumPromptBytes = AnalysisRunInput.MaximumPromptBytes;
-    public const int MaximumValidationPasses = 2;
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
 
