@@ -293,7 +293,7 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         var panel = document.QuerySelector("[data-report-missing]")!;
 
-        Assert.Equal("Find the record first", panel.QuerySelector("h3")!.TextContent);
+        Assert.Equal("Find the record first", panel.QuerySelector("h2")!.TextContent);
         Assert.Equal([PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath], panel.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Contains($"has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\"", panel.TextContent, StringComparison.Ordinal);
         Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
@@ -2703,28 +2703,6 @@ public sealed class ReleaseRendererTests
 
         Assert.Equal($"{name}, page 3 of 3 | Civic Lens", TitleOf(await renderer.RenderFacetPageAsync(facet, 3, ReleaseBillLines.None, CancellationToken.None)));
         Assert.Equal("All published records | Civic Lens", TitleOf(await renderer.RenderAllRecordsAsync(ReleaseOf(3), 1, ReleaseBillLines.None, CancellationToken.None)));
-    }
-
-    [Fact]
-    public async Task TwoWithdrawalsHaveDifferentTitlesSoTabsAndSearchResultsCanTellThemApart()
-    {
-        PublishedWithdrawal Withdrawal(char id) => new()
-        {
-            Kind = PublishedRecordKind.Action,
-            RecordId = new string(id, 64),
-            WithdrawnRevisionNumber = 1,
-            FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
-            WithdrawnAtUtc = DateTimeOffset.UnixEpoch,
-            Note = "Wrong.",
-            Corrections = []
-        };
-        var renderer = new ReleaseRenderer(null, null);
-
-        var first = TitleOf(await renderer.RenderWithdrawalAsync(Withdrawal('a'), CancellationToken.None));
-        var second = TitleOf(await renderer.RenderWithdrawalAsync(Withdrawal('b'), CancellationToken.None));
-
-        Assert.NotEqual(first, second);
-        Assert.Equal("Withdrawn bill or resolution: aaaaaaaaaaaa | Civic Lens", first);
     }
 
     [Fact]

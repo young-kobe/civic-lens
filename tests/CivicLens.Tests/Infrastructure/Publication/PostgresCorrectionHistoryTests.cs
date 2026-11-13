@@ -35,7 +35,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     [Fact]
     public async Task ConcurrentEquivalentPreparationStoresOneExactOrderedBody()
     {
-        var record = Binding(A, 10);
+        var record = VoteBinding(A, 10);
         var corrections = OrderedCorrections();
         var history = new PublicationCorrectionHistory(record, corrections);
 
@@ -59,7 +59,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     [Fact]
     public async Task PreparationRefusesAnIncompleteExistingBodyWithoutRepairingIt()
     {
-        var history = new PublicationCorrectionHistory(Binding(A, 10), OrderedCorrections());
+        var history = new PublicationCorrectionHistory(VoteBinding(A, 10), OrderedCorrections());
         var binding = Assert.Single(await publications.PrepareCorrectionHistoriesAsync([history], default));
         await ExecuteAsync("DELETE FROM published_correction_history_entries WHERE history_id = @history_id AND position = 1",
             ("history_id", binding.HistoryId));
@@ -656,6 +656,9 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
     }
 
     private static PublishedRevisionBinding Binding(string recordId, int revision) => new(PublishedRecordKind.Action, recordId, revision);
+
+    // Only a vote correction can say that the facts did not change, so a history that holds that mark binds a vote.
+    private static PublishedRevisionBinding VoteBinding(string recordId, int revision) => new(PublishedRecordKind.Vote, recordId, revision);
 
     private static PublishedCorrection[] OrderedCorrections() =>
     [
