@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -33,7 +34,7 @@ internal static class OfficialPageQueries
          CROSS JOIN LATERAL (
               SELECT v.record_id, v.headline, v.label, v.voted_on, v.chamber, v.roll_call_number, v.text_origin, l.approver
                 FROM public_api.record_links l
-                JOIN public_api.votes v ON v.record_id = l.related_record_id
+               CROSS JOIN LATERAL (SELECT v.* FROM public_api.votes v WHERE v.record_id = l.related_record_id OFFSET 0) v
                WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote'
                ORDER BY v.voted_on DESC, v.record_id LIMIT 1 OFFSET 0) v
           LEFT JOIN public_api.member_votes m ON m.record_id = v.record_id AND m.official_id = @id
@@ -56,12 +57,20 @@ internal static class OfficialPageQueries
     /// <summary>The columns of one sponsored bill, in the order of <see cref="ReadBill"/>.</summary>
     internal const string BillColumns = "b.record_id, b.bill_type, b.bill_line, b.bill_title, p.sponsored_on, t.latest_action_text, t.latest_action_date";
 
+    /// <summary>The bills that the official <c>@id</c> sponsored, with their status, for the bills of the official page and the record page. The one owner of that join.
+    /// OFFSET 0 keeps the bill lookup correlated, so Postgres reads one bill for each sponsorship and never rebuilds the view.</summary>
+    internal const string SponsoredBillsSql = $"""
+          FROM public_api.bill_sponsorships p
+         CROSS JOIN LATERAL (
+              SELECT b.* FROM public_api.bills b
+               WHERE b.record_id = p.record_id AND b.revision_number = p.revision_number OFFSET 0) b
+          {BillStore.StatusSql}
+         WHERE p.official_id = @id AND p.role = 'Sponsor'
+        """;
+
     private const string BillsSql = $"""
         SELECT {BillColumns}
-          FROM public_api.bill_sponsorships p
-          JOIN public_api.bills b ON b.record_id = p.record_id AND b.revision_number = p.revision_number
-          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
-         WHERE p.official_id = @id AND p.role = 'Sponsor' AND b.congress = @congress
+        {SponsoredBillsSql} AND b.congress = @congress
          ORDER BY p.sponsored_on DESC, b.record_id
          LIMIT @take
         """;
