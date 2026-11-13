@@ -624,7 +624,7 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AV6TextDraftStaysCurrentWithKeyTermsOnAsWellAsOffBecauseABillWithNoDefinitionsIsSentV6AndRedraftWouldPayAgain()
+    public async Task ThePlainTextDraftStaysCurrentWithKeyTermsOnAsWellAsOffBecauseABillWithNoDefinitionsIsSentThePlainPromptAndRedraftWouldPayAgain()
     {
         var candidate = await CandidateWithoutSummariesAsync();
         await SettleAsync(candidate, Revision(candidate, 1));
