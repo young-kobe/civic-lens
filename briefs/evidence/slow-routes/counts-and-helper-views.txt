@@ -1,0 +1,51 @@
+BEGIN
+Output format is unaligned.
+?column?|pg_get_viewdef
+release_bill_counts| SELECT c.release_number,
+    c.congress,
+    c.bills,
+    c.expected_member_row_count
+   FROM release_bill_counts c
+     JOIN publication_releases r ON r.release_number = c.release_number
+  WHERE r.is_active;
+(1 row)
+?column?|pg_get_viewdef
+release_policy_areas| SELECT a.release_number,
+    a.policy_area_id,
+    a.name
+   FROM release_policy_areas a
+     JOIN publication_releases r ON r.release_number = a.release_number
+  WHERE r.is_active;
+(1 row)
+?column?|pg_get_viewdef
+release_official_bill_counts| SELECT m.release_number,
+    m.congress,
+    m.official_id,
+    m.sponsored,
+    m.cosponsored
+   FROM release_official_bill_counts m
+     JOIN publication_releases r ON r.release_number = m.release_number
+  WHERE r.is_active;
+(1 row)
+kind|active|total
+action|19597|21812
+executiveAction|693|693
+statement|30|30
+vote|1588|1900
+(4 rows)
+relname|n_live_tup|last_analyze|last_autoanalyze
+action_revision_sponsorships|257164||2026-11-11 11:01:36.254005+00
+action_revisions|23288||2026-11-08 08:51:05.754064+00
+executive_action_revisions|695||2026-11-04 23:02:44.818041+00
+publication_record_states|24435||2026-11-04 11:00:33.253675+00
+publication_releases|1082||2026-11-12 15:26:44.425449+00
+published_entries|22705||2026-11-12 21:54:12.680213+00
+release_bill_counts|58||2026-11-12 18:20:33.557361+00
+release_bill_histories|284528||2026-11-08 10:11:07.03833+00
+release_bill_statuses|1635458||2026-11-13 15:26:50.405122+00
+statement_revision_speakers|933||2026-11-13 00:02:33.247891+00
+statement_revisions|933||2026-11-13 00:02:33.227799+00
+vote_member_list_entries|382389||2026-11-07 06:22:16.512718+00
+vote_revisions|1901||2026-11-10 19:09:20.957856+00
+(13 rows)
+ROLLBACK

@@ -1,0 +1,50 @@
+BEGIN
+Output format is unaligned.
+pg_get_viewdef
+ SELECT s.kind,
+    s.record_id,
+    s.revision_number,
+    r.release_number,
+    r.published_at_utc_ticks
+   FROM publication_releases r
+     JOIN publication_record_states s ON s.first_release <= r.release_number AND (s.last_release IS NULL OR s.last_release >= r.release_number)
+  WHERE r.is_active;
+(1 row)
+pg_get_viewdef
+ SELECT a.record_id,
+    a.revision_number,
+    i.issue_id,
+    i."position",
+    r.congress
+   FROM public_api.active_records a
+     JOIN action_revisions r ON r.record_id::text = a.record_id::text AND r.revision_number = a.revision_number
+     JOIN action_revision_issues i ON i.record_id::text = r.record_id::text AND i.revision_number = r.revision_number
+  WHERE a.kind::text = 'action'::text AND r.headline IS NOT NULL AND r.event_on IS NOT NULL AND i.is_tracked AND (EXISTS ( SELECT 1
+           FROM action_revision_sponsorships p
+          WHERE p.record_id::text = r.record_id::text AND p.revision_number = r.revision_number));
+(1 row)
+statement_timeout
+0
+(1 row)
+work_mem
+4MB
+(1 row)
+shared_buffers
+128MB
+(1 row)
+effective_cache_size
+4GB
+(1 row)
+random_page_cost
+4
+(1 row)
+jit
+on
+(1 row)
+rolname|rolconfig
+civic_lens_public|{default_transaction_read_only=on,statement_timeout=2s,idle_in_transaction_session_timeout=10s,idle_session_timeout=60s}
+(1 row)
+release_number
+1082
+(1 row)
+ROLLBACK
