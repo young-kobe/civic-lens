@@ -185,23 +185,17 @@ public sealed class PublicPageReadingGradeTests
     private const string BillCrsSource = "From the Congressional Research Service summary.";
     private const string CodeWordingLabel = "Written automatically from Congress.gov data, with no AI";
 
-    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below. The all-pages test expects exactly these and
-    /// <see cref="OpenQuestionPassages"/> and no others, so a new hard passage fails it and a fixed one prompts removal here.</summary>
+    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below. The all-pages test expects exactly these
+    /// and no others, so a new hard passage fails it and a fixed one prompts removal here.</summary>
     private static readonly Dictionary<string, double> OwnerKeptPassages = new()
     {
         [PresidentialNoticeMeaning] = 12.3,
-        [BillCrsSource] = 12.3
-    };
-
-    /// <summary>Fixed passages that read above the limit and wait for an owner decision in the open questions of PR #532. Each stays a known failure until the owner keeps it,
-    /// which moves it to <see cref="OwnerKeptPassages"/>, or changes its words, which removes it here.</summary>
-    private static readonly Dictionary<string, double> OpenQuestionPassages = new()
-    {
+        [BillCrsSource] = 12.3,
         [CodeWordingLabel] = 12.6
     };
 
     [Fact]
-    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptTheKeptAndOpenPassages()
+    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptThePassagesTheOwnerKept()
     {
         var failures = new Dictionary<string, double>();
         foreach (var (name, render, recordData) in await ServerPagesAsync())
@@ -215,7 +209,7 @@ public sealed class PublicPageReadingGradeTests
             }
         }
 
-        Assert.Equal(OwnerKeptPassages.Concat(OpenQuestionPassages).OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
+        Assert.Equal(OwnerKeptPassages.OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
     }
 
     [Fact]
@@ -236,6 +230,9 @@ public sealed class PublicPageReadingGradeTests
 
     [Fact(Skip = "The owner kept this text on 2026-11-13: \"From the Congressional Research Service summary.\" reads at grade 12.3 when it stands alone on the bill page.")]
     public void TheBillSummarySourceNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(BillCrsSource);
+
+    [Fact(Skip = "The owner kept this label on 2026-11-13, because labels keep their texts: \"Written automatically from Congress.gov data, with no AI\" reads at grade 12.6 alone.")]
+    public void TheCodeWordingLabelReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(CodeWordingLabel);
 
     private static void AssertReadable(string passage)
     {
