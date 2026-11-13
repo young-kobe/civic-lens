@@ -14,7 +14,13 @@
                 <h2 id="withdrawal-facts-title">What was withdrawn</h2>
                 <Facts Items="PublishedWithdrawalView.Facts(Withdrawal)" />
             </section>
-            <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+            @if (Withdrawal.Corrections.Length > 0)
+            {
+                <section class="detail-section" aria-labelledby="withdrawal-corrections-title">
+                    <h2 id="withdrawal-corrections-title">Corrections</h2>
+                    <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+                </section>
+            }
             <section class="detail-card detail-card-raised" aria-labelledby="withdrawal-next-title">
                 <h2 id="withdrawal-next-title">What you can do</h2>
                 <ul class="detail-list" role="list">

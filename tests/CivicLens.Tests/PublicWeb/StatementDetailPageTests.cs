@@ -176,4 +176,12 @@ public sealed class StatementDetailPageTests
         Assert.Equal("Source seen 29 Oct 2026, 17:19 UTC.", card.QuerySelector("p.muted")!.TextContent);
         Assert.Contains("https://kelly.example/release", page.QuerySelector("#source dd a")!.TextContent);
     }
+
+    [Fact]
+    public async Task TheRailLabelNamesTheSpeakersTheIssuesAndTheSourceCardsItHolds()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+
+        Assert.Equal("Speakers, issues, and source", page.QuerySelector("aside.detail-rail")!.GetAttribute("aria-label"));
+    }
 }

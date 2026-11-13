@@ -146,6 +146,17 @@ public sealed class WithdrawalNoticePageTests
         var page = await RenderAsync(Notice with { Corrections = [] });
 
         Assert.Null(page.QuerySelector(".corrections"));
+        Assert.Null(page.QuerySelector("#withdrawal-corrections-title"));
+    }
+
+    [Fact]
+    public async Task TheCorrectionListHasTheApprovedSectionHeadingAtTheLevelOfTheOtherSections()
+    {
+        var page = await RenderAsync(Notice);
+
+        var section = page.QuerySelector("[aria-labelledby=withdrawal-corrections-title]")!;
+        Assert.Equal(("H2", "Corrections"), (section.QuerySelector("#withdrawal-corrections-title")!.TagName, section.QuerySelector("#withdrawal-corrections-title")!.TextContent));
+        Assert.NotNull(section.QuerySelector(".corrections"));
     }
 
     [Fact]
