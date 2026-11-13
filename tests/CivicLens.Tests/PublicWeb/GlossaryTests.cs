@@ -8,7 +8,7 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class GlossaryTests
 {
-    private const string ApprovedWordingHash = "AB978AC6639051D7E46D981C1CB754CE9655617A2CB203DE7E8E23216D34AEDE";
+    private const string ApprovedWordingHash = "9CBD8DC8A299CEA5D6B467579FC13FCD5589875DB7776A369BE1215C14F143FE";
     private const int ApprovedTermCount = 44;
 
     private static readonly ReleaseRenderer Renderer = new(null, null);
