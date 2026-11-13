@@ -125,19 +125,23 @@ public sealed class VoteStatementsAndStatusTests
     }
 
     [Fact]
-    public async Task TheLawLineTakesThePlaceOfTheNotShownLineAndFollowsAKnownNextStep()
+    public async Task TheLawLineIsTheOnlyNextStepLineWhenTheBillBecameLawAndTheStepLineShowsOtherwise()
     {
+        const string LawLine = "The bill became law as Public Law 119-111 on 18 Sep 2026, according to Congress.gov, read on 5 Nov 2026.";
         var lawBill = Vote().Bill! with { StatusLabel = "Became law", PublicLaw = "119-111", StatusDate = new(2026, 9, 18), StatusReadAtUtc = new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero) };
-        var unknownStep = await RenderAsync(Vote() with { Kind = PublishedVoteKind.Other, Bill = lawBill });
+        var knownStepLaw = await RenderAsync(Vote() with { Bill = lawBill });
+        var unknownStepLaw = await RenderAsync(Vote() with { Kind = PublishedVoteKind.Other, Bill = lawBill });
+        var knownStepNoLaw = await RenderAsync(Vote());
         var unknownStepNoLaw = await RenderAsync(Vote() with { Kind = PublishedVoteKind.Other });
-        var knownStep = await RenderAsync(Vote() with { Bill = lawBill });
 
-        var lines = unknownStep.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent).ToArray();
-        Assert.Equal(["The bill became law as Public Law 119-111 on 18 Sep 2026, according to Congress.gov, read on 5 Nov 2026."], lines);
-        Assert.Equal([NextStep.NotShown], unknownStepNoLaw.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent));
-        var known = knownStep.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent).ToArray();
-        Assert.Equal(2, known.Length);
-        Assert.NotEqual(NextStep.NotShown, known[0]);
-        Assert.StartsWith("The bill became law", known[1]);
+        Assert.Equal([LawLine], NextStepLines(knownStepLaw));
+        Assert.Equal([LawLine], NextStepLines(unknownStepLaw));
+        var knownStep = VoteWording.Of(Vote().WordingSource)!.Value.NextStep;
+        Assert.NotEqual(NextStep.NotShown, knownStep);
+        Assert.Equal([knownStep], NextStepLines(knownStepNoLaw));
+        Assert.Equal([NextStep.NotShown], NextStepLines(unknownStepNoLaw));
     }
+
+    private static string[] NextStepLines(AngleSharp.Dom.IDocument page) =>
+        page.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent).ToArray();
 }
