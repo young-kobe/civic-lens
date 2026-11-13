@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Actions;
+using CivicLens.Application.ExecutiveActions;
 using CivicLens.Host.Actions;
 using CivicLens.Tests.Application.Actions;
 using CivicLens.Tests.Fixtures;
@@ -88,14 +89,54 @@ public sealed class ActionTextMeasureCommandTests : IDisposable
         Assert.False(created);
     }
 
-    private async Task<(int Code, string Output)> ExecuteAsync(string[] args, Func<ActionTextMeasure> createMeasure)
+    [Fact]
+    public async Task TheExecutiveFormWritesTheSameKindOfReportForTheDocumentsOfItsFile()
+    {
+        var path = Path.Combine(directory, "documents.json");
+        await File.WriteAllTextAsync(path, """["2025-01953"]""");
+        var model = new FakeExecutiveSummaryModel();
+
+        var exit = await ExecuteAsync(["executive-actions", "text", "measure", "1000000", path], Measure,
+            () => new ExecutiveSummaryMeasure(new FakeExecutiveSummaryStore(null), new ExecutiveSummaryStep(new FakeExecutiveSummaryStore(null), model, new ExecutiveSummarySettings(10_000_000, 1))));
+
+        Assert.Equal(0, exit.Code);
+        var file = Assert.Single(Directory.GetFiles(Path.Combine(directory, ActionTextMeasureCommand.ReportDirectory)));
+        using var report = JsonDocument.Parse(File.ReadAllText(file));
+        Assert.Equal(ExecutiveSummaryTask.PromptVersion, report.RootElement.GetProperty("promptVersion").GetString());
+        Assert.Equal(("2025-01953", ActionTextMeasureReason.NoRecord), (report.RootElement.GetProperty("bills")[0].GetProperty("billId").GetString(),
+            report.RootElement.GetProperty("bills")[0].GetProperty("reason").GetString()));
+        Assert.Empty(model.Requests);
+    }
+
+    [Theory]
+    [InlineData("""["2025-01953","2025-01953"]""")]
+    [InlineData("""["not a number"]""")]
+    [InlineData("[]")]
+    public async Task ADocumentsFileWithABadOrRepeatedNumberStopsTheExecutiveFormBeforeAnyMeasure(string json)
+    {
+        var path = Path.Combine(directory, "documents.json");
+        await File.WriteAllTextAsync(path, json);
+        var created = false;
+
+        var exit = await ExecuteAsync(["executive-actions", "text", "measure", "1000", path], Measure, () =>
+        {
+            created = true;
+            return null!;
+        });
+
+        Assert.Equal(2, exit.Code);
+        Assert.False(created);
+    }
+
+    private async Task<(int Code, string Output)> ExecuteAsync(string[] args, Func<ActionTextMeasure> createMeasure,
+        Func<ExecutiveSummaryMeasure>? createExecutive = null)
     {
         var output = new StringWriter();
         var error = Console.Error;
         Console.SetError(TextWriter.Null);
         try
         {
-            var code = await ActionTextMeasureCommand.ExecuteAsync(args, createMeasure, directory, output, TimeProvider.System, default);
+            var code = await ActionTextMeasureCommand.ExecuteAsync(args, createMeasure, directory, output, TimeProvider.System, default, createExecutive);
             return (code, output.ToString());
         }
         finally

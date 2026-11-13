@@ -9,7 +9,8 @@ namespace CivicLens.Infrastructure.ExecutiveActions;
 internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveActionRevisionRow> Rows,
     ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionFactRow> Facts,
     ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionNoticeRow> Notices,
-    IReadOnlyDictionary<(string SourceId, string DocumentNumber), ExecutiveActionDocumentRow> Documents) : IRevisionRowPage<ExecutiveActionRevisionRow>
+    IReadOnlyDictionary<(string SourceId, string DocumentNumber), ExecutiveActionDocumentRow> Documents,
+    ILookup<(string RecordId, int RevisionNumber), ExecutiveActionRevisionSummarySentenceRow> SummarySentences) : IRevisionRowPage<ExecutiveActionRevisionRow>
 {
     public ExecutiveActionRevision Rebuild(ExecutiveActionRevisionRow row)
     {
@@ -18,7 +19,7 @@ internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveAction
         return new(row.RecordId, row.RevisionNumber, row.AuthorSubject, new DateTimeOffset(row.CreatedAtUtcTicks, TimeSpan.Zero),
             row.SourceId, row.DocumentNumber!, row.Kind!.Value, row.PresidentialNumber, row.Title!, row.SignedOn!.Value, row.PublishedOn!.Value,
             row.FederalRegisterCitation!, row.PresidentName!, row.PersonId!, row.DocumentUrl!, FactsOf(row), NoticesOf(row))
-        { DispositionNotes = DispositionNotesOf(row) };
+        { DispositionNotes = DispositionNotesOf(row), Summary = SummaryOf(row) };
     }
 
     public IReadOnlyList<StoredRevision<ExecutiveActionRevisionRow, ExecutiveActionRevision>> ToStoredRevisions() =>
@@ -34,6 +35,21 @@ internal sealed record ExecutiveActionRevisionPage(IReadOnlyList<ExecutiveAction
             throw new InvalidDataException($"Executive action revision {row.RecordId} {row.RevisionNumber} has incomplete fact rows.");
         return [.. lines.Zip(spans, (line, span) => new ExecutiveActionFact(line.Label, line.Value,
             new SourceSpan(span.CitationExtractionId, span.CitationStart, span.CitationLength)))];
+    }
+
+    private ExecutiveActionSummary? SummaryOf(ExecutiveActionRevisionRow row)
+    {
+        var sentences = SummarySentences[(row.RecordId, row.RevisionNumber)].OrderBy(sentence => sentence.Position).ToArray();
+        if (row.SummaryTextOrigin is null || row.SummaryCut is null)
+        {
+            if (sentences.Length > 0 || row.SummaryTextOrigin is not null || row.SummaryCut is not null)
+                throw new InvalidDataException($"Executive action revision {row.RecordId} {row.RevisionNumber} has incomplete summary columns.");
+            return null;
+        }
+        if (!sentences.Select(sentence => (int)sentence.Position).SequenceEqual(Enumerable.Range(0, sentences.Length)))
+            throw new InvalidDataException($"Executive action revision {row.RecordId} {row.RevisionNumber} has incomplete summary rows.");
+        return new(row.SummaryTextOrigin.Value, row.SummaryCut.Value, [.. sentences.Select(sentence => new ExecutiveActionSummarySentence(sentence.Sentence,
+            new SourceSpan(sentence.QuoteExtractionId, sentence.QuoteStart, sentence.QuoteLength)))]);
     }
 
     private static ExecutiveActionFact? DispositionNotesOf(ExecutiveActionRevisionRow row)

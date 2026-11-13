@@ -11,37 +11,18 @@ namespace CivicLens.Application.Actions;
 /// It clears the draft history of each bill, so a bill with a current record is drafted again as a new bill.</summary>
 public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep step)
 {
+    private static readonly IReadOnlySet<string> MeasuredPrompts =
+        new HashSet<string> { ActionDraftTask.TextPromptVersion, ActionDraftTask.KeyTermTextPromptVersion };
+
     private readonly bool keyTermsOn = step.DraftsKeyTerms;
 
-    public async Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken)
-    {
-        if (tokenCap < 1) throw new ArgumentOutOfRangeException(nameof(tokenCap), tokenCap, "The spend cap must be at least 1 token.");
-        var results = ImmutableArray.CreateBuilder<ActionTextMeasureBill>();
-        var spent = 0L;
-        try
-        {
-            foreach (var bill in bills)
-            {
-                var result = results.Any(item => item.EndsRun) ? NotRun(bill, results) : await MeasureAsync(bill, tokenCap, spent, cancellationToken);
-                spent += result.ChargedTokens;
-                results.Add(result);
-            }
-        }
-        catch (OperationCanceledException exception)
-        {
-            throw new ActionTextMeasureCanceledException(ReportOf(tokenCap, results), exception);
-        }
-        return ReportOf(tokenCap, results);
-    }
+    public Task<ActionTextMeasureReport> RunAsync(IReadOnlyList<CongressBillListItem> bills, long tokenCap, CancellationToken cancellationToken) =>
+        ActionTextMeasureRun.RunAsync(bills, tokenCap, IdOf, (bill, spent, token) => MeasureAsync(bill, tokenCap, spent, token),
+            results => ReportOf(tokenCap, results), cancellationToken);
 
-    private ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill>.Builder results) =>
+    private ActionTextMeasureReport ReportOf(long tokenCap, ImmutableArray<ActionTextMeasureBill> results) =>
         new(keyTermsOn ? ActionDraftTask.KeyTermTextPromptVersion : ActionDraftTask.TextPromptVersion,
-            keyTermsOn ? ActionDraftTask.KeyTermTextSchemaVersion : ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, keyTermsOn, results.ToImmutable());
-
-    private static ActionTextMeasureBill NotRun(CongressBillListItem bill, IEnumerable<ActionTextMeasureBill> earlier) =>
-        earlier.Any(item => item.Outcome == ActionTextMeasureOutcome.StoppedByModel)
-            ? ActionTextMeasureBill.WithoutCall(IdOf(bill), ActionTextMeasureOutcome.StoppedByModel, ActionTextMeasureReason.ModelFailure)
-            : ActionTextMeasureBill.WithoutCall(IdOf(bill), ActionTextMeasureOutcome.StoppedByCap, ActionTextMeasureReason.SpendCap);
+            keyTermsOn ? ActionDraftTask.KeyTermTextSchemaVersion : ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model, tokenCap, keyTermsOn, results);
 
     public static string IdOf(CongressBillListItem bill) => $"{bill.Congress}-{bill.Type}-{bill.Number}";
 
@@ -58,17 +39,17 @@ public sealed class ActionTextMeasure(IActionDraftStore store, ActionDraftStep s
         var evidence = await store.ReadEvidenceAsync(candidateId, withBillText: true, cancellationToken);
         if (evidence?.BillText is not { } billText) return ActionTextMeasureBill.Skipped(billId, ActionTextMeasureReason.NoBillText);
 
-        var attempt = new ActionTextMeasureAttempt(candidateId, tokenCap, spent);
+        var attempt = new AnalysisMeasureAttempt<ActionDraftRun, ActionDraftRevision>(candidateId, ActionDraftTask.Identity, MeasuredPrompts,
+            run => run.Run, checkpoint => (checkpoint as ActionDraftCheckpoint)?.Revision, tokenCap, spent);
         await step.DraftAsync(attempt, evidence with { Current = null, HasStaleDraft = false, IsRejected = false },
             cancellationToken);
         return Summarize(billId, evidence, billText, attempt);
     }
 
     private ActionTextMeasureBill Summarize(string billId, ActionDraftEvidence evidence, ActionDraftBillText billText,
-        ActionTextMeasureAttempt attempt)
+        AnalysisMeasureAttempt<ActionDraftRun, ActionDraftRevision> attempt)
     {
-        var usage = attempt.Runs.Aggregate(AnalysisTokenUsage.None, (sum, run) => new(sum.InputTokens + run.Usage.InputTokens,
-            sum.OutputTokens + run.Usage.OutputTokens, sum.CacheReadTokens + run.Usage.CacheReadTokens, sum.CacheWriteTokens + run.Usage.CacheWriteTokens));
+        var usage = ActionTextMeasureRun.UsageOf(attempt.Runs);
         var rejections = attempt.Runs.SelectMany(run => run.ValidationErrors).ToImmutableArray();
         var textFigures = BillFigures.Count(billText.Body);
         var keyTerms = attempt.Revision is { TextPackageId: not null } text
