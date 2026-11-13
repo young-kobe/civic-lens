@@ -1,14 +1,15 @@
+using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi.Home;
 
-/// <summary>Maps the current public home answer to the public presentation contract without rereading its release.</summary>
+/// <summary>Maps the current public home answer to the public presentation contract, with the freshness of the same answer, without rereading its release.</summary>
 public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
 {
     public string? BrowserApiRoot => browserApiUrl?.Join(string.Empty).TrimEnd('/');
 
-    public async Task<HomePageData?> ReadAsync(CancellationToken cancellationToken)
+    public async Task<HomePageRead?> ReadAsync(CancellationToken cancellationToken)
     {
         if (await home.ReadAsync(cancellationToken) is not { } answer) return null;
         var featured = answer.FeaturedVote is { } vote
@@ -23,10 +24,11 @@ public sealed class HomePageReader(HomeStore home, PublicBaseUrl? browserApiUrl)
             group.Kind, group.Count, group.NewestRecordId, group.NewestTitle, group.NewestSignedOn)).ToArray();
         var issues = answer.Issues.Select(issue => new HomeIssueData(
             issue.IssueId, issue.Name, issue.Congress, issue.SubstantiveVotes, issue.Bills)).ToArray();
-        return new(answer.Release, featured, votes, brief)
+        var data = new HomePageData(answer.Release, featured, votes, brief)
         {
             ExecutiveActions = executiveActions,
             Issues = issues
         };
+        return new(data, new(answer.Release, answer.NewestHouseRollCall, answer.NewestSenateRollCall));
     }
 }

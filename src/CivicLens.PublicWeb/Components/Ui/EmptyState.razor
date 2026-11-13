@@ -1,5 +1,12 @@
 <div class="empty">
-    <h3>@Title</h3>
+    @if (HeadingLevel == 2)
+    {
+        <h2>@Title</h2>
+    }
+    else
+    {
+        <h3>@Title</h3>
+    }
     @if (Text is not null)
     {
         <p>@Text</p>
@@ -13,4 +20,7 @@
     [Parameter] public string? Text { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? Action { get; set; }
+
+    /// <summary>The heading level of the title: 3 under a panel title, 2 when no panel title is above it, so the outline skips no level.</summary>
+    [Parameter] public int HeadingLevel { get; set; } = 3;
 }

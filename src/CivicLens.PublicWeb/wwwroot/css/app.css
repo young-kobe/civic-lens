@@ -101,7 +101,7 @@ a.cell-title:hover { text-decoration: underline; }
 .notice-dismiss:hover { opacity: 1; }
 @keyframes notice-in { from { opacity: 0; transform: translateY(-4px); } }
 .empty { display: grid; gap: 2px; padding: var(--s5) var(--s4); }
-.empty h3 { font-size: var(--t-sm); font-weight: 650; }
+.empty h2, .empty h3 { font-size: var(--t-sm); font-weight: 650; }
 .empty p { max-width: 52ch; color: var(--muted); font-size: var(--t-sm); }
 .empty .btn { justify-self: start; margin-top: var(--s2); }
 

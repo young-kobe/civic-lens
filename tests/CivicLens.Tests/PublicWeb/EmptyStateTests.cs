@@ -11,7 +11,7 @@ public sealed class EmptyStateTests
 {
     private static RenderFragment Fragment(string html) => builder => builder.AddMarkupContent(0, html);
 
-    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(RenderFragment? content, RenderFragment? action)
+    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(RenderFragment? content, RenderFragment? action, int headingLevel = 3)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -21,7 +21,8 @@ public sealed class EmptyStateTests
                 [nameof(EmptyState.Title)] = "Nothing here",
                 [nameof(EmptyState.Text)] = "Try again.",
                 [nameof(EmptyState.ChildContent)] = content,
-                [nameof(EmptyState.Action)] = action
+                [nameof(EmptyState.Action)] = action,
+                [nameof(EmptyState.HeadingLevel)] = headingLevel
             }))).ToHtmlString());
         return await new HtmlParser().ParseDocumentAsync(html);
     }
@@ -42,5 +43,13 @@ public sealed class EmptyStateTests
         var page = await RenderAsync(null, null);
 
         Assert.Equal(["H3", "P"], page.QuerySelector(".empty")!.Children.Select(child => child.TagName));
+    }
+
+    [Fact]
+    public async Task HeadingLevelTwoRendersTheTitleAsH2ForAPageWithNoPanelTitle()
+    {
+        var page = await RenderAsync(null, null, 2);
+
+        Assert.Equal(["H2", "P"], page.QuerySelector(".empty")!.Children.Select(child => child.TagName));
     }
 }

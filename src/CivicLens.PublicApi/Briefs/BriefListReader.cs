@@ -24,7 +24,8 @@ public sealed class BriefListReader(NpgsqlDataSource views)
     {
         await using var command = views.CreateCommand(Sql);
         command.Parameters.AddWithValue("take", PublicationProtocol.PageSize);
-        command.Parameters.AddWithValue("skip", (page - 1) * PublicationProtocol.PageSize);
+        // The skip is a long, so a large page number reads past the end and answers 404 instead of an int overflow.
+        command.Parameters.AddWithValue("skip", (page - 1L) * PublicationProtocol.PageSize);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         var release = reader.GetInt32(0);

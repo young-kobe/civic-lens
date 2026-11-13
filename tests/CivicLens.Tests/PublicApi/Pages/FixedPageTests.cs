@@ -28,7 +28,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
     private static async Task<(HttpStatusCode Status, IDocument Page)> GetAsync(ApiHost host, string path)
     {
-        using var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix + "/" + path);
+        using var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix + (path.Length == 0 ? string.Empty : "/" + path));
         return (response.StatusCode, new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync()));
     }
 
@@ -79,7 +79,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         var (status, page) = await GetAsync(host, PublicationProtocol.BriefsPagePath(1));
 
         Assert.Equal(HttpStatusCode.OK, status);
-        Assert.Equal("No weekly briefs yet", page.QuerySelector(".empty h3")!.TextContent);
+        Assert.Equal("No weekly briefs yet", page.QuerySelector(".empty h2")!.TextContent);
+        Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
         Assert.Contains("Release 4, published 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
     }
 
@@ -123,6 +124,18 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.NotFound, thirdStatus);
     }
 
+    [Theory]
+    [InlineData(50_000_000)]
+    [InlineData(int.MaxValue)]
+    public async Task ABriefsPageNumberThatOverflowsTheSkipAnswers404(int number)
+    {
+        await using var host = await StartAsync();
+
+        var (status, _) = await GetAsync(host, PublicationProtocol.BriefsPagePath(number));
+
+        Assert.Equal(HttpStatusCode.NotFound, status);
+    }
+
     [Fact]
     public async Task TheIssuesIndexListsEachIssueByNameWithItsCountsAndLinksItsPage()
     {
@@ -141,6 +154,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Contains("3 bills", tiles[1].TextContent);
         Assert.Contains("119th Congress", tiles[1].TextContent);
         Assert.Equal("Air", tiles[0].TextContent.Trim());
+        Assert.Null(page.QuerySelector(".home-issue-list")!.Closest(".panel"));
         Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href")!.Substring(Root.Length));
     }
 
@@ -153,10 +167,12 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Empty(page.QuerySelectorAll("a.home-issue-tile"));
-        Assert.Contains("None yet", page.QuerySelector(".empty")!.TextContent);
+        Assert.Equal("None yet", page.QuerySelector(".empty h2")!.TextContent);
+        Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
     }
 
     [Theory]
+    [InlineData("")]
     [InlineData(PublicationProtocol.AboutPagePath)]
     [InlineData(PublicationProtocol.MethodPagePath)]
     [InlineData(PublicationProtocol.FacetsPath)]

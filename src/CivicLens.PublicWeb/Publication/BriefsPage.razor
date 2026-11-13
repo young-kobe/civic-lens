@@ -6,7 +6,7 @@
     @if (Data.Total == 0)
     {
         <Panel Label="Weekly briefs" Padded="true">
-            <EmptyState Title="No weekly briefs yet" Text="Civic Lens has not published a weekly brief. Browse the published records instead.">
+            <EmptyState HeadingLevel="2" Title="No weekly briefs yet" Text="Civic Lens has not published a weekly brief. Browse the published records instead.">
                 <Action><Button Href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</Button></Action>
             </EmptyState>
         </Panel>

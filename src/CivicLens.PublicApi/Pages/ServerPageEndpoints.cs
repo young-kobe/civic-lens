@@ -28,11 +28,11 @@ public static class ServerPageEndpoints
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } answer
-                ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, answer.Release,
+            ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } read
+                ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, read.Freshness,
                     new Dictionary<string, object?>
                     {
-                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = answer,
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = read.Data,
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.RootPath)] = baseUrl.Join(string.Empty),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot
                     }, cancellationToken)
