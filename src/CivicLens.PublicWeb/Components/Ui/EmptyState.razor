@@ -1,5 +1,15 @@
 <div class="empty">
-    <h3>@Title</h3>
+    @switch (Level)
+    {
+        case 2:
+            <h2>@Title</h2>
+            break;
+        case 3:
+            <h3>@Title</h3>
+            break;
+        default:
+            throw new InvalidOperationException("An empty state heading is level 2 or 3.");
+    }
     @if (Text is not null)
     {
         <p>@Text</p>
@@ -13,4 +23,7 @@
     [Parameter] public string? Text { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? Action { get; set; }
+
+    /// <summary>The heading level that follows the outline of the page. A page that shows the empty state right under its h1 sets 2.</summary>
+    [Parameter] public int Level { get; set; } = 3;
 }
