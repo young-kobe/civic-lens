@@ -385,7 +385,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('a', "2026-03-02") { Issues = ["health"] }, Vote('b', "2026-03-03", 2));
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('c', "2026-03-01") { Issues = ["health"], BillNumber = 1 }, new SeededBill('d', "2026-03-02") { BillNumber = 2 });
+        await AddBillsAsync(host, new SeededBill('c', "2026-03-01") { Issues = ["health"], BillNumber = 1 }, new SeededBill('d', "2026-03-02") { BillNumber = 2 });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
             + "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
 
