@@ -122,16 +122,10 @@
                                     <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
                                     <div>
                                         <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                        @if (statement.Label is not null)
-                                        {
-                                            <span class="official-source-label" data-origin="@statement.TextOrigin?.ToString().ToLowerInvariant()">@statement.Label</span>
-                                        }
+                                        <AiLabel Text="@statement.Label" Origin="statement.TextOrigin" />
                                         <p class="official-meta"><span>@StatementPageView.RowDate(statement.StatementDate)</span></p>
                                         <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@VoteWords.RollCall(statement.VoteChamber, statement.VoteRollCall), @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
-                                            @if (voteLabel is not null)
-                                            {
-                                                <span class="official-source-label" data-origin="@statement.VoteTextOrigin?.ToString().ToLowerInvariant()">@voteLabel</span>
-                                            }
+                                            <AiLabel Text="@voteLabel" Origin="statement.VoteTextOrigin" />
                                             @if (statement.Cast is { } cast)
                                             {
                                                 <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>

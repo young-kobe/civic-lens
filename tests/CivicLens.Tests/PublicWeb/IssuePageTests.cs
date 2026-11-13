@@ -20,6 +20,13 @@ public sealed class IssuePageTests
         new(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
 
     [Fact]
+    public async Task EachRecordRowLabelIsDrawnByAiLabel()
+    {
+        AiLabelAssert.DrawnByAiLabel((await RenderAsync(Data())).QuerySelector("#bills")!, AiLabelWords.ModelWording);
+        AiLabelAssert.DrawnByAiLabel((await RenderAsync(Data(bills: [Bill with { Label = AiLabelWords.CodeWording, TextOrigin = PublishedTextOrigin.Code }]))).QuerySelector("#bills")!, AiLabelWords.CodeWording);
+    }
+
+    [Fact]
     public async Task TheCountLineNamesTheWhatTheTagAndTheReleaseAndTheTagCaveatFollowsIt()
     {
         var page = await RenderAsync(Data());

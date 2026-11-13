@@ -124,12 +124,16 @@ public static class VotePageView
 
     public static bool HasUnknownParty(VotePageData vote) => vote.Members.Any(member => member.Party is null);
 
-    /// <summary>The facts of the source fold: the cited facts, then the identity of the roll call, the wording origin, and the revision.</summary>
+    /// <summary>The AI label of the vote summary: the label column of the view, or the label of its text origin when the view gives none.</summary>
+    public static string? Label(VotePageData vote) => vote.Label ?? (vote.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
+        ? PublishedRecordLabels.Wording(vote.TextOrigin).First().Value : null);
+
+    /// <summary>The facts of the source fold: the cited facts, then the identity of the roll call, the AI label, and the revision.</summary>
     public static IReadOnlyList<Fact> Facts(VotePageData vote, VoteCitationAnchors anchors) =>
     [
         .. VoteFacts.Cited(vote.FactsSource, anchors.Anchor),
         .. VoteFacts.Identity(vote.Chamber, vote.RollCall, vote.Congress, vote.Session, vote.Source),
-        .. PublishedRecordLabels.Wording(vote.TextOrigin),
+        .. Label(vote) is { } label ? [new Fact(PublishedRecordLabels.WordingFact, label) { AiLabelOrigin = vote.TextOrigin }] : Array.Empty<Fact>(),
         new("Revision", vote.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture))
     ];
 }

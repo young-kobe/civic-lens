@@ -87,10 +87,7 @@
                                 <li>
                                     <div>
                                         <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                        @if (statement.Label is not null)
-                                        {
-                                            <span class="official-source-label" data-origin="@statement.TextOrigin.ToString().ToLowerInvariant()">@statement.Label</span>
-                                        }
+                                        <AiLabel Text="@statement.Label" Origin="statement.TextOrigin" />
                                         <p class="official-meta">
                                             @foreach (var speaker in statement.Speakers)
                                             {
@@ -268,8 +265,7 @@
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Vote, Data.Headline, Data.ShortName);
         anchors = new VoteCitationAnchors(Data);
         wording = VoteWording.Of(Data.WordingSource);
-        summaryLabel = Data.Label ?? (Data.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
-            ? PublishedRecordLabels.Wording(Data.TextOrigin).First().Value : null);
+        summaryLabel = VotePageView.Label(Data);
         chamberBar = VotePageView.ChamberBar(Data);
         partyBars = VotePageView.PartyBars(Data);
         map = VoteMapData.Of(Data);

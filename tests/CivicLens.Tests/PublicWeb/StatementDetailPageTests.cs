@@ -12,7 +12,7 @@ public sealed class StatementDetailPageTests
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
 
         var summary = page.QuerySelector(".ai-summary-ai")!;
-        Assert.Equal(StatementLabel, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(StatementLabel, summary.QuerySelector(".ai-label")!.TextContent);
         Assert.Contains("A model wrote only the summary above.", summary.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Contains(StatementPageView.CaptureCaveat, summary.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Equal("#source", summary.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
@@ -25,7 +25,7 @@ public sealed class StatementDetailPageTests
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(PublishedTextOrigin.Person));
 
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
-        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.Null(page.QuerySelector(".ai-label"));
         Assert.DoesNotContain("model", page.QuerySelector(".ai-summary-check")!.TextContent, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("code checked each one", page.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Contains(StatementPageView.CaptureCaveat, page.QuerySelector(".ai-summary-check")!.TextContent);
@@ -37,8 +37,8 @@ public sealed class StatementDetailPageTests
         var withLabel = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
         var withoutLabel = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(label: null, approver: PublishedApprover.Person));
 
-        Assert.Equal(StatementLabel, withLabel.QuerySelector(".ai-summary-label")!.TextContent);
-        Assert.Null(withoutLabel.QuerySelector(".ai-summary-label"));
+        Assert.Equal(StatementLabel, withLabel.QuerySelector(".ai-label")!.TextContent);
+        Assert.Null(withoutLabel.QuerySelector(".ai-label"));
         Assert.Null(withoutLabel.QuerySelector(".ai-summary-ai"));
     }
 
@@ -193,5 +193,11 @@ public sealed class StatementDetailPageTests
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
+
+    [Fact]
+    public async Task TheStatementSummaryLabelIsDrawnByAiLabel()
+    {
+        AiLabelAssert.DrawnByAiLabel(await RenderAsync<StatementDetailPage, StatementPageData>(Statement()), StatementLabel);
     }
 }

@@ -375,6 +375,21 @@ public sealed class HomePageTests
             VotePageView.ChamberBar(index < 2 ? PublishedChamber.House : PublishedChamber.Senate, 216, 214, 0, 5, VoteThreshold.None), null)
         { Alignment = alignment })];
 
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model, AiLabelWords.ModelWording)]
+    [InlineData(PublishedTextOrigin.Code, AiLabelWords.CodeWording)]
+    public async Task TheFeaturedVoteLabelTheBriefLabelAndEachVoteRowLabelAreDrawnByAiLabel(PublishedTextOrigin origin, string featuredLabel)
+    {
+        const string briefLabel = "Drafted by an AI model from reviewed records.";
+        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin },
+            [.. RecentVotes(PublishedVoteAlignment.Split).Select(vote => vote with { Label = AiLabelWords.ModelWording, TextOrigin = PublishedTextOrigin.Model })],
+            new(new string('b', 64), "This week in Congress", briefLabel)));
+
+        AiLabelAssert.DrawnByAiLabel(page, featuredLabel);
+        AiLabelAssert.DrawnByAiLabel(page, briefLabel);
+        AiLabelAssert.DrawnByAiLabel(page.QuerySelector(".home-votes")!, AiLabelWords.ModelWording);
+    }
+
     private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null, string? featuredMapHref = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();

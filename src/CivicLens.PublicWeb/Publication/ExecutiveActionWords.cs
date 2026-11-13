@@ -101,7 +101,7 @@ public static class ExecutiveActionWords
         Fact.LinkList("Official document", [new FactLink($"Federal Register document {data.DocumentNumber}", data.DocumentUrl)]),
         new("Federal Register citation", data.FederalRegisterCitation),
         new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) },
-        .. data.Summary is { Label: not null } ? [new Fact("Wording", SummaryWording)] : Array.Empty<Fact>()
+        .. data.Summary is { Label: not null } ? [new Fact(PublishedRecordLabels.WordingFact, SummaryWording)] : Array.Empty<Fact>()
     ];
 
     /// <summary>The heading over the quotes of the summary sentences in the source fold.</summary>

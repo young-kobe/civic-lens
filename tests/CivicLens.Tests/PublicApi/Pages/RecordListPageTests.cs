@@ -203,7 +203,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var officials = page.QuerySelector(".page-header-lede a")!;
         Assert.Equal(("Officials", "https://civic-lens.test/officials.html"), (officials.TextContent, officials.GetAttribute("href")));
         Assert.Null(page.QuerySelector(".page-header-meta"));
-        Assert.Equal("model", model.QuerySelector(".record-row-label")!.GetAttribute("data-origin"));
+        Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var (other, person, model) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
         Assert.Null(Label(person));
         Assert.Equal(ModelLabel, Label(model));
-        Assert.Equal("model", model.QuerySelector(".record-row-label")!.GetAttribute("data-origin"));
+        Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
         Assert.DoesNotContain("Sponsor:", Text(person));
         Assert.Contains("Sponsor: Ann Able", Text(model));
         Assert.Contains("Latest sponsorship 2 Mar 2026", Text(model));
@@ -424,9 +424,9 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
         Assert.Equal(["Headline a", "Headline c", "Headline b"], Titles(page));
         var (model, earlier, person) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
-        Assert.StartsWith("An AI summary", model.QuerySelector(".record-row-label")!.TextContent);
-        Assert.Equal("model", model.QuerySelector(".record-row-label")!.GetAttribute("data-origin"));
-        Assert.Null(person.QuerySelector(".record-row-label"));
+        Assert.StartsWith("An AI summary", model.QuerySelector(".ai-label")!.TextContent);
+        Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
+        Assert.Null(person.QuerySelector(".ai-label"));
         Assert.Contains("Zed Zane, Senator for AZ, Republican, Ann Able, Representative for MA, district 5, Democrat, Said on 2 Mar 2026, From site-a.senate.gov", Text(model));
         Assert.Contains("Ann Able, Representative for MA, district 4, Republican, Said on 3 Jun 2024, From site-c.senate.gov", Text(earlier));
         // An undated statement has no day, so no term gives its speaker a seat or a party.

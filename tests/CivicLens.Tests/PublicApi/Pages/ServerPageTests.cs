@@ -249,7 +249,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Headline f", row.TextContent);
-        Assert.Equal(origin == "Model" ? "model" : null, row.QuerySelector(".record-row-label")?.GetAttribute("data-origin"));
+        Assert.Equal(expectedLabel is null ? null : origin.ToLowerInvariant(), row.QuerySelector(".ai-label")?.GetAttribute("data-origin"));
         if (expectedLabel is not null) Assert.Contains(expectedLabel, row.TextContent);
         else
         {

@@ -82,11 +82,11 @@ public sealed class BriefDetailPageTests
     {
         var page = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
 
-        Assert.Equal(BriefLabel, page.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(BriefLabel, page.QuerySelector(".ai-label")!.TextContent);
         Assert.Contains("This brief is a sample, not a full account of the week.", page.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Equal("#cited", page.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
         Assert.Null(page.QuerySelector(".caveat"));
-        Assert.Equal(1, page.QuerySelectorAll(".ai-summary-label").Length);
+        Assert.Equal(1, page.QuerySelectorAll(".ai-label").Length);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class BriefDetailPageTests
     {
         var page = await RenderAsync<BriefDetailPage, BriefPageData>(Brief(label: null));
 
-        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.Null(page.QuerySelector(".ai-label"));
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
         Assert.Contains("First <b>paragraph</b>.", page.QuerySelector(".ai-summary")!.TextContent);
     }
@@ -141,5 +141,11 @@ public sealed class BriefDetailPageTests
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
+
+    [Fact]
+    public async Task TheBriefLabelIsDrawnByAiLabel()
+    {
+        AiLabelAssert.DrawnByAiLabel(await RenderAsync<BriefDetailPage, BriefPageData>(Brief()), BriefLabel);
     }
 }

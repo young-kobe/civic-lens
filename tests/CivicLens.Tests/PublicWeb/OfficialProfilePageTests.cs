@@ -340,7 +340,7 @@ public sealed class OfficialProfilePageTests
             }]
         });
 
-        var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
+        var labels = page.QuerySelectorAll("#statements .ai-label[data-origin=model]");
         Assert.Equal([AiLabelWords.ModelWording], labels.Select(label => label.TextContent).ToArray());
     }
 
@@ -357,8 +357,8 @@ public sealed class OfficialProfilePageTests
             }]
         });
 
-        Assert.Empty(page.QuerySelectorAll("#statements .official-source-label[data-origin=model]"));
-        Assert.Equal(AiLabelWords.CodeWording, Assert.Single(page.QuerySelectorAll("#statements .official-source-label")).TextContent);
+        Assert.Empty(page.QuerySelectorAll("#statements .ai-label[data-origin=model]"));
+        Assert.Equal(AiLabelWords.CodeWording, Assert.Single(page.QuerySelectorAll("#statements .ai-label")).TextContent);
     }
 
     [Fact]
@@ -397,7 +397,7 @@ public sealed class OfficialProfilePageTests
     {
         var page = await RenderAsync<OfficialProfilePage>(Member());
 
-        Assert.Contains("AI vote label", page.QuerySelector("#votes .shared-vote-label")!.TextContent);
+        Assert.Contains("AI vote label", page.QuerySelector("#votes .ai-label")!.TextContent);
         var statement = page.QuerySelector("#statements")!.TextContent;
         Assert.Contains("AI statement label", statement);
         Assert.Contains("AI linked vote label", statement);
@@ -531,6 +531,16 @@ public sealed class OfficialProfilePageTests
 
         Assert.True(rule.Success, "The official page frame rule sets one padding shorthand with top, inline and bottom values.");
         Assert.Equal("var(--frame-pad)", rule.Groups[2].Value);
+    }
+
+    [Fact]
+    public async Task TheStatementLabelTheLinkedVoteLabelAndEachVoteRowLabelAreDrawnByAiLabel()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member());
+
+        AiLabelAssert.DrawnByAiLabel(page, "AI statement label");
+        AiLabelAssert.DrawnByAiLabel(page, "AI linked vote label");
+        AiLabelAssert.DrawnByAiLabel(page, "AI vote label");
     }
 
     private static int Px(string css, string pattern)

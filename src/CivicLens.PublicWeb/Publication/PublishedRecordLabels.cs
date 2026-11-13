@@ -99,15 +99,18 @@ public static class PublishedRecordLabels
 
     public const string ModelChosenIssues = "Chosen by an AI model from the bill title and subjects";
 
+    /// <summary>The name of the fact row that holds the AI label of a record.</summary>
+    public const string WordingFact = "Wording";
+
     public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = AiLabelWords.ModelWording) => origin switch
     {
-        PublishedTextOrigin.Model => [new("Wording", modelWording)],
-        PublishedTextOrigin.Code => [new("Wording", AiLabelWords.CodeWording)],
+        PublishedTextOrigin.Model => [new(WordingFact, modelWording)],
+        PublishedTextOrigin.Code => [new(WordingFact, AiLabelWords.CodeWording)],
         _ => []
     };
 
     public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
-        statement.TextOrigin == PublishedTextOrigin.Model ? [new("Wording", StatementModelLabel(statement.ApprovedBy))] : [];
+        statement.TextOrigin == PublishedTextOrigin.Model ? [new(WordingFact, StatementModelLabel(statement.ApprovedBy))] : [];
 
     private static string StatementModelLabel(PublishedApprover approver) =>
         approver == PublishedApprover.Code ? AiLabelWords.StatementModelWording : AiLabelWords.StatementCheckedByPersonWording;

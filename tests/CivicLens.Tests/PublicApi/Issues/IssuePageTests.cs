@@ -170,8 +170,8 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 
         foreach (var section in new[] { "#votes", "#bills" })
         {
-            var labels = page.QuerySelectorAll($"{section} .record-row-label");
-            Assert.Equal(["model", null], labels.Select(label => label.GetAttribute("data-origin")));
+            var labels = page.QuerySelectorAll($"{section} .ai-label");
+            Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
             Assert.All(labels, label => Assert.NotEmpty(label.TextContent));
         }
     }
