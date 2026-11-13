@@ -17,4 +17,5 @@ public sealed record ExecutiveActionPageData(
     string OfficialId,
     string PresidentName,
     ExecutiveActionNoticeData[] Notices,
-    ExecutiveActionTargetData[] Targets);
+    ExecutiveActionTargetData[] Targets,
+    ExecutiveActionSummaryData? Summary = null);

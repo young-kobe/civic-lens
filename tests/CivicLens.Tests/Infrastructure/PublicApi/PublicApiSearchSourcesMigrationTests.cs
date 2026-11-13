@@ -256,7 +256,7 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
         await db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
         db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.Votes.VoteRevisionRows", "Create", vote, null));
         await InternalMethods.InvokeAsync("CivicLens.Infrastructure.Votes.VoteMemberLists", "EnsureAsync", db, vote, CancellationToken.None);
-        db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.ExecutiveActions.ExecutiveActionRevisionRows", "Create", executive, TestCodeVersion.Current));
+        db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.ExecutiveActions.ExecutiveActionRevisionRows", "Create", executive, TestCodeVersion.Current, null));
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
         await ExecuteAsync(database, $"""
@@ -278,7 +278,7 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
         var executive = ExecutiveRevision(RetiredExecutiveId);
         await using (var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options))
         {
-            db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.ExecutiveActions.ExecutiveActionRevisionRows", "Create", executive, TestCodeVersion.Current));
+            db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.ExecutiveActions.ExecutiveActionRevisionRows", "Create", executive, TestCodeVersion.Current, null));
             await db.Database.OpenConnectionAsync();
             await db.Database.ExecuteSqlRawAsync("SET session_replication_role = replica");
             await db.SaveChangesAsync();

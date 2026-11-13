@@ -78,7 +78,7 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
         ArgumentNullException.ThrowIfNull(textSource);
         ArgumentException.ThrowIfNullOrWhiteSpace(textJobId);
         ArgumentNullException.ThrowIfNull(evidence);
-        return TransactionAsync(async (db, _) =>
+        return TransactionAsync(async (db, now) =>
         {
             await EnsureExtractionIsOfJobAsync(db, textJobId, evidence.ExtractionId, cancellationToken);
             var sourceId = textSource.FederalRegisterDocumentsSourceId;
@@ -87,16 +87,18 @@ public sealed partial class PostgresCollectionJobStore : IFederalRegisterAdmissi
                 ?? throw new InvalidDataException("Text job names a document that is not recorded.");
             if (document.NoticeUrl is not null || document.BodyHtmlUrl != evidence.BodyUrl)
                 throw new InvalidDataException("Text job names a correction notice or another URL than the pinned body URL of the document.");
-            if (!await db.Set<ExecutiveActionTextRow>().AnyAsync(row => row.SourceId == sourceId &&
+            if (await db.Set<ExecutiveActionTextRow>().AnyAsync(row => row.SourceId == sourceId &&
                     row.DocumentNumber == evidence.DocumentNumber, cancellationToken))
-                db.Add(new ExecutiveActionTextRow
-                {
-                    SourceId = sourceId,
-                    DocumentNumber = evidence.DocumentNumber,
-                    ExtractionId = evidence.ExtractionId,
-                    CharsTotal = evidence.Reading.CharsTotal,
-                    CharsRead = evidence.Reading.CharsRead
-                });
+                return 0;
+            db.Add(new ExecutiveActionTextRow
+            {
+                SourceId = sourceId,
+                DocumentNumber = evidence.DocumentNumber,
+                ExtractionId = evidence.ExtractionId,
+                CharsTotal = evidence.Reading.CharsTotal,
+                CharsRead = evidence.Reading.CharsRead
+            });
+            ExecutiveSummaryQueueRows.Add(db, document.RecordId, Ticks(now));
             return 0;
         }, cancellationToken);
     }

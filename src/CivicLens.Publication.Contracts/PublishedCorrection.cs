@@ -7,6 +7,7 @@ public sealed record PublishedCorrection
 {
     public const int MaximumNoteLength = 500;
     public const int MaximumNotedEntries = 20;
+    public const int MaximumEntries = MaximumNotedEntries * 3 + 2;
 
     public required int ReplacedRevisionNumber { get; init; }
     public required DateTimeOffset PublishedAtUtc { get; init; }

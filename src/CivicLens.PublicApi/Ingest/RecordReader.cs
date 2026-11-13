@@ -22,8 +22,14 @@ public static class RecordReader
         };
         if (indexed.Entry.RecordId != listed.RecordId || indexed.Entry.RevisionNumber != listed.RevisionNumber)
             throw new InvalidDataException("The record file does not match its manifest entry.");
+        return Finish(indexed, listed.BillLine);
+    }
+
+    /// <summary>Refuses a NUL character and gives an action its bill line, which is also its snippet text. The record files hold no bill line, so the manifest entry or the entry view gives it.</summary>
+    public static IndexedRecord Finish(IndexedRecord indexed, string? billLine)
+    {
         RequireNoNul(indexed);
-        return indexed with { Entry = indexed.Entry with { BillLine = listed.BillLine }, SnippetText = listed.BillLine ?? indexed.SnippetText };
+        return indexed with { Entry = indexed.Entry with { BillLine = billLine }, SnippetText = billLine ?? indexed.SnippetText };
     }
 
     // Postgres cannot store a NUL character in text or jsonb.
@@ -82,7 +88,8 @@ public static class RecordReader
         return Create(record.ToEntry(), [record.Reason, record.Quote], []);
     }
 
-    private static IndexedRecord Create(PublishedRecordEntry entry, string[] summary, string[] source, string? snippetText = null) =>
+    /// <summary>Applies the one text bound rule to the summary and source parts of a record, in order.</summary>
+    public static IndexedRecord Create(PublishedRecordEntry entry, string[] summary, string[] source, string? snippetText = null) =>
         new(entry, Bound(IndexedRecord.SummaryLimit, summary), Bound(IndexedRecord.SourceLimit, source), BoundSnippetText(snippetText));
 
     private static string? BoundSnippetText(string? text)

@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.AspNetCore.Builder;
@@ -43,7 +44,7 @@ internal sealed class ApiHost : IAsyncDisposable
             PublicViewsDatabase = new NpgsqlConnectionStringBuilder(operational) { Username = PublicRole, Password = PublicPassword }.ConnectionString
         };
         options = change?.Invoke(options) ?? options;
-        var app = PublicApiApp.Build(options, logProvider is null ? ["--logging:LogLevel:Default=None"] : [], site, turnstile, logProvider);
+        var app = PublicApiApp.Build(options, logProvider is null ? ["--logging:LogLevel:Default=None"] : [], new FeedReleaseSource(new ReleaseFeed(new HttpClient(site) { BaseAddress = options.ReleaseBaseUrl })), turnstile, logProvider);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();
         return new ApiHost(postgres, app, options, site, operational);

@@ -75,6 +75,7 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
         var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
+        await ExecutiveSummaryTexts.RequireBoundAsync(db, currents, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var current in currents) current.ValidateAgainst(extractions);
         return drafts.ToDictionary(draft => draft.RecordId,
@@ -86,12 +87,15 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
     internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, ExecutiveActionRevision revision,
-        CancellationToken cancellationToken) =>
-        revision.ValidateForApproval(await ReadExtractionsAsync(db, [revision], cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        ExecutiveSummaryApproval.Validate(revision, await ReadExtractionsAsync(db, [revision], cancellationToken));
+        await ExecutiveSummaryTexts.RequireBoundAsync(db, [revision], cancellationToken);
+    }
 
     private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<ExecutiveActionRevision> revisions, CancellationToken cancellationToken) =>
         PostgresDocumentExtractionStore.ReadManyAsync(db,
-            [.. revisions.SelectMany(revision => revision.Citations).Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)],
+            [.. revisions.SelectMany(revision => revision.Citations.Concat(revision.SummarySpans)).Select(span => span.ExtractionId).Distinct(StringComparer.Ordinal)],
             cancellationToken);
 }
