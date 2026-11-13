@@ -78,6 +78,30 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Executive actions", page.QuerySelectorAll(".public-breadcrumbs a")[1].TextContent);
     }
 
+    [Theory]
+    [InlineData("ExecutiveOrder", "What an executive order is", "An executive order is a signed direction from the President to federal agencies.", "Read it to see which agencies it directs and what they must do.")]
+    [InlineData("Proclamation", "What a proclamation is", "A proclamation is a formal statement from the President.", "Read the text to see what it announces or orders.")]
+    [InlineData("Memorandum", "What a memorandum is", "A memorandum is a written direction from the President.", "Read it to see who it directs and what they must do.")]
+    [InlineData("Notice", "What a presidential notice is", "A presidential notice is a document from the President that gives public information", "Read it to see what it announces.")]
+    public async Task TheExecutiveActionPageExplainsItsKindWithTheGlossaryMeaningAndEachKindShowsItsOwnReadHint(string kind, string heading, string sentence, string hint)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId)
+            + $"UPDATE executive_action_revisions SET kind = '{kind}';");
+
+        var page = await GetPageAsync(host, Path(ActionId));
+
+        var section = page.QuerySelector("section.executive-explain")!;
+        Assert.Equal(["official-fixed", "executive-explain"], section.ClassList.ToArray());
+        Assert.Equal(heading, section.QuerySelector("h2")!.TextContent);
+        var lead = (IElement)section.QuerySelector("p")!.Clone(true);
+        lead.QuerySelector(".term-popover")!.Remove();
+        Assert.StartsWith(sentence, lead.TextContent);
+        Assert.Equal(hint, section.QuerySelector("p.small")!.TextContent);
+        Assert.True(section.NextElementSibling!.ClassList.Contains("ai-summary"));
+    }
+
     [Fact]
     public async Task TheExecutiveActionPageMapsTypedTargetsInPositionOrderAndLinksOnlyActiveReleaseMatches()
     {

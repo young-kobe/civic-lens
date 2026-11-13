@@ -9,7 +9,7 @@ namespace CivicLens.PublicApi.Ingest;
 public sealed class ReleaseFeed(HttpClient http)
 {
     // Large enough for the biggest record file that the publisher can write.
-    public const int MaximumRecordBytes = 128 * 1024 * 1024;
+    public const int MaximumRecordBytes = 144 * 1024 * 1024;
 
     private EntityTagHeaderValue? entityTag;
     private DateTimeOffset? lastModified;

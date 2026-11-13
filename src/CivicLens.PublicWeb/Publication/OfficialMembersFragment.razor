@@ -1,0 +1,41 @@
+@using CivicLens.Publication.Contracts
+@* The private fragment of the official page section "Compare with your other members". It names one ZIP area, so no cache keeps it.
+   Its comparison is the rule of the Compare page: SharedVoteRows in the differences-only mode over the same ZIP snapshot. *@
+<div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress" data-issue="" data-view="official" data-official="@OfficialId" data-since-release="" data-new-votes="">
+    @if (seat is not null)
+    {
+        <p class="official-members-note">
+            @seat.Member!.Name is one of your members.
+            @if (others.Length > 0)
+            {
+                <text>Your other members: </text>@for (var index = 0; index < others.Length; index++)
+                {
+                    @(index == 0 ? "" : index == others.Length - 1 ? " and " : ", ")<a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(others[index].OfficialId)))">@others[index].Name</a>
+                }<text>. </text><a href="@(RootPath + "compare.html")">Compare all @(others.Length + 1)</a>
+            }
+        </p>
+        <ZipDistrictCountNote DistrictCount="Data.DistrictCount" />
+        @if (chamberMembers > 1)
+        {
+            <ChamberDifferences Data="Data" Chamber="seat.Chamber" RootPath="@RootPath" HeadingLevel="3" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string OfficialId { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private ZipMemberSeatData? seat;
+    private ZipMemberIdentityData[] others = [];
+    private int chamberMembers;
+
+    protected override void OnParametersSet()
+    {
+        seat = Data.Seats.FirstOrDefault(item => item.Member?.OfficialId == OfficialId);
+        others = [.. Data.Seats.Select(item => item.Member).OfType<ZipMemberIdentityData>().Where(member => member.OfficialId != OfficialId).DistinctBy(member => member.OfficialId)];
+        chamberMembers = seat is null ? 0 : Data.Seats.Where(item => item.Chamber == seat.Chamber).Select(item => item.Member).OfType<ZipMemberIdentityData>()
+            .DistinctBy(member => member.OfficialId).Count();
+    }
+}

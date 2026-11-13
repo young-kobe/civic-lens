@@ -252,6 +252,8 @@ try
         var actionDrafting = ActionDraftComposition.Create(analysisContexts, connectionString, codeVersion, jobs, apiResponses, textExtractor, issues,
             artifactRoot, BeatOf(WorkerLoopNames.ActionDrafting), loggers);
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
+        var executiveSummary = ExecutiveSummaryComposition.Create(analysisContexts, connectionString, codeVersion, BeatOf(WorkerLoopNames.ExecutiveSummary), loggers);
+        await using var executiveSummaryWakeup = executiveSummary.Wakeup;
         var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.RelationshipDrafting), loggers);
@@ -271,6 +273,7 @@ try
         await gate.RecordStartAsync(cancellation.Token);
         await statementDrafting.RecordStartAsync(cancellation.Token);
         await actionDrafting.RecordStartAsync(cancellation.Token);
+        await executiveSummary.RecordStartAsync(cancellation.Token);
         await voteDrafting.RecordStartAsync(cancellation.Token);
         await relationshipDrafting.RecordStartAsync(cancellation.Token);
         await briefDrafting.RecordStartAsync(cancellation.Token);
@@ -296,6 +299,7 @@ try
                 AnalysisStage.For(WorkerLoopNames.Gate, gate.Worker),
                 AnalysisStage.For(WorkerLoopNames.StatementDrafting, statementDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.ActionDrafting, actionDrafting.Worker),
+                AnalysisStage.For(WorkerLoopNames.ExecutiveSummary, executiveSummary.Worker),
                 AnalysisStage.For(WorkerLoopNames.VoteDrafting, voteDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.RelationshipDrafting, relationshipDrafting.Worker),
                 AnalysisStage.For(WorkerLoopNames.BriefDrafting, briefDrafting.Worker),
@@ -354,7 +358,7 @@ try
     {
         executing = true;
         return await ActionTextMeasureCommand.ExecuteAsync(args, () => ActionDraftComposition.CreateMeasure(codeVersion), Path.GetFullPath("artifacts"), Console.Out, TimeProvider.System,
-            cancellation.Token);
+            cancellation.Token, () => ExecutiveSummaryComposition.CreateMeasure(codeVersion));
     }
 
     if (ActionCommand.Matches(args))

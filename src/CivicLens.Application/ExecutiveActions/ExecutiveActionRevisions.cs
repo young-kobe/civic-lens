@@ -26,9 +26,19 @@ public static class ExecutiveActionRevisions
         { DispositionNotes = dispositionNotes };
     }
 
-    /// <summary>The next revision keeps the original facts and adds the notices.</summary>
+    /// <summary>The next revision keeps the original facts and the summary, and adds the notices. Code writes it, so it has the code author.</summary>
     public static ExecutiveActionRevision Add(ExecutiveActionRevision current, DateTimeOffset createdAtUtc, IEnumerable<ExecutiveActionNotice> notices) =>
-        current with { RevisionNumber = current.RevisionNumber + 1, CreatedAtUtc = createdAtUtc, Notices = Ordered([.. current.Notices, .. notices]) };
+        current with
+        {
+            RevisionNumber = current.RevisionNumber + 1,
+            AuthorSubject = ReviewAuthor.CodeSubject,
+            CreatedAtUtc = createdAtUtc,
+            Notices = Ordered([.. current.Notices, .. notices])
+        };
+
+    /// <summary>The next revision after the summary. The analysis worker writes it, and code approves it after the checks.</summary>
+    public static ExecutiveActionRevision AddSummary(ExecutiveActionRevision current, DateTimeOffset createdAtUtc, ExecutiveActionSummary summary) =>
+        current with { RevisionNumber = current.RevisionNumber + 1, AuthorSubject = ReviewAuthor.AnalysisSubject, CreatedAtUtc = createdAtUtc, Summary = summary };
 
     public static ExecutiveActionNotice NoticeOf(FederalRegisterEvidence correction)
     {

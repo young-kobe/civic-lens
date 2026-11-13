@@ -244,6 +244,38 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
+    public void AFailedMembersLookupHidesTheCompareSectionInsteadOfShowingAnErrorOnEveryOfficialPage()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+        var start = script.IndexOf("const initOfficialMembers", StringComparison.Ordinal);
+        var official = script[start..script.IndexOf("\n    };", start, StringComparison.Ordinal)];
+
+        Assert.Contains("hideOnFailure: true,", official, StringComparison.Ordinal);
+        Assert.Contains("if (hideOnFailure) { slot.replaceChildren(); onClear?.(); return; }", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ThePresidentPageAndTheActionPageGiveEachKindTheSameMeaning()
+    {
+        var kinds = Enum.GetValues<PublishedExecutiveActionKind>();
+        var president = await RenderAsync<PresidentPage>(President() with
+        {
+            Executive = new(kinds.Length, new(2025, 1, 20), new(2026, 11, 3),
+                [.. kinds.Select((kind, index) => new OfficialExecutiveType(kind, 1, [new(new string((char)('1' + index), 64), "Title", new(2026, 10, 22))]))])
+        });
+
+        foreach (var kind in kinds)
+        {
+            var action = await RenderAsync<ExecutiveActionDetailPage>(new ExecutiveActionPageData(1, new string('9', 64), 1, "Title", kind, "2026-1",
+                new(2026, 10, 20), new(2026, 10, 22), "91 FR 1", "https://www.federalregister.gov/d/2026-1", "p4", "Eve East", [], []));
+            var explainer = (IElement)action.QuerySelector("section.executive-explain p")!.Clone(true);
+            explainer.QuerySelector(".term-popover")!.Remove();
+
+            Assert.Equal(explainer.TextContent, president.QuerySelector($"#{OfficialPageText.ExecutiveAnchor(kind)} .official-lede")!.TextContent);
+        }
+    }
+
+    [Fact]
     public async Task PresidentRowsShowTheTypeTheSignedDateAndLinkToTheRecord()
     {
         var page = await RenderAsync<PresidentPage>(President());
@@ -335,12 +367,11 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public async Task FixedPageCopyReadsAtOrBelowTheSharedGradeLimit()
     {
-        var passages = new[]
-        {
+        string[] passages =
+        [
             OfficialPageText.LinkMeaning, OfficialPageText.NoLinks, OfficialPageText.BillCountsUnavailable, OfficialPageText.ExecutiveBox,
-            OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.ExecutiveOrder), OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.Proclamation),
-            OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.Notice), OfficialPageText.ExecutiveMeaning(PublishedExecutiveActionKind.Memorandum)
-        };
+            .. Enum.GetValues<PublishedExecutiveActionKind>().Select(ExecutiveActionWords.ExplainerText)
+        ];
 
         foreach (var passage in passages)
             Assert.True(ReadingGrade.RoundedPassage([passage]) <= ReadingGrade.MaximumGrade, $"\"{passage}\" reads above the limit.");
@@ -485,7 +516,7 @@ public sealed class OfficialProfilePageTests
         return pattern.Contains("--s", StringComparison.Ordinal) ? new[] { 0, 4, 8, 12, 16, 24, 32, 48 }[value] : value;
     }
 
-    private static async Task<IDocument> RenderAsync<TComponent>(OfficialPageData data) where TComponent : IComponent
+    private static async Task<IDocument> RenderAsync<TComponent>(object data) where TComponent : IComponent
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
