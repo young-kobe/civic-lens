@@ -100,6 +100,14 @@
                             <dt>Checked</dt>
                             <dd>@Moment.Full(checkedAt). First published @Moment.Full(firstPublished).</dd>
                         }
+                        @if (!string.IsNullOrWhiteSpace(Data.Summary))
+                        {
+                            @foreach (var fact in PublishedRecordLabels.Wording(Data.TextOrigin))
+                            {
+                                <dt>@fact.Label</dt>
+                                <dd>@fact.Value</dd>
+                            }
+                        }
                         <dt>Official bill page</dt>
                         <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>
                         <dt>Revision</dt>
