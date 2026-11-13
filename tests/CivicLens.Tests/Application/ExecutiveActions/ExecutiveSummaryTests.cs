@@ -179,6 +179,20 @@ public sealed class ExecutiveSummaryTests
     }
 
     [Fact]
+    public async Task OneAnswerWithAPhraseInTwoSentencesCountsAsOnePhraseRejection()
+    {
+        var model = new FakeExecutiveSummaryModel()
+            .Draft(Output(("This order aims to speed up the review of each import rule.", FirstQuote), ("The Secretary seeks to report the results to the President by March 1, 2025.", SecondQuote)))
+            .Draft(Good());
+
+        var report = await MeasureAsync(model);
+
+        var bill = Assert.Single(report.Bills);
+        Assert.Equal((ActionTextMeasureOutcome.Accepted, 2, 1), (bill.Outcome, bill.Calls, bill.PhraseRejections));
+        Assert.Equal(2, bill.Rejections.Count(ExecutiveSummaryPhrases.IsReason));
+    }
+
+    [Fact]
     public async Task AnAnswerWithAPhraseAfterTheRepairPassIsRejectedAndNoSummaryIsAccepted()
     {
         var bad = Output(("This order seeks to speed up the review of each import rule.", FirstQuote), (SecondSentence, SecondQuote));
