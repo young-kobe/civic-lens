@@ -20,7 +20,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(params SeededVote[] votes)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         return host;

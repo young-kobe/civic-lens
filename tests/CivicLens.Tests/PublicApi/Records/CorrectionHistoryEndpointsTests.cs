@@ -16,7 +16,7 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task RouteUsesRecordKindValidationAndDistinguishesMissingReleaseFromUnpublishedRecords()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         foreach (var kind in Enum.GetValues<PublishedRecordKind>())
         {
             var recordId = kind == PublishedRecordKind.DocumentChange ? new string('b', 32) : Id;
@@ -57,7 +57,7 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task DetailKeepsBoundHistoryOrderAndTimestampOffsetAndFailsClosedOnDigestMismatch()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch);
         var corrections = MaximumHistory();
         var historyId = PublishedCorrectionHistoryIdentity.Of(corrections);

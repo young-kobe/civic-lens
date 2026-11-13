@@ -8,7 +8,6 @@ namespace CivicLens.PublicApi;
 
 public sealed record PublicApiOptions
 {
-    public const string ReleaseBaseUrlVariable = "CIVIC_LENS_RELEASE_BASE_URL";
     public const string DatabaseVariable = "CIVIC_LENS_SEARCH_DATABASE";
     public const string PublicViewsDatabaseVariable = "CIVIC_LENS_PUBLIC_VIEWS_DATABASE";
     public const int PublicViewsPoolSize = 4;
@@ -23,7 +22,6 @@ public sealed record PublicApiOptions
     public const string BrowserApiUrlVariable = "CIVIC_LENS_PUBLIC_API_URL";
     public const string ReportPullTokenVariable = "CIVIC_LENS_REPORT_PULL_TOKEN";
 
-    public required Uri ReleaseBaseUrl { get; init; }
     public required string Database { get; init; }
     /// <summary>The connection of the role <c>civic_lens_public</c> to the operational database. Only the views of <c>public_api</c> are readable through it.</summary>
     public required string PublicViewsDatabase { get; init; }
@@ -61,7 +59,6 @@ public sealed record PublicApiOptions
 
     public static PublicApiOptions FromEnvironment() => new()
     {
-        ReleaseBaseUrl = Directory(Required(ReleaseBaseUrlVariable)),
         Database = Required(DatabaseVariable),
         PublicViewsDatabase = Required(PublicViewsDatabaseVariable),
         PublicBaseUrl = PublicBaseUrl.Parse(Environment.GetEnvironmentVariable(PublicBaseUrlVariable), PublicBaseUrlVariable),
@@ -92,9 +89,6 @@ public sealed record PublicApiOptions
         : ReaderReportProtocol.IsPullToken(token)
             ? token
             : throw new ArgumentException($"{ReportPullTokenVariable} must hold at least {ReaderReportProtocol.MinimumPullTokenCharacters} characters.");
-
-    /// <summary>Gives a base address that ends with a slash, so relative release paths resolve under it.</summary>
-    public static Uri Directory(string url) => new(url.EndsWith('/') ? url : url + "/", UriKind.Absolute);
 
     private static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value
         ? value

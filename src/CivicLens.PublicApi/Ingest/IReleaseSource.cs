@@ -14,11 +14,8 @@ public sealed record RecordBatch(IReadOnlyList<IndexedRecord> Records, IReadOnly
 /// <summary>The boundary of the ingest to the published data. <see cref="TypedReleaseSource"/> reads the <c>public_api</c> views.</summary>
 public interface IReleaseSource
 {
-    /// <summary>Opens one read of the release to ingest. Null means that nothing changed since the last stored release.</summary>
-    Task<IReleaseRead?> ReadChangedAsync(CancellationToken cancellationToken);
-
-    /// <summary>Tells the source that the release is stored, so it may skip an unchanged release next time.</summary>
-    void Stored();
+    /// <summary>Opens one read of the active release. Null means that no release is active.</summary>
+    Task<IReleaseRead?> ReadActiveAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>One open read of a release. The release, its list and its records all come from the same published state, so a later release cannot mix into them.</summary>

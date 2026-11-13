@@ -17,9 +17,7 @@ public sealed class ReleaseEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task TheReleaseEndpointAnswersFromTheViewsAndNotFromTheSearchIndexBecauseTheTwoCanDifferAfterAPublish()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
-        await using var host = await ApiHost.StartAsync(postgres, site);
+        await using var host = await ApiHost.StartAsync(postgres, publish: site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 7, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote with { FirstRelease = 7 });
@@ -32,7 +30,7 @@ public sealed class ReleaseEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task AnActiveReleaseWithNoRecordsStillHasAnIdentity()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero), recordCount: 0);
 
         var release = await host.Client.GetFromJsonAsync<ReleaseInfo>("/v1/release", PublicationProtocol.JsonOptions);
@@ -43,7 +41,7 @@ public sealed class ReleaseEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task EmptyRecordListsKeepTheActiveReleaseAndTrueAbsenceStillReturnsNotFound()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 12, 30, 0, TimeSpan.Zero), recordCount: 0);
 
         foreach (var (path, collection) in new[]
@@ -69,7 +67,7 @@ public sealed class ReleaseEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task TheReleaseEndpointFollowsARollbackAtOnce()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, new DateTimeOffset(2026, 6, 9, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
@@ -85,7 +83,7 @@ public sealed class ReleaseEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task WithNoActiveReleaseTheReleaseEndpointAnswers503()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await host.Client.GetAsync("/v1/release")).StatusCode);
     }

@@ -53,7 +53,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartWithBillsAsync(params SeededBill[] bills)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills);
         return host;
@@ -435,7 +435,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task WithNoActiveReleaseTheListAnswers503AndALookupAnswers404()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         var id = new string('e', 64);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await host.Client.GetAsync("/v1/bills")).StatusCode);

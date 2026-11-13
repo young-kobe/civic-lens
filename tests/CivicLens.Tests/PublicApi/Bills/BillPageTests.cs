@@ -31,7 +31,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(SeededOfficial? thirdMember = null)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, Bill);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"), PartySwitcher(), thirdMember ?? Official("p3", "Bob Three", "Republican"),
@@ -144,7 +144,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
     [Fact]
     public async Task ABillOnlyIntroducedInTheSenateShowsNoGapNoteAndNoVotesSection()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('b', "2026-03-02") { BillType = "s", BillNumber = 9, Sponsorships = [new("p1", "Sponsor", "2026-03-02")] });
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"));

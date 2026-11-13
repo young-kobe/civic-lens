@@ -153,14 +153,14 @@ public sealed class PartyAgreementEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task NoActiveReleaseAnswersServiceUnavailable()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         using var response = await host.Client.GetAsync("/v1/party-agreement?chamber=house&congress=119");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
     private async Task<ApiHost> StartAsync(params SeededVote[] votes)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         return host;

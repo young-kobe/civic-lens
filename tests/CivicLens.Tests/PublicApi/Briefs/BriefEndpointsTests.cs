@@ -16,7 +16,7 @@ public sealed class BriefEndpointsTests(PostgresCollection postgres)
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public async Task InvalidAndMissingBriefsAnswerNotFound(string recordId)
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         using var response = await host.Client.GetAsync("/v1/briefs/" + recordId);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -24,7 +24,7 @@ public sealed class BriefEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task EndpointReturnsOrderedTextWithPinnedTargetHeadlinesAndRollbackRestoresAWithdrawnBrief()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await PublishedBriefContentSeed.SeedAsync(host.OperationalDatabase);
 
         using var response = await host.Client.GetAsync("/v1/briefs/" + BriefFixtures.RecordId);
