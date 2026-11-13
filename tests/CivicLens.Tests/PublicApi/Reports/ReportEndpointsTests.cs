@@ -15,15 +15,13 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     private static readonly string RecordId = new('a', 64);
     private const string PullToken = "0123456789abcdef0123456789abcdef";
 
-    private async Task<ApiHost> StartAsync(FakeTurnstile turnstile, Func<PublicApiOptions, PublicApiOptions>? change = null, FakeReleaseSite? site = null)
+    private async Task<ApiHost> StartAsync(FakeTurnstile turnstile, Func<PublicApiOptions, PublicApiOptions>? change = null)
     {
-        site ??= new FakeReleaseSite();
-        if (site.Requests.Count == 0) site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
-        var host = await ApiHost.StartAsync(postgres, site, options =>
+        var host = await ApiHost.StartAsync(postgres, options =>
         {
             options = options with { Turnstile = new("secret", FakeTurnstile.Hostname), ReportPullToken = PullToken };
             return change?.Invoke(options) ?? options;
-        }, turnstile);
+        }, turnstile, publish: site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap")));
         await host.WaitForReleaseAsync();
         return host;
     }
@@ -123,10 +121,8 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task AReportOnAReplacedRevisionIsAcceptedBecauseTheReaderMayHoldAnOldPage()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
-        await using var host = await StartAsync(new FakeTurnstile(), options => options with { PollInterval = TimeSpan.FromMilliseconds(100) }, site);
-        site.Publish(2, PublishedSamples.Statement('a', "Rent cap", revision: 2));
+        await using var host = await StartAsync(new FakeTurnstile(), options => options with { PollInterval = TimeSpan.FromMilliseconds(100) });
+        await host.Site.PublishAsync(2, PublishedSamples.Statement('a', "Rent cap", revision: 2));
         await host.WaitForReleaseAsync(2);
 
         var response = await PostAsync(host, revision: "1");

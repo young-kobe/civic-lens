@@ -1,4 +1,3 @@
-using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.AspNetCore.Builder;
@@ -7,7 +6,10 @@ using Npgsql;
 
 namespace CivicLens.Tests.PublicApi;
 
-/// <summary>The search service on a loopback port over an empty database, reading a fake release site. The vote routes read a migrated operational database through the login of the public role.</summary>
+/// <summary>
+/// The search service on a loopback port over an empty search database. The ingest and the read routes read a migrated operational database through the login of the public role.
+/// <see cref="Site"/> publishes releases into that database.
+/// </summary>
 internal sealed class ApiHost : IAsyncDisposable
 {
     private readonly PostgresCollection postgres;
@@ -16,7 +18,7 @@ internal sealed class ApiHost : IAsyncDisposable
     private const string PublicRole = "civic_lens_public";
     private const string PublicPassword = "test-only-password";
 
-    private ApiHost(PostgresCollection postgres, WebApplication app, PublicApiOptions options, FakeReleaseSite site, string operationalDatabase)
+    private ApiHost(PostgresCollection postgres, WebApplication app, PublicApiOptions options, TypedReleaseSite site, string operationalDatabase)
     {
         OperationalDatabase = operationalDatabase;
         this.postgres = postgres;
@@ -27,24 +29,25 @@ internal sealed class ApiHost : IAsyncDisposable
     }
 
     public PublicApiOptions Options { get; }
-    public FakeReleaseSite Site { get; }
+    public TypedReleaseSite Site { get; }
     public HttpClient Client { get; }
     /// <summary>The operational database as its owner, for a test to seed the published records that the views show.</summary>
     public string OperationalDatabase { get; }
 
-    public static async Task<ApiHost> StartAsync(PostgresCollection postgres, FakeReleaseSite site, Func<PublicApiOptions, PublicApiOptions>? change = null,
-        HttpMessageHandler? turnstile = null, ILoggerProvider? logProvider = null)
+    /// <summary>Starts the service. <paramref name="publish"/> publishes releases before the start, so the first ingest tick finds them.</summary>
+    public static async Task<ApiHost> StartAsync(PostgresCollection postgres, Func<PublicApiOptions, PublicApiOptions>? change = null,
+        HttpMessageHandler? turnstile = null, ILoggerProvider? logProvider = null, Func<TypedReleaseSite, Task>? publish = null)
     {
         var operational = await postgres.CreateMigratedDatabaseAsync();
-        await ExecuteAsync(operational, $"ALTER ROLE {PublicRole} LOGIN PASSWORD '{PublicPassword}'");
+        var site = new TypedReleaseSite(operational);
+        if (publish is not null) await publish(site);
         var options = new PublicApiOptions
         {
-            ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
             Database = await postgres.CreateEmptyDatabaseAsync(),
-            PublicViewsDatabase = new NpgsqlConnectionStringBuilder(operational) { Username = PublicRole, Password = PublicPassword }.ConnectionString
+            PublicViewsDatabase = await LogInPublicRoleAsync(operational)
         };
         options = change?.Invoke(options) ?? options;
-        var app = PublicApiApp.Build(options, logProvider is null ? ["--logging:LogLevel:Default=None"] : [], new FeedReleaseSource(new ReleaseFeed(new HttpClient(site) { BaseAddress = options.ReleaseBaseUrl })), turnstile, logProvider);
+        var app = PublicApiApp.Build(options, logProvider is null ? ["--logging:LogLevel:Default=None"] : [], turnstile, logProvider);
         app.Urls.Add("http://127.0.0.1:0");
         await app.StartAsync();
         return new ApiHost(postgres, app, options, site, operational);
@@ -82,9 +85,18 @@ internal sealed class ApiHost : IAsyncDisposable
         await app.StopAsync();
         await app.DisposeAsync();
         await postgres.DropDatabaseAsync(Options.Database);
-        await ExecuteAsync(OperationalDatabase, $"ALTER ROLE {PublicRole} NOLOGIN PASSWORD NULL");
+        await LogOutPublicRoleAsync(OperationalDatabase);
         await postgres.DropDatabaseAsync(OperationalDatabase);
     }
+
+    /// <summary>Lets the role <c>civic_lens_public</c> log in and gives its connection to the operational database. The role belongs to the cluster, so each test logs it out again.</summary>
+    public static async Task<string> LogInPublicRoleAsync(string operationalDatabase)
+    {
+        await ExecuteAsync(operationalDatabase, $"ALTER ROLE {PublicRole} LOGIN PASSWORD '{PublicPassword}'");
+        return new NpgsqlConnectionStringBuilder(operationalDatabase) { Username = PublicRole, Password = PublicPassword }.ConnectionString;
+    }
+
+    public static Task LogOutPublicRoleAsync(string operationalDatabase) => ExecuteAsync(operationalDatabase, $"ALTER ROLE {PublicRole} NOLOGIN PASSWORD NULL");
 
     private static async Task ExecuteAsync(string connectionString, string sql)
     {

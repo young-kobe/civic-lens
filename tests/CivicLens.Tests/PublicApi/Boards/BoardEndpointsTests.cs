@@ -96,7 +96,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task AValidEmptyReleaseReturnsFourKnownEmptyBoardsAndTwoExplicitNullAgreements()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero), 0);
 
         using var answer = await GetAsync(host);
@@ -156,7 +156,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task NoActiveReleaseAnswersServiceUnavailable()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         using var response = await host.Client.GetAsync("/v1/boards");
 
@@ -165,7 +165,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(BoardVote[] votes, bool pinParties = true, bool writeAlignment = true, bool serverPages = false)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => serverPages
+        var host = await ApiHost.StartAsync(postgres, options => serverPages
             ? options with { PublicBaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test") }
             : options);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));

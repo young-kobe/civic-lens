@@ -33,7 +33,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
 
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         var database = host.OperationalDatabase;
         await ViewsSeed.ActivateReleaseAsync(database, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await OfficialsSeed.AddOfficialsAsync(database, Officials);

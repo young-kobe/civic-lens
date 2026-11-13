@@ -16,7 +16,7 @@ public sealed class VoteMembersEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartWithVotesAsync(params SeededVote[] votes)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         return host;

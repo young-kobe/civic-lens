@@ -31,7 +31,7 @@ public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartWithVotesAsync(params SeededVote[] votes)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         return host;
@@ -288,7 +288,7 @@ public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task WithNoActiveReleaseTheListAnswers503AndALookupAnswers404()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await host.Client.GetAsync("/v1/votes")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync($"/v1/votes/{new string('e', 64)}")).StatusCode);

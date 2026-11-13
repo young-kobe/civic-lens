@@ -8,9 +8,5 @@ namespace CivicLens.PublicApi.Ingest;
 /// </summary>
 public sealed class TypedReleaseSource(RecordSnapshot snapshot) : IReleaseSource
 {
-    public async Task<IReleaseRead?> ReadChangedAsync(CancellationToken cancellationToken) => await TypedReleaseRead.OpenAsync(snapshot, cancellationToken);
-
-    public void Stored()
-    {
-    }
+    public async Task<IReleaseRead?> ReadActiveAsync(CancellationToken cancellationToken) => await TypedReleaseRead.OpenAsync(snapshot, cancellationToken);
 }
