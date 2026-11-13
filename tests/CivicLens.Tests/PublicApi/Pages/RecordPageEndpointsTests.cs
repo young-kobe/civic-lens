@@ -110,8 +110,8 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, Path(saved.DraftId));
 
         Assert.Equal("Headline", page.QuerySelector("h1")!.TextContent);
-        Assert.Equal("seven", page.QuerySelector(".redline del")!.TextContent.Replace("Removed: ", ""));
-        Assert.Equal("three", page.QuerySelector(".redline ins")!.TextContent.Replace("Added: ", ""));
+        Assert.Equal("seven", page.QuerySelector(".redline del")!.TextContent);
+        Assert.Equal("three", page.QuerySelector(".redline ins")!.TextContent);
         Assert.Equal(["Book a tour seven days before.", "Book a tour three days before."], page.QuerySelectorAll("#source .doc-text").Select(text => text.TextContent));
     }
 
