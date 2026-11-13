@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CivicLens.Application.ExecutiveActions;
 using CivicLens.Core.Documents;
 using CivicLens.Core.ExecutiveActions;
@@ -40,14 +41,26 @@ internal sealed class PublishedExecutiveActionBuilder(PublishedRecordRules rules
                 PublishedOn = notice.PublishedOn,
                 Url = notice.Url
             })],
-            Sources = PublishedRecordRules.Sources(revision.Citations, extractions),
+            Sources = PublishedRecordRules.Sources(revision.Citations.Concat(revision.SummarySpans), extractions),
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
-            Corrections = corrections
+            Corrections = corrections,
+            Summary = revision.Summary is { } summary ? SummaryOf(summary, extractions) : null
         };
         record.Validate();
         return record;
     }
+
+    private static PublishedExecutiveSummary SummaryOf(ExecutiveActionSummary summary, ImmutableDictionary<string, DocumentExtraction> extractions) => new()
+    {
+        TextOrigin = PublishedRecordRules.TextOriginOf(summary.TextOrigin),
+        Cut = summary.Cut,
+        Sentences = [.. summary.Sentences.Select(sentence => new PublishedExecutiveSentence
+        {
+            Sentence = sentence.Sentence,
+            Citation = PublishedRecordRules.Cite(sentence.Quote, extractions[sentence.Quote.ExtractionId])
+        })]
+    };
 
     private static PublishedExecutiveActionKind KindOf(ExecutiveActionKind kind) => kind switch
     {

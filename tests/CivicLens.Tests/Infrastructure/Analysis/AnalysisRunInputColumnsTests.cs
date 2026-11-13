@@ -17,7 +17,7 @@ public sealed class AnalysisRunInputColumnsTests(PostgresCollection postgres) : 
     private const string Table = "document_change_analysis_runs";
     private static readonly string[] RunTables =
     [
-        "action_analysis_runs", "brief_analysis_runs", "document_change_analysis_runs", "relationship_analysis_runs",
+        "action_analysis_runs", "brief_analysis_runs", "document_change_analysis_runs", "exec_summary_analysis_runs", "relationship_analysis_runs",
         "statement_analysis_runs", "vote_analysis_runs"
     ];
     private static readonly string SystemHash = AnalysisRunInput.TextHash("System.");

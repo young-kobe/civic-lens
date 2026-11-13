@@ -21,7 +21,7 @@ internal sealed class SearchWorld : IAsyncDisposable
         Options = options;
         writer = NpgsqlDataSource.Create(options.Database);
         reader = NpgsqlDataSource.Create(options.ReaderDatabase);
-        Ingest = new ReleaseIngest(new ReleaseFeed(new HttpClient(Site) { BaseAddress = options.ReleaseBaseUrl }), writer);
+        Ingest = new ReleaseIngest(new FeedReleaseSource(new ReleaseFeed(new HttpClient(Site) { BaseAddress = options.ReleaseBaseUrl })), writer);
         Index = new SearchIndex(reader);
         Reports = new ReportStore(writer, options);
     }

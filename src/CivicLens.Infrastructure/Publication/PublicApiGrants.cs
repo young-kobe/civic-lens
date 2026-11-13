@@ -85,7 +85,9 @@ internal static class PublicApiGrants
         GRANT SELECT (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks) ON release_bill_statuses TO civic_lens_public_owner;
         GRANT SELECT (release_number, vote_record_id, bill_record_id) ON release_vote_bills TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, kind, document_number, signed_on, published_on, federal_register_citation, document_url,
-            person_id, president_name, title, presidential_number, disposition_notes, disposition_notes_extraction_id) ON executive_action_revisions TO civic_lens_public_owner;
+            person_id, president_name, title, presidential_number, disposition_notes, disposition_notes_extraction_id,
+            summary_text_origin, summary_cut) ON executive_action_revisions TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, "position", sentence) ON executive_action_revision_summary_sentences TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", citation_extraction_id) ON executive_action_revision_facts TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", relation, kind, number, reference_start, reference_length)
             ON executive_action_revision_disposition_targets TO civic_lens_public_owner;
@@ -122,6 +124,11 @@ internal static class PublicApiGrants
         GRANT SELECT (detail_job_id, projection_version, position, action_date, action_time, text, type, action_code, source_system_code, source_system_name)
             ON published_bill_history_actions TO civic_lens_public_owner;
 
+        GRANT SELECT (release_number, kind, record_id, revision_number, history_id) ON release_correction_histories TO civic_lens_public_owner;
+        GRANT SELECT (history_id, encoding_version, correction_count) ON published_correction_histories TO civic_lens_public_owner;
+        GRANT SELECT (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged)
+            ON published_correction_history_entries TO civic_lens_public_owner;
+
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
         GRANT SELECT ON public_api.active_records, public_api.active_release, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
             public_api.bills, public_api.bill_key_terms, public_api.bill_actions, public_api.bill_sponsorships, public_api.bill_sponsorship_parties, public_api.briefs, public_api.brief_paragraphs, public_api.brief_citations, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
@@ -129,9 +136,11 @@ internal static class PublicApiGrants
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
             public_api.official_party_lines, public_api.official_issue_counts, public_api.official_executive_actions,
             public_api.bill_status, public_api.record_headlines, public_api.record_links, public_api.vote_facts,
-            public_api.executive_actions, public_api.executive_action_notices, public_api.executive_action_targets, public_api.withdrawals, public_api.withdrawal_corrections,
+            public_api.executive_actions, public_api.executive_action_notices, public_api.executive_action_targets,
+            public_api.executive_action_summaries, public_api.executive_action_summary_sentences, public_api.withdrawals, public_api.withdrawal_corrections,
             public_api.vote_first_publications, public_api.vote_party_tallies, public_api.vote_evidence, public_api.vote_sources, public_api.release_issue_party_lineups,
-            public_api.release_bill_counts, public_api.release_official_bill_counts TO civic_lens_public;
+            public_api.release_bill_counts, public_api.release_official_bill_counts, public_api.record_correction_histories,
+            public_api.record_correction_history_entries TO civic_lens_public;
         GRANT SELECT ON public_api.statements, public_api.statement_speakers, public_api.statement_approvers TO civic_lens_public;
         GRANT SELECT ON public_api.statement_sources, public_api.statement_quotations TO civic_lens_public;
         GRANT SELECT ON public_api.document_changes, public_api.document_change_officials, public_api.document_change_sources,

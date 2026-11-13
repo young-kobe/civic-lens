@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.ExecutiveActions;
 
-/// <summary>Reads the views <c>public_api.executive_actions</c>, <c>public_api.executive_action_notices</c>, and <c>public_api.executive_action_targets</c>. One statement reads the record, its notices, and its targets, so all come from one release.</summary>
+/// <summary>Reads the views <c>public_api.executive_actions</c>, <c>public_api.executive_action_notices</c>, <c>public_api.executive_action_targets</c>, and <c>public_api.executive_action_summaries</c> with its sentences. One statement reads the record, its notices, its targets, and its summary, so all come from one release.</summary>
 public sealed class ExecutiveActionStore(NpgsqlDataSource views)
 {
     private const int MaximumTargets = 100;
@@ -23,8 +23,13 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
                            'targetRecordId', t.target_record_id) ORDER BY t."position")
                   FROM (SELECT t.* FROM public_api.executive_action_targets t
                          WHERE t.record_id = e.record_id AND t.revision_number = e.revision_number
-                         ORDER BY t."position" LIMIT @target_limit) t)
+                         ORDER BY t."position" LIMIT @target_limit) t),
+               m.text_origin, m.label, m.cut,
+               (SELECT json_agg(s.sentence ORDER BY s."position")
+                  FROM public_api.executive_action_summary_sentences s
+                 WHERE s.record_id = e.record_id AND s.revision_number = e.revision_number)
           FROM public_api.executive_actions e
+          LEFT JOIN public_api.executive_action_summaries m ON m.record_id = e.record_id AND m.revision_number = e.revision_number
          WHERE e.record_id = @id
         """;
 
@@ -48,7 +53,17 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
             throw new InvalidDataException("Published executive references exceed their maximum count.");
         return new(reader.GetInt32(0), ReadRow(reader), notices,
             [.. targets.Select(target => new ExecutiveActionTargetRow(target.Position, target.Relation, target.Kind, target.Number,
-                ReferenceAt(notes, target), target.TargetRecordId))]);
+                ReferenceAt(notes, target), target.TargetRecordId))], ReadSummary(reader));
+    }
+
+    /// <summary>The summary of the revision, or null when it has none. Sentences without a summary row, or a summary with an out of range count, are a view fault.</summary>
+    private static ExecutiveActionSummaryRow? ReadSummary(NpgsqlDataReader reader)
+    {
+        if (reader.IsDBNull(15)) return null;
+        var sentences = reader.IsDBNull(18) ? [] : JsonSerializer.Deserialize<string[]>(reader.GetString(18), PublicationProtocol.JsonOptions) ?? [];
+        if (sentences.Length is < PublishedExecutiveSummary.MinimumSentences or > PublishedExecutiveSummary.MaximumSentences)
+            throw new InvalidDataException("A published executive action summary has an out of range number of sentences.");
+        return new(ViewColumns.Enum<PublishedTextOrigin>(reader, 15), ViewColumns.Text(reader, 16), reader.GetBoolean(17), sentences);
     }
 
     private static string? ReferenceAt(string? notes, TargetSpan target)
