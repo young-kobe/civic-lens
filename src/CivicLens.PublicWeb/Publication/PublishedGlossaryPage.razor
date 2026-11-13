@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="PublicSection.Glossary" CanonicalPath="@PublicationProtocol.GlossaryPagePath" Title="Glossary" Description="@Glossary.PageDescription">
+<PublicPage Section="PublicSection.Glossary" CanonicalPath="@PublicationProtocol.GlossaryPagePath" Title="Glossary" Description="@Glossary.PageDescription" RootPath="@RootPath">
     <PageHeader Title="Glossary" />
     <Panel Title="Index of terms" Padded="true">
         <nav class="glossary-index" aria-label="@Glossary.IndexLabel">
@@ -73,6 +73,9 @@
 </PublicPage>
 
 @code {
+    /// <summary>The public site root of a server page. The static release leaves it empty, so its links stay relative.</summary>
+    [Parameter] public string RootPath { get; set; } = string.Empty;
+
     private static readonly IReadOnlyList<GlossaryIndexGroup> IndexGroups = BuildIndexGroups();
 
     private static IReadOnlyList<GlossaryIndexGroup> BuildIndexGroups()
