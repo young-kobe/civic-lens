@@ -114,7 +114,7 @@ public sealed class ExecutiveActionDetailPageTests
         Assert.Equal(["The order tells agencies to act.", "Each agency reports in 30 days."], quotes.QuerySelectorAll(".choice-label").Select(label => label.TextContent));
         Assert.Equal(["Each agency shall act on this order.", "Each agency shall report within 30 days."], quotes.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
         Assert.Equal(Body.Url, quotes.QuerySelector("a")!.GetAttribute("href"));
-        Assert.DoesNotContain("Unread body words", page.TextContent);
+        Assert.DoesNotContain("Unread body words", page.Body!.TextContent);
         Assert.DoesNotContain(ExecutiveSummaryWords.CutNote, quotes.TextContent);
     }
 
