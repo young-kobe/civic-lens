@@ -155,7 +155,7 @@ public sealed class PublicPageReadingGradeTests
 
     private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND"];
     private static readonly string[] HeadingTags = ["H1", "H2", "H3", "H4", "H5", "H6"];
-    private const string RecordDataSelector = "script, style, tbody, pre, blockquote, .ai-summary > p, .document-text, .source-text, option";
+    private const string RecordDataSelector = "script, style, tbody, pre, blockquote, .ai-summary > p:not([class]), .document-text, .source-text, option";
     private const int MinimumPassageWords = 6;
 
     /// <summary>The fixed text of a page: each block of at least <see cref="MinimumPassageWords"/> words that holds no record data. The first block under a heading
@@ -185,17 +185,23 @@ public sealed class PublicPageReadingGradeTests
     private const string BillCrsSource = "From the Congressional Research Service summary.";
     private const string CodeWordingLabel = "Written automatically from Congress.gov data, with no AI";
 
-    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below. The all-pages test expects exactly these and no others,
-    /// so a new hard passage fails it and a fixed one prompts removal here.</summary>
+    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below. The all-pages test expects exactly these and
+    /// <see cref="OpenQuestionPassages"/> and no others, so a new hard passage fails it and a fixed one prompts removal here.</summary>
     private static readonly Dictionary<string, double> OwnerKeptPassages = new()
     {
         [PresidentialNoticeMeaning] = 12.3,
-        [BillCrsSource] = 12.3,
+        [BillCrsSource] = 12.3
+    };
+
+    /// <summary>Fixed passages that read above the limit and wait for an owner decision in the open questions of PR #532. Each stays a known failure until the owner keeps it,
+    /// which moves it to <see cref="OwnerKeptPassages"/>, or changes its words, which removes it here.</summary>
+    private static readonly Dictionary<string, double> OpenQuestionPassages = new()
+    {
         [CodeWordingLabel] = 12.6
     };
 
     [Fact]
-    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptThePassagesTheOwnerKept()
+    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptTheKeptAndOpenPassages()
     {
         var failures = new Dictionary<string, double>();
         foreach (var (name, render, recordData) in await ServerPagesAsync())
@@ -209,7 +215,7 @@ public sealed class PublicPageReadingGradeTests
             }
         }
 
-        Assert.Equal(OwnerKeptPassages.OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
+        Assert.Equal(OwnerKeptPassages.Concat(OpenQuestionPassages).OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
     }
 
     [Fact]
@@ -230,9 +236,6 @@ public sealed class PublicPageReadingGradeTests
 
     [Fact(Skip = "The owner kept this text on 2026-11-13: \"From the Congressional Research Service summary.\" reads at grade 12.3 when it stands alone on the bill page.")]
     public void TheBillSummarySourceNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(BillCrsSource);
-
-    [Fact(Skip = "Owner question: the label \"Written automatically from Congress.gov data, with no AI\" reads at grade 12.6 when it stands alone.")]
-    public void TheCodeWordingLabelReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(CodeWordingLabel);
 
     private static void AssertReadable(string passage)
     {
@@ -267,19 +270,31 @@ public sealed class PublicPageReadingGradeTests
         };
         var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3), PublishedChamber.House, "Published headline", null, "Published summary",
             PublishedTextOrigin.Model, "Passed", 216, 214, "Current bill line.", PublishedWording.BillLineSource);
-        var recent = Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('a' + index), 64), new(2026, 3, 2), PublishedChamber.House,
-            "Published vote", "AI label", "Passed", null, "Current bill line.")
+        var recent = Enumerable.Range(0, 4).Select(index => index < 2 ? PublishedChamber.House : PublishedChamber.Senate).Select((chamber, index) => new HomeVoteData(
+            new string((char)('a' + index), 64), new(2026, 3, 2), chamber, "Published vote", "AI label", "Passed",
+            VotePageView.ChamberBar(chamber, 216, 214, 0, 5, VoteThreshold.None), "Current bill line.")
         { Alignment = PublishedVoteAlignment.Split }).ToArray();
+        static BoardPanelData Board(PublishedChamber chamber, string party, string name, int cast, int breaks) =>
+            new(chamber, party, 119, null, new DateOnly(2026, 9, 16), true, [new(PublicationProtocol.OfficialPagePath(name), name, null, cast, breaks)]);
+        BoardPanelData[] fourBoards =
+        [
+            Board(PublishedChamber.House, "Democrat", "Henry Cuellar", 254, 160), Board(PublishedChamber.House, "Republican", "James Moylan", 51, 26),
+            Board(PublishedChamber.Senate, "Democrat", "John Fetterman", 337, 66), Board(PublishedChamber.Senate, "Republican", "Lisa Murkowski", 341, 58)
+        ];
         var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief))
         {
             Issues = [new("health", "Health", 119, 3, 12)],
             ExecutiveActions = [new(PublishedExecutiveActionKind.Notice, 4, new string('c', 64), "Newest notice title", new(2026, 5, 31))],
             NewestHouseRollCall = new(2026, 5, 31),
-            NewestSenateRollCall = new(2026, 5, 29)
+            NewestSenateRollCall = new(2026, 5, 29),
+            FeaturedVoteDetail = VoteDetailPageFixture.Vote() with { Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Ben Baker", "Nay", "Republican", "TX", 1)] },
+            Boards = fourBoards
         };
         var official = new OfficialPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, "House", "MA", 7, "Democrat", null, new(2027, 1, 3), null)
         {
             PublishedOn = new(2026, 11, 1),
+            Terms = [new() { Office = "Representative", Kind = PublishedOfficeKind.Representative, State = "MA", District = 7, Party = "Democrat", Start = new(2019, 1, 3) }],
+            Website = "https://able.house.gov",
             HasLinkedStatements = true,
             MarksTotal = 2,
             Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
@@ -291,7 +306,7 @@ public sealed class PublicPageReadingGradeTests
             Marks = [new(new string('b', 64), new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"), new(new string('c', 64), new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
             Votes = [new(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
             Statements = [new(new string('d', 64), new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", new string('a', 64), "House agrees to Senate changes", "AI linked vote label",
-                new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
+                new(2026, 9, 16), PublishedChamber.House, 308, "Nay") { LinkApprover = PublishedApprover.Person }],
             Bills = [new(new string('e', 64), "hr", null, "H.R. 40 would study reparations.", new(2025, 1, 3), "Referred to the House Committee on the Judiciary.", new(2025, 1, 3))]
         };
         var president = new OfficialPageData(7, "p4", "Eve East", PublishedOfficeKind.Executive, "President", null, null, "Republican", null, null, null)
@@ -320,6 +335,25 @@ public sealed class PublicPageReadingGradeTests
             [new(PublishedChamber.House, 119, [new(PublishedVoteKind.Passage, 15, 201)], 196, 254, 0, 450, 0)]);
         var zip = new ZipMemberCardsData(8, 119, "36009", 2,
             [new("Representative for Alabama, district 2", new ZipMemberIdentityData("pat", "Pat Member", "Democratic", new(2029, 1, 3), null, [], [])), new("Senator for Alabama", null)], []);
+        var differs = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 2, 314, "House members differ", null, "Vote to pass", "Passed",
+            [new("pat", "Yes (Yea)", "Yea"), new("sam", "No (Nay)", "Nay")])
+        { MembersVotedTheSame = false };
+        var zipCompare = new ZipMemberCardsData(8, 119, "36009", 2,
+            [new("Representative for Alabama, district 2", new ZipMemberIdentityData("pat", "Pat Member", "Democratic", null, null, [], [])),
+                new("Representative for Alabama, district 1", new ZipMemberIdentityData("sam", "Sam Member", "Republican", null, null, [], [])),
+                new("Senator for Alabama", null) { Chamber = PublishedChamber.Senate }], [])
+        {
+            SharedVotes = [new(PublishedChamber.House, [new("pat", "Pat Member"), new("sam", "Sam Member")], [differs])],
+            IssueOptions = [new("health", "Health")],
+            SelectedIssue = "health"
+        };
+        var billMembers = new BillMembersData("36009", new string('a', 64), 7,
+        [
+            new("Pat Member", PublishedChamber.House, BillMemberRelation.Sponsor, null, [new(new(2026, 9, 16), "Yes (Yea)", "Yea")]),
+            new("Sam Member", PublishedChamber.House, BillMemberRelation.Cosponsor, new(2025, 10, 2), []),
+            new("Sue Senator", PublishedChamber.Senate, BillMemberRelation.None, null, [])
+        ], [PublishedChamber.House]);
+        string[] ZipRecordData = ["Pat Member", "Sam Member", "Sue Senator", "House members differ", "Health"];
 
         string[] VoteRecordData = ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton", "Dee Cee", "Pat Rico", "Sam Solo", "Ed Ward", "Cal Ray"];
         static VoteMemberData MapMember(string name, string cast, string party, string? state, int? district) =>
@@ -330,7 +364,8 @@ public sealed class PublicPageReadingGradeTests
 
         return
         [
-            ("home", Page<HomePage>(With("Data", home)), ["Published", "Newest notice", "Health", "Current bill line"]),
+            ("home", Page<HomePage>(With("Data", home, ("BrowserApiUrl", "https://api.civic-lens.test"), ("FeaturedMapHref", "/web/records/" + VoteDetailPageFixture.RecordId + "/map.html"))),
+                ["Published", "Newest notice", "Health", "Current bill line", "Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski", "Ada Able", "Ben Baker"]),
             ("home empty", Page<HomePage>(With("Data", new HomePageData(7, null, [], null))), []),
             ("compare", Page<ComparePage>(With("Data", null)), []),
             ("officials", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], OfficialsFilterData.None, null))), []),
@@ -343,6 +378,12 @@ public sealed class PublicPageReadingGradeTests
             ("vote", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote(), ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton"]),
             ("vote house map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Kind = PublishedVoteKind.Suspension, Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Dee Cee", "Present", "Democrat", "DC", 0), MapMember("Pat Rico", "Nay", "Republican", "PR", 0), MapMember("Sam Solo", "Aye", "Republican", null, null)] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter { Name = "zzq" }))), VoteRecordData),
             ("vote senate map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Chamber = PublishedChamber.Senate, Kind = PublishedVoteKind.VetoOverride, Members = [MapMember("Ed Ward", "Nay", "Democrat", "MA", null), MapMember("Cal Ray", "Not Voting", "Republican", "TX", null)], PartyTallies = null, Bill = null, Issues = [] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), VoteRecordData),
+            ("vote statements", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with
+            {
+                Bill = VoteDetailPageFixture.Vote().Bill! with { StatusLabel = "Became law", PublicLaw = "119-111", StatusDate = new(2026, 9, 18) },
+                Statements = [new(new string('d', 64), new(2026, 9, 12), "Kelly speaks on the bill", "AI statement label", PublishedTextOrigin.Model, PublishedApprover.Person, [new("o1", "Ada Able"), new("o9", "Una Unseen")]),
+                    new(new string('e', 64), null, "Schiff speaks on the bill", null, PublishedTextOrigin.Person, null, [new("o2", "Ben Baker")])]
+            }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, "speaks on the bill", "AI statement label", "Una Unseen"]),
             ("vote map page", Page<VoteMapPage>(With("Data", VoteDetailPageFixture.Vote() with { Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Dee Cee", "Present", "Democrat", "DC", 0)] })), VoteRecordData),
             ("vote map page empty", Page<VoteMapPage>(With("Data", VoteDetailPageFixture.Vote())), VoteRecordData),
             ("official bare", Page<OfficialProfilePage>(With("Data", new OfficialPageData(7, "p9", "Una Unseen", PublishedOfficeKind.Senator, "Senate", "TX", null, null, null, null, null) { BillCountsAbsent = true })), ["Una Unseen"]),
@@ -350,12 +391,15 @@ public sealed class PublicPageReadingGradeTests
             ("statement many quotes", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement(quotes: 2))), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
             ("document change dated", Page<DocumentChangeDetailPage>(With("Data", DetailPageFixture.Change(changeDate: new(2026, 10, 15), passages: 12))), ["Example Agency", "The agency cut", "A shorter notice", "The text alone"]),
             ("brief empty", Page<BriefDetailPage>(With("Data", brief with { Label = null, TextOrigin = PublishedTextOrigin.Person, ApprovedAtUtc = null, FirstPublishedAtUtc = null })), ["The week in Congress", "First paragraph", "Kelly announces"]),
-            ("official", Page<OfficialProfilePage>(With("Data", official)), ["Ann Able", "House passes", "statement about", "H.R. 40", "Referred to"]),
+            ("official", Page<OfficialProfilePage>(With("Data", official, ("BrowserApiUrl", "https://api.civic-lens.test"))), ["Ann Able", "House passes", "statement about", "H.R. 40", "Referred to"]),
+            ("official members", Page<OfficialMembersFragment>(With("Data", zipCompare, ("OfficialId", "pat"))), ZipRecordData),
             ("president", Page<PresidentPage>(With("Data", president)), ["Eve East", "Housing Costs", "Women", "Seafood"]),
             ("issue", Page<IssuePage>(With("Data", issue)), ["Federal firearms law", "Background checks", "Crime statements", "firearms bill", "H.R. 1 would"]),
             ("statement", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement())), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
             ("document change", Page<DocumentChangeDetailPage>(With("Data", DetailPageFixture.Change())), ["Example Agency", "The agency cut", "A shorter notice", "The text alone"]),
             ("executive action", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action())), ["Implementing the Sanctioning", "Donald Trump", "2026-21599", "91 FR"]),
+            ("executive action summary", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action() with { Summary = new(PublishedTextOrigin.Model, "AI summary label", true, ["The order sets sanctions."]) })),
+                ["Implementing the Sanctioning", "Donald Trump", "2026-21599", "91 FR", "AI summary label", "sets sanctions"]),
             ("brief", Page<BriefDetailPage>(With("Data", brief)), ["The week in Congress", "First paragraph", "Kelly announces"]),
             ("withdrawal", Page<PublishedWithdrawalPage>(With("Withdrawal", WithdrawalNoticePageTests.Notice)), ["The quote came"]),
             ("report", Page<PublishedReportPage>(new() { ["RootPath"] = Root, ["PublicApiUrl"] = "https://api.civic-lens.test", ["TurnstileSiteKey"] = "key" }), []),
@@ -366,6 +410,9 @@ public sealed class PublicPageReadingGradeTests
             ("glossary", Page<PublishedGlossaryPage>(new() { ["RootPath"] = Root }), []),
             ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),
             ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
+            ("zip compare", Page<ZipMemberCards>(With("Data", zipCompare, ("View", "compare"))), ZipRecordData),
+            ("zip issue", Page<IssueMemberVotes>(With("Data", zipCompare)), ZipRecordData),
+            ("bill members", Page<BillMembersFragment>(With("Data", billMembers)), ZipRecordData),
         ];
     }
 
