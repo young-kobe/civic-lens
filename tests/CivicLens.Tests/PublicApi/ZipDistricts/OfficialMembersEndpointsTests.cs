@@ -18,7 +18,7 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
     // ZIP 12345 lies in Alabama districts 1 and 2. Release 1 holds one representative for each, and the two senators of Alabama.
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ZipSeed.AddRecordAsync(host.OperationalDatabase, 1);
         await ZipSeed.AdmitDistrictsAsync(host.OperationalDatabase);

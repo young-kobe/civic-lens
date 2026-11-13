@@ -20,7 +20,7 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[] bills)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        var host = await ApiHost.StartAsync(postgres, options => options with
         {
             PublicBaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test"),
             BrowserApiUrl = PublicBaseUrl.Parse("https://api.civic-lens.test", "test")

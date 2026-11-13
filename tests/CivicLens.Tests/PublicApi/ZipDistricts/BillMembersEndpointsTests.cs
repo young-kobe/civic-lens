@@ -15,7 +15,7 @@ public sealed class BillMembersEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(params SeededSponsorship[] sponsorships)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         try
         {
             await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));

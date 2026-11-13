@@ -109,8 +109,9 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     [Fact]
     public async Task EveryKindIsFoundByTheTextOfItsSource()
     {
+        // The relationship cites statement 1, and its quote starts at offset 3 of the statement source.
         await world.PublishAndIngestAsync(1,
-            PublishedSamples.Statement('a', "Statement headline", source: "Xq statementword"),
+            PublishedSamples.Statement('1', "Statement headline", source: "Xq a quote statementword"),
             PublishedSamples.DocumentChange("Change headline", "Change summary", "Afterword text."),
             PublishedSamples.Action("Action headline", "Action summary", "Bill title", "Sponsor: actionword"),
             PublishedSamples.Vote("Vote headline", "Vote summary", "Result: voteword"),

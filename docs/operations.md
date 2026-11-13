@@ -209,9 +209,6 @@ The source `federal-register-documents` in `config/federal-coverage.json` follow
 
 1. Check that the configuration holds a person for each President whose documents the window covers. The shipped file holds Joe Biden, from 2021-01-20 to 2025-01-20, and Donald Trump from 2025-01-20. A document with no configured President blocks its job.
 2. Set `enabled` to `true` for `federal-register-documents` and restart the worker. A restart reads the configuration again.
-3. Deploy the search service before the publisher. The search service of an older version refuses a release that holds an executive action.
-
-A release that holds the correction field `factsUnchanged` needs the same order. The search service reads files with `JsonOptions`, which refuses unmapped members, so an older search service refuses the field. `deploy/scripts/update.sh` starts the search service and the worker from one `compose up` at one image tag. It sets no order between them. A deploy of the worker alone must update the search service first.
 
 To stop the source, set `enabled` to `false` and restart the worker.
 
@@ -313,7 +310,7 @@ The same step revokes `TEMPORARY` on the database and `EXECUTE` on the `pg_advis
 
 Enable the login by hand, after the first `db migrate` that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where `PublicApi` reads its settings. The service reads the connection from `CIVIC_LENS_PUBLIC_VIEWS_DATABASE`, for example `Host=<host>;Database=<database>;Username=civic_lens_public;Password=<password>`. It sets `Maximum Pool Size=4` itself and no timeout, because the role sets the statement timeout. The service stops at startup when the variable is missing.
 
-The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` uses the role for `/v1/release` and the vote routes. Without the login those routes fail and the search routes keep working.
+The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. It runs with `jit` off. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` uses the role for `/v1/release` and the vote routes. Without the login those routes fail and the search routes keep working.
 
 ## Managed collection jobs
 
@@ -710,7 +707,7 @@ The owner measures the text prompt before the setting goes on. The command calls
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text measure 1500000 config/action-text-measure-bills.json
 ```
 
-To measure the key terms, set `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS=1` for the same command. The report then lists the definitions heading and the key terms of each bill, with the cut mark of each term. `droppedKeyTerms` lists the terms that code left out. Set the same value for the worker and for the `analysis` and `actions` commands, because the setting decides which drafts are stale. The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 77,000 tokens, so 20 bills can reserve 1,540,000 tokens. The command writes no database row. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence, its grade, and its quote in the report. The sentence grades are for information. The report gives the passage grade of each bill. The passage is the headline and the sentences read as one text. It gives the mean passage grade of the run. The target is a passage at grade 12 or below. A low grade is not enough, because a sentence can be easy to read and say nothing. Read each sentence against its quote. The prompt keeps the exact term of the bill and explains it in plain words. A sentence must never turn "shall be considered" into "is not treated as", or reverse a condition. Each bill also gives `textFigures` and `sentenceFigures`, the counts of dollar amounts and of dates or years in the sent bill text and in the accepted sentences. `losesFigures` is true when the text has at least one amount and the sentences have none, or the same for dates. For a flagged bill, `missingDates` lists the dates of the sent text that no accepted sentence writes the same way, for example `September 30, 2027`. The totals give `billsLosingFigures`, the number of flagged bills. A flag is a prompt to read that bill. Compare the sentences with the quotes, and check whether a central amount or date is missing. A year in a section number can cause a false flag. The flag never rejects a draft. Decide from the flagged count whether the code should reject sentences that drop figures. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
+To measure the key terms, set `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS=1` for the same command. The report then lists the definitions heading and the key terms of each bill, with the cut mark of each term. `droppedKeyTerms` lists the terms that code left out. Set the same value for the worker and for the `analysis` and `actions` commands, because the setting decides which drafts are stale. The first argument is the spend cap in tokens. The command refuses to start without it. It stops before a call that could pass the cap. Each call of a 60,000 character text reserves about 77,000 tokens, so 20 bills can reserve 1,540,000 tokens. The command writes no database row. It writes the report to `artifacts/action-text-measure/<time>.json`. A bill with no stored text is skipped with its reason. Read each sentence, its grade, and its quote in the report. The sentence grades are for information. The report gives the passage grade of each bill. The passage is the headline and the sentences read as one text. It gives the mean passage grade of the run. Prompts aim for 12; code rejects above 14. A passage between them passes, so read it for clarity. A low grade is not enough, because a sentence can be easy to read and say nothing. Read each sentence against its quote. The prompt keeps the exact term of the bill and explains it in plain words. A sentence must never turn "shall be considered" into "is not treated as", or reverse a condition. Each bill also gives `textFigures` and `sentenceFigures`, the counts of dollar amounts and of dates or years in the sent bill text and in the accepted sentences. `losesFigures` is true when the text has at least one amount and the sentences have none, or the same for dates. For a flagged bill, `missingDates` lists the dates of the sent text that no accepted sentence writes the same way, for example `September 30, 2027`. The totals give `billsLosingFigures`, the number of flagged bills. A flag is a prompt to read that bill. Compare the sentences with the quotes, and check whether a central amount or date is missing. A year in a section number can cause a false flag. The flag never rejects a draft. Decide from the flagged count whether the code should reject sentences that drop figures. Put the totals and your reading of the sample on the pull request, before the publish pull request. See [text measure](architecture/actions.md#text-measure).
 
 Drafting uses Claude Haiku 5.5. The first run can spend up to the daily limit on queued candidates. Start with a low limit. A bill version whose summaries or subjects have closed has up to three queued candidates. Each older one settles as `supersededByNewerCandidate` with no call, also when the newest candidate blocks. The [outcomes](architecture/actions.md#outcomes) table lists every other code.
 
@@ -1280,7 +1277,7 @@ Open `http://127.0.0.1:8090/`. The home page shows the hero with the break card,
 
 ## Run the search service
 
-The search service reads a published release over HTTP and keeps its own Postgres database. It needs no operational credential. The design is in [search](architecture/search.md).
+The search service reads the active release from the `public_api` views as the role `civic_lens_public` and keeps its own Postgres database. The design is in [search](architecture/search.md).
 
 Start a separate Postgres container. Use another port and another volume than the operational database. Port 5434 differs from the port 5433 of `make db`:
 
@@ -1289,16 +1286,9 @@ docker run -d --name civic-lens-search-db -e POSTGRES_USER=search -e POSTGRES_PA
   -p 127.0.0.1:5434:5432 postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
 ```
 
-Serve the active release root with a plain static server:
+Run the service in a second shell. It applies its schema at startup, ingests the active release, and polls every 30 seconds:
 
 ```sh
-python3 -m http.server 8090 --bind 127.0.0.1 --directory "$CIVIC_LENS_RELEASE_DIRECTORY/current"
-```
-
-Run the service in a second shell. It applies its schema at startup, ingests the release, and polls every 30 seconds:
-
-```sh
-export CIVIC_LENS_RELEASE_BASE_URL=http://127.0.0.1:8090/
 export CIVIC_LENS_SEARCH_DATABASE="Host=127.0.0.1;Port=5434;Database=search;Username=search;Password=search"
 export CIVIC_LENS_PUBLIC_VIEWS_DATABASE="Host=127.0.0.1;Port=5433;Database=civic_lens;Username=civic_lens_public;Password=<password of the public role>"
 export ASPNETCORE_URLS=http://127.0.0.1:8100
@@ -1423,10 +1413,10 @@ A release contract change can add a required field to a published file. Old file
 - The Postgres containers publish `127.0.0.1:5433` (operational) and `127.0.0.1:5434` (search). The connection strings in the secret env files name these ports. Change both places together.
 - The root is `/srv/civic-lens`, the Linux convention for data that a machine serves. To use another root, give `CIVIC_LENS_ROOT` to every script, for example `sudo CIVIC_LENS_ROOT=/data/civic-lens deploy/scripts/update.sh <sha>`. `sudo` drops an exported value. Every directory is mounted at the same path inside the containers, so one path value serves both sides.
 - Under the root, `env/` holds the env files, `config/` holds `collection.json`, `issues.json` and `issue-icons.json`, and `captures/`, `releases/`, `review-keys/` and `postgres/` hold data. `captures/`, `releases/` and `review-keys/` belong to user 10001, the user of our images. The two Postgres directories belong to user 70, the `postgres` user of the Alpine Postgres image.
-- `compose.env` holds the image tag and the three ports (`CIVIC_LENS_CADDY_PORT`, `CIVIC_LENS_API_PORT`, `CIVIC_LENS_REVIEW_PORT`). The search address and the Caddy proxy target come from `CIVIC_LENS_API_PORT`. The release address of the search service comes from `CIVIC_LENS_CADDY_PORT`.
+- `compose.env` holds the image tag and the three ports (`CIVIC_LENS_CADDY_PORT`, `CIVIC_LENS_API_PORT`, `CIVIC_LENS_REVIEW_PORT`). The search address and the Caddy proxy target come from `CIVIC_LENS_API_PORT`.
 - Secrets are in files that end in `.secret.env` and have mode 600. Each process reads only its own files. The database password is in two files, the Postgres file and the connection string. Keep the two equal. The report pull token is in the host and search files. Keep these two equal too.
 - The AI stages, publishing, and report pull are off while their variables are empty. Set `CIVIC_LENS_PUBLISHING=1`, `CIVIC_LENS_REPORT_PULL=1`, and the `*_DAILY_TOKENS` values to turn them on. Publishing also needs the drafting stages; see [Automatic publication](#automatic-publication).
-- The search service reads the release from Caddy at `127.0.0.1` on `CIVIC_LENS_CADDY_PORT`, so it does not need the tunnel.
+- The search service reads the release from the operational Postgres container at `127.0.0.1:5433`, so it does not need the tunnel or Caddy.
 
 Run the scripts with `sudo`, because they write under the root and the env files hold secrets.
 

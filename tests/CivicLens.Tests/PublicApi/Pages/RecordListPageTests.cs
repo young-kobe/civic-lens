@@ -28,7 +28,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         return host;
     }
@@ -77,7 +77,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task ANoReleaseAnswers503AndACursorOfAnotherReleaseRedirectsToTheFirstPage()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         foreach (var path in new[] { "/web/votes", "/web/bills", "/web/statements", "/web/executive-actions" })
             await GetPageAsync(host, path, HttpStatusCode.ServiceUnavailable);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
@@ -259,6 +259,19 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     private static string BillId(char id) => new(id, 64);
 
+    // The bill list reads its Congress and total from the stored counts of the release, so each seed stores them again.
+    private static async Task AddBillsAsync(ApiHost host, params SeededBill[] bills)
+    {
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills);
+        await StoreBillCountsAsync(host);
+    }
+
+    private static async Task StoreBillCountsAsync(ApiHost host)
+    {
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "DELETE FROM release_official_bill_counts; DELETE FROM release_bill_counts;");
+        await StoredBillCounts.FillAsync(host.OperationalDatabase, 1, 119);
+    }
+
     private static string StoredStatus(char id, string text, string? status) => PublicRecordPageRows.PinnedStatus(1, BillId(id), text, "2026-02-13", PublishedAt.UtcTicks)
         + (status is null ? "" : $"\nUPDATE release_bill_statuses SET status = '{status}' WHERE record_id = '{BillId(id)}';");
 
@@ -267,7 +280,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("p1", "Ann Able"));
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+        await AddBillsAsync(host,
             new SeededBill('a', "2026-03-02") { Sponsorships = [new("p1", "Sponsor", "2026-03-02")] },
             new SeededBill('b', "2026-03-03") { TextOrigin = "Person", BillNumber = 8, Sponsorships = [new("p2", "Sponsor", "2026-03-03")] },
             new SeededBill('c', "2026-03-04") { BillNumber = 9 });
@@ -298,7 +311,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     public async Task TheBillListCountsAndNamesTheNewestCongressAndOffersOnlyThePolicyAreasOfThatCongress()
     {
         await using var host = await StartAsync();
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02") { PolicyAreaId = "tax" },
+        await AddBillsAsync(host, new SeededBill('a', "2026-03-02") { PolicyAreaId = "tax" },
             new SeededBill('c', "2026-03-03") { BillNumber = 9, PolicyAreaId = "tax" },
             new SeededBill('b', "2024-03-02") { Congress = 118, BillNumber = 8, PolicyAreaId = "energy" });
 
@@ -313,11 +326,52 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheBillListTakesTheNewestCongressAndItsTotalFromTheStoredCountsAndGivesEachBillItsOwnSponsorAndStatus()
+    {
+        await using var host = await StartAsync();
+        await using var unstoredHost = await StartAsync();
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("p1", "Ann Able"), new SeededOfficial("p2", "Bo Zed"));
+        await AddBillsAsync(host,
+            new SeededBill('a', "2026-03-02") { Sponsorships = [new("p1", "Sponsor", "2026-03-02")] },
+            new SeededBill('b', "2026-03-04") { BillNumber = 8, Sponsorships = [new("p2", "Sponsor", "2026-03-04"), new("p1", "Cosponsor", "2026-03-04")] },
+            new SeededBill('c', "2026-03-03") { BillNumber = 9, Sponsorships = [new("p1", "Sponsor", "2026-03-03")] },
+            new SeededBill('d', "2024-05-01") { Congress = 118, BillNumber = 10, Sponsorships = [new("p2", "Sponsor", "2024-05-01")] });
+        await BillsSeed.AddBillsAsync(unstoredHost.OperationalDatabase, new SeededBill('a', "2026-03-02"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
+            + StoredStatus('a', "Referred to the House Committee on Energy and Commerce.", "InCommittee") + "\n"
+            + StoredStatus('b', "Received in the Senate.", "PassedHouse") + "\n"
+            + StoredStatus('d', "Became Public Law No: 118-1.", "BecameLaw"));
+
+        var page = await GetPageAsync(host, "/web/bills");
+
+        Assert.Equal(["b", "c", "a"], Ids(page));
+        Assert.StartsWith("3 bills and resolutions of the 119th Congress are in this release.", Lede(page), StringComparison.Ordinal);
+        var (passed, unknown, committee) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
+        Assert.Contains("Sponsor: Bo Zed", Text(passed));
+        Assert.Equal("Passed the House", passed.QuerySelector(".badge")!.TextContent.Trim());
+        Assert.Contains("Sponsor: Ann Able", Text(unknown));
+        Assert.Null(unknown.QuerySelector(".badge"));
+        Assert.Contains("Sponsor: Ann Able", Text(committee));
+        Assert.Equal("In committee", committee.QuerySelector(".badge")!.TextContent.Trim());
+        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/web/bills?status=passedHouse")));
+        Assert.Equal(["c", "a"], Ids(await GetPageAsync(host, "/web/bills?sponsor=ann")));
+        Assert.Empty(Ids(await GetPageAsync(host, "/web/bills?status=becameLaw")));
+
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE release_bill_counts SET bills = 40 WHERE congress = 119;");
+        Assert.StartsWith("40 bills and resolutions of the 119th Congress", Lede(await GetPageAsync(host, "/web/bills")), StringComparison.Ordinal);
+
+        var unstored = await GetPageAsync(unstoredHost, "/web/bills");
+        Assert.Equal("Bills and resolutions, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(unstored));
+        Assert.Empty(Rows(unstored));
+    }
+
+    [Fact]
     public async Task ABillListOfOneBillUsesTheSingularTotalAndAReleaseWithNoBillNamesNoCongress()
     {
         await using var emptyHost = await StartAsync();
         await using var host = await StartAsync();
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02"));
+        await StoreBillCountsAsync(emptyHost);
+        await AddBillsAsync(host, new SeededBill('a', "2026-03-02"));
 
         var empty = await GetPageAsync(emptyHost, "/web/bills");
         var one = await GetPageAsync(host, "/web/bills");
@@ -331,7 +385,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('a', "2026-03-02") { Issues = ["health"] }, Vote('b', "2026-03-03", 2));
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('c', "2026-03-01") { Issues = ["health"], BillNumber = 1 }, new SeededBill('d', "2026-03-02") { BillNumber = 2 });
+        await AddBillsAsync(host, new SeededBill('c', "2026-03-01") { Issues = ["health"], BillNumber = 1 }, new SeededBill('d', "2026-03-02") { BillNumber = 2 });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
             + "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
 
@@ -353,7 +407,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("p1", "Ann Able"), new SeededOfficial("p2", "Bo Zed"));
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+        await AddBillsAsync(host,
             new SeededBill('a', "2026-03-01") { Issues = ["health"], BillNumber = 4, Sponsorships = [new("p1", "Sponsor", "2026-03-01"), new("p2", "Cosponsor", "2026-03-01")] },
             new SeededBill('b', "2026-03-02") { BillType = "s", BillNumber = 4, PolicyAreaId = "tax", Sponsorships = [new("p2", "Sponsor", "2026-03-02"), new("p1", "Cosponsor", "2026-03-02")] },
             new SeededBill('c', "2026-03-03") { BillNumber = 9, Sponsorships = [new("p3", "Sponsor", "2026-03-03")] });
@@ -382,7 +436,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Contains(filtered.QuerySelectorAll("select[name=policyArea] option").Select(option => option.GetAttribute("value")), value => value == "health");
         Assert.Contains("No bill matches these filters.", (await GetPageAsync(host, "/web/bills?issue=nothing")).QuerySelector(".empty")!.TextContent);
 
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, [.. Enumerable.Range(0, 25).Select(index =>
+        await AddBillsAsync(host, [.. Enumerable.Range(0, 25).Select(index =>
             new SeededBill((char)('d' + index % 20), $"2026-02-{index + 1:00}") { RecordId = new string('d', 60) + index.ToString("0000"), BillNumber = 100 + index })]);
         var first = await GetPageAsync(host, "/web/bills");
         var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;

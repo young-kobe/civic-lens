@@ -31,7 +31,8 @@ internal static class OfficialsSeed
     {
         foreach (var official in officials)
             await ViewsSeed.ExecuteAsync(database, $"""
-                INSERT INTO release_officials (release_number, official_id, name) VALUES (1, '{official.Id}', '{official.Name.Replace("'", "''")}');
+                INSERT INTO release_officials (release_number, official_id, name) VALUES (1, '{official.Id}', '{official.Name.Replace("'", "''")}')
+                  ON CONFLICT (release_number, official_id) DO UPDATE SET name = EXCLUDED.name;
                 {string.Join('\n', official.Terms.Select((term, position) => TermRow(official.Id, position, term)))}
                 """);
     }

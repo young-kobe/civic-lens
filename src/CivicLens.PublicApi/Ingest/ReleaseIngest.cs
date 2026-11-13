@@ -4,14 +4,14 @@ using Npgsql;
 namespace CivicLens.PublicApi.Ingest;
 
 /// <summary>
-/// Makes the release of the manifest the active release, in one transaction.
-/// A release that is stored already only becomes active again. That is how the service follows a rollback of the static site.
+/// Makes the active release of the views the active release of the index, in one transaction.
+/// A release that is stored already only becomes active again. That is how the service follows a rollback of publication.
 /// </summary>
 public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource database)
 {
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
-        await using var read = await source.ReadChangedAsync(cancellationToken);
+        await using var read = await source.ReadActiveAsync(cancellationToken);
         if (read is null) return IngestResult.NotModified;
 
         var release = read.Release;
@@ -20,7 +20,6 @@ public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource databa
             ? await ActivateAsync(index, release.ReleaseNumber, cancellationToken)
             : await IngestAsync(index, read, cancellationToken);
         await index.CommitAsync(cancellationToken);
-        source.Stored();
         return result;
     }
 

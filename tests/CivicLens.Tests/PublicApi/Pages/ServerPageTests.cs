@@ -29,10 +29,10 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     private static readonly DateTimeOffset PublishedAt = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
 
     private Task<ApiHost> StartAsync(bool withBaseUrl = true) =>
-        ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = withBaseUrl ? BaseUrl : null });
+        ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = withBaseUrl ? BaseUrl : null });
 
     private Task<ApiHost> StartWithBrowserApiAsync() =>
-        ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        ApiHost.StartAsync(postgres, options => options with
         {
             PublicBaseUrl = BaseUrl,
             BrowserApiUrl = PublicBaseUrl.Parse("https://api.civic-lens.test", PublicApiOptions.BrowserApiUrlVariable)

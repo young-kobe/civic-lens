@@ -25,10 +25,11 @@ internal static class OfficialRecordQueries
     private const string StatementDay = "COALESCE(s.statement_date, DATE '0001-01-02')";
 
     // The bills tab count. The official page reads it alone for its "See all" link, so the link and the tab show one number.
+    // OFFSET 0 keeps the bill check correlated, as in SpokenBy.
     private const string BillCountSql = """
         SELECT count(*) FROM public_api.bill_sponsorships p
-          JOIN public_api.bills b ON b.record_id = p.record_id AND b.revision_number = p.revision_number
          WHERE p.official_id = @id AND p.role = 'Sponsor'
+           AND EXISTS (SELECT 1 FROM public_api.bills b WHERE b.record_id = p.record_id AND b.revision_number = p.revision_number OFFSET 0)
         """;
 
     private const string CountsSql = $"""
@@ -48,10 +49,7 @@ internal static class OfficialRecordQueries
 
     private static readonly string BillsSql = $"""
         SELECT {OfficialPageQueries.BillColumns}
-          FROM public_api.bill_sponsorships p
-          JOIN public_api.bills b ON b.record_id = p.record_id AND b.revision_number = p.revision_number
-          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
-         WHERE p.official_id = @id AND p.role = 'Sponsor'{After("p.sponsored_on", "b.record_id")}
+        {OfficialPageQueries.SponsoredBillsSql}{After("p.sponsored_on", "b.record_id")}
          ORDER BY p.sponsored_on DESC, b.record_id LIMIT @take
         """;
 
