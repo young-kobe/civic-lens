@@ -435,6 +435,8 @@ Limits:
 - The bill pin reads at most five bills with the number. Another bill with the number past those five gets no line, even when it is a result.
 - The map page source note holds only the Shapes entry. The Votes, Seats, and Delegates entries stay out until the owner approves generic text for them. The mockup text holds example counts.
 - The withdrawal notice link "Report a problem with this notice" opens the report page with no record. A record-bound link needs a report service change, because the search index does not hold a withdrawn record.
+- The bill text source line "Read the full text on Congress.gov." is plain text. `public_api.bills` serves the version name but not its version code, so code cannot build the text page address. The fold keeps the bill link.
+- The bill page shows bill text sentences and key terms without the exact stored quote. A follow-up change adds views for the sentence quotes and the exact key term characters.
 - The full record page of an official does not port the "Against their party" filter of the static record page. The owner accepted this on 2026-11-13.
 
 Open choices:
