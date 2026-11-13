@@ -1,3 +1,4 @@
+using CivicLens.Application.Roster;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -56,6 +57,18 @@ public sealed class OfficialsPageTests
         var page = await RenderAsync(Page([Row("hal", "Hal Hale", PublishedOfficeKind.Representative, "DC", 0, "Democrat", null, 3)]));
 
         Assert.Equal("Delegate for DC", page.QuerySelector(".list-row-meta span")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData(ExecutiveRosterParser.President, "President")]
+    [InlineData(ExecutiveRosterParser.VicePresident, "Vice President")]
+    public async Task AnExecutiveRowNamesTheOfficeWordAndNeverTheRawExecutiveCode(string code, string words)
+    {
+        var row = Row("eve", "Eve East", PublishedOfficeKind.Executive, null, null, "Republican", null, 3) with { Office = code };
+
+        var page = await RenderAsync(Page([row]));
+
+        Assert.Equal(words, page.QuerySelector(".list-row-meta span")!.TextContent);
     }
 
     [Fact]

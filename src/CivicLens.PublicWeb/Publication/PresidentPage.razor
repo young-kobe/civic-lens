@@ -3,7 +3,7 @@
 @{
     var executive = Data.Executive!;
     var title = "President " + Data.Name;
-    var allPath = RootPath + PublicationProtocol.OfficialRecordPagePath(Data.OfficialId);
+    var allPath = OfficialRecordText.Path(RootPath, Data.OfficialId, OfficialRecordKind.ExecutiveActions);
 }
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialPagePath(Data.OfficialId)" Title="@title" Description="@Description(executive)" RootPath="@RootPath">
@@ -46,7 +46,10 @@
                         <li>
                             <div>
                                 <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))">@action.Title</a>
-                                <p class="official-meta"><span>@PublishedRecordLabels.ExecutiveActionKind(type.Kind)</span><span>Signed @Moment.Day(action.SignedOn)</span></p>
+                                <p class="official-meta">@foreach (var part in OfficialPageText.ExecutiveMeta(type.Kind, action.SignedOn))
+                                {
+                                    <span>@part</span>
+                                }</p>
                             </div>
                         </li>
                     }

@@ -30,6 +30,7 @@ public sealed class OfficialProfilePageTests
         BillsCongress = 119,
         IssuesCongress = 119,
         SponsoredBills = 43,
+        RecordBills = 44,
         Issues = [new("tax", "Federal taxes", 8)],
         Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"),
                  new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
@@ -193,7 +194,7 @@ public sealed class OfficialProfilePageTests
         Assert.Contains("Introduced 3 Jan 2025", row.QuerySelector(".official-meta")!.TextContent);
         Assert.Equal(BillStatusMeaning.Label("Referred to the House Committee on the Judiciary.", "hr"), row.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Equal("In committee", row.QuerySelector(".badge")!.TextContent.Trim());
-        Assert.Contains("See all 43 bills", page.QuerySelector("#bills .official-more")!.TextContent);
+        Assert.Contains("See all 44 bills", page.QuerySelector("#bills .official-more")!.TextContent);
     }
 
     [Fact]
@@ -212,12 +213,12 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task SeeAllLinksLeadToTheFullRecordPageOfTheOfficial()
+    public async Task SeeAllLinksLeadToTheTabOfTheirKindOnTheFullRecordPageOfTheOfficial()
     {
         var page = await RenderAsync<OfficialProfilePage>(Member());
 
-        Assert.All(page.QuerySelectorAll(".official-more a"), link => Assert.Equal(Root + "officials/p1/record.html", link.GetAttribute("href")));
-        Assert.Equal(3, page.QuerySelectorAll(".official-more a").Length);
+        Assert.Equal([Root + "officials/p1/record.html?kind=votes", Root + "officials/p1/record.html?kind=statements", Root + "officials/p1/record.html?kind=bills"],
+            page.QuerySelectorAll(".official-more a").Select(link => link.GetAttribute("href")!).ToArray());
     }
 
     [Fact]
@@ -297,8 +298,7 @@ public sealed class OfficialProfilePageTests
         var row = page.QuerySelector(".official-exec .official-rows li")!;
 
         Assert.Equal(Root + "records/" + new string('1', 64) + ".html", row.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains("Executive order", row.QuerySelector(".official-meta")!.TextContent);
-        Assert.Contains("Signed 22 Oct 2026", row.QuerySelector(".official-meta")!.TextContent);
+        Assert.Equal(["Executive order", "Signed 22 Oct 2026"], row.QuerySelectorAll(".official-meta > span").Select(part => part.TextContent).ToArray());
     }
 
     [Fact]
@@ -308,7 +308,7 @@ public sealed class OfficialProfilePageTests
         var links = page.QuerySelectorAll("a.btn, .official-more a");
 
         Assert.Single(links);
-        Assert.All(links, link => Assert.Equal(Root + "officials/p4/record.html", link.GetAttribute("href")));
+        Assert.All(links, link => Assert.Equal(Root + "officials/p4/record.html?kind=executive-actions", link.GetAttribute("href")));
     }
 
     [Fact]
@@ -323,7 +323,7 @@ public sealed class OfficialProfilePageTests
 
         var link = Assert.Single(page.QuerySelectorAll(".official-exec .official-more a"));
         Assert.Equal("See all 5 executive orders", link.TextContent);
-        Assert.Equal(Root + "officials/p4/record.html", link.GetAttribute("href"));
+        Assert.Equal(Root + "officials/p4/record.html?kind=executive-actions", link.GetAttribute("href"));
         Assert.NotNull(page.QuerySelector("a.btn-primary"));
     }
 
@@ -469,7 +469,7 @@ public sealed class OfficialProfilePageTests
 
         var note = cut.QuerySelector("#votes p.muted")!;
         Assert.StartsWith("The 12 newest of 40.", note.TextContent);
-        Assert.Equal(Root + "officials/p1/record.html", note.QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal(Root + "officials/p1/record.html?kind=votes", note.QuerySelector("a")!.GetAttribute("href"));
         Assert.DoesNotContain("newest of", whole.QuerySelector("#votes")!.TextContent);
     }
 
