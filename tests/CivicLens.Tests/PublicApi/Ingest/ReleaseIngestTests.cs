@@ -20,7 +20,7 @@ public sealed class ReleaseIngestTests(PostgresCollection postgres) : IAsyncLife
     {
         world.Site.Publish(1, PublishedSamples.Statement('a', "Rent cap"), PublishedSamples.Statement('b', "Zoning"));
         var first = await world.IngestAsync();
-        var again = await new ReleaseIngest(new ReleaseFeed(new HttpClient(world.Site) { BaseAddress = world.Options.ReleaseBaseUrl }), world.Database)
+        var again = await new ReleaseIngest(new FeedReleaseSource(new ReleaseFeed(new HttpClient(world.Site) { BaseAddress = world.Options.ReleaseBaseUrl })), world.Database)
             .RunAsync(CancellationToken.None);
 
         Assert.Equal((IngestOutcome.Ingested, 2), (first.Outcome, first.Indexed));

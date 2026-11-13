@@ -32,9 +32,9 @@ namespace CivicLens.PublicApi;
 
 public static class PublicApiApp
 {
-    /// <summary>Builds the service. A test passes a handler that serves the release files in place of the network, one that answers the bot check, and a log provider.
+    /// <summary>Builds the service. A test passes a release source in place of the typed views, a handler that answers the bot check, and a log provider.
     /// The service lowers the request logs of ASP.NET Core to warnings, because an information log holds the request address with the search words.</summary>
-    public static WebApplication Build(PublicApiOptions options, string[] args, HttpMessageHandler? releaseHandler = null,
+    public static WebApplication Build(PublicApiOptions options, string[] args, IReleaseSource? releaseSource = null,
         HttpMessageHandler? turnstileHandler = null, ILoggerProvider? logProvider = null)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -44,16 +44,11 @@ public static class PublicApiApp
         var writer = NpgsqlDataSource.Create(options.Database);
         var reader = NpgsqlDataSource.Create(options.ReaderDatabase);
         var views = NpgsqlDataSource.Create(options.PublicViewsReaderDatabase);
-        var feed = new ReleaseFeed(new HttpClient(releaseHandler ?? new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All })
-        {
-            BaseAddress = options.ReleaseBaseUrl,
-            MaxResponseContentBufferSize = ReleaseFeed.MaximumRecordBytes,
-            Timeout = TimeSpan.FromMinutes(1)
-        });
 
         builder.Services.AddSingleton(options);
+        var snapshot = new RecordSnapshot(views);
         builder.Services.AddSingleton(new SchemaMigrator(writer));
-        builder.Services.AddSingleton(new ReleaseIngest(feed, writer));
+        builder.Services.AddSingleton(new ReleaseIngest(releaseSource ?? new TypedReleaseSource(snapshot), writer));
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
@@ -65,7 +60,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton<BillPageReader>();
         builder.Services.AddSingleton<BillMembersReader>();
         builder.Services.AddSingleton(new RecordKindStore(views));
-        builder.Services.AddSingleton(new RecordSnapshot(views));
+        builder.Services.AddSingleton(snapshot);
         builder.Services.AddSingleton(new StatementStore(views));
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));
@@ -81,6 +76,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new HomePageReader(provider.GetRequiredService<HomeStore>(), options.BrowserApiUrl));
         builder.Services.AddSingleton(new RelatedStore(views));
         builder.Services.AddSingleton(new WithdrawalStore(views));
+        builder.Services.AddSingleton(new CorrectionHistoryStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
         builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>()));
         builder.Services.AddSingleton<PageRenderer>();
@@ -142,6 +138,7 @@ public static class PublicApiApp
         app.MapHome();
         app.MapRelated();
         app.MapWithdrawals();
+        app.MapCorrectionHistories();
         app.MapExecutiveActions();
         app.MapOfficials();
         app.MapSearch();
