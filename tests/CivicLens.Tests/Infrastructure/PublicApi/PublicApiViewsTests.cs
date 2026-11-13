@@ -81,7 +81,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_lock(1)");
         await AssertDeniedAsync(connection, "SELECT pg_try_advisory_xact_lock(1)");
         foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_sponsorship_parties", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
-            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statement_approvers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
+            "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "vote_facts", "statement_speakers", "statement_speaker_terms", "statement_approvers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
             "executive_actions", "executive_action_notices", "executive_action_targets", "withdrawals", "withdrawal_corrections",
             "action_sources", "executive_action_sources", "record_entries", "record_officials", "record_issues", "record_policy_areas", "record_first_publications" })
         {
@@ -166,6 +166,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"statement_approvers v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_quotations v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_sources v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"statement_speaker_terms v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statement_speakers v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"statements v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"vote_evidence v {Owner} {Role}:SELECT {{security_barrier=true}}",
