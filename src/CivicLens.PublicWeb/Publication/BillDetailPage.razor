@@ -137,7 +137,7 @@
                         }
                         @if (!string.IsNullOrWhiteSpace(Data.Summary))
                         {
-                            @foreach (var fact in PublishedRecordLabels.Wording(Data.TextOrigin, Data.BillText is null ? PublishedRecordLabels.ModelWording : BillTextWords.Label))
+                            @foreach (var fact in PublishedRecordLabels.Wording(Data.TextOrigin, Data.BillText is null ? AiLabelWords.ModelWording : BillTextWords.Label))
                             {
                                 <dt>@fact.Label</dt>
                                 <dd>@fact.Value</dd>

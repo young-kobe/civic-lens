@@ -341,7 +341,7 @@ public sealed class OfficialProfilePageTests
         });
 
         var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
-        Assert.Equal([PublishedRecordLabels.ModelWording], labels.Select(label => label.TextContent).ToArray());
+        Assert.Equal([AiLabelWords.ModelWording], labels.Select(label => label.TextContent).ToArray());
     }
 
     [Fact]
@@ -353,12 +353,12 @@ public sealed class OfficialProfilePageTests
             Statements = [data.Statements[0] with
             {
                 Label = null, TextOrigin = PublishedTextOrigin.Person,
-                VoteLabel = PublishedRecordLabels.CodeWording, VoteTextOrigin = PublishedTextOrigin.Code
+                VoteLabel = AiLabelWords.CodeWording, VoteTextOrigin = PublishedTextOrigin.Code
             }]
         });
 
         Assert.Empty(page.QuerySelectorAll("#statements .official-source-label[data-origin=model]"));
-        Assert.Equal(PublishedRecordLabels.CodeWording, Assert.Single(page.QuerySelectorAll("#statements .official-source-label")).TextContent);
+        Assert.Equal(AiLabelWords.CodeWording, Assert.Single(page.QuerySelectorAll("#statements .official-source-label")).TextContent);
     }
 
     [Fact]

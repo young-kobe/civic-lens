@@ -100,11 +100,11 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task OnlyAModelSummaryWithALabelGetsTheAiStyleAndNoLabelColumnShowsPlainText()
     {
-        var code = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = PublishedRecordLabels.CodeWording })).QuerySelector(".ai-summary")!;
+        var code = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording })).QuerySelector(".ai-summary")!;
         var plain = (await RenderAsync(Bill with { Label = null })).QuerySelector(".ai-summary")!;
 
         Assert.False(code.ClassList.Contains("ai-summary-ai"));
-        Assert.Equal(PublishedRecordLabels.CodeWording, code.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(AiLabelWords.CodeWording, code.QuerySelector(".ai-summary-label")!.TextContent);
         Assert.False(plain.ClassList.Contains("ai-summary-ai"));
         Assert.Null(plain.QuerySelector(".ai-summary-label"));
     }
@@ -401,7 +401,7 @@ public sealed class BillDetailPageTests
             whole.QuerySelectorAll("dt").Single(term => term.TextContent == "Bill text").NextElementSibling!.TextContent);
         Assert.Null(crs.QuerySelector(".bill-why-title"));
         Assert.DoesNotContain(crs.QuerySelectorAll("details#source dt"), term => term.TextContent == "Bill text");
-        Assert.Equal(PublishedRecordLabels.ModelWording, crs.QuerySelectorAll("details#source dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
+        Assert.Equal(AiLabelWords.ModelWording, crs.QuerySelectorAll("details#source dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
     }
 
     private static async Task<IDocument> RenderAsync(BillPageData data)

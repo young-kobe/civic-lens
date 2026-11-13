@@ -233,8 +233,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Theory]
-    [InlineData("Model", PublishedRecordLabels.ModelWording)]
-    [InlineData("Code", PublishedRecordLabels.CodeWording)]
+    [InlineData("Model", AiLabelWords.ModelWording)]
+    [InlineData("Code", AiLabelWords.CodeWording)]
     [InlineData("Person", null)]
     public async Task RecentHeadlinesKeepTheirOwnPublishedWordingLabel(string origin, string? expectedLabel)
     {
@@ -253,8 +253,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         if (expectedLabel is not null) Assert.Contains(expectedLabel, row.TextContent);
         else
         {
-            Assert.DoesNotContain(PublishedRecordLabels.ModelWording, row.TextContent);
-            Assert.DoesNotContain(PublishedRecordLabels.CodeWording, row.TextContent);
+            Assert.DoesNotContain(AiLabelWords.ModelWording, row.TextContent);
+            Assert.DoesNotContain(AiLabelWords.CodeWording, row.TextContent);
         }
     }
 

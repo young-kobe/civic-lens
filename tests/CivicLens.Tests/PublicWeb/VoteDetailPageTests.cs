@@ -23,10 +23,10 @@ public sealed class VoteDetailPageTests
     [Fact]
     public async Task ACodeWrittenVoteKeepsItsCodeLabelWithoutModelStyling()
     {
-        var page = await RenderAsync(Vote() with { TextOrigin = PublishedTextOrigin.Code, Label = PublishedRecordLabels.CodeWording });
+        var page = await RenderAsync(Vote() with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording });
 
         var summary = page.QuerySelector(".ai-summary")!;
-        Assert.Equal(PublishedRecordLabels.CodeWording, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(AiLabelWords.CodeWording, summary.QuerySelector(".ai-summary-label")!.TextContent);
         Assert.False(summary.ClassList.Contains("ai-summary-ai"));
     }
 
@@ -282,7 +282,7 @@ public sealed class VoteDetailPageTests
     {
         var page = await RenderAsync(Vote() with { Summary = "<script>x()</script>" });
 
-        Assert.Equal(PublishedRecordLabels.ModelWording, page.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(AiLabelWords.ModelWording, page.QuerySelector(".ai-summary-label")!.TextContent);
         Assert.Equal("<script>x()</script>", page.QuerySelector(".ai-summary p")!.TextContent);
         Assert.Null(page.QuerySelector("main script"));
     }

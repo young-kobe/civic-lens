@@ -335,7 +335,7 @@ public sealed class PublicPageReadingGradeTests
         };
         var issue = new IssuePageData(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186,
             [new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, PublishedTextOrigin.Person, "Passed", 52, 48)],
-            [new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro")],
+            [new(new string('b', 64), "H.R. 1 would set storage rules.", AiLabelWords.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro")],
             new IssueLineUpData(119, 3, [new("Democrat", 2), new("Republican", 1)], 0));
         var search = new SearchPageData(new("5334", null, null, null, null, null), 1028,
             [new("jimmy-panetta", "Jimmy Panetta", PublishedOfficeKind.Representative, null, "CA", 19, "Democrat")], true,

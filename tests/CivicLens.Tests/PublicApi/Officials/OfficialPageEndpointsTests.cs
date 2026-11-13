@@ -210,10 +210,10 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains("Said on 10 Feb 2026", statements.TextContent);
         Assert.Contains("House roll call 3", statements.QuerySelector(".official-related a")!.TextContent);
         Assert.Contains("Yes (Yea)", statements.QuerySelector(".shared-vote-cast-value")!.TextContent);
-        Assert.Contains(PublishedRecordLabels.StatementModelWording, statements.TextContent);
+        Assert.Contains(AiLabelWords.StatementModelWording, statements.TextContent);
         Assert.Equal(2, statements.QuerySelectorAll(".official-source-label[data-origin=model]").Length);
         Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-label").Length);
-        Assert.All(page.QuerySelectorAll("#votes .shared-vote-label"), label => Assert.Equal(PublishedRecordLabels.ModelWording, label.TextContent.Trim()));
+        Assert.All(page.QuerySelectorAll("#votes .shared-vote-label"), label => Assert.Equal(AiLabelWords.ModelWording, label.TextContent.Trim()));
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
     }
 
@@ -316,8 +316,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var labels = page.QuerySelectorAll("#statements .official-source-label[data-origin=model]");
         Assert.Equal(2, labels.Length);
-        Assert.Contains(labels, label => label.TextContent == PublishedRecordLabels.StatementCheckedByPersonWording);
-        Assert.DoesNotContain(labels, label => label.TextContent == PublishedRecordLabels.StatementModelWording);
+        Assert.Contains(labels, label => label.TextContent == AiLabelWords.StatementCheckedByPersonWording);
+        Assert.DoesNotContain(labels, label => label.TextContent == AiLabelWords.StatementModelWording);
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, "/web/officials/p0");
 
         Assert.Single(page.QuerySelectorAll("#statements .official-source-label[data-origin=model]"));
-        Assert.Equal(PublishedRecordLabels.CodeWording,
+        Assert.Equal(AiLabelWords.CodeWording,
             Assert.Single(page.QuerySelectorAll("#statements .official-source-label[data-origin=code]")).TextContent);
     }
 

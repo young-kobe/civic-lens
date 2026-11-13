@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using System.Net;
 using System.Text.Json;
 using CivicLens.Application.Publication;
-using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Boards;
@@ -521,7 +520,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(votes[2].RecordId, featured.GetProperty("recordId").GetString());
         Assert.Equal("Summary c", featured.GetProperty("summary").GetString());
         Assert.Equal("model", featured.GetProperty("textOrigin").GetString());
-        Assert.Equal(PublishedRecordLabels.ModelWording, featured.GetProperty("label").GetString());
+        Assert.Equal(AiLabelWords.ModelWording, featured.GetProperty("label").GetString());
         Assert.Equal("Current line.", featured.GetProperty("billLine").GetString());
         Assert.Equal(PublishedWording.BillLineSource, featured.GetProperty("billLineSource").GetString());
         Assert.Equal(JsonValueKind.Null, featured.GetProperty("yea").ValueKind);
@@ -578,7 +577,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, senate.GetProperty("billLine").ValueKind);
         Assert.Equal(JsonValueKind.Null, senate.GetProperty("billLineSource").ValueKind);
         var house = answer.GetProperty("featuredVote");
-        Assert.Equal(PublishedRecordLabels.ModelWording, house.GetProperty("label").GetString());
+        Assert.Equal(AiLabelWords.ModelWording, house.GetProperty("label").GetString());
         Assert.Equal("First bill line.", house.GetProperty("billLine").GetString());
         Assert.Equal(PublishedWording.BillLineSource, house.GetProperty("billLineSource").GetString());
         Assert.Equal((2, 1), (house.GetProperty("yea").GetInt32(), house.GetProperty("nay").GetInt32()));
@@ -735,7 +734,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         var personBrief = (await GetAsync(person)).GetProperty("brief");
 
         Assert.Equal(PublishedWording.ModelBrief, modelBrief.GetProperty("label").GetString());
-        Assert.NotEqual(PublishedRecordLabels.ModelWording, modelBrief.GetProperty("label").GetString());
+        Assert.NotEqual(AiLabelWords.ModelWording, modelBrief.GetProperty("label").GetString());
         Assert.Equal(JsonValueKind.Null, personBrief.GetProperty("label").ValueKind);
     }
 

@@ -13,7 +13,7 @@ public static class ExecutiveActionWords
 
     /// <summary>The check line under an AI summary. It is the line of the approved mockup. The label of the summary is in the view.</summary>
     public const string SummaryCheck =
-        "The title, dates, citation and numbers on this page come from the Federal Register, checked by code. A model wrote only this summary.";
+        "The title, dates, citation and numbers on this page come from the Federal Register, checked by code. " + AiLabelWords.ModelWroteOnlyThisSummary;
 
     /// <summary>The Wording line of the source fold of a page with an AI summary. It is the line of the approved mockup, with "document" for "order".</summary>
     public const string SummaryWording = "The headline is the official title. The summary is an AI summary of the document text.";

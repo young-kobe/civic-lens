@@ -1,6 +1,6 @@
+using CivicLens.Publication.Contracts;
 using System.Net;
 using System.Text.Json;
-using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
@@ -120,7 +120,7 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
         using var second = await GetAsync(host, $"/v1/records/statement/{Statement}/related?limit=2&cursor={cursor}");
         using var fromAction = await GetAsync(host, $"/v1/records/action/{actions[0]}/related");
 
-        Assert.Equal([$"Tax bill|action|claimsCreditFor|2026-05-01|code|{PublishedRecordLabels.CodeWording}", $"Housing bill|action|describesOwnBill|2026-05-02|model|{PublishedRecordLabels.ModelWording}"], Describe(first));
+        Assert.Equal([$"Tax bill|action|claimsCreditFor|2026-05-01|code|{AiLabelWords.CodeWording}", $"Housing bill|action|describesOwnBill|2026-05-02|model|{AiLabelWords.ModelWording}"], Describe(first));
         Assert.Equal(["Vote on housing|vote|statementAboutVote|none|person|none"], Describe(second));
         Assert.Equal(JsonValueKind.Null, second.RootElement.GetProperty("nextCursor").ValueKind);
         Assert.Equal(["Doe on rent|statement|describesOwnBill|2026-05-02|person|none"], Describe(fromAction));

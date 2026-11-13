@@ -50,8 +50,8 @@ public sealed class HomePageTests
     }
 
     [Theory]
-    [InlineData(PublishedTextOrigin.Model, PublishedRecordLabels.ModelWording)]
-    [InlineData(PublishedTextOrigin.Code, PublishedRecordLabels.CodeWording)]
+    [InlineData(PublishedTextOrigin.Model, AiLabelWords.ModelWording)]
+    [InlineData(PublishedTextOrigin.Code, AiLabelWords.CodeWording)]
     [InlineData(PublishedTextOrigin.Person, null)]
     public async Task TheSummaryKeepsItsPublishedOriginAndEscapesStoredText(PublishedTextOrigin origin, string? wording)
     {

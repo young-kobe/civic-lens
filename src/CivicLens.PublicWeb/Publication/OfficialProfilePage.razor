@@ -117,7 +117,7 @@
                         <ul class="official-rows" role="list">
                             @foreach (var statement in Data.Statements)
                             {
-                                var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? PublishedRecordLabels.ModelWording : null);
+                                var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? AiLabelWords.ModelWording : null);
                                 <li>
                                     <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
                                     <div>

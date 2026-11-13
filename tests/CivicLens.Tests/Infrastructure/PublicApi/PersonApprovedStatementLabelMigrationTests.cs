@@ -1,6 +1,6 @@
+using CivicLens.Publication.Contracts;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection.Migrations;
-using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
@@ -40,8 +40,8 @@ public sealed class PersonApprovedStatementLabelMigrationTests(PostgresCollectio
     [Fact]
     public async Task ThePersonApprovedModelStatementKeepsItsAiLabelInBothViewsAndTheRollbackReturnsItsLabelToNullInBoth()
     {
-        string[] withLabel = [$"Code approved|{PublishedRecordLabels.StatementModelWording}", $"Person approved|{PublishedRecordLabels.StatementCheckedByPersonWording}"];
-        string[] withoutLabel = [$"Code approved|{PublishedRecordLabels.StatementModelWording}", "Person approved|null"];
+        string[] withLabel = [$"Code approved|{AiLabelWords.StatementModelWording}", $"Person approved|{AiLabelWords.StatementCheckedByPersonWording}"];
+        string[] withoutLabel = [$"Code approved|{AiLabelWords.StatementModelWording}", "Person approved|null"];
         Assert.Equal(withLabel, await LabelsAsync("record_headlines WHERE kind = 'statement'"));
         Assert.Equal(withLabel, await LabelsAsync("statements"));
 

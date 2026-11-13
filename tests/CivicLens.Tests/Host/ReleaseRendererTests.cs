@@ -680,7 +680,7 @@ public sealed class ReleaseRendererTests
         var html = await new ReleaseRenderer(null, null).RenderStatementAsync(statement, [], PublicationCatalogs.None, CancellationToken.None);
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
-        Assert.Contains(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
+        Assert.Contains(AiLabelWords.StatementModelWording, text, StringComparison.Ordinal);
         Assert.Contains("Checked by code on 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Checked by code, 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.Contains("Policy areas (chosen by AI)", text, StringComparison.Ordinal);
@@ -698,7 +698,7 @@ public sealed class ReleaseRendererTests
         Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Checked by code", text, StringComparison.Ordinal);
         Assert.DoesNotContain("AI summary", text, StringComparison.Ordinal);
-        Assert.DoesNotContain(PublishedRecordLabels.StatementCheckedByPersonWording, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(AiLabelWords.StatementCheckedByPersonWording, text, StringComparison.Ordinal);
         Assert.DoesNotContain("chosen by AI", text, StringComparison.Ordinal);
     }
 
@@ -732,8 +732,8 @@ public sealed class ReleaseRendererTests
 
         var text = new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent;
         Assert.Contains("Approved 10 May 2026, 12:00 UTC", text, StringComparison.Ordinal);
-        Assert.Contains(PublishedRecordLabels.StatementCheckedByPersonWording, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(PublishedRecordLabels.StatementModelWording, text, StringComparison.Ordinal);
+        Assert.Contains(AiLabelWords.StatementCheckedByPersonWording, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(AiLabelWords.StatementModelWording, text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2379,8 +2379,8 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
         Assert.NotNull(document.QuerySelector("main a[href='method.html']"));
         Assert.NotNull(document.QuerySelector("main a[href='report.html']"));
-        Assert.Contains(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
-        Assert.Contains(PublishedRecordLabels.CodeWording, html, StringComparison.Ordinal);
+        Assert.Contains(AiLabelWords.ModelWording, html, StringComparison.Ordinal);
+        Assert.Contains(AiLabelWords.CodeWording, html, StringComparison.Ordinal);
         Assert.Contains("On a bill or resolution page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". " +
             "Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".",
             new HtmlParser().ParseDocument(html).QuerySelector("main")!.TextContent, StringComparison.Ordinal);
@@ -3411,7 +3411,7 @@ public sealed class ReleaseRendererTests
         var links = panel.QuerySelectorAll("a[href^='#cite-']").ToArray();
         Assert.Equal(quotes, links.Select(link => document.QuerySelector(link.GetAttribute("href")!)!.TextContent));
         Assert.Contains(BillTextWords.Label, document.QuerySelector("dl")!.TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain(PublishedRecordLabels.ModelWording, html, StringComparison.Ordinal);
+        Assert.DoesNotContain(AiLabelWords.ModelWording, html, StringComparison.Ordinal);
     }
 
     [Fact]
