@@ -188,6 +188,20 @@ public sealed class StatementCodeApprovalTests
         Assert.False(StatementCodeApproval.Check(evidence, narrower, Warren, revision).Passed);
     }
 
+    [Fact]
+    public void CodeApprovesAStatementAtThirteenPointFiveAndHoldsOneAtFourteenPointOneWithTheOneApprovalMessage()
+    {
+        var evidence = DraftEvidence(configuration: OwnOfficeOf(Warren));
+        var revision = StatementDraftResolver.Resolve(Output(), evidence, Officials(Warren), DateTimeOffset.UnixEpoch).Revision! with
+        {
+            Summary = GradePassages.Summary
+        };
+
+        Assert.True(StatementCodeApproval.Check(evidence, Allowed(), Warren, revision with { Headline = GradePassages.PassingHeadline }).Passed);
+        Assert.Equal(GradePassages.ApprovalMessage,
+            StatementCodeApproval.Check(evidence, Allowed(), Warren, revision with { Headline = GradePassages.FailingHeadline }).Failure);
+    }
+
     private static StatementAllowedSelections Allowed() => new([Warren], [StatementGateFixtures.RentIssue], [StatementGateFixtures.HousingArea]);
 
     private static StatementDraftEvidence DatedEvidence() =>

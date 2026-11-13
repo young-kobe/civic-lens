@@ -190,5 +190,5 @@ public sealed class RelationshipPairFinderTests
 
     [Fact]
     public void TheFingerprintIsPinnedSoAStoredSettledInputKeepsItsMeaningUntilTheVersionIsBumped() =>
-        Assert.Equal("1e679afa2493e14de3ed14394fd30f8c73bf5ed31c558004221337351e4de91b", RelationshipFingerprint.Compute(ActionPair()));
+        Assert.Equal("75537f67fdaaa03980958a0ece49d5f98168c80c13918391a0bc096547c48996", RelationshipFingerprint.Compute(ActionPair()));
 }

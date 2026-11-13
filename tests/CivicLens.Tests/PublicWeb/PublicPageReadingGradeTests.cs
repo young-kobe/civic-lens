@@ -1,6 +1,6 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
-using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -126,7 +126,7 @@ public sealed class PublicPageReadingGradeTests
         });
 
         var grade = FeaturedModelGrade(page);
-        Assert.True(grade <= ReadingGrade.MaximumGrade,
+        Assert.True(grade <= AiTextRules.MaximumGrade,
             $"The featured model passage reads at grade {ReadingGrade.Format(grade)}.");
     }
 
@@ -148,9 +148,9 @@ public sealed class PublicPageReadingGradeTests
         modelSection.AppendChild(easyCopy);
         var gradeAfterUnrelatedCopy = FeaturedModelGrade(page);
 
-        Assert.True(isolatedGrade > ReadingGrade.MaximumGrade);
+        Assert.True(isolatedGrade > AiTextRules.MaximumGrade);
         Assert.Equal(isolatedGrade, gradeAfterUnrelatedCopy);
-        Assert.True(ReadingGrade.Rounded(NormalizeText(modelSection)) <= ReadingGrade.MaximumGrade,
+        Assert.True(ReadingGrade.Rounded(NormalizeText(modelSection)) <= AiTextRules.MaximumGrade,
             "The whole section can hide a difficult model passage behind unrelated easy text.");
     }
 

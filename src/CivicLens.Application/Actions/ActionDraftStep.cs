@@ -102,7 +102,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
 
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> TextLoop(IAnalysisAttempt<ActionDraftRun> attempt,
         ActionDraftContext context, AnalysisModelRequest firstRequest) =>
-        new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
+        new(Wrap, attempt, AnalysisRunOutcome.Drafted, AiTextRules.MaximumValidationPasses,
             errors => errors.IsDefaultOrEmpty ? firstRequest : BuildTextRequest(context, errors), model.DraftAsync,
             (json, run) => ActionDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc), ReadRunAsync);
 
@@ -113,14 +113,14 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
 
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> BillTextLoop(IAnalysisAttempt<ActionDraftRun> attempt,
         ActionDraftContext context, ActionDraftBillText billText, ActionKeyTermScope? keyTerms, AnalysisModelRequest firstRequest) =>
-        new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
+        new(Wrap, attempt, AnalysisRunOutcome.Drafted, AiTextRules.MaximumValidationPasses,
             errors => errors.IsDefaultOrEmpty ? firstRequest : BuildBillTextRequest(context, billText, keyTerms, errors), model.DraftAsync,
             (json, run) => ActionDraftResolver.ResolveBillText(json, context, run.RunId, run.FinishedAtUtc, keyTerms), ReadRunAsync,
             (json, run) => ActionDraftResolver.ResolveBillText(json, context, run.RunId, run.FinishedAtUtc, keyTerms, dropFailingKeyTerms: true));
 
     private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> IssueLoop(IAnalysisAttempt<ActionDraftRun> attempt,
         ActionDraftContext context) =>
-        new(Wrap, attempt, AnalysisRunOutcome.Drafted, ActionDraftTask.MaximumValidationPasses,
+        new(Wrap, attempt, AnalysisRunOutcome.Drafted, AiTextRules.MaximumValidationPasses,
             errors => context.Issues.BuildDroppingSubjectsWhenOverTheCap(
                 choice => ActionIssuePrompt.Build(context.Snapshot, choice, settings.PromptByteCap, errors)), model.DraftAsync,
             (json, run) => ActionDraftResolver.ResolveIssueChoice(json, context, run.FinishedAtUtc), ReadRunAsync);
