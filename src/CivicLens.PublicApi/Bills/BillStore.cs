@@ -27,10 +27,19 @@ public sealed class BillStore(NpgsqlDataSource views)
           ORDER BY s."position" LIMIT 1)
         """;
 
+    /// <summary>Joins the stored status <c>t</c> of each bill <c>b</c> of a row set. The one owner of that join.
+    /// Postgres underestimates the rows of a view on <c>active_records</c>, so a plain join rebuilds the whole view for each bill. OFFSET 0 keeps the lookup correlated.</summary>
+    internal const string StatusSql = """
+        LEFT JOIN LATERAL (
+             SELECT t.* FROM public_api.bill_status t
+              WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number OFFSET 0) t
+          ON TRUE
+        """;
+
     private const string PinFactsSql = $"""
         SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, v.record_id, v.chamber
           FROM public_api.bills b
-          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+          {StatusSql}
           LEFT JOIN LATERAL (
                SELECT v.record_id, v.chamber FROM public_api.votes v
                 WHERE v.congress = b.congress AND v.bill_type = b.bill_type AND v.bill_number = b.bill_number
@@ -42,7 +51,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     private const string ListFactsSql = $"""
         SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, t.status
           FROM public_api.bills b
-          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+          {StatusSql}
          WHERE b.record_id = ANY(@ids)
         """;
 
@@ -73,7 +82,8 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     /// <summary>Reads one page of the bills of the newest Congress that the active release holds and that Congress, in one query, inside the transaction of the caller.
-    /// Null means that no release is active, and a release with no bill gives a null Congress and an empty page.</summary>
+    /// The Congress and its total come from the stored counts of the release, which <c>ReleaseBillCounts</c> owns, so no live count runs.
+    /// Null means that no release is active. A release with no bill or with no stored count gives a null Congress and an empty page.</summary>
     public async Task<NewestCongressBills?> ListNewestCongressAsync(NpgsqlTransaction transaction, BillRequest request, CancellationToken cancellationToken)
     {
         if (request.Congress is not null) throw new ArgumentException("The newest Congress list takes its own Congress.", nameof(request));
@@ -287,11 +297,11 @@ public sealed class BillStore(NpgsqlDataSource views)
         """;
 
     private static string NewestCongressSql(BillRequest request) => $"""
-        WITH newest AS MATERIALIZED (SELECT max(b.congress) AS congress FROM public_api.bills b)
-        SELECT a.release_number, {Columns}, n.congress,
-               (SELECT count(*) FROM public_api.bills c WHERE c.congress = n.congress) AS in_congress
+        WITH newest AS MATERIALIZED (
+             SELECT c.congress, c.bills FROM public_api.release_bill_counts c WHERE c.bills > 0 ORDER BY c.congress DESC LIMIT 1)
+        SELECT a.release_number, {Columns}, n.congress, coalesce(n.bills, 0)::bigint AS in_congress
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
-         CROSS JOIN newest n
+          LEFT JOIN newest n ON TRUE
           LEFT JOIN LATERAL (
                SELECT b.* FROM public_api.bills b
                 WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}

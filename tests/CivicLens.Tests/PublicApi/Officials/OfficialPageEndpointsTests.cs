@@ -256,6 +256,31 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task BillRowsShowEachSponsoredBillOfTheCongressOnceWithItsOwnStatusAndSkipOtherCongressesAndOtherSponsors()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('4', "2024-05-01") { Congress = 118, BillNumber = 4, Sponsorships = [new("p0", "Sponsor", "2026-04-02")] },
+            new SeededBill('8', "2026-04-01") { BillNumber = 8, Sponsorships = [new("p0", "Sponsor", "2026-04-01"), new("p2", "Cosponsor", "2026-04-01")] },
+            new SeededBill('9', "2026-04-03") { BillNumber = 9, Sponsorships = [new("p2", "Sponsor", "2026-04-03"), new("p0", "Cosponsor", "2026-04-03")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.PinnedStatus(1, new string('1', 64), "Referred to the House Committee on Energy and Commerce.", "2026-01-12", 1)}
+            {PublicRecordPageRows.PinnedStatus(1, new string('4', 64), "Received in the Senate.", "2024-05-02", 1)}
+            {PublicRecordPageRows.PinnedStatus(1, new string('9', 64), "Received in the Senate.", "2026-04-04", 1)}
+            """);
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var rows = page.QuerySelectorAll("#bills .official-rows li").ToArray();
+        Assert.Equal([.. "821".Select(id => BaseUrl.Join($"records/{new string(id, 64)}.html"))],
+            rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!).ToArray());
+        Assert.Equal(["", "", "In committee"], rows.Select(row => row.QuerySelector(".badge")?.TextContent.Trim() ?? "").ToArray());
+        Assert.Contains("Latest official action 12 Jan 2026", rows[2].QuerySelector(".official-meta")!.TextContent);
+        Assert.Equal("See all 4 bills", page.QuerySelector("#bills .official-more a")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheSeeAllBillsLinkCountsEveryCongressOfTheReleaseAsTheBillsTabDoesAndNotTheBillFigureOfOneCongress()
     {
         await using var host = await StartAsync();

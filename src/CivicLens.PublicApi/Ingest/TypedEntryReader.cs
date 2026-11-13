@@ -20,7 +20,9 @@ public sealed class TypedEntryReader(NpgsqlTransaction snapshot)
             SELECT x.kind, x.record_id, x.revision_number, x.headline, x.source_host, x.event_date, x.bill_line, x.bill_title, x.document_type,
                    x.link_type, x.statement_record_id, x.target_kind, x.target_record_id, f.first_published_at_utc_ticks
               FROM public_api.record_entries x
-              JOIN public_api.record_first_publications f ON f.kind = x.kind AND f.record_id = x.record_id
+             CROSS JOIN LATERAL (
+                  SELECT f.first_published_at_utc_ticks FROM public_api.record_first_publications f
+                   WHERE f.kind = x.kind AND f.record_id = x.record_id OFFSET 0) f
              WHERE {RevisionKeys.Filter}
             """);
         var entries = new Dictionary<(string, int), PublishedRecordEntry>();
