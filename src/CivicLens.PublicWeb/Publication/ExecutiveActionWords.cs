@@ -99,9 +99,23 @@ public static class ExecutiveActionWords
     public static IReadOnlyList<Fact> SourceFacts(ExecutiveActionPageData data) =>
     [
         Fact.LinkList("Official document", [new FactLink($"Federal Register document {data.DocumentNumber}", data.DocumentUrl)]),
+        new("Federal Register citation", data.FederalRegisterCitation),
         new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) },
         .. data.Summary is { Label: not null } ? [new Fact("Wording", SummaryWording)] : Array.Empty<Fact>()
     ];
+
+    /// <summary>The heading over the quotes of the summary sentences in the source fold.</summary>
+    public const string QuotesHeading = "Quotes that support the summary";
+
+    /// <summary>Each cited fact as the saved Federal Register record states it, with a link to its marked line. The link names the line, so two notices differ. Fact <c>i</c> marks the anchor of <see cref="CitedText.Anchor"/> <c>i</c>.</summary>
+    public static IReadOnlyList<Fact> CitedFacts(ExecutiveActionPageData data) =>
+        [.. data.Facts.Select((fact, index) => new Fact(fact.Label, fact.Value).CitedAt(CitedText.Anchor(index), $"{fact.Label}, line {index + 1}"))];
+
+    /// <summary>The marked spans of one source: the citation of each fact that quotes it, with the anchor of that fact.</summary>
+    public static IReadOnlyList<CitedRange> RangesIn(ExecutiveActionPageData data, PublishedDocumentVersion source) =>
+        [.. data.Facts.Select((fact, index) => (fact.Citation, Anchor: CitedText.Anchor(index)))
+            .Where(item => item.Citation.ExtractionId == source.ExtractionId)
+            .Select(item => new CitedRange(item.Anchor, item.Citation.Start, item.Citation.Length))];
 
     private static Fact Correction(ExecutiveActionNoticeData notice)
     {

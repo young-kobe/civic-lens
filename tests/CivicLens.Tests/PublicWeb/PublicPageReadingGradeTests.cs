@@ -434,7 +434,7 @@ public sealed class PublicPageReadingGradeTests
             ("statement", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement())), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
             ("document change", Page<DocumentChangeDetailPage>(With("Data", DetailPageFixture.Change())), ["Example Agency", "The agency cut", "A shorter notice", "The text alone"]),
             ("executive action", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action())), ["Implementing the Sanctioning", "Donald Trump", "2026-21599", "91 FR"]),
-            ("executive action summary", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action() with { Summary = new(PublishedTextOrigin.Model, "AI summary label", true, ["The order sets sanctions."]) })),
+            ("executive action summary", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action() with { Summary = new(PublishedTextOrigin.Model, "AI summary label", true, [new() { Sentence = "The order sets sanctions.", Citation = new() { ExtractionId = "b", Start = 0, Length = 4, Quote = "Sec." } }], null) })),
                 ["Implementing the Sanctioning", "Donald Trump", "2026-21599", "91 FR", "AI summary label", "sets sanctions"]),
             ("brief", Page<BriefDetailPage>(With("Data", brief)), ["The week in Congress", "First paragraph", "Kelly announces"]),
             ("withdrawal", Page<PublishedWithdrawalPage>(With("Withdrawal", WithdrawalNoticePageTests.Notice)), ["The quote came"]),

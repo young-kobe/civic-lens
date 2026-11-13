@@ -77,7 +77,16 @@ internal static class PublicRecordPageRows
             """
     };
 
-    /// <summary>An executive action with two revisions and two correction notices. The active revision is 2 and it holds both notices in reverse position order.</summary>
+    /// <summary>The fact lines of the saved Federal Register record of <see cref="ExecutiveAction"/>. The disposition notes line has no citation until a test sets one.</summary>
+    public const string ExecutiveActionFactsText = "Federal Register document: 2026-00001\nSigned: 2026-01-20\nDisposition notes: Amends EO 1\n" +
+        "Correction notice: 2026-00009\nCorrection notice: 2026-00005";
+
+    /// <summary>The start of a line in <see cref="ExecutiveActionFactsText"/>.</summary>
+    public static int FactAt(string line) => ExecutiveActionFactsText.IndexOf(line, StringComparison.Ordinal);
+
+    /// <summary>An executive action with two revisions and two correction notices. The active revision is 2 and it holds both notices in reverse position order.
+    /// Its saved Federal Register record has the record ID as its extraction ID. Revision 2 cites two fact lines, written out of position order, and each notice
+    /// cites its line. Revision 1 cites a line of its own.</summary>
     public static string ExecutiveAction(string record) => $"""
         {ActiveRelease}
         INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('executiveAction', '{record}', 1, 2, NULL);
@@ -85,11 +94,23 @@ internal static class PublicRecordPageRows
             source_id, document_number, kind, title, signed_on, published_on, federal_register_citation, president_name, person_id, document_url)
           VALUES ('{record}', 1, 'x', 1, 'Code', 'civic-lens:code', '{new string('c', 40)}', 'fr', '2026-00001', 'ExecutiveOrder', 'Old title', '2026-01-20', '2026-01-23', '91 FR 1', 'Jane Roe', 'president', 'https://fr.example/1'),
                  ('{record}', 2, 'x', 1, 'Code', 'civic-lens:code', '{new string('c', 40)}', 'fr', '2026-00001', 'ExecutiveOrder', 'Title two', '2026-01-20', '2026-01-23', '91 FR 1', 'Jane Roe', 'president', 'https://fr.example/1');
+        {ExecutiveActionSource(record, ExecutiveActionFactsText)}
+        INSERT INTO executive_action_revision_facts (record_id, revision_number, "position", citation_extraction_id, citation_start, citation_length)
+        VALUES ('{record}', 2, 1, '{record}', {FactAt("Signed")}, 18), ('{record}', 2, 0, '{record}', 0, 37), ('{record}', 1, 0, '{record}', 0, 9);
         INSERT INTO executive_action_documents (source_id, document_number, record_id, revision_number, published_on, document_job_id, notice_url,
             notice_citation_extraction_id, notice_citation_start, notice_citation_length) VALUES
-          ('fr', '2026-00009', '{record}', 2, '2026-02-01', 'job1', 'https://fr.example/9', 'ext', 0, 1),
-          ('fr', '2026-00005', '{record}', 2, '2026-02-03', 'job2', 'https://fr.example/5', 'ext', 0, 1);
+          ('fr', '2026-00009', '{record}', 2, '2026-02-01', 'job1', 'https://fr.example/9', '{record}', {FactAt("Correction notice: 2026-00009")}, 29),
+          ('fr', '2026-00005', '{record}', 2, '2026-02-03', 'job2', 'https://fr.example/5', '{record}', {FactAt("Correction notice: 2026-00005")}, 29);
         INSERT INTO executive_action_revision_notices (record_id, revision_number, "position", source_id, document_number) VALUES
           ('{record}', 2, 1, 'fr', '2026-00005'), ('{record}', 2, 0, 'fr', '2026-00009'), ('{record}', 1, 0, 'fr', '2026-00009');
+        """;
+
+    /// <summary>A saved Federal Register record: one attempt and one extraction whose ID is the record ID, so each record has its own source.</summary>
+    public static string ExecutiveActionSource(string record, string text) => $"""
+        INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
+            outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256, elapsed_milliseconds)
+        VALUES ('fr-{record}', 'fr', 'https://fr.example/api/{record[..8]}', 'https://fr.example/api/{record[..8]}', 1000, 'captured', true, 200, ARRAY[]::text[], false, REPEAT('a', 64), 0);
+        INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+        VALUES ('{record}', 'fr-{record}', 'test', '{text}', REPEAT('b', 64));
         """;
 }

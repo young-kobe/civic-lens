@@ -28,7 +28,7 @@
                         <ChildContent>
                             @foreach (var sentence in summary.Sentences)
                             {
-                                <p>@sentence</p>
+                                <p>@sentence.Sentence</p>
                             }
                             @if (summary.Cut)
                             {
@@ -83,6 +83,34 @@
         </div>
         <SourceFold>
             <Facts Items="ExecutiveActionWords.SourceFacts(Data)" />
+            @if (Data.Summary is { Source: { } bodyText, Sentences.Length: > 0 } quoted)
+            {
+                <section class="executive-quotes" aria-labelledby="executive-quotes-title">
+                    <h3 id="executive-quotes-title">@ExecutiveActionWords.QuotesHeading</h3>
+                    <ul class="choices detail-quotes">
+                        @foreach (var sentence in quoted.Sentences)
+                        {
+                            <li><CitationQuote Label="@sentence.Sentence" Quote="@sentence.Citation.Quote" /></li>
+                        }
+                    </ul>
+                    @if (quoted.Cut)
+                    {
+                        <p class="small muted">@ExecutiveSummaryWords.CutNote</p>
+                    }
+                    <VersionSource Version="bodyText" />
+                </section>
+            }
+            @if (Data.Facts.Length > 0)
+            {
+                <Facts Items="ExecutiveActionWords.CitedFacts(Data)" />
+                <SourceLinesNote><Term Key="federal-register">Federal Register</Term> API record</SourceLinesNote>
+                @for (var index = 0; index < Data.Sources.Length; index++)
+                {
+                    var source = Data.Sources[index];
+                    <VersionSource Version="source" Linked="false" />
+                    <DocumentText Label="@($"Source text {index + 1} of {Data.Sources.Length}")" Runs="CitedText.Split(source.Text, ExecutiveActionWords.RangesIn(Data, source))" />
+                }
+            }
         </SourceFold>
     </article>
 </PublicPage>
