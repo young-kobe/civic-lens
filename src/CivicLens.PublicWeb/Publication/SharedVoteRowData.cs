@@ -3,7 +3,10 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>One vote row. <c>Totals</c> is the chamber bar of all casts and <c>Alignment</c> gives the split badge. A page that has no totals for the vote leaves both null.</summary>
+/// <summary>
+/// One vote row. <c>Totals</c> is the chamber bar of all casts and <c>Alignment</c> gives the split badge. A page that has no totals for the vote leaves both null.
+/// <c>Chamber</c> names the chamber in the roll call meta, for a list that can mix House and Senate votes.
+/// </summary>
 public sealed record SharedVoteRowData(
     string RecordId, DateOnly VotedOn, int Congress, int Session, int RollCall, string Headline, string? Label,
     string KindWords, string ResultWords, SharedVoteCastData[] Casts)
@@ -11,4 +14,5 @@ public sealed record SharedVoteRowData(
     public bool? MembersVotedTheSame { get; init; }
     public PublishedVoteAlignment? Alignment { get; init; }
     public PartyBarData? Totals { get; init; }
+    public PublishedChamber? Chamber { get; init; }
 }

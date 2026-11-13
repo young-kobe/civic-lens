@@ -44,7 +44,9 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
             MarksTotal = marksTotal,
             Statements = statements,
             HasLinkedStatements = statements.Length > 0 || await OfficialPageQueries.ReadHasBillLinkedStatementAsync(connection, transaction, id, cancellationToken),
-            Bills = bills
+            Bills = bills,
+            // Only a page that shows bills has a "See all" link that needs the count.
+            RecordBills = bills.Length > 0 ? await OfficialRecordQueries.ReadBillCountAsync(connection, transaction, id, cancellationToken) : 0
         };
     }
 
@@ -72,7 +74,7 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
         };
     }
 
-    private static SharedVoteRowData Vote(string officialId, MemberVote vote) =>
+    internal static SharedVoteRowData Vote(string officialId, MemberVote vote) =>
         new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label, vote.KindWords, vote.ResultWords,
             [new(officialId, vote.CastWords, vote.Side)]);
 }

@@ -13,11 +13,13 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     /// <summary>The most shared votes selected for each chamber.</summary>
     public const int MaximumSharedVotesPerChamber = 10;
 
+    /// <summary>The columns of one vote with the cast of the official, in the order of <see cref="ReadVote"/>. A query that selects the release and the official before them can use it.</summary>
+    internal const string VoteColumns = "v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast, v.side, v.party_majority_cast";
+
     // Each official gets a lateral read of its own, so the person index drives the plan. The issue filter reads the column issue_ids of the same view.
     // A filter on public_api.vote_issues made Postgres build the active records again for each row.
     private static string Sql(MemberVoteRequest request) => $"""
-        SELECT a.release_number, o.official_id, v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind,
-               v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast, v.side, v.party_majority_cast
+        SELECT a.release_number, o.official_id, {VoteColumns}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
          CROSS JOIN unnest(@officials) WITH ORDINALITY AS o(official_id, ask_order)
           LEFT JOIN LATERAL (
@@ -203,7 +205,8 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
             result, PlainVoteWords.Result(result), []);
     }
 
-    private static MemberVote ReadVote(NpgsqlDataReader reader)
+    /// <summary>Reads one vote. The columns start at the third ordinal, after the release and the official.</summary>
+    internal static MemberVote ReadVote(NpgsqlDataReader reader)
     {
         var kind = ViewColumns.Enum<PublishedVoteKind>(reader, 8);
         var result = reader.GetString(13);

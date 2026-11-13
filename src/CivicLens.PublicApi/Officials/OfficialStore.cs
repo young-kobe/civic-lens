@@ -134,7 +134,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         parameters.AddWithValue("cursor_id", cursor.OfficialId);
     }
 
-    private static async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    internal static async Task<(int Release, long? PublishedAtUtcTicks, OfficialRow Official)?> ReadOfficialAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(DetailSql, connection);
         command.Transaction = transaction;
@@ -145,7 +145,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
             : null;
     }
 
-    private static async Task<OfficialTerm[]> ReadTermsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    internal static async Task<OfficialTerm[]> ReadTermsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(TermsSql, connection);
         command.Transaction = transaction;

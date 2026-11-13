@@ -26,7 +26,7 @@
                     <div class="shared-vote-summary">
                         @RowHeading(vote)
                         <p class="shared-vote-meta">
-                            <time datetime="@vote.VotedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@Moment.Day(vote.VotedOn)</time>, roll call @vote.RollCall, @CongressCalendar.Ordinal(vote.Congress) Congress, session @vote.Session. @(vote.KindWords). Result: @vote.ResultWords
+                            <time datetime="@vote.VotedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@Moment.Day(vote.VotedOn)</time>, @(vote.Chamber is { } chamber ? VoteWords.RollCall(chamber, vote.RollCall) : $"roll call {vote.RollCall}"), @CongressCalendar.Ordinal(vote.Congress) Congress, session @vote.Session. @(vote.KindWords). Result: @vote.ResultWords
                             @if (vote.Label is not null)
                             {
                                 <span class="shared-vote-label">@vote.Label</span>
@@ -93,14 +93,15 @@
         builder.AddAttribute(1, "href", RootPath + PublicationProtocol.RecordPagePath(vote.RecordId));
         builder.AddContent(2, vote.Headline);
         builder.CloseElement();
-    });
+    }, "shared-vote-title");
 
     private static RenderFragment Heading(int level, string text) => Heading(level, builder => builder.AddContent(0, text));
 
-    private static RenderFragment Heading(int level, RenderFragment content) => builder =>
+    private static RenderFragment Heading(int level, RenderFragment content, string? cssClass = null) => builder =>
     {
         builder.OpenElement(0, "h" + level);
-        builder.AddContent(1, content);
+        builder.AddAttribute(1, "class", cssClass);
+        builder.AddContent(2, content);
         builder.CloseElement();
     };
 }

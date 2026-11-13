@@ -13,7 +13,17 @@
             {
                 <span class="muted small">Sponsor: @Sponsor</span>
             }
-            <span class="muted small">@Meta</span>
+            @if (MetaParts is not null)
+            {
+                <span class="muted small record-row-meta">@foreach (var part in MetaParts)
+                    {
+                        <span>@part</span>
+                    }</span>
+            }
+            else
+            {
+                <span class="muted small">@Meta</span>
+            }
         </a>
         @if (Yea is { } yea && Nay is { } nay)
         {
@@ -45,7 +55,9 @@
     [Parameter] public PublishedTextOrigin? LabelOrigin { get; set; }
     /// <summary>The name of the bill sponsor, shown as "Sponsor: {name}" above the meta line.</summary>
     [Parameter] public string? Sponsor { get; set; }
-    [Parameter, EditorRequired] public string Meta { get; set; } = string.Empty;
+    [Parameter] public string Meta { get; set; } = string.Empty;
+    /// <summary>A meta line of separate parts, each in its own span, as on the official page. It takes the place of <c>Meta</c>.</summary>
+    [Parameter] public string[]? MetaParts { get; set; }
     [Parameter] public int? Yea { get; set; }
     [Parameter] public int? Nay { get; set; }
     [Parameter] public string? ResultWords { get; set; }
