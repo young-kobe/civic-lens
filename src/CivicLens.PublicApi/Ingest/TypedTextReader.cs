@@ -51,7 +51,9 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
     private const string RelationshipQuotes = """
         SELECT x.link_record_id, x.reason, s.text, x.quote_start, x.quote_length
           FROM public_api.record_links x
-          JOIN public_api.statement_sources s ON s.record_id = x.record_id AND s.extraction_id = x.quote_extraction_id
+         CROSS JOIN LATERAL (
+              SELECT s.text FROM public_api.statement_sources s
+               WHERE s.record_id = x.record_id AND s.extraction_id = x.quote_extraction_id OFFSET 0) s
          WHERE x.kind = 'statement' AND x.link_record_id = ANY(@ids)
         """;
 

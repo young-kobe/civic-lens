@@ -27,7 +27,7 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
                   FROM public_api.record_links k
                  WHERE k.kind = 'vote' AND k.record_id = @id AND k.related_kind = 'statement'
                  ORDER BY k.related_record_id, k.link_record_id OFFSET 0) l
-          JOIN public_api.statements s ON s.record_id = l.related_record_id
+         CROSS JOIN LATERAL (SELECT s.* FROM public_api.statements s WHERE s.record_id = l.related_record_id OFFSET 0) s
          ORDER BY s.statement_date DESC NULLS LAST, s.record_id
          LIMIT @take
         """;
