@@ -15,6 +15,10 @@ internal static class QueryValues
         return values.Count == 1 ? values[0] : throw new ArgumentException($"{name} must appear once.", name);
     }
 
+    /// <summary>The text of each named parameter as the reader typed it, in the given order, for a form that shows a refused request again. It reads the first value of a repeated parameter.</summary>
+    public static (string Name, string? Value)[] Typed(IQueryCollection query, params string[] names) =>
+        [.. names.Select(name => (name, query.TryGetValue(name, out var values) ? values.FirstOrDefault() : null))];
+
     public static int? Number(IQueryCollection query, string name, int minimum, int maximum)
     {
         var value = Value(query, name);

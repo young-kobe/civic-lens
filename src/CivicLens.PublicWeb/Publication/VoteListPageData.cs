@@ -8,5 +8,5 @@ public sealed record VoteListPageData(int Release, int VotesInRelease, IReadOnly
     IReadOnlyList<SearchChoiceData> Kinds, IReadOnlyList<SearchChoiceData> Issues);
 
 /// <summary><see cref="Label"/> is the label column of the view, or null. The counts are null when a cast is a candidate name.</summary>
-public sealed record VoteListRowData(string RecordId, string Headline, string? Label, PublishedChamber Chamber, int RollCall, DateOnly VotedOn,
+public sealed record VoteListRowData(string RecordId, string Headline, string? Label, PublishedTextOrigin TextOrigin, PublishedChamber Chamber, int RollCall, DateOnly VotedOn,
     PublishedVoteKind Kind, string? BillNumber, string Result, PublishedVoteAlignment? Alignment, int? Yea, int? Nay);

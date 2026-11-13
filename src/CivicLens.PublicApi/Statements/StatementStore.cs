@@ -87,6 +87,29 @@ public sealed class StatementStore(NpgsqlDataSource views)
             ? (read.Page, read.Total!.Value)
             : null;
 
+    // OFFSET 0 keeps the link lookup correlated through the security barrier view.
+    private const string ListFactsSql = """
+        SELECT s.record_id, src.url,
+               EXISTS (SELECT 1 FROM public_api.record_links l
+                        WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote' OFFSET 0)
+          FROM public_api.statements s
+          JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
+         WHERE s.record_id = ANY(@ids)
+        """;
+
+    /// <summary>Reads the source site and the vote link of a bounded set of statements in one query, inside the transaction of the caller.
+    /// A statement that left the release has no entry.</summary>
+    public async Task<Dictionary<string, StatementListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, string[] recordIds, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(ListFactsSql, transaction.Connection, transaction);
+        command.Parameters.AddWithValue("ids", recordIds);
+        var facts = new Dictionary<string, StatementListFacts>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            facts[reader.GetString(0)] = new(reader.GetString(1), reader.GetBoolean(2));
+        return facts;
+    }
+
     private static string ListSql(StatementRequest request, bool withTotal = false) => $"""
         SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
                ARRAY(SELECT p.official_id FROM public_api.statement_speakers p

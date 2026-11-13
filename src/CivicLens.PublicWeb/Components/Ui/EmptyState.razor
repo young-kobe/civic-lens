@@ -1,5 +1,12 @@
 <div class="empty">
-    <h3>@Title</h3>
+    @if (HeadingLevel == 2)
+    {
+        <h2>@Title</h2>
+    }
+    else
+    {
+        <h3>@Title</h3>
+    }
     @if (Text is not null)
     {
         <p>@Text</p>
@@ -10,6 +17,8 @@
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    /// <summary>2 when the empty state follows the page title directly, so the headings keep their order. 3 under a section heading.</summary>
+    [Parameter] public int HeadingLevel { get; set; } = 3;
     [Parameter] public string? Text { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? Action { get; set; }

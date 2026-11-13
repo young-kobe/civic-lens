@@ -99,6 +99,7 @@ table[data-paged]:focus { outline: none; }
 .record-counts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s3) 0; font-variant-numeric: tabular-nums; }
 .record-counts b { font-family: var(--heading); font-size: var(--t-lg); }
 .record-row .record-counts { font-size: .875rem; }
+.record-row-label[data-origin="model"] { color: var(--ai-ink); }
 .record-row .record-counts b { font-family: inherit; font-size: inherit; }
 .home-grid .home-brief-line { margin: 0; padding: 0; border: 0; }
 .home-issues { background: var(--surface); }

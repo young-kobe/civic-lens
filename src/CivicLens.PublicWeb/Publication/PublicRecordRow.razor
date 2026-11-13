@@ -7,7 +7,7 @@
             <span>@Headline</span>
             @if (Label is not null)
             {
-                <span class="muted small">@Label</span>
+                <span class="muted small record-row-label" data-origin="@(LabelOrigin == PublishedTextOrigin.Model ? "model" : null)">@Label</span>
             }
             @if (Sponsor is not null)
             {
@@ -41,6 +41,8 @@
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
     [Parameter] public string? Label { get; set; }
+    /// <summary>The text origin of the row. A model label shows in the AI ink. Any other label, such as one that says "with no AI", stays muted.</summary>
+    [Parameter] public PublishedTextOrigin? LabelOrigin { get; set; }
     /// <summary>The name of the bill sponsor, shown as "Sponsor: {name}" above the meta line.</summary>
     [Parameter] public string? Sponsor { get; set; }
     [Parameter, EditorRequired] public string Meta { get; set; } = string.Empty;

@@ -4,15 +4,37 @@ using CivicLens.PublicWeb.Components.Ui;
 namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>The filters of one list request, as the reader typed them. Each value is keyed by its query parameter name. An empty value is no filter and is not kept.
-/// The order of the values is the order of the form fields, and the dates come last. <see cref="From"/> and <see cref="To"/> are the date filters.</summary>
-public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values, DateOnly? From, DateOnly? To)
+/// The order of the values is the order of the form fields, and the dates come last. <see cref="From"/> and <see cref="To"/> are the date filters.
+/// <see cref="Invalid"/> names the field that the server refused, or is null. A refused filter keeps the typed text of each field, so the form shows it again.</summary>
+public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values, DateOnly? From, DateOnly? To, string? Invalid = null)
 {
+    /// <summary>The approved error of a date field whose text is no date (#518).</summary>
+    public const string DateError = "Enter the date as year, month and day, for example 2026-09-01.";
+
+    private const string DateFormat = "yyyy-MM-dd";
+
     /// <summary>Keeps the pairs that have a value, in the given order, and then the dates.</summary>
     public static RecordListFilter Of(DateOnly? from, DateOnly? to, params (string Name, string? Value)[] pairs) =>
         new(pairs.Append((Name: "from", Value: DateText(from))).Append((Name: "to", Value: DateText(to))).Where(pair => pair.Value is not null)
             .ToDictionary(pair => pair.Name, pair => pair.Value!), from, to);
 
+    /// <summary>The typed text of each field of a refused request, in form order, and the field that the server refused. It holds no dates, so it shows no date chip.</summary>
+    public static RecordListFilter Refused(string? invalid, params (string Name, string? Value)[] pairs) =>
+        new(pairs.Where(pair => !string.IsNullOrEmpty(pair.Value)).ToDictionary(pair => pair.Name, pair => pair.Value!), null, null, invalid);
+
     public bool IsActive => Values.Count > 0;
+
+    public bool IsInvalid(string name) => Invalid == name;
+
+    /// <summary>The error text of a field, or null. Only a date field whose text is no date has approved text. Any other refused field is marked invalid with no text.</summary>
+    public string? ErrorOf(string name) => IsInvalid(name) && name is ("from" or "to") && !IsDate(Value(name)) ? DateError : null;
+
+    /// <summary>The attributes that tie an input to its error: <c>aria-invalid</c> on the refused field, and <c>aria-describedby</c> when the field has error text.</summary>
+    public IReadOnlyDictionary<string, object> InputAttributes(string name, string inputId) => !IsInvalid(name)
+        ? new Dictionary<string, object>()
+        : ErrorOf(name) is null
+            ? new Dictionary<string, object> { ["aria-invalid"] = "true" }
+            : new Dictionary<string, object> { ["aria-invalid"] = "true", ["aria-describedby"] = Field.ErrorIdOf(inputId) };
 
     public string? Value(string name) => Values.GetValueOrDefault(name);
 
@@ -29,5 +51,7 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
     public string Query(string? cursor = null) => "?" + string.Join('&', Values.Select(pair => $"{pair.Key}={Uri.EscapeDataString(pair.Value)}")
         .Concat(cursor is null ? [] : [$"cursor={Uri.EscapeDataString(cursor)}"]));
 
-    private static string? DateText(DateOnly? date) => date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private static string? DateText(DateOnly? date) => date?.ToString(DateFormat, CultureInfo.InvariantCulture);
+
+    private static bool IsDate(string? text) => DateOnly.TryParseExact(text, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 }

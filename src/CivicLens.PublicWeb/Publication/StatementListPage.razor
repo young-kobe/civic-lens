@@ -5,8 +5,8 @@
                  Lede="What members of Congress and the President said in their own press releases, newest first. Each statement links to its source."
                  FilterSummary="Filter by official, issue or date" Singular="statement" Plural="statements" EmptyTitle="No statement matches these filters.">
     <Fields>
-        <Field Label="Official" For="statements-official"><input id="statements-official" type="search" name="official" placeholder="Type a name" autocomplete="off" value="@Data.Filter.Value("official")" /></Field>
-        <RecordListSelect Id="statements-issue" Name="issue" Label="Issue" Choices="Data.Issues" Selected="@Data.Filter.Value("issue")" />
+        <RecordListText Id="statements-official" Name="official" Label="Official" Placeholder="Type a name" Filter="Data.Filter" />
+        <RecordListSelect Id="statements-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Data.Filter" />
         <RecordListDates IdPrefix="statements" Filter="Data.Filter" />
     </Fields>
     <EmptyTips>
@@ -18,7 +18,12 @@
         @foreach (var statement in Data.Statements)
         {
             <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline" Label="@statement.Label"
-                             Meta="@Meta(statement)" />
+                             LabelOrigin="statement.TextOrigin" Meta="@Meta(statement)">
+                @if (statement.LinkedToVote)
+                {
+                    <p><StatusBadge Text="Linked to a vote" /></p>
+                }
+            </PublicRecordRow>
         }
     </Rows>
 </RecordListFrame>
@@ -30,6 +35,11 @@
     private IReadOnlyList<string?> Chips =>
         [Data.Filter.Value("official") is { } name ? $"Official: {name}" : null, RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue"))];
 
-    private static string Meta(StatementListRowData statement) => string.Join(", ", statement.Speakers
-        .Append(statement.StatementDate is { } day ? $"Said on {Moment.Day(day)}" : "Date not stated"));
+    /// <summary>The meta line of the mockup row: each speaker with seat and party, the day, and the site of the source.</summary>
+    private static string Meta(StatementListRowData statement) => string.Join(", ", statement.Speakers.Select(Speaker)
+        .Append(statement.StatementDate is { } day ? $"Said on {Moment.Day(day)}" : "Date not stated")
+        .Append($"From {statement.SourceSite}"));
+
+    private static string Speaker(StatementSpeakerData speaker) =>
+        string.Join(", ", new[] { speaker.Name, OfficialSeat.Text(speaker.Kind, speaker.Office, speaker.State, speaker.District), speaker.Party }.OfType<string>());
 }

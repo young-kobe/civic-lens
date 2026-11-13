@@ -48,7 +48,7 @@ public sealed class BillStore(NpgsqlDataSource views)
 
     private const string PolicyAreasSql = """
         SELECT DISTINCT b.policy_area_id, b.policy_area FROM public_api.bills b
-         WHERE b.policy_area_id IS NOT NULL AND b.policy_area IS NOT NULL ORDER BY b.policy_area, b.policy_area_id
+         WHERE b.congress = @congress AND b.policy_area_id IS NOT NULL AND b.policy_area IS NOT NULL ORDER BY b.policy_area, b.policy_area_id
         """;
 
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
@@ -72,28 +72,26 @@ public sealed class BillStore(NpgsqlDataSource views)
         return new(active, page, next);
     }
 
-    /// <summary>Reads one page of the bills of the newest Congress that the active release holds, its Congress, and the stored bill total of that Congress, in one query.
-    /// The total comes from <c>public_api.release_bill_counts</c>, as the official page reads it, and is null when the release stores none. A filter never changes it.
+    /// <summary>Reads one page of the bills of the newest Congress that the active release holds and that Congress, in one query, inside the transaction of the caller.
     /// Null means that no release is active, and a release with no bill gives a null Congress and an empty page.</summary>
-    public async Task<NewestCongressBills?> ListNewestCongressAsync(BillRequest request, CancellationToken cancellationToken)
+    public async Task<NewestCongressBills?> ListNewestCongressAsync(NpgsqlTransaction transaction, BillRequest request, CancellationToken cancellationToken)
     {
         if (request.Congress is not null) throw new ArgumentException("The newest Congress list takes its own Congress.", nameof(request));
-        await using var command = views.CreateCommand(NewestCongressSql(request));
+        await using var command = new NpgsqlCommand(NewestCongressSql(request), transaction.Connection, transaction);
         AddParameters(command, request);
         var rows = new List<BillRow>();
-        int? release = null, congress = null, total = null;
+        int? release = null, congress = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                congress = ViewColumns.Number(reader, reader.FieldCount - 2);
-                total = ViewColumns.Number(reader, reader.FieldCount - 1);
+                congress = ViewColumns.Number(reader, reader.FieldCount - 1);
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
-        return new(new BillPage(active, page, next), congress, total);
+        return new(new BillPage(active, page, next), congress);
     }
 
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
@@ -159,9 +157,9 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     /// <summary>Reads the sponsor, the latest action, and its stored status of a bounded set of bills in one query. A bill that left the release has no entry.</summary>
-    public async Task<Dictionary<string, BillListFacts>> ReadListFactsAsync(string[] recordIds, CancellationToken cancellationToken)
+    public async Task<Dictionary<string, BillListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, string[] recordIds, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(ListFactsSql);
+        await using var command = new NpgsqlCommand(ListFactsSql, transaction.Connection, transaction);
         command.Parameters.AddWithValue("ids", recordIds);
         var facts = new Dictionary<string, BillListFacts>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -171,10 +169,11 @@ public sealed class BillStore(NpgsqlDataSource views)
         return facts;
     }
 
-    /// <summary>Lists the policy areas that bills of the active release hold, as a filter lists them.</summary>
-    public async Task<SearchChoiceData[]> ListPolicyAreasAsync(CancellationToken cancellationToken)
+    /// <summary>Lists the policy areas that bills of one Congress of the active release hold, as a filter lists them, inside the transaction of the caller.</summary>
+    public async Task<SearchChoiceData[]> ListPolicyAreasAsync(NpgsqlTransaction transaction, int congress, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(PolicyAreasSql);
+        await using var command = new NpgsqlCommand(PolicyAreasSql, transaction.Connection, transaction);
+        command.Parameters.AddWithValue("congress", congress);
         var areas = new List<SearchChoiceData>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken)) areas.Add(new(reader.GetString(0), reader.GetString(1)));
@@ -287,10 +286,9 @@ public sealed class BillStore(NpgsqlDataSource views)
 
     private static string NewestCongressSql(BillRequest request) => $"""
         WITH newest AS MATERIALIZED (SELECT max(b.congress) AS congress FROM public_api.bills b)
-        SELECT a.release_number, {Columns}, n.congress, t.bills
+        SELECT a.release_number, {Columns}, n.congress
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
          CROSS JOIN newest n
-          LEFT JOIN public_api.release_bill_counts t ON t.congress = n.congress
           LEFT JOIN LATERAL (
                SELECT b.* FROM public_api.bills b
                 WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}

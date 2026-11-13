@@ -107,6 +107,22 @@ public sealed class OfficialStore(NpgsqlDataSource views)
          ORDER BY {OrderOf(request)}
         """;
 
+    /// <summary>Reads the officials of a bounded set of IDs inside the transaction of the caller, with the seat and party that the officials list shows.
+    /// An ID that the release does not name has no entry.</summary>
+    internal static async Task<Dictionary<string, OfficialRow>> ReadRowsAsync(NpgsqlTransaction transaction, string[] officialIds, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand($"SELECT {Columns} FROM public_api.officials o WHERE o.official_id = ANY(@ids)", transaction.Connection, transaction);
+        command.Parameters.AddWithValue("ids", officialIds);
+        var rows = new Dictionary<string, OfficialRow>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var row = ReadRow(reader, 0);
+            rows[row.OfficialId] = row;
+        }
+        return rows;
+    }
+
     /// <summary>True when the parameter <c>@name_prefix</c>, in lower case, starts the lower case name of the official <paramref name="alias"/>, or starts any word after a space in it.
     /// The one owner of the name match. <see cref="OfficialRequest.NameOf"/> reads the text.</summary>
     internal static string NameMatchSql(string alias) => $"strpos(' ' || lower({alias}.name), ' ' || lower(@name_prefix)) > 0";

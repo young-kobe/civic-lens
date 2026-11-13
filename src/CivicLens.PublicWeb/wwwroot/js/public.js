@@ -1051,6 +1051,9 @@
     window.addEventListener("hashchange", openFoldOfHash);
     openFoldOfHash();
 
+    // The filter fold of a record list opens on a wide screen, as the approved mockup does. The server opens it when a filter is active.
+    if (matchMedia("(min-width: 720px)").matches) document.querySelectorAll("details[data-wide-open]").forEach(fold => { fold.open = true; });
+
     // The vote map shows the shapes on a wide screen and the tiles on a narrow one. The view buttons override that choice. Without script the width chooses.
     const initVoteMapView = map => {
         const views = map.querySelector("[data-vote-map-views]");

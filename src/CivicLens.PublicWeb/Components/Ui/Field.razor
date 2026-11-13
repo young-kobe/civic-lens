@@ -3,7 +3,7 @@
     @ChildContent
     @if (Error is not null)
     {
-        <span class="field-error">@Error</span>
+        <span class="field-error" id="@ErrorId">@Error</span>
     }
     @if (Hint is not null)
     {
@@ -20,4 +20,9 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     public string HintId => $"{For}-hint";
+
+    public string ErrorId => ErrorIdOf(For);
+
+    /// <summary>The id of the error text of the field whose input has the id <paramref name="inputId"/>, for <c>aria-describedby</c>.</summary>
+    public static string ErrorIdOf(string inputId) => $"{inputId}-error";
 }

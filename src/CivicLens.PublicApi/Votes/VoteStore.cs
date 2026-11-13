@@ -27,15 +27,18 @@ public sealed class VoteStore(NpgsqlDataSource views)
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<VotePage?> ListAsync(VoteRequest request, CancellationToken cancellationToken) =>
-        (await ReadPageAsync(request, withTotal: false, cancellationToken))?.Page;
+        (await ReadPageAsync(views.CreateCommand(ListSql(request, withTotal: false)), request, withTotal: false, cancellationToken))?.Page;
 
-    /// <summary>Reads one page and the number of votes of the active release, in one query, as the officials list reads its total. A filter never changes the total.</summary>
-    public async Task<(VotePage Page, int VotesInRelease)?> ListWithTotalAsync(VoteRequest request, CancellationToken cancellationToken) =>
-        await ReadPageAsync(request, withTotal: true, cancellationToken) is { } read ? (read.Page, read.Total!.Value) : null;
+    /// <summary>Reads one page and the number of votes of the active release, in one query, as the officials list reads its total. A filter never changes the total.
+    /// It reads inside the transaction of the caller, so the page shares a snapshot with the other reads of that transaction.</summary>
+    public async Task<(VotePage Page, int VotesInRelease)?> ListWithTotalAsync(NpgsqlTransaction transaction, VoteRequest request, CancellationToken cancellationToken) =>
+        await ReadPageAsync(new NpgsqlCommand(ListSql(request, withTotal: true), transaction.Connection, transaction), request, withTotal: true, cancellationToken) is { } read
+            ? (read.Page, read.Total!.Value)
+            : null;
 
-    private async Task<(VotePage Page, int? Total)?> ReadPageAsync(VoteRequest request, bool withTotal, CancellationToken cancellationToken)
+    private static async Task<(VotePage Page, int? Total)?> ReadPageAsync(NpgsqlCommand command, VoteRequest request, bool withTotal, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(ListSql(request, withTotal));
+        await using var _ = command;
         AddParameters(command, request);
         var rows = new List<VoteRow>();
         int? release = null, total = null;

@@ -5,6 +5,7 @@ using CivicLens.PublicApi;
 using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicApi.Votes;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -75,23 +76,88 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ANoReleaseAnswers503AnInvalidFilterAnswers400AndACursorOfAnotherReleaseRedirectsToTheFirstPage()
+    public async Task ANoReleaseAnswers503AndACursorOfAnotherReleaseRedirectsToTheFirstPage()
     {
         await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
         foreach (var path in new[] { "/web/votes", "/web/bills", "/web/statements", "/web/executive-actions" })
             await GetPageAsync(host, path, HttpStatusCode.ServiceUnavailable);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
 
-        await GetPageAsync(host, "/web/votes?chamber=moon", HttpStatusCode.BadRequest);
-        await GetPageAsync(host, "/web/votes?bill=nonsense", HttpStatusCode.BadRequest);
-        await GetPageAsync(host, "/web/bills?from=2026-02-01&to=2026-01-01", HttpStatusCode.BadRequest);
-        await GetPageAsync(host, "/web/executive-actions?type=law", HttpStatusCode.BadRequest);
         var stale = new VoteCursor(99, new DateOnly(2026, 3, 1), PublishedChamber.House, 1, 1, new string('a', 64)).Encode();
         using var noRedirect = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress };
         var response = await noRedirect.GetAsync($"/web/votes?chamber=house&cursor={stale}");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/web/votes?chamber=house", response.Headers.Location!.OriginalString);
+    }
+
+    [Fact]
+    public async Task ARefusedFilterAnswers400WithThePageTheTypedTextAndTheRefusedFieldMarkedAndNoRows()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote('a', "2026-03-02", 1));
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02"));
+
+        var bill = await GetPageAsync(host, "/web/bills?bill=5334a&sponsor=Ann", HttpStatusCode.BadRequest);
+        var conflict = await GetPageAsync(host, "/web/bills?type=s&bill=H.R.%201002", HttpStatusCode.BadRequest);
+        var date = await GetPageAsync(host, "/web/votes?from=2026-13-45&chamber=house", HttpStatusCode.BadRequest);
+        var order = await GetPageAsync(host, "/web/statements?from=2026-02-01&to=2026-01-01", HttpStatusCode.BadRequest);
+        var choice = await GetPageAsync(host, "/web/executive-actions?type=law", HttpStatusCode.BadRequest);
+
+        var number = bill.QuerySelector("input[name=bill]")!;
+        Assert.Equal(("5334a", "true", null), (number.GetAttribute("value"), number.GetAttribute("aria-invalid"), number.GetAttribute("aria-describedby")));
+        Assert.Equal("Ann", bill.QuerySelector("input[name=sponsor]")!.GetAttribute("value"));
+        Assert.Null(bill.QuerySelector("input[name=sponsor]")!.GetAttribute("aria-invalid"));
+        Assert.Equal("true", conflict.QuerySelector("select[name=type]")!.GetAttribute("aria-invalid"));
+        var from = date.QuerySelector("input[name=from]")!;
+        Assert.Equal("true", from.GetAttribute("aria-invalid"));
+        Assert.Equal(RecordListFilter.DateError, date.GetElementById(from.GetAttribute("aria-describedby")!)!.TextContent);
+        Assert.Equal("house", date.QuerySelector("select[name=chamber] option[selected]")!.GetAttribute("value"));
+        Assert.Equal("true", order.QuerySelector("input[name=from]")!.GetAttribute("aria-invalid"));
+        Assert.Null(order.QuerySelector("input[name=from]")!.GetAttribute("aria-describedby"));
+        Assert.Equal("true", choice.QuerySelector("select[name=type]")!.GetAttribute("aria-invalid"));
+        foreach (var page in new[] { bill, conflict, date, order, choice })
+        {
+            Assert.NotNull(page.QuerySelector(".list-fold[open] form"));
+            Assert.Empty(Rows(page));
+            Assert.Null(page.QuerySelector(".list-status"));
+            Assert.Null(page.QuerySelector(".empty"));
+            Assert.Equal(1, page.QuerySelectorAll("[aria-invalid]").Length);
+        }
+        Assert.Single(date.QuerySelectorAll(".field-error"));
+        Assert.Empty(bill.QuerySelectorAll(".field-error"));
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoRecordsShowsNoTotalNoFiltersAndNoNoMatchTips()
+    {
+        await using var host = await StartAsync();
+
+        foreach (var path in new[] { "/web/votes", "/web/bills", "/web/statements", "/web/executive-actions" })
+        {
+            var page = await GetPageAsync(host, path);
+            Assert.DoesNotContain("in this release", Lede(page));
+            Assert.Null(page.QuerySelector(".list-fold"));
+            Assert.Null(page.QuerySelector(".list-status"));
+            Assert.Null(page.QuerySelector(".empty"));
+            Assert.Empty(Rows(page));
+        }
+    }
+
+    [Fact]
+    public async Task TheFilterFoldOpensOnAWideScreenByScriptAndTheNoMatchHeadingFollowsThePageTitle()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote('a', "2026-03-02", 1));
+
+        var page = await GetPageAsync(host, "/web/votes");
+        var empty = await GetPageAsync(host, "/web/votes?chamber=senate");
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+
+        Assert.NotNull(page.QuerySelector("details.list-fold[data-wide-open]:not([open])"));
+        Assert.Contains("if (matchMedia(\"(min-width: 720px)\").matches) document.querySelectorAll(\"details[data-wide-open]\")", script, StringComparison.Ordinal);
+        Assert.Equal("No vote matches these filters.", empty.QuerySelector(".empty > h2")!.TextContent);
+        Assert.Null(empty.QuerySelector(".empty h3"));
     }
 
     // ---- votes ----
@@ -118,6 +184,10 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal("Showing 2 votes on this page.", page.QuerySelector(".list-status")!.TextContent);
         Assert.Empty(Chips(page));
         Assert.Equal("2 votes are in this release. House and Senate roll call votes, newest first. To see how one member voted, open their page from Officials.", Lede(page));
+        var officials = page.QuerySelector(".page-header-lede a")!;
+        Assert.Equal(("Officials", "https://civic-lens.test/officials.html"), (officials.TextContent, officials.GetAttribute("href")));
+        Assert.Null(page.QuerySelector(".page-header-meta"));
+        Assert.Equal("model", model.QuerySelector(".record-row-label")!.GetAttribute("data-origin"));
     }
 
     [Fact]
@@ -194,6 +264,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var (other, person, model) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
         Assert.Null(Label(person));
         Assert.Equal(ModelLabel, Label(model));
+        Assert.Equal("model", model.QuerySelector(".record-row-label")!.GetAttribute("data-origin"));
         Assert.DoesNotContain("Sponsor:", Text(person));
         Assert.Contains("Sponsor: Ann Able", Text(model));
         Assert.Contains("Latest sponsorship 2 Mar 2026", Text(model));
@@ -208,20 +279,19 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBillListNamesTheStoredTotalOfTheNewestCongressAndLeavesOutOlderCongressesAndNoStoredTotalShowsNoNumber()
+    public async Task TheBillListNamesTheNewestCongressStatesNoReleaseTotalAndOffersOnlyThePolicyAreasOfThatCongress()
     {
         await using var host = await StartAsync();
-        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02"), new SeededBill('b', "2024-03-02") { Congress = 118, BillNumber = 8 });
-        const string BillsLede = "Bills and resolutions in the 119th Congress, with the latest official action on each. A bill moves up the list when a member signs on to it.";
-
-        var unstored = await GetPageAsync(host, "/web/bills");
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02") { PolicyAreaId = "tax" },
+            new SeededBill('b', "2024-03-02") { Congress = 118, BillNumber = 8, PolicyAreaId = "energy" });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
             "INSERT INTO release_bill_counts (release_number, congress, bills, expected_member_row_count) VALUES (1, 119, 41, 0), (1, 118, 3, 0);");
-        var stored = await GetPageAsync(host, "/web/bills?policyArea=nothing");
 
-        Assert.Equal(["a"], Ids(unstored));
-        Assert.Equal(BillsLede, Lede(unstored));
-        Assert.Equal("41 bills and resolutions are in this release. " + BillsLede, Lede(stored));
+        var page = await GetPageAsync(host, "/web/bills");
+
+        Assert.Equal(["a"], Ids(page));
+        Assert.Equal("Bills and resolutions in the 119th Congress, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(page));
+        Assert.Equal(["tax"], page.QuerySelectorAll("select[name=policyArea] option").Skip(1).Select(option => option.GetAttribute("value")));
     }
 
     [Fact]
@@ -273,23 +343,37 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     // ---- statements ----
 
+    private static async Task AddStatementsAsync(ApiHost host, params SeededStatement[] statements)
+    {
+        await StatementsSeed.AddAsync(host.OperationalDatabase, statements);
+        await StatementsSeed.AddSourcesAsync(host.OperationalDatabase, [.. statements.Select(statement => (statement.RecordId, $"https://site-{statement.Id}.senate.gov/news/{statement.RecordId[..8]}"))]);
+    }
+
     [Fact]
-    public async Task TheStatementListShowsSpeakersAndDateOrNoDateAndTheAiLabelOnlyWhenTheViewHasOne()
+    public async Task TheStatementListShowsEachSpeakerWithSeatAndPartyTheDateTheSourceSiteTheVoteLinkAndTheAiLabelOnlyWhenTheViewHasOne()
     {
         await using var host = await StartAsync();
-        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
-        await StatementsSeed.AddAsync(host.OperationalDatabase,
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("official-a", "Ann Able", new SeededTerm("House", "Representative", "2025-01-03") { State = "MA", District = 5, Party = "Democrat" }),
+            new SeededOfficial("official-z", "Zed Zane", new SeededTerm("Senate", "Senator", "2025-01-03") { State = "AZ", Party = "Republican" }));
+        await AddStatementsAsync(host,
             new('a', "2026-03-02", ["official-z", "official-a"], [], "Analysis", "Code"),
             new('b', null, ["official-a"], [], "Person", "Person"));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote('f', "2026-03-01", 1));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
+            + PublicRecordPageRows.Link(new string('7', 64), new string('a', 64), new string('f', 64), "vote", "StatementAboutVote", "2026-03-02"));
 
         var page = await GetPageAsync(host, "/web/statements");
 
         Assert.Equal(["Headline a", "Headline b"], Titles(page));
-        Assert.NotNull(page.QuerySelectorAll(".record-row")[0].QuerySelectorAll("a > span").FirstOrDefault(span => span.TextContent.StartsWith("An AI summary")));
-        Assert.Equal(2, page.QuerySelectorAll(".record-row")[0].QuerySelectorAll("a > span").Length - 1);
-        Assert.Equal(2, page.QuerySelectorAll(".record-row")[1].QuerySelectorAll("a > span").Length - 1 + 1);
-        Assert.Contains("Zed Zane, Ann Able, Said on 2 Mar 2026", Text(Rows(page)[0]));
-        Assert.Contains("Ann Able, Date not stated", Text(Rows(page)[1]));
+        var (model, person) = (Rows(page)[0], Rows(page)[1]);
+        Assert.StartsWith("An AI summary", model.QuerySelector(".record-row-label")!.TextContent);
+        Assert.Equal("model", model.QuerySelector(".record-row-label")!.GetAttribute("data-origin"));
+        Assert.Null(person.QuerySelector(".record-row-label"));
+        Assert.Contains("Zed Zane, Senator for AZ, Republican, Ann Able, Representative for MA, district 5, Democrat, Said on 2 Mar 2026, From site-a.senate.gov", Text(model));
+        Assert.Contains("Ann Able, Representative for MA, district 5, Democrat, Date not stated, From site-b.senate.gov", Text(person));
+        Assert.Equal("Linked to a vote", model.QuerySelector(".badge")!.TextContent.Trim());
+        Assert.Null(person.QuerySelector(".badge"));
         Assert.Equal("Showing 2 statements on this page.", page.QuerySelector(".list-status")!.TextContent);
         Assert.StartsWith("2 statements are in this release. What members of Congress", Lede(page));
     }
@@ -300,7 +384,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
-        await StatementsSeed.AddAsync(host.OperationalDatabase,
+        await AddStatementsAsync(host,
             new('a', "2026-03-02", ["official-z"], ["health"], "Person", "Person"),
             new('b', "2026-03-05", ["official-a"], [], "Person", "Person"),
             new('c', null, ["official-a"], [], "Person", "Person"));
@@ -323,7 +407,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"));
-        await StatementsSeed.AddAsync(host.OperationalDatabase, [.. Enumerable.Range(1, 26).Select(index =>
+        await AddStatementsAsync(host, [.. Enumerable.Range(1, 26).Select(index =>
             new SeededStatement('a', index <= 24 ? $"2026-03-{index:00}" : null, ["official-a"], [], "Person", "Person") { RecordId = new string('a', 60) + index.ToString("0000") })]);
 
         var first = await GetPageAsync(host, "/web/statements");
