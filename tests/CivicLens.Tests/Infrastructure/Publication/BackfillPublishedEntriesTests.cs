@@ -452,6 +452,37 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal([relationship.RecordId], await ReadAsync("SELECT record_id FROM published_entries"));
     }
 
+    [Theory]
+    [InlineData(PublishedApprover.Code)]
+    [InlineData(PublishedApprover.Person)]
+    public async Task RelationshipApproverBackfillReadsThePublishedFileAndNeverOverwritesAPinnedValue(PublishedApprover approver)
+    {
+        var relationship = ((PublishedRelationship)PublishedSamples.Relationship("A link", "The statement describes the bill.", "quote").Body) with { ApprovedBy = approver };
+        await ExecuteAsync($$"""
+            SET session_replication_role = replica;
+            INSERT INTO relationship_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks)
+            VALUES ('{{relationship.RecordId}}', 1, 'owner', 'Person', '{}', 0);
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks)
+            VALUES ('statement', '{{StatementId}}', 1), ('relationship', '{{relationship.RecordId}}', 1), ('action', '{{relationship.Target.RecordId}}', 1)
+            """);
+        await AddReleasesAsync(1);
+        await AddRangeAsync(relationship.RecordId, "relationship", 1, null);
+        var oldEntry = relationship.ToEntry() with { ApprovedBy = null };
+        await publications.AddEntriesAsync([oldEntry], default);
+        Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'relationship'"));
+        Keep(1, new FolderRecord(oldEntry, relationship));
+
+        var first = await RunAsync(10);
+
+        Assert.Equal([approver.ToString()], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'relationship'"));
+        Assert.Equal(0, first.OpenRecordsWithoutApprover);
+        var other = approver == PublishedApprover.Code ? PublishedApprover.Person : PublishedApprover.Code;
+        var conflict = await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillApproversAsync([oldEntry with { ApprovedBy = other }], default));
+        Assert.Contains("The published approval differs from its kept record file.", conflict.Message, StringComparison.Ordinal);
+        Assert.Equal([approver.ToString()], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'relationship'"));
+        Assert.False((await publications.ReadEntryCandidatesAsync(default)).Single(candidate => candidate.Kind == PublishedRecordKind.Relationship).NeedsBackfill);
+    }
+
     [Fact]
     public async Task ARowThatACommitInsertsBetweenTheCandidateReadAndTheInsertIsCountedAsPresentAndNotWrittenTwice()
     {
@@ -520,7 +551,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         await RunAsync(10);
 
         Assert.Equal(["Code"], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'statement'"));
-        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillStatementApproversAsync(
+        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillApproversAsync(
             [oldEntry with { ApprovedBy = PublishedApprover.Person }], default));
         Assert.Equal(["Code"], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'statement'"));
         Assert.False((await publications.ReadEntryCandidatesAsync(default)).Single().NeedsBackfill);
@@ -542,7 +573,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
 
         var result = await RunAsync(10);
 
-        Assert.Equal(1, result.OpenStatementsWithoutApprover);
+        Assert.Equal(1, result.OpenRecordsWithoutApprover);
         Assert.Equal(["unknown"], await ReadAsync("SELECT coalesce(approved_by, 'unknown') FROM published_entries WHERE kind = 'statement'"));
     }
 
@@ -601,7 +632,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
 
         var result = await RunAsync(10);
 
-        Assert.Equal((0, 0, 0), (result.Skipped, result.OpenStatementsWithoutApprover, result.OpenRangesWithoutApprovalTime));
+        Assert.Equal((0, 0, 0), (result.Skipped, result.OpenRecordsWithoutApprover, result.OpenRangesWithoutApprovalTime));
         Assert.Equal([$"Code|{statement.ApprovedAtUtc.UtcTicks}"],
             await ReadAsync("SELECT approved_by || '|' || approved_at_utc_ticks FROM published_entries WHERE kind = 'statement'"));
     }

@@ -31,9 +31,12 @@ public static class StatementPageView
     public static string Eyebrow(StatementPageData data) => data.Speakers.Length == 0 ? "Statement" : $"Statement | {data.ShortName}";
 
     /// <summary>The date sentence of the lede. An undated statement says so, and names when the source was seen.</summary>
-    public static string DateLine(StatementPageData data) => data.StatementDate is { } date
-        ? $"Said on {Moment.Day(date)}."
+    public static string DateLine(StatementPageData data) => data.StatementDate is not null
+        ? $"{RowDate(data.StatementDate)}."
         : $"{DateNotStated}. Source seen {Moment.Full(data.Source.ObservedAtUtc)}.";
+
+    /// <summary>The date words of a statement row, the one owner for the vote page and the official page rows.</summary>
+    public static string RowDate(DateOnly? date) => date is { } said ? $"Said on {Moment.Day(said)}" : DateNotStated;
 
     public static string QuotationsNote(StatementPageData data) => data.Quotations.Length > ShownQuotations
         ? $"Each quote is the exact text of the source. {data.Quotations.Length} quotes are saved. The first {ShownQuotations} are shown."

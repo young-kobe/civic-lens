@@ -38,7 +38,10 @@
                         <p>@meaning.No</p>
                     }
                     <h3>@NextStep.Heading</h3>
-                    <p>@(wording?.NextStep ?? NextStep.NotShown)</p>
+                    @foreach (var line in VotePageView.NextStepLines(Data, wording?.NextStep))
+                    {
+                        <p>@line</p>
+                    }
                 </section>
                 @if (partyBars.Count == 0)
                 {
@@ -60,6 +63,56 @@
                 @if (map is not null)
                 {
                     <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" />
+                }
+                @if (Data.Statements.Length > 0)
+                {
+                    <section class="vote-statements" id="statements" aria-labelledby="vote-statements-title">
+                        <h2 id="vote-statements-title">@VotePageView.StatementsHeading</h2>
+                        @if (VotePageView.StatementsIntro(Data) is { } intro)
+                        {
+                            <p>@intro</p>
+                        }
+                        <div class="vote-note">
+                            <p class="vote-note-tag">@VotePageView.StatementsNoteTag</p>
+                            <p>@VotePageView.StatementsNote</p>
+                        </div>
+                        @if (VotePageView.StatementsCount(Data) is { } count)
+                        {
+                            <p class="muted small">@count</p>
+                        }
+                        <ul class="official-rows" role="list">
+                            @foreach (var statement in Data.Statements)
+                            {
+                                <li>
+                                    <div>
+                                        <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
+                                        @if (statement.Label is not null)
+                                        {
+                                            <span class="official-source-label" data-origin="@statement.TextOrigin.ToString().ToLowerInvariant()">@statement.Label</span>
+                                        }
+                                        <p class="official-meta">
+                                            @foreach (var speaker in statement.Speakers)
+                                            {
+                                                <span class="vote-statement-speaker">
+                                                    <a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a>
+                                                    @if (Data.Members.FirstOrDefault(member => member.OfficialId == speaker.OfficialId) is { } member)
+                                                    {
+                                                        <span>@VotePageView.CastOnThisVote</span>
+                                                        <SharedVoteCast Side="@PublishedOfficialVote.SideOf(member.Cast)"><CastWord Cast="@member.Cast" /></SharedVoteCast>
+                                                    }
+                                                </span>
+                                            }
+                                            <span>@StatementPageView.RowDate(statement.StatementDate)</span>
+                                        </p>
+                                        @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
+                                        {
+                                            <p class="official-related"><span class="link-checker">@checker</span></p>
+                                        }
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    </section>
                 }
                 @if (breakers.Count > 0)
                 {
@@ -153,6 +206,10 @@
                     <section class="vote-bill" aria-labelledby="vote-bill-title">
                         <h2 id="vote-bill-title">@VotePageView.BillHeading</h2>
                         <p><a href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.Title</a></p>
+                        @if (bill.StatusLabel is not null)
+                        {
+                            <p class="vote-bill-status"><StatusBadge Text="@bill.StatusLabel" /></p>
+                        }
                         @if (bill.Line is not null)
                         {
                             <p class="small"><PublishedBillLine Line="@bill.Line" /></p>

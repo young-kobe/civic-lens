@@ -41,7 +41,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         var filled = await FillBillLinesAsync([.. pending.Where(entry => !entry.WritesRow)], cancellationToken);
         foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedBy is not null).Chunk(BatchSize))
         {
-            await publications.FillStatementApproversAsync([.. batch.Select(entry => entry.EntryBeforeTimeFill!)], cancellationToken);
+            await publications.FillApproversAsync([.. batch.Select(entry => entry.EntryBeforeTimeFill!)], cancellationToken);
             foreach (var entry in batch) entry.ApproverFilled = true;
         }
         foreach (var batch in pending.Where(entry => !entry.WritesRow && entry.IsReady && entry.Entry!.ApprovedAtUtc is not null && entry.Candidate.LacksApprovalTime).Chunk(BatchSize))
@@ -94,7 +94,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
     private async Task ReadFirstEntryAsync(PublicationReleaseSummary release, PublishedRecordEntry entry, PendingPublishedEntry pending,
         CancellationToken cancellationToken)
     {
-        if (pending.Candidate.HasEntry && !pending.Candidate.LacksStatementApprover && !pending.Candidate.LacksApprovalTime)
+        if (pending.Candidate.HasEntry && !pending.Candidate.LacksApprover && !pending.Candidate.LacksApprovalTime)
         {
             pending.Entry = entry;
             return;
@@ -179,7 +179,7 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
             pending.Count(entry => !entry.Candidate.IsOpen && entry.Entry is null && !entry.IsBlocked),
             pending.Count(entry => entry.IsReady && !entry.HasRow))
         {
-            OpenStatementsWithoutApprover = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksStatementApprover && !entry.ApproverFilled),
+            OpenRecordsWithoutApprover = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksApprover && !entry.ApproverFilled),
             OpenRangesWithoutApprovalTime = all.Count(entry => entry.Candidate.IsOpen && entry.Candidate.LacksApprovalTime && !entry.ApprovalTimeFilled)
         };
     }

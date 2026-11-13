@@ -50,20 +50,22 @@ public sealed class VoteDetailPageTests
     }
 
     [Theory]
-    [InlineData(PublishedVoteKind.Passage, true)]
-    [InlineData(PublishedVoteKind.Rule, true)]
-    [InlineData(PublishedVoteKind.Nomination, true)]
-    [InlineData(PublishedVoteKind.Suspension, false)]
-    [InlineData(PublishedVoteKind.VetoOverride, false)]
-    [InlineData(PublishedVoteKind.Cloture, false)]
-    [InlineData(PublishedVoteKind.Other, false)]
-    public async Task OnlyAVoteKnownToNeedASimpleMajorityDrawsTheHalfLineOnTheChamberBar(PublishedVoteKind kind, bool drawsLine)
+    [InlineData(PublishedVoteKind.Passage, "Half of Yes and No votes", 5.0)]
+    [InlineData(PublishedVoteKind.Rule, "Half of Yes and No votes", 5.0)]
+    [InlineData(PublishedVoteKind.Nomination, "Half of Yes and No votes", 5.0)]
+    [InlineData(PublishedVoteKind.Suspension, "Two-thirds of Yes and No votes", 6.667)]
+    [InlineData(PublishedVoteKind.VetoOverride, "Two-thirds of Yes and No votes", 6.667)]
+    [InlineData(PublishedVoteKind.Cloture, null, 0.0)]
+    [InlineData(PublishedVoteKind.Other, null, 0.0)]
+    public async Task EachVoteKindDrawsOnlyTheMarkItNeedsOnTheChamberBar(PublishedVoteKind kind, string? label, double count)
     {
         var page = await RenderAsync(Vote() with { Kind = kind, KindCitation = null });
 
         var chamber = page.QuerySelector(".vote-result .party-bar")!;
-        Assert.Equal(drawsLine, chamber.QuerySelector("line.party-bar-mark") is not null);
-        Assert.Equal(drawsLine, chamber.TextContent.Contains("Half of Yes and No votes", StringComparison.Ordinal));
+        Assert.Equal(label is not null, chamber.QuerySelector("line.party-bar-mark") is not null);
+        foreach (var other in new[] { "Half of Yes and No votes", "Two-thirds of Yes and No votes" })
+            Assert.Equal(other == label, chamber.TextContent.Contains(other, StringComparison.Ordinal));
+        Assert.Equal(count, VotePageView.ChamberBar(Vote() with { Kind = kind, KindCitation = null })!.Mark?.Count ?? 0.0, 3);
         Assert.NotNull(page.QuerySelector(".vote-parties line.party-bar-mark"));
     }
 

@@ -101,7 +101,7 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
     {
         Alignment = vote.Alignment,
         Totals = vote is { Yea: { } yes, Nay: { } no, Present: { } present, NotVoting: { } notVoting } && yes + no + present + notVoting > 0
-            ? VotePageView.CastBar($"{vote.Chamber} members", PartyTone.Neutral, yes, no, present, notVoting, 0, false)
+            ? VotePageView.CastBar($"{vote.Chamber} members", PartyTone.Neutral, yes, no, present, notVoting, 0, VoteThreshold.None)
             : null
     };
 

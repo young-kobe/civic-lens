@@ -166,6 +166,21 @@ public sealed class OfficialProfilePageTests
         Assert.Equal(Root + "method.html", statements.QuerySelector("p.muted a")!.GetAttribute("href"));
     }
 
+    [Theory]
+    [InlineData(PublishedApprover.Code, "Code checked this link")]
+    [InlineData(PublishedApprover.Person, "A reviewer checked this link")]
+    [InlineData(null, null)]
+    public async Task AStatementRowShowsTheLabelOfWhoCheckedItsLinkAndTheLinkMeaningNoLongerClaimsAReviewer(PublishedApprover? approver, string? label)
+    {
+        var data = Member();
+        var page = await RenderAsync<OfficialProfilePage>(data with { Statements = [data.Statements[0] with { LinkApprover = approver }] });
+        var statements = page.QuerySelector("#statements")!;
+
+        Assert.Equal(label, statements.QuerySelector(".link-checker")?.TextContent);
+        Assert.Equal("A link does not mean the vote or bill matches the statement.", OfficialPageText.LinkMeaning);
+        Assert.DoesNotContain("A reviewer approved each link", statements.TextContent);
+    }
+
     [Fact]
     public async Task BillRowsShowTheIntroducedDateTheOfficialTitleWithoutABillLineAndAStatusBadge()
     {

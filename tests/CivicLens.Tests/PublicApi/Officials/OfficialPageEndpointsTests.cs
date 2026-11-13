@@ -217,6 +217,27 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
     }
 
+    [Theory]
+    [InlineData("Code", "Code checked this link")]
+    [InlineData("Person", "A reviewer checked this link")]
+    [InlineData(null, null)]
+    public async Task EachLinkedStatementNamesWhoCheckedItsLinkAndNoLabelShowsBeforeTheBackfill(string? approver, string? label)
+    {
+        await using var host = await StartAsync();
+        if (approver is not null)
+            await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+                SET session_replication_role = replica;
+                UPDATE published_entries SET approved_by = '{approver}' WHERE kind = 'relationship' AND record_id = '{new string('7', 64)}';
+                """);
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        var row = Assert.Single(page.QuerySelectorAll("#statements .official-rows li"));
+        Assert.Equal(label, row.QuerySelector(".link-checker")?.TextContent);
+        Assert.DoesNotContain("A reviewer approved each link.", page.QuerySelector("#statements")!.TextContent);
+        Assert.Contains("A link does not mean the vote or bill matches the statement.", page.QuerySelector("#statements")!.TextContent);
+    }
+
     [Fact]
     public async Task BillRowsListOnlyBillsTheOfficialSponsoredNewestFirstWithIntroducedDatesAndTheBillLine()
     {
