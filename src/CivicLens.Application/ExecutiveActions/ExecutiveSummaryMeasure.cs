@@ -47,7 +47,7 @@ public sealed class ExecutiveSummaryMeasure(IExecutiveSummaryStore store, Execut
                 BillFigures.Count(text.Body), BillFigures.Count(sentenceText), passageGrade, [], [], null)
             {
                 Cut = text.Cut,
-                PhraseRejections = rejections.Count(ExecutiveSummaryPhrases.IsReason)
+                PhraseRejections = attempt.Runs.Count(run => run.ValidationErrors.Any(ExecutiveSummaryPhrases.IsReason))
             };
             return bill.LosesFigures ? bill with { MissingDates = [.. BillFigures.MissingDates(text.Body, sentenceText)] } : bill;
         }
