@@ -15,9 +15,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
 {
     private async Task<ApiHost> StartWithReleasesAsync(Func<PublicApiOptions, PublicApiOptions>? change = null)
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "o1", issues: ["housing"], host: "one.gov", date: new DateOnly(2026, 3, 1)));
-        var host = await ApiHost.StartAsync(postgres, site, change);
+        var host = await ApiHost.StartAsync(postgres, change, publish: site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "o1", issues: ["housing"], host: "one.gov", date: new DateOnly(2026, 3, 1))));
         await host.WaitForReleaseAsync();
         return host;
     }
@@ -46,9 +44,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     public async Task AnActionHitCarriesTheBillLineOfItsManifestEntryInASearchAndInASortedRequestAndAnotherKindHoldsNone()
     {
         var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
-        var site = new FakeReleaseSite();
-        site.Publish(1, action with { Entry = action.Entry with { BillLine = "This bill funds housing." } }, PublishedSamples.Statement('a', "Rent cap"));
-        await using var host = await ApiHost.StartAsync(postgres, site);
+        await using var host = await ApiHost.StartAsync(postgres, publish: site => site.PublishAsync(1, action with { Entry = action.Entry with { BillLine = "This bill funds housing." } }, PublishedSamples.Statement('a', "Rent cap")));
         await host.WaitForReleaseAsync();
 
         using var found = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=sponsored"));
@@ -64,9 +60,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task ASortedRequestAnswersWithHitsInTheOrderOfTheKeyAndACursorThatContinuesIt()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Alpha"), PublishedSamples.Statement('b', "Beta"));
-        await using var host = await ApiHost.StartAsync(postgres, site);
+        await using var host = await ApiHost.StartAsync(postgres, publish: site => site.PublishAsync(1, PublishedSamples.Statement('a', "Alpha"), PublishedSamples.Statement('b', "Beta")));
         await host.WaitForReleaseAsync();
 
         using var json = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?sort=headline&direction=desc&limit=1"));
@@ -91,9 +85,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     public async Task ASearchWritesNoQueryTextToTheLogsBecauseThePrivacyTableOfTheAboutPagePromisesNothingIsSaved()
     {
         var logs = new CapturedLogs();
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap"));
-        await using var host = await ApiHost.StartAsync(postgres, site, logProvider: logs);
+        await using var host = await ApiHost.StartAsync(postgres, logProvider: logs, publish: site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap")));
         await host.WaitForReleaseAsync();
 
         using var response = await host.Client.GetAsync("/v1/search?q=zebracrossing&release=1");
@@ -118,7 +110,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task BeforeAnyReleaseIsIndexedTheServiceAnswers503SoACallerKnowsItIsNotReadyYet()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await host.Client.GetAsync("/v1/release")).StatusCode);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await host.Client.GetAsync("/v1/search?q=rent")).StatusCode);
@@ -157,14 +149,12 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task TheLimitIsHonoredUpToTheMaximumAndTheCursorContinuesInTheSameRelease()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, Enumerable.Range(0, 3).Select(i => PublishedSamples.Statement((char)('a' + i), "Rent " + i)).ToArray());
-        await using var host = await ApiHost.StartAsync(postgres, site, options => options with { PollInterval = TimeSpan.FromMilliseconds(100) });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PollInterval = TimeSpan.FromMilliseconds(100) }, publish: site => site.PublishAsync(1, Enumerable.Range(0, 3).Select(i => PublishedSamples.Statement((char)('a' + i), "Rent " + i)).ToArray()));
         await host.WaitForReleaseAsync();
 
         using var first = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=rent&limit=2"));
         var cursor = first.RootElement.GetProperty("nextCursor").GetString();
-        site.Publish(2, PublishedSamples.Statement('f', "Rent new"));
+        await host.Site.PublishAsync(2, PublishedSamples.Statement('f', "Rent new"));
         await host.WaitForReleaseAsync(2);
         using var second = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=rent&limit=2&cursor=" + cursor));
 
@@ -178,14 +168,12 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     public async Task WhenTheSiteGoesBackToAnEarlierReleaseAnUnpinnedSearchFollowsAndAPinToTheLaterReleaseStillWorks()
     {
         var five = PublishedSamples.Statement('a', "Rent five");
-        var site = new FakeReleaseSite();
-        site.Publish(5, five);
-        await using var host = await ApiHost.StartAsync(postgres, site, options => options with { PollInterval = TimeSpan.FromMilliseconds(100) });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PollInterval = TimeSpan.FromMilliseconds(100) }, publish: site => site.PublishAsync(5, five));
         await host.WaitForReleaseAsync(5);
-        site.Publish(6, PublishedSamples.Statement('b', "Rent six"));
+        await host.Site.PublishAsync(6, PublishedSamples.Statement('b', "Rent six"));
         await host.WaitForReleaseAsync(6);
 
-        site.Publish(5, five);
+        await host.Site.ActivateAsync(5);
         await host.WaitForReleaseAsync(5);
 
         using var active = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=rent"));

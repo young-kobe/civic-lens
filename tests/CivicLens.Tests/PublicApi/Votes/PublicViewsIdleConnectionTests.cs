@@ -22,7 +22,7 @@ public sealed class PublicViewsIdleConnectionTests(PostgresCollection postgres)
     [Fact]
     public async Task ThePoolClosesAnIdleConnectionBeforeTheRoleEndsItsSessionSoTheNextRequestNeverMeetsAClosedConnection()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), PooledViews);
+        await using var host = await ApiHost.StartAsync(postgres, PooledViews);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('a', "2026-03-02"));
         await ShortenRoleIdleTimeoutAsync(host.OperationalDatabase);

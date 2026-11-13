@@ -41,7 +41,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(bool storeBillCounts = true, bool withBrowserApi = false)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        var host = await ApiHost.StartAsync(postgres, options => options with
         {
             PublicBaseUrl = BaseUrl,
             BrowserApiUrl = withBrowserApi ? PublicBaseUrl.Parse("https://api.civic-lens.test", "test") : null

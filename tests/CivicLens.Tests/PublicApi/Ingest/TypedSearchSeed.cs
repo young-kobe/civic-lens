@@ -1,5 +1,4 @@
 using System.Globalization;
-using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.PublicApi.Votes;
@@ -7,25 +6,18 @@ using CivicLens.Tests.PublicApi.Votes;
 namespace CivicLens.Tests.PublicApi.Ingest;
 
 /// <summary>
-/// Writes the typed rows that the <c>public_api</c> views read, for the sample records of <see cref="PublishedSamples"/>. The texts come from the record bodies, so the
-/// typed rows and the record files hold the same words. Each record cites its own extraction rows, which hold the source texts of the record.
+/// Writes the entries and the typed rows that the <c>public_api</c> views read, for the sample records of <see cref="PublishedSamples"/>. The texts come from the record bodies.
+/// Each record cites its own extraction rows, which hold the source texts of the record. A later revision of a record reuses the source rows of its first revision.
+/// <see cref="TypedReleaseSite"/> lists the records in releases.
 /// </summary>
 internal static class TypedSearchSeed
 {
-    private const string Prefix = "SET session_replication_role = replica;\n";
-
-    public static async Task WriteAsync(string database, int release, params SampleRecord[] records)
+    public static async Task WriteAsync(string database, SampleRecord[] records)
     {
+        if (records.Length == 0) return;
         await PublishedEntryFixtures.SeedEntriesAsync(database, [.. records.Select(record => record.Entry)], allowMissingRevisionParents: true);
-        await ViewsSeed.ActivateReleaseAsync(database, release, DateTimeOffset.UnixEpoch.AddDays(release), records.Length);
-        var officials = records.SelectMany(record => record.Entry.Officials).DistinctBy(official => official.Id);
-        await ViewsSeed.ExecuteAsync(database, Prefix + string.Join('\n', records.Select(record => States(release, record.Entry)).Concat(
-            officials.Select(official => $"INSERT INTO release_officials (release_number, official_id, name) VALUES ({release}, {Q(official.Id)}, {Q(official.Name)});"))));
-        foreach (var record in records) await ViewsSeed.ExecuteAsync(database, Prefix + Rows(record));
+        foreach (var record in records) await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica;\n" + Rows(record));
     }
-
-    private static string States(int release, PublishedRecordEntry entry) =>
-        $"INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('{PublishedRecordReference.NameOf(entry.Kind)}', '{entry.RecordId}', {release}, {entry.RevisionNumber}, NULL);";
 
     private static string Rows(SampleRecord record) => record.Body switch
     {
@@ -45,7 +37,7 @@ internal static class TypedSearchSeed
         return $"""
             {Extraction(extraction, record.Source.Url, record.Source.Text)}
             INSERT INTO statement_candidates (candidate_id, source_id, url, extraction_id, attempt_id, created_at_utc_ticks)
-              VALUES ('{record.RecordId}', 'src', {Q(record.Source.Url)}, '{extraction}', 'attempt-{extraction}', 1);
+              VALUES ('{record.RecordId}', 'src', {Q(record.Source.Url)}, '{extraction}', 'attempt-{extraction}', 1) ON CONFLICT DO NOTHING;
             INSERT INTO statement_revisions (candidate_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks, headline, summary, statement_date)
               VALUES ('{record.RecordId}', {record.RevisionNumber}, 'test', 'Person', 'x', 1, {Q(record.Headline)}, {Q(record.Summary)}, NULL);
             {string.Join('\n', record.Quotations.Select((quotation, position) => $"INSERT INTO statement_revision_quotations (candidate_id, revision_number, position, quotation_extraction_id, quotation_start, quotation_length, kind) VALUES ('{record.RecordId}', {record.RevisionNumber}, {position}, '{extraction}', {quotation.Start}, {quotation.Length}, 'DirectQuotation');"))}
@@ -61,7 +53,7 @@ internal static class TypedSearchSeed
             {Extraction(before, record.Before.Url, record.Before.Text)}
             {Extraction(after, record.After.Url, record.After.Text)}
             INSERT INTO document_comparisons (comparison_id, before_extraction_id, after_extraction_id, algorithm_version, settings_version, result_json, has_changes, hunk_count)
-              VALUES ('{comparison}', '{before}', '{after}', 'a', 's', 'x', true, 1);
+              VALUES ('{comparison}', '{before}', '{after}', 'a', 's', 'x', true, 1) ON CONFLICT DO NOTHING;
             INSERT INTO document_change_revisions (draft_id, revision_number, revision_json, created_at_utc_ticks, author_kind, author_subject, comparison_id, headline, summary, institution)
               VALUES ('{record.RecordId}', {record.RevisionNumber}, 'x', 1, 'Person', 'test', '{comparison}', {Q(record.Headline)}, {Q(record.Summary)}, {Q(record.Institution)});
             """;
@@ -70,13 +62,14 @@ internal static class TypedSearchSeed
     private static string Action(PublishedAction record)
     {
         var extraction = ExtractionId(record.RecordId, "e");
+        var sponsor = record.Sponsorships[0];
+        var sponsoredOn = sponsor.SponsoredOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         return $"""
             {Extraction(extraction, record.Sources[0].Url, record.Sources[0].Text)}
-            {PublicActionRows.ActionRevision(record.RecordId, record.RevisionNumber, "Model", record.Sponsorships[0].SponsoredOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), 0, policyAreaId: null, headline: "placeholder")}
+            {PublicActionRows.ActionRevision(record.RecordId, record.RevisionNumber, "Model", sponsoredOn, 0, record.Congress, record.BillType, record.BillNumber, policyAreaId: null, headline: "placeholder")}
             UPDATE action_revisions SET headline = {Q(record.Headline)}, summary = {Q(record.Summary)}, bill_title = {Q(record.BillTitle)}
              WHERE record_id = '{record.RecordId}' AND revision_number = {record.RevisionNumber};
-            INSERT INTO action_revision_sponsorships (record_id, revision_number, position, person_id, bioguide_id, role, is_original, sponsored_on)
-              VALUES ('{record.RecordId}', {record.RevisionNumber}, 0, 'o1', 'O000001', 'Sponsor', true, '2026-01-03');
+            {PublicActionRows.ActionSponsorship(record.RecordId, record.RevisionNumber, 0, sponsor.Official.Id, "Sponsor", true, sponsoredOn)}
             INSERT INTO action_revision_sponsorship_citations (record_id, revision_number, sponsorship_position, position, citation_extraction_id, citation_start, citation_length)
               VALUES ('{record.RecordId}', {record.RevisionNumber}, 0, 0, '{extraction}', 0, 2);
             """;
@@ -138,10 +131,10 @@ internal static class TypedSearchSeed
     private static string Extraction(string id, string url, string text) => $"""
         INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks, outcome, has_response, response_status_code,
             response_content_encodings, has_sent_validators, capture_sha256, elapsed_milliseconds)
-          VALUES ('attempt-{id}', 'src', {Q(url)}, {Q(url)}, 1, 'captured', true, 200, ARRAY[]::text[], false, REPEAT('a', 64), 0);
+          VALUES ('attempt-{id}', 'src', {Q(url)}, {Q(url)}, 1, 'captured', true, 200, ARRAY[]::text[], false, REPEAT('a', 64), 0) ON CONFLICT DO NOTHING;
         INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
-          VALUES ('{id}', 'attempt-{id}', 'test', {Q(text)}, REPEAT('b', 64));
+          VALUES ('{id}', 'attempt-{id}', 'test', {Q(text)}, REPEAT('b', 64)) ON CONFLICT DO NOTHING;
         """;
 
-    private static string Q(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    public static string Q(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 }

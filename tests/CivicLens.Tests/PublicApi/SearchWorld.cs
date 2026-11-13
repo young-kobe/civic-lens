@@ -1,5 +1,6 @@
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Ingest;
+using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
@@ -8,26 +9,35 @@ using Npgsql;
 
 namespace CivicLens.Tests.PublicApi;
 
-/// <summary>An empty search database with its schema applied, a fake release site, and the ingest and the index over them.</summary>
+/// <summary>
+/// An empty search database with its schema applied, a migrated operational database that <see cref="Site"/> publishes into,
+/// and the ingest and the index over them. The ingest reads the <c>public_api</c> views as the role <c>civic_lens_public</c>, as the service does.
+/// </summary>
 internal sealed class SearchWorld : IAsyncDisposable
 {
     private readonly PostgresCollection postgres;
     private readonly NpgsqlDataSource writer;
     private readonly NpgsqlDataSource reader;
+    private readonly NpgsqlDataSource views;
 
-    private SearchWorld(PostgresCollection postgres, PublicApiOptions options)
+    private SearchWorld(PostgresCollection postgres, PublicApiOptions options, string operationalDatabase)
     {
         this.postgres = postgres;
         Options = options;
+        OperationalDatabase = operationalDatabase;
         writer = NpgsqlDataSource.Create(options.Database);
         reader = NpgsqlDataSource.Create(options.ReaderDatabase);
-        Ingest = new ReleaseIngest(new FeedReleaseSource(new ReleaseFeed(new HttpClient(Site) { BaseAddress = options.ReleaseBaseUrl })), writer);
+        views = NpgsqlDataSource.Create(options.PublicViewsReaderDatabase);
+        Site = new TypedReleaseSite(operationalDatabase);
+        Ingest = new ReleaseIngest(new TypedReleaseSource(new RecordSnapshot(views)), writer);
         Index = new SearchIndex(reader);
         Reports = new ReportStore(writer, options);
     }
 
     public PublicApiOptions Options { get; }
-    public FakeReleaseSite Site { get; } = new();
+    /// <summary>The operational database as its owner, for a test to change the rows that the views show.</summary>
+    public string OperationalDatabase { get; }
+    public TypedReleaseSite Site { get; }
     public ReleaseIngest Ingest { get; }
     public SearchIndex Index { get; }
     public ReportStore Reports { get; }
@@ -35,14 +45,13 @@ internal sealed class SearchWorld : IAsyncDisposable
 
     public static async Task<SearchWorld> CreateAsync(PostgresCollection postgres, TimeSpan? queryTimeout = null)
     {
-        var connection = await postgres.CreateEmptyDatabaseAsync();
+        var operational = await postgres.CreateMigratedDatabaseAsync();
         var world = new SearchWorld(postgres, new PublicApiOptions
         {
-            ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
-            Database = connection,
-            PublicViewsDatabase = connection,
+            Database = await postgres.CreateEmptyDatabaseAsync(),
+            PublicViewsDatabase = await ApiHost.LogInPublicRoleAsync(operational),
             QueryTimeout = queryTimeout ?? TimeSpan.FromSeconds(2)
-        });
+        }, operational);
         await new SchemaMigrator(world.writer).ApplyAsync(CancellationToken.None);
         return world;
     }
@@ -51,7 +60,7 @@ internal sealed class SearchWorld : IAsyncDisposable
 
     public async Task<IngestResult> PublishAndIngestAsync(int number, params SampleRecord[] records)
     {
-        Site.Publish(number, records);
+        await Site.PublishAsync(number, records);
         return await IngestAsync();
     }
 
@@ -66,6 +75,9 @@ internal sealed class SearchWorld : IAsyncDisposable
     {
         await writer.DisposeAsync();
         await reader.DisposeAsync();
+        await views.DisposeAsync();
         await postgres.DropDatabaseAsync(Options.Database);
+        await ApiHost.LogOutPublicRoleAsync(OperationalDatabase);
+        await postgres.DropDatabaseAsync(OperationalDatabase);
     }
 }

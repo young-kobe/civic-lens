@@ -19,8 +19,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly DateTimeOffset PublishedAt = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
 
-    private Task<ApiHost> StartAsync(FakeReleaseSite? site = null) =>
-        ApiHost.StartAsync(postgres, site ?? new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+    private Task<ApiHost> StartAsync(Func<TypedReleaseSite, Task>? publish = null) =>
+        ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl }, publish: publish);
 
     private static SeededOfficial Senator(int index) => new($"p{index:00}", $"Sen {index:00}",
         new SeededTerm("Senate", "Senator", "2021-01-03") { State = "NY", Party = "Democrat", EndsOn = "2027-01-03" });
@@ -100,9 +100,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task SearchShowsTheOfficialFirstPinsTheBillNumberAndNeverEntersASharedCache()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1"));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
@@ -129,9 +127,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task TheBillPinNamesTheSponsorLinksTheNewestHouseVoteAndNamesOnlyTheOtherBillThatIsAResult()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1"), PublishedSamples.Action("S. 5334 names a clinic", "A short account.", "Clinic act", "Xq the source text."));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1"), PublishedSamples.Action("S. 5334 names a clinic", "A short account.", "Clinic act", "Xq the source text.",
+            billType: "s", billNumber: 5334, sponsor: "p3", sponsoredOn: new DateOnly(2026, 1, 10))));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
@@ -139,7 +136,6 @@ public sealed class ListPageTests(PostgresCollection postgres)
             new SeededOfficial("p3", "John Cornyn", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "TX", Party = "Republican" }));
         await BillsSeed.AddBillsAsync(host.OperationalDatabase,
             new SeededBill('1', "2026-03-03") { BillNumber = 5334, BillLine = "H.R. 5334, the Sanctions Act" },
-            new SeededBill('f', "2026-02-01") { BillType = "s", BillNumber = 5334, Sponsorships = [new("p3", "Sponsor", "2026-01-10")] },
             new SeededBill('6', "2026-01-15") { BillType = "hjres", BillNumber = 5334, Sponsorships = [new("p3", "Sponsor", "2026-01-10")] });
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
             new SeededVote('3', "2026-03-01") { BillNumber = 5334, RollCall = 1 },
@@ -164,9 +160,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task TheBillPinLinksTheNewestSenateVoteWhenTheBillHasNoHouseVote()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
@@ -187,9 +181,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task SearchShowsThreeOfficialsAndLinksTheOfficialsListWhenAFourthMatches()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, [.. new[] { "Ann", "Bo", "Cy", "Di" }.Select((first, index) =>
@@ -211,9 +203,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task SearchPutsAnOfficialWhoseWholeNameEqualsTheTextBeforeAnEarlierNameThatOnlyContainsItAsAWord()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
@@ -228,9 +218,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task TheSearchIssueFilterListsTheIssuesOfTheActiveReleaseByNameFromTheIssueStore()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
@@ -244,9 +232,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task ASearchWithNoMatchGivesGuidanceAndABlankSearchRunsNoQuery()
     {
-        var site = new FakeReleaseSite();
-        site.Publish(1, PublishedSamples.Statement('a', "Rent cap", official: "p1"));
-        await using var host = await StartAsync(site);
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
 

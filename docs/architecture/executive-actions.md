@@ -101,7 +101,7 @@ Each line gives the rule, what enforces it, and the test that protects it.
 - The contract labels equal the labels that code writes. Enforced by a test. Test: `PublishedExecutiveActionTests.TheLabelsThatTheContractChecksEqualTheLabelsThatCodeWrites`.
 - A published record cites its title, dates, citation, and link. Enforced by `PublishedExecutiveAction.Validate`. Tests: `PublishedExecutiveActionTests.AHeadlineThatIsNotTheCitedTitleIsRefusedSoTheOfficialTitleCannotDrift`, `PublishedExecutiveActionTests.ASigningDateThatTheEvidenceDoesNotShowIsRefused`.
 - The worker publishes each approved, unpublished record, whoever approved it. Enforced by `ExecutiveActionReviewQueries`. Test: `PublishExecutiveActionTests.TheWorkerPublishesAnExecutiveActionWhoeverApprovedIt`.
-- Search accepts the kind. Enforced by `RecordReader`. Test: `RecordReaderTests.AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind`.
+- Search accepts the kind and indexes no summary text for it. Enforced by `TypedTextReader`. Test: `TypedReleaseSourceTests.EachKindGivesItsFixedSummarySourceAndSnippetTextAndTheEntryOfItsRevision`.
 
 ## Behavior
 

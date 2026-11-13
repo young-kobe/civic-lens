@@ -40,7 +40,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(bool withVotesAndBills = false, bool storeBillCounts = true)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Officials);
         await OfficialsSeed.AddEntriesAsync(host.OperationalDatabase, new SeededEntry("statement", 'a', "p0", "p1"), new SeededEntry("statement", 'b', "p0"),
@@ -210,7 +210,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task AWalkOverOfficialsWithNamesAndIdsOfTheFullColumnLengthFollowsEveryCursorTheServerWrites()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         string[] ids = [.. "abc".Select(letter => new string(letter, 256))];
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, [.. ids.Select(id => new SeededOfficial(id, new string(id[0], 255) + "é"))]);
@@ -272,7 +272,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task WithNoActiveReleaseTheListAnswers503AndALookupAnswers404()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, (await host.Client.GetAsync("/v1/officials")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync("/v1/officials/p0")).StatusCode);
@@ -478,7 +478,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     [InlineData("1934-12-31T23:59:00Z", null)]
     public async Task MemberWithoutAttendanceUsesTheReleaseUtcDateForBillAndIssueFigures(string publishedAt, int? expectedCongress)
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, DateTimeOffset.Parse(publishedAt));
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
             new SeededOfficial("p5", "Fay Fox", new SeededTerm("Representative", "Representative", "2023-01-03") { State = "CA", District = 1, Party = "Democrat" }));

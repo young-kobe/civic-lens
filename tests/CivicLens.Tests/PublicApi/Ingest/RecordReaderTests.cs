@@ -1,136 +1,19 @@
-using System.Text.Json;
-using CivicLens.Application.Publication;
 using CivicLens.PublicApi.Ingest;
-using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.PublicApi.Ingest;
 
+/// <summary>The text bound and the NUL check that the typed reader applies to every record.</summary>
 public sealed class RecordReaderTests
 {
-    private static IndexedRecord Read(SampleRecord sample) =>
-        RecordReader.Read(sample.Entry, JsonSerializer.SerializeToUtf8Bytes(sample.Body, PublicationProtocol.JsonOptions));
-
-    [Fact]
-    public void ADocumentChangeIndexesItsSummaryAsSummaryAndBothVersionsAsSourceTextWithTheNewVersionFirst()
-    {
-        var read = Read(PublishedSamples.DocumentChange("Rule changed", "The rule changed.", "Newer words.", "Older words."));
-
-        Assert.Equal("The rule changed.", read.Summary);
-        Assert.Equal("Newer words.\nOlder words.", read.Source);
-    }
-
-    [Fact]
-    public void AStatementIndexesItsSummaryAndQuotationsAsSummaryAndItsSourceTextAsSource()
-    {
-        var read = Read(PublishedSamples.Statement('a', "Rent cap", summary: "A short account.", source: "Xq the source text."));
-
-        Assert.Equal("A short account.\nXq", read.Summary);
-        Assert.Equal("Xq the source text.", read.Source);
-    }
-
-    [Fact]
-    public void AnActionKeepsTheBillLineOfItsManifestEntryBecauseTheRecordFileHoldsNoSuchField()
-    {
-        var sample = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
-
-        var read = Read(sample with { Entry = sample.Entry with { BillLine = "This bill funds housing." } });
-
-        Assert.Equal("This bill funds housing.", read.Entry.BillLine);
-    }
-
-    [Fact]
-    public void EachKindWithAPublishedSummaryGivesItAsTheSnippetTextAndNeverTheQuotationsOrTheSource()
-    {
-        Assert.Equal("The rule changed.", Read(PublishedSamples.DocumentChange("Rule changed", "The rule changed.", "New.", "Old.")).SnippetText);
-        Assert.Equal("A short account.", Read(PublishedSamples.Statement('a', "Rent cap", summary: "A short account.", source: "Xq raw.")).SnippetText);
-        Assert.Equal("Doe sponsored it.", Read(PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001")).SnippetText);
-        Assert.Equal("The House passed it.", Read(PublishedSamples.Vote("Passage", "The House passed it.", "Roll call raw.")).SnippetText);
-    }
-
-    [Fact]
-    public void AnActionGivesItsBillLineAsTheSnippetTextBecauseTheLineIsTheApprovedWordsAboutTheBill()
-    {
-        var sample = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
-
-        var read = Read(sample with { Entry = sample.Entry with { BillLine = "This bill funds housing." } });
-
-        Assert.Equal("This bill funds housing.", read.SnippetText);
-    }
-
-    [Fact]
-    public void AKindWithNoPublishedSummaryGivesNoSnippetTextSoTheBodySnippetStaysTheFallback()
-    {
-        Assert.Null(Read(PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.")).SnippetText);
-        Assert.Null(Read(PublishedSamples.Brief("Weekly brief", "A paragraph.")).SnippetText);
-    }
-
-    [Fact]
-    public void AnExecutiveActionIndexesNoSummaryAndItsSavedRecordAsSourceSoSearchAcceptsTheNewKind()
-    {
-        var sample = PublishedSamples.ExecutiveAction("Ending the Weaponization", "Tail text.");
-
-        var read = Read(sample);
-
-        Assert.Equal(PublishedRecordKind.ExecutiveAction, read.Entry.Kind);
-        Assert.Equal("", read.Summary);
-        Assert.EndsWith("Tail text.", read.Source);
-    }
-
-    [Fact]
-    public void ACodeApprovedAiStatementIsIndexedBecauseTheSearchServiceMustAcceptTheNewFieldsInTheSameDeploy()
-    {
-        var sample = PublishedSamples.Statement('a', "Rent cap");
-        var code = (PublishedStatement)sample.Body with { ApprovedBy = PublishedApprover.Code, TextOrigin = PublishedTextOrigin.Model };
-
-        var read = Read(sample with { Body = code });
-
-        Assert.Equal("A short account.\nXq", read.Summary);
-    }
-
-    [Fact]
-    public void AnActionIndexesItsSummaryAndBillTitleAsSummaryAndItsSourcesAsSource()
-    {
-        var read = Read(PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001"));
-
-        Assert.Equal("Doe sponsored it.\nA housing bill", read.Summary);
-        Assert.Equal("Sponsor: D000001", read.Source);
-    }
-
-    [Fact]
-    public void AVoteIndexesItsSummaryAsSummaryAndItsSourcesAsSource()
-    {
-        var read = Read(PublishedSamples.Vote("House votes", "The House voted.", "Result: Passed"));
-
-        Assert.Equal("The House voted.", read.Summary);
-        Assert.EndsWith("Result: Passed", read.Source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ABriefIndexesItsParagraphsAndNoSourceText()
-    {
-        var read = Read(PublishedSamples.Brief("A week of housing", "Warren backed a rent cap."));
-
-        Assert.Equal("Warren backed a rent cap.", read.Summary);
-        Assert.Equal("", read.Source);
-    }
-
-    [Fact]
-    public void ARelationshipIndexesItsReasonAndQuoteAndNoSourceText()
-    {
-        var read = Read(PublishedSamples.Relationship("Doe backs a cap", "Doe says the bill is hers.", "a rent cap"));
-
-        Assert.Equal("Doe says the bill is hers.\na rent cap", read.Summary);
-        Assert.Equal("", read.Source);
-    }
+    private static readonly SampleRecord Sample = PublishedSamples.Statement('a', "Rent cap");
 
     [Fact]
     public void SourceTextStopsAtTheLimitSoTheSearchVectorStaysUnderThePostgresSizeLimit()
     {
         var text = "Xq " + new string('w', IndexedRecord.SourceLimit);
 
-        var read = Read(PublishedSamples.Statement('a', "Rent cap", source: text));
+        var read = RecordReader.Create(Sample.Entry, [], [text]);
 
-        Assert.Equal(IndexedRecord.SourceLimit, read.Source.Length);
         Assert.Equal(text[..IndexedRecord.SourceLimit], read.Source);
     }
 
@@ -139,48 +22,16 @@ public sealed class RecordReaderTests
     {
         var text = new string('w', IndexedRecord.SourceLimit - 1) + "\U0001F600";
 
-        var read = Read(PublishedSamples.Statement('a', "Rent cap", source: text));
+        var read = RecordReader.Create(Sample.Entry, [], [text]);
 
-        Assert.Equal(IndexedRecord.SourceLimit - 1, read.Source.Length);
+        Assert.Equal(text[..(IndexedRecord.SourceLimit - 1)], read.Source);
     }
 
     [Fact]
     public void ARecordWithANulCharacterIsRefusedBecausePostgresCannotStoreIt()
     {
-        var sample = PublishedSamples.Statement('a', "Rent cap", summary: "A short\0account.");
+        var read = RecordReader.Create(Sample.Entry, ["A short\0account."], []);
 
-        Assert.Throws<InvalidDataException>(() => Read(sample));
-    }
-
-    [Fact]
-    public void AnEscapedBackslashBeforeU0000IsPlainTextAndNotANulCharacter()
-    {
-        var read = Read(PublishedSamples.Statement('a', "Rent cap", summary: "A literal \\u0000 in text."));
-
-        Assert.StartsWith("A literal \\u0000 in text.", read.Summary, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ARecordThatBreaksItsContractIsRefusedByTheContractValidation()
-    {
-        var sample = PublishedSamples.Statement('a', "Rent cap");
-        var json = JsonSerializer.Serialize(sample.Body, PublicationProtocol.JsonOptions).Replace("Xq the source text.", "Changed text.", StringComparison.Ordinal);
-
-        Assert.Throws<InvalidDataException>(() => RecordReader.Read(sample.Entry, System.Text.Encoding.UTF8.GetBytes(json)));
-    }
-
-    [Fact]
-    public void AFileWithAFieldTheContractDoesNotKnowIsRefusedAsAJsonError()
-    {
-        var sample = PublishedSamples.Statement('a', "Rent cap");
-        var json = JsonSerializer.Serialize(sample.Body, PublicationProtocol.JsonOptions).Replace("{", "{\"extra\":1,", StringComparison.Ordinal);
-
-        Assert.ThrowsAny<JsonException>(() => RecordReader.Read(sample.Entry, System.Text.Encoding.UTF8.GetBytes(json)));
-    }
-
-    [Fact]
-    public void TheRecordFileCapHoldsTheLargestFileThatPublishCanWriteBecauseTheTwoLimitsHaveSeparateOwners()
-    {
-        Assert.True(ReleaseFeed.MaximumRecordBytes >= PublishedRecordFiles.MaximumCitedRecordBytes);
+        Assert.Throws<InvalidDataException>(() => RecordReader.Finish(read, null));
     }
 }
