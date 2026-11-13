@@ -383,6 +383,8 @@ public sealed class PublicPageReadingGradeTests
             RecordListFilter.Of(null, null), null, "next", [new("notice", "Notice")]);
         string[] ListRecordData = ["H.R. 5334", "AI vote label", "AI bill label", "Jimmy Panetta", "Public Law", "Kelly announces", "AI statement label", "Mark Kelly", "kelly.senate.gov", "Seafood Month",
             "2026-13-40", "abc", "zzq", "soon"];
+        // The four board tabs are a run of link labels, not a passage.
+        const string BoardTabLabels = "House Democrats House Republicans Senate Democrats Senate Republicans";
         string[] ZipRecordData = ["Pat Member", "Sam Member", "Sue Senator", "House members differ", "Health"];
 
         string[] VoteRecordData = ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton", "Dee Cee", "Pat Rico", "Sam Solo", "Ed Ward", "Cal Ray"];
@@ -408,6 +410,8 @@ public sealed class PublicPageReadingGradeTests
             ("officials filtered", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], new(null, null, null, "zzq"), null))), []),
             ("boards", Page<BoardsPage>(With("Data", boards)), ["Henry Cuellar"]),
             ("boards empty", Page<BoardsPage>(With("Data", new BoardsPageData(7, [], []))), []),
+            ("board list", Page<BoardListPage>(With("Data", new BoardListPageData(7, boards.Boards[0]))), ["Henry Cuellar", BoardTabLabels]),
+            ("board list empty", Page<BoardListPage>(With("Data", new BoardListPageData(7, new(PublishedChamber.Senate, "Republican", null, null, null, false, [])))), [BoardTabLabels]),
             ("vote kinds", Page<VoteKindsPage>(With("Data", null)), []),
             ("bill", Page<BillDetailPage>(With("Data", bill)), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
             ("bill bare", Page<BillDetailPage>(With("Data", bill with { Votes = [], Issues = [], PolicyArea = null, Steps = [], Status = null, StatusLabel = null, Sponsors = [], Cosponsors = null, BillLine = null, CrsText = null, SenateVoteGap = true, TextOrigin = PublishedTextOrigin.Code })), ["Example Act", "headline", "tax credit"]),

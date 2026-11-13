@@ -114,7 +114,7 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task BreakersAreTrackedMembersWhoCastYesOrNoAgainstTheirPartyMajorityAndEachPartyHeadingLinksToItsBoard()
+    public async Task BreakersAreTrackedMembersWhoCastYesOrNoAgainstTheirPartyMajorityAndEachPartyHeadingLinksToItsFullBoardOnThePreview()
     {
         var page = await RenderAsync(Vote());
 
@@ -122,7 +122,7 @@ public sealed class VoteDetailPageTests
         Assert.Equal(2, groups.Length);
         Assert.Equal("House Democrats: 1 tracked member voted against most of the party", groups[0].QuerySelector("h3")!.TextContent);
         Assert.Equal(["Ada Able"], groups[0].QuerySelectorAll("li a").Select(link => link.TextContent));
-        Assert.Equal(Root + "board-house-democrat.html", groups[0].QuerySelector("h3 a")!.GetAttribute("href"));
+        Assert.Equal("/web/board-house-democrat.html", groups[0].QuerySelector("h3 a")!.GetAttribute("href"));
         Assert.Equal(["Di Dole"], groups[1].QuerySelectorAll("li a").Select(link => link.TextContent));
     }
 
@@ -138,7 +138,7 @@ public sealed class VoteDetailPageTests
         Assert.Null(groups[1].QuerySelector("h3"));
         Assert.Null(groups[1].QuerySelector("ul"));
         Assert.Equal("House Republicans: no tracked member voted against most of the party.", groups[1].TextContent.Trim());
-        Assert.Equal(Root + "board-house-republican.html", groups[1].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal("/web/board-house-republican.html", groups[1].QuerySelector("a")!.GetAttribute("href"));
         Assert.DoesNotContain("0 tracked", page.QuerySelector(".vote-breakers")!.TextContent);
     }
 
