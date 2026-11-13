@@ -7,7 +7,7 @@
         <header class="detail-head">
             <p class="detail-eyebrow">@StatementPageView.Eyebrow(Data)</p>
             <h1 class="detail-headline">@Data.Headline</h1>
-            <p class="detail-lede">@StatementPageView.DateLine(Data) From <a href="@Data.OriginalUrl" rel="noopener noreferrer nofollow">@Data.OriginalUrl</a>.</p>
+            <p class="detail-lede">@StatementPageView.DateLine(Data) From <a href="@Data.OriginalUrl" rel="noopener noreferrer nofollow">@Data.OriginalHost</a>.</p>
         </header>
         <div class="detail-layout">
             <div class="detail-main">
@@ -43,7 +43,13 @@
                     <ul class="detail-list" role="list">
                         @foreach (var speaker in Data.Speakers)
                         {
-                            <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a></li>
+                            <li>
+                                <a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a>
+                                @if (speaker.Role is { } role)
+                                {
+                                    <p class="muted small">@role</p>
+                                }
+                            </li>
                         }
                     </ul>
                 </section>
@@ -54,20 +60,16 @@
                         <ul class="detail-chips" role="list">
                             @foreach (var issue in Data.Issues)
                             {
-                                <li>
-                                    @if (issue.IsConfigured)
-                                    {
-                                        <LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip>
-                                    }
-                                    else
-                                    {
-                                        @issue.Name
-                                    }
-                                </li>
+                                <li><LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip></li>
                             }
                         </ul>
                     </section>
                 }
+                <section class="detail-card" aria-labelledby="statement-source-title">
+                    <h2 id="statement-source-title">Source</h2>
+                    <p><a href="@Data.OriginalUrl" rel="noopener noreferrer nofollow">@Data.OriginalHost</a></p>
+                    <p class="muted small">@StatementPageView.SourceSeenLine(Data)</p>
+                </section>
             </aside>
         </div>
         <SourceFold>

@@ -15,6 +15,10 @@ internal static class ViewColumns
     public static DateOnly? Date(DbDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateOnly>(ordinal);
 
+    /// <summary>A time that a view stores as UTC ticks.</summary>
+    public static DateTimeOffset? Utc(DbDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? null : new DateTimeOffset(reader.GetInt64(ordinal), TimeSpan.Zero);
+
     public static T Enum<T>(DbDataReader reader, int ordinal) where T : struct, Enum =>
         System.Enum.TryParse<T>(reader.GetString(ordinal), out var value) && System.Enum.IsDefined(value)
             ? value

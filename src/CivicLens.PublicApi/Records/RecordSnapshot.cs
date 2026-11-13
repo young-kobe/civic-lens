@@ -5,7 +5,7 @@ using Npgsql;
 namespace CivicLens.PublicApi.Records;
 
 /// <summary>Reads for the statement and document change pages. It opens the read-only REPEATABLE READ transaction that one page reads inside, so every read of the page comes from one snapshot and one release.
-/// It then reads the names that the page shows for its officials and issues. Both name reads go out as one batch. Order follows the order of the IDs. An issue that the release does not hold keeps its ID as its name and is not configured, as the static page shows it.</summary>
+/// It then reads the names that the page shows for its officials and issues. Both name reads go out as one batch. Order follows the order of the IDs. An issue that the release does not hold is left out, because its ID means nothing to a reader.</summary>
 public sealed class RecordSnapshot(NpgsqlDataSource views)
 {
     public async Task<(NpgsqlConnection Connection, NpgsqlTransaction Transaction)> OpenAsync(CancellationToken cancellationToken)
@@ -42,7 +42,7 @@ public sealed class RecordSnapshot(NpgsqlDataSource views)
         var issueNames = await ReadMapAsync(reader, cancellationToken);
         return ([.. officialIds.Select(id => new RecordOfficialData(id,
                 officialNames.TryGetValue(id, out var name) ? name : throw new InvalidDataException("An official of a published record has no name.")))],
-            [.. issueIds.Select(id => issueNames.TryGetValue(id, out var name) ? new RecordIssueData(id, name, true) : new RecordIssueData(id, id, false))]);
+            [.. issueIds.Where(issueNames.ContainsKey).Select(id => new RecordIssueData(id, issueNames[id]))]);
     }
 
     private static async Task<Dictionary<string, string>> ReadMapAsync(NpgsqlDataReader reader, CancellationToken cancellationToken)

@@ -54,18 +54,6 @@ public sealed class StatementDetailPageTests
     }
 
     [Fact]
-    public async Task AnIssueThatTheReleaseDoesNotHoldIsPlainTextAndAConfiguredIssueIsALink()
-    {
-        var data = Statement() with { Issues = [new("budget", "Federal budget and debt", true), new("unlisted", "unlisted", false)] };
-        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
-
-        var items = page.QuerySelectorAll(".detail-chips li");
-        Assert.Equal(["Federal budget and debt", "unlisted"], items.Select(item => item.TextContent.Trim()));
-        Assert.NotNull(items[0].QuerySelector("a.link-chip"));
-        Assert.Null(items[1].QuerySelector("a"));
-    }
-
-    [Fact]
     public async Task EachQuoteLinkNamesItsNumberOnlyWhenThereIsMoreThanOneQuote()
     {
         var one = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(quotes: 1));
@@ -143,5 +131,49 @@ public sealed class StatementDetailPageTests
         Assert.Equal(Root + PublicationProtocol.IssuePagePath("budget", 1), page.QuerySelector(".link-chip")!.GetAttribute("href"));
         Assert.Equal("A model wrote this <b>summary</b>.", page.QuerySelector(".ai-summary-ai p")!.TextContent);
         Assert.Empty(page.QuerySelectorAll(".ai-summary-ai b"));
+    }
+
+    [Fact]
+    public async Task EachSpeakerShowsTheSeatAndThePartyOfTheTermAndOneSpeakerAlsoGetsThemInTheEyebrow()
+    {
+        var two = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+        var one = Statement();
+        var single = await RenderAsync<StatementDetailPage, StatementPageData>(one with { Speakers = [one.Speakers[0]] });
+        var noTerm = await RenderAsync<StatementDetailPage, StatementPageData>(one with { Speakers = [one.Speakers[1]] });
+
+        var speakers = two.QuerySelectorAll("[aria-labelledby=statement-speakers-title] li").ToArray();
+        Assert.Equal("Senator for AZ, Democrat", speakers[0].QuerySelector("p")!.TextContent);
+        Assert.Null(speakers[1].QuerySelector("p"));
+        Assert.Equal("Statement | Mark Kelly, Adam Schiff", two.QuerySelector(".detail-eyebrow")!.TextContent);
+        Assert.Equal("Statement | Mark Kelly, Senator for AZ, Democrat", single.QuerySelector(".detail-eyebrow")!.TextContent);
+        Assert.Equal("Statement | Adam Schiff", noTerm.QuerySelector(".detail-eyebrow")!.TextContent);
+        Assert.Equal("Senator for AZ", (one.Speakers[0] with { Party = null }).Role);
+    }
+
+    [Fact]
+    public async Task TheFoldShowsTheApprovalAndTheFirstPublicationTimesWithTheBriefLabelsAndNoRowForAMissingTime()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+        var missing = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { ApprovedAtUtc = null });
+
+        static (string, string)[] Facts(AngleSharp.Dom.IDocument document) => [.. document.QuerySelectorAll("#source dt")
+            .Zip(document.QuerySelectorAll("#source dd"), (name, value) => (name.TextContent.Trim(), value.TextContent.Trim()))
+            .Where(fact => fact.Item1 is "Approved" or "First published" or "Revision")];
+        Assert.Equal([("Approved", "30 Oct 2026, 00:42 UTC"), ("First published", "30 Oct 2026, 00:44 UTC"), ("Revision", "2")], Facts(page));
+        Assert.Equal([("First published", "30 Oct 2026, 00:44 UTC"), ("Revision", "2")], Facts(missing));
+    }
+
+    [Fact]
+    public async Task TheLedeAndTheSourceCardNameTheHostAndTheFullUrlStaysInTheFold()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+
+        var lede = page.QuerySelector(".detail-lede a")!;
+        Assert.Equal(("kelly.example", "https://kelly.example/release"), (lede.TextContent, lede.GetAttribute("href")!));
+        var card = page.QuerySelector("[aria-labelledby=statement-source-title]")!;
+        Assert.Equal("Source", card.QuerySelector("h2")!.TextContent);
+        Assert.Equal(("kelly.example", "https://kelly.example/release"), (card.QuerySelector("a")!.TextContent, card.QuerySelector("a")!.GetAttribute("href")!));
+        Assert.Equal("Source seen 29 Oct 2026, 17:19 UTC.", card.QuerySelector("p.muted")!.TextContent);
+        Assert.Contains("https://kelly.example/release", page.QuerySelector("#source dd a")!.TextContent);
     }
 }

@@ -21,7 +21,7 @@ internal static class PublishedWithdrawalView
     [
         new("Kind", PublishedRecordLabels.Kind(withdrawal.Kind)),
         new("Withdrawn revision", withdrawal.WithdrawnRevisionNumber.ToString(CultureInfo.InvariantCulture)),
-        new("First published", Moment.Full(withdrawal.FirstPublishedAtUtc)),
+        .. PublishedTimeFacts.Of(null, withdrawal.FirstPublishedAtUtc),
         new("Withdrawn", Moment.Full(withdrawal.WithdrawnAtUtc)),
         new("Note", withdrawal.Note)
     ];

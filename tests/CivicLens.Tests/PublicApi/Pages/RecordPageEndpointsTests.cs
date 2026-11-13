@@ -55,11 +55,48 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Zed Zane, Ann Able", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
         Assert.Equal(["Zed Zane", "Ann Able"], page.QuerySelectorAll(".detail-list a").Select(link => link.TextContent));
         Assert.Equal("Health care", page.QuerySelector(".link-chip")!.TextContent);
-        Assert.Equal(["Health care", "unlisted"], page.QuerySelectorAll(".detail-chips li").Select(item => item.TextContent.Trim()));
+        Assert.Equal(["Health care"], page.QuerySelectorAll(".detail-chips li").Select(item => item.TextContent.Trim()));
         Assert.Equal("exact quote", page.QuerySelector(".detail-quotes blockquote")!.TextContent);
         Assert.Equal(["exact quote", "Friday"], page.QuerySelectorAll("#source mark").Select(mark => mark.TextContent));
         Assert.Contains("Said on 2 Mar 2026.", page.QuerySelector(".detail-lede")!.TextContent);
         Assert.NotNull(page.QuerySelector(".ai-summary-label"));
+    }
+
+    [Fact]
+    public async Task EachSpeakerShowsTheSeatAndThePartyOfTheTermOnTheStatementDateAndTheFoldShowsTheStoredTimes()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await StatementsSeed.AddAsync(host.OperationalDatabase, Statement);
+        await StatementEndpointsTests.AddDetailEvidenceAsync(host.OperationalDatabase, Statement.RecordId, ExtractionId, Source,
+            Source.IndexOf("exact quote", StringComparison.Ordinal), "exact quote".Length, Source.IndexOf("Friday", StringComparison.Ordinal), 6);
+        // The later term of another party proves that the page reads the term on the statement date and not the current one.
+        var zed = new SeededOfficial("official-z", "Zed Zane",
+            new SeededTerm("Senate", "Senator", "2025-01-03") { State = "AZ", Party = "Democrat", EndsOn = "2026-04-30" },
+            new SeededTerm("Senate", "Senator", "2026-05-01") { State = "AZ", Party = "Independent" });
+        // Two terms of two parties hold the statement date, so the shared rule gives no party and the seat rule gives no seat.
+        var ann = new SeededOfficial("official-a", "Ann Able",
+            new SeededTerm("House", "Representative", "2025-01-03") { State = "MA", District = 1, Party = "Republican", EndsOn = "2026-03-02" },
+            new SeededTerm("Senate", "Senator", "2026-03-02") { State = "MA", Party = "Democrat" });
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, zed, ann);
+        var approved = new DateTimeOffset(2026, 3, 3, 10, 5, 0, TimeSpan.Zero);
+        var first = new DateTimeOffset(2026, 3, 3, 10, 7, 0, TimeSpan.Zero);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE published_entries SET approved_at_utc_ticks = {approved.UtcTicks} WHERE kind = 'statement' AND record_id = '{Statement.RecordId}';
+            INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('statement', '{Statement.RecordId}', {first.UtcTicks});
+            RESET session_replication_role;
+            """);
+
+        var page = await GetPageAsync(host, Path(Statement.RecordId));
+
+        var speakers = page.QuerySelectorAll("[aria-labelledby=statement-speakers-title] li").ToArray();
+        Assert.Equal(("Zed Zane", "Senator for AZ, Democrat"), (speakers[0].QuerySelector("a")!.TextContent, speakers[0].QuerySelector("p")!.TextContent));
+        Assert.Equal("Ann Able", speakers[1].QuerySelector("a")!.TextContent);
+        Assert.Null(speakers[1].QuerySelector("p"));
+        var facts = page.QuerySelectorAll("#source dt").Zip(page.QuerySelectorAll("#source dd"), (name, value) => (name.TextContent.Trim(), value.TextContent.Trim()))
+            .Where(fact => fact.Item1 is "Approved" or "First published").ToArray();
+        Assert.Equal([("Approved", "3 Mar 2026, 10:05 UTC"), ("First published", "3 Mar 2026, 10:07 UTC")], facts);
     }
 
     [Fact]
@@ -234,8 +271,9 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal("This record was withdrawn", page.QuerySelector("h1")!.TextContent);
         Assert.Equal(["Home", PublishedRecordLabels.KindPlural(kind)], page.QuerySelectorAll(".public-breadcrumbs a").Select(link => link.TextContent));
-        Assert.Equal([PublishedRecordLabels.Kind(kind), id, "5", "2 Jan 2026, 03:04 UTC", "2 Jun 2026, 12:30 UTC", "Withdrawn after a report"],
+        Assert.Equal([PublishedRecordLabels.Kind(kind), "5", "2 Jan 2026, 03:04 UTC", "2 Jun 2026, 12:30 UTC", "Withdrawn after a report", id],
             page.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
+        Assert.Equal(id, page.QuerySelector("details.source-fold dd")!.TextContent.Trim());
         var history = page.QuerySelectorAll(".corrections li").Select(item => item.TextContent).ToArray();
         Assert.Equal(2, history.Length);
         Assert.Contains("Replaces revision 4.", history[0]);

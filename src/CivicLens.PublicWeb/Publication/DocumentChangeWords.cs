@@ -79,7 +79,7 @@ public static class DocumentChangeWords
         if (data.Officials.Length > 0)
             facts.Add(Fact.LinkList("Officials", [.. data.Officials.Select(official => new FactLink(official.Name, rootPath + PublicationProtocol.OfficialPagePath(official.OfficialId)))]));
         if (data.Issues.Length > 0)
-            facts.Add(Fact.LinkList("Issues", [.. data.Issues.Select(issue => new FactLink(issue.Name, issue.IsConfigured ? rootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1) : null))]));
+            facts.Add(Fact.LinkList("Issues", [.. data.Issues.Select(issue => new FactLink(issue.Name, rootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1)))]));
         facts.Add(new("Revision", data.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         return facts;
     }

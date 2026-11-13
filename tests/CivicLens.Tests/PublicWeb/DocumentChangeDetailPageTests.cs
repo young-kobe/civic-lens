@@ -87,16 +87,6 @@ public sealed class DocumentChangeDetailPageTests
     }
 
     [Fact]
-    public async Task AnIssueThatTheReleaseDoesNotHoldIsPlainTextInTheFold()
-    {
-        var data = Change() with { Issues = [new("budget", "Federal budget and debt", true), new("unlisted", "unlisted", false)] };
-        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(data);
-
-        var issues = page.QuerySelectorAll("#source dd").Single(value => value.TextContent.Contains("unlisted"));
-        Assert.Equal(["Federal budget and debt"], issues.QuerySelectorAll("a").Select(link => link.TextContent));
-    }
-
-    [Fact]
     public async Task ACitationLinkNamesItsNumberOnlyWhenThereIsMoreThanOneCitation()
     {
         var one = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(citations: 1));

@@ -29,12 +29,13 @@ internal static class DetailPageFixture
         string? label = StatementLabel, PublishedApprover approver = PublishedApprover.Code) => new(
         7, StatementId, 2, dated ? new DateOnly(2026, 10, 29) : null, "Kelly announces a bill", "A model wrote this <b>summary</b>.", origin,
         origin == PublishedTextOrigin.Model ? label : null, approver,
-        [new("official-a", "Mark Kelly"), new("official-b", "Adam Schiff")], [new("budget", "Federal budget and debt", true)],
+        [new("official-a", "Mark Kelly") { Seat = "Senator for AZ", Party = "Democrat" }, new("official-b", "Adam Schiff")], [new("budget", "Federal budget and debt")],
         new PublishedDocumentVersion { ExtractionId = "x1", Url = "https://feed.example/rss", ObservedAtUtc = new(2026, 10, 29, 17, 19, 0, TimeSpan.Zero), Text = StatementText },
         "https://kelly.example/release",
         dated ? new PublishedCitation { ExtractionId = "x1", Start = StatementText.IndexOf("Friday", StringComparison.Ordinal), Length = 6, Quote = "Friday" } : null,
         [.. new[] { "First quote.", "Second quote.", "Third quote.", "Fourth quote." }.Take(quotes).Select(quote =>
-            new PublishedQuotation { ExtractionId = "x1", Start = StatementText.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote, Kind = PublishedQuotationKind.DirectQuotation })]);
+            new PublishedQuotation { ExtractionId = "x1", Start = StatementText.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote, Kind = PublishedQuotationKind.DirectQuotation })],
+        new DateTimeOffset(2026, 10, 30, 0, 42, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 30, 0, 44, 0, TimeSpan.Zero));
 
     public static ExecutiveActionPageData Action(params ExecutiveActionNoticeData[] notices) => new(
         7, ActionId, 1, "Implementing the Sanctioning Russia and Iran Act", PublishedExecutiveActionKind.ExecutiveOrder, "2026-21599",
@@ -65,7 +66,7 @@ internal static class DetailPageFixture
         int citations = 2, string? label = ChangeLabel) => new(
         7, ChangeId, 1, "Example Agency changed its visitor policy page", "The agency cut the notice from seven days to three.", origin,
         origin == PublishedTextOrigin.Model ? label : null, "A shorter notice helps visitors.", "The text alone does not show the reason.", "Example Agency", changeDate,
-        [new("official-a", "Ann Able")], [new("budget", "Federal budget and debt", true)],
+        [new("official-a", "Ann Able")], [new("budget", "Federal budget and debt")],
         new PublishedDocumentVersion { ExtractionId = "b1", Url = "https://example.gov/visit", ObservedAtUtc = new(2026, 10, 12, 8, 0, 0, TimeSpan.Zero), Text = BeforeText },
         new PublishedDocumentVersion { ExtractionId = "a1", Url = "https://example.gov/visit", ObservedAtUtc = new(2026, 10, 19, 8, 0, 0, TimeSpan.Zero), Text = AfterText },
         [.. Enumerable.Repeat(SevenToThree(), passages)],
