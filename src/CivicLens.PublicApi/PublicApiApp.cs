@@ -79,7 +79,8 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new WithdrawalStore(views));
         builder.Services.AddSingleton(new CorrectionHistoryStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
-        builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
+        builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>(), new ExecutiveActionEvidenceStore(),
+            provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton<PageRenderer>();
         if (options.PublicBaseUrl is { } baseUrl)
         {

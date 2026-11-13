@@ -42,9 +42,12 @@ public static class ExecutiveActionTargetRows
         return sql.ToString();
     }
 
+    // The saved record holds the document number line and, when the revision has notes, the notes line. Each cited line has its span.
     private static void Revision(StringBuilder sql, string record, string number, ExecutiveActionKind kind, int? last, string? notes = null)
     {
-        var notesColumns = notes is null ? "NULL, NULL, NULL, NULL" : $"'{notes}', 'ext', 0, 1";
+        var documentLine = $"Federal Register document: 2026-{record[..5]}";
+        var notesLine = notes is null ? null : $"\nDisposition notes: {notes}";
+        var notesColumns = notesLine is null ? "NULL, NULL, NULL, NULL" : $"'{notes}', '{record}', {documentLine.Length + 1}, {notesLine.Length - 1}";
         sql.AppendLine(CultureInfo.InvariantCulture, $"""
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('executiveAction', '{record}', 1, 1, {(last is null ? "NULL" : last.ToString())});
@@ -53,6 +56,9 @@ public static class ExecutiveActionTargetRows
                 disposition_notes, disposition_notes_extraction_id, disposition_notes_start, disposition_notes_length)
               VALUES ('{record}', 1, 'x', 1, 'Code', 'civic-lens:code', '{new string('c', 40)}', 'fr', '2026-{record[..5]}', '{kind}', '{number}', 'Title {number}',
                 '2026-01-20', '2026-01-23', '91 FR 1', 'Jane Roe', 'president', 'https://fr.example/{number}', {notesColumns});
+            {PublicRecordPageRows.ExecutiveActionSource(record, documentLine + notesLine)}
+            INSERT INTO executive_action_revision_facts (record_id, revision_number, "position", citation_extraction_id, citation_start, citation_length)
+              VALUES ('{record}', 1, 0, '{record}', 0, {documentLine.Length});
             """);
     }
 }
