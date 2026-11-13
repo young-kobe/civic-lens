@@ -8,10 +8,15 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 /// Adds the view <c>public_api.bill_text_sentences</c>: each sentence of the bill text summary of an active bill record, with its part and the exact
 /// characters of its quote. It adds the column <c>quote</c> to <c>public_api.bill_key_terms</c>, with the exact characters of each definition quote.
 /// Both views serve rows for the origin Model only, the origin that carries the AI label, so they share one gate. The rollback drops the new view and
-/// rebuilds the key term view of <c>ActionRevisionKeyTerms</c>, because a replaced view cannot drop a column.
+/// rebuilds the key term view of <c>ActionRevisionKeyTerms</c> with its grant, because a replaced view cannot drop a column.
 /// </summary>
 public partial class PublicApiBillTextQuotes : Migration
 {
+    // The label text copies BillTextWords.KeyTermsLabel, because SQL cannot read the class. ActionRevisionKeyTerms holds the other copy.
+    // PublicApiBillTextQuotesMigrationTests compares both copies with the owner.
+    private const string KeyTermsLabel =
+        "'Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.'";
+
     private const string Supplementary = @"[\U00010000-\U0010FFFF]";
 
     // A span counts UTF-16 units, and substr counts code points. Each supplementary character is one code point and two UTF-16 units. The slice
@@ -36,7 +41,7 @@ public partial class PublicApiBillTextQuotes : Migration
     private static readonly string UpSql = $"""
         CREATE OR REPLACE VIEW public_api.bill_key_terms WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, k."position", k.term, k.definition, k.cut,
-               {ActionRevisionKeyTerms.KeyTermsLabel} AS label,
+               {KeyTermsLabel} AS label,
                {QuoteOf("d.text", "k.citation_start", "k.citation_length")} AS quote
         {ModelTextRevisions}
           JOIN public.action_revision_key_terms k ON k.record_id = r.record_id AND k.revision_number = r.revision_number
@@ -56,10 +61,25 @@ public partial class PublicApiBillTextQuotes : Migration
 
     protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(UpSql);
 
+    // The key term view of ActionRevisionKeyTerms, as that migration made it.
+    private const string OldKeyTermsSql = $"""
+        CREATE VIEW public_api.bill_key_terms WITH (security_barrier = true) AS
+        SELECT a.record_id, a.revision_number, k."position", k.term, k.definition, k.cut,
+               {KeyTermsLabel} AS label
+          FROM public_api.active_records a
+          JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
+          JOIN public.action_revision_key_terms k ON k.record_id = r.record_id AND k.revision_number = r.revision_number
+         WHERE a.kind = 'action' AND r.headline IS NOT NULL AND r.event_on IS NOT NULL
+           AND r.text_origin = 'Model' AND r.text_package_id IS NOT NULL;
+
+        ALTER VIEW public_api.bill_key_terms OWNER TO civic_lens_public_owner;
+        """;
+
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql($"""
         DROP VIEW public_api.bill_text_sentences;
         DROP VIEW public_api.bill_key_terms;
-        {ActionRevisionKeyTerms.ViewSql}
+        {OldKeyTermsSql}
+        GRANT SELECT ON public_api.bill_key_terms TO civic_lens_public;
         REVOKE SELECT (citation_extraction_id, citation_start, citation_length) ON action_revision_key_terms FROM civic_lens_public_owner;
         REVOKE SELECT (part, sentence, citation_start, citation_length) ON action_revision_text_citations FROM civic_lens_public_owner;
         """);

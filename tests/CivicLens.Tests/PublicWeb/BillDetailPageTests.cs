@@ -328,8 +328,6 @@ public sealed class BillDetailPageTests
         Assert.Null(other.QuerySelector(".ai-summary-check"));
     }
 
-    private const string KeyTermsLabel = "Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.";
-
     private static readonly BillPageData TextBill = Bill with
     {
         Summary = "The bill would add a tax credit. It would end in 2030.",
@@ -346,7 +344,7 @@ public sealed class BillDetailPageTests
         var page = await RenderAsync(TextBill with
         {
             KeyTerms = [new("Landlord", "The term \"landlord\" means an owner of a dwelling unit", true, "The term “landlord” means an owner of a dwelling unit"), new("Tenant", "The term \"tenant\" means a person who rents.", false, "The term “tenant” means a person who rents.")],
-            KeyTermsLabel = KeyTermsLabel
+            KeyTermsLabel = BillTextWords.KeyTermsLabel
         });
         var section = page.QuerySelector(".bill-terms")!;
         var terms = section.QuerySelectorAll(".bill-term").ToArray();
@@ -354,7 +352,7 @@ public sealed class BillDetailPageTests
         Assert.Same(section, page.QuerySelector(".bill-main > .ai-summary")!.NextElementSibling);
         Assert.Equal("Key terms", section.QuerySelector("h2")!.TextContent);
         var label = section.QuerySelector(".ai-summary.ai-summary-ai > .ai-summary-label")!;
-        Assert.Equal(KeyTermsLabel, label.TextContent);
+        Assert.Equal(BillTextWords.KeyTermsLabel, label.TextContent);
         Assert.Equal(["Landlord", "Tenant"], terms.Select(term => term.QuerySelector("dt")!.TextContent));
         Assert.Equal("The term \"landlord\" means an owner of a dwelling unit", terms[0].QuerySelector("blockquote.quote")!.TextContent);
         Assert.Equal($"{BillTextWords.KeyTermCutNote} {BillTextWords.KeyTermCutLink}", terms[0].QuerySelector(".bill-term-cut")!.TextContent);

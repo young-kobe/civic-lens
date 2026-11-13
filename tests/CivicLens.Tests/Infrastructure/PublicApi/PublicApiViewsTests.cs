@@ -822,7 +822,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
         Assert.Equal(["M|0|Secretary|The term \"Secretary\" means the Secretary of Energy.|false", "M|1|grant|The term \"grant\" means a payment under § 3.|true"],
             await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition || '|' || cut FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
-        Assert.Equal(["Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms."],
+        Assert.Equal([BillTextWords.KeyTermsLabel],
             await PublicAsync("SELECT DISTINCT label FROM public_api.bill_key_terms"));
     }
 
