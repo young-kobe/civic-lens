@@ -21,7 +21,8 @@ internal static class OfficialRecordQueries
                  WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND p.official_id = @id OFFSET 0)
         """;
 
-    private const string StatementDay = "COALESCE(s.statement_date, DATE '0001-01-01')";
+    // An undated statement sorts last. The key is the second day of year 1, because Npgsql sends DateOnly.MinValue (the first day) as -infinity, which no row matches.
+    private const string StatementDay = "COALESCE(s.statement_date, DATE '0001-01-02')";
 
     // The bills tab count. The official page reads it alone for its "See all" link, so the link and the tab show one number.
     private const string BillCountSql = """

@@ -196,6 +196,19 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task APageThatEndsOnAnUndatedStatementContinuesWithTheOtherUndatedStatements()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
+            new SeededStatement('6', null, ["p0"], [], "Person", "Person"), new SeededStatement('7', null, ["p0"], [], "Person", "Person"));
+
+        var page = await GetPageAsync(host, $"/web/officials/p0/record.html?kind=statements&cursor=r.1.00010102.{new string('6', 64)}");
+
+        Assert.Equal([BaseUrl.Join($"records/{new string('7', 64)}.html")],
+            page.QuerySelectorAll(".record-row > div > a").Select(link => link.GetAttribute("href")!).ToArray());
+    }
+
+    [Fact]
     public async Task TheExecutiveActionsTabListsTheActionsThePresidentSignedNewestFirstWithTheirKind()
     {
         await using var host = await StartAsync();
