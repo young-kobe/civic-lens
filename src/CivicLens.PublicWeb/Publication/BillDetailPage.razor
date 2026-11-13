@@ -1,5 +1,6 @@
 @using System.Globalization
 @using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
 @using CivicLens.PublicWeb.Components.Ui
 
 <PublicPage Section="PublicSection.AllRecords" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" Title="@Data.Headline" Description="@(Data.BillLine ?? Data.Title)" IsArticle="true"
@@ -32,6 +33,11 @@
                 {
                     <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label" Check="CrsCheck">
                         <p>@Data.Summary</p>
+                        @if (Data.WhyItMatters is { } whyItMatters)
+                        {
+                            <h2 class="bill-why-title">@BillTextWords.WhyItMattersHeading</h2>
+                            <p>@whyItMatters</p>
+                        }
                     </AiSummary>
                 }
                 @if (Data.CrsText is not null)
@@ -42,6 +48,29 @@
                             <p>@paragraph</p>
                         }
                     </SourceFold>
+                }
+                @if (Data.KeyTerms.Length > 0)
+                {
+                    <section class="bill-terms" aria-labelledby="bill-terms-title">
+                        <h2 id="bill-terms-title">Key terms</h2>
+                        <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.KeyTermsLabel">
+                            <dl class="bill-terms-list">
+                                @foreach (var term in Data.KeyTerms)
+                                {
+                                    <div class="bill-term">
+                                        <dt>@term.Term</dt>
+                                        <dd>
+                                            <blockquote class="quote">@EncodedEvidence.Markup(term.Definition)</blockquote>
+                                            @if (term.Cut)
+                                            {
+                                                <p class="bill-term-cut">@BillTextWords.KeyTermCutNote <a href="@Data.CongressGovUrl" rel="noopener noreferrer">@BillTextWords.KeyTermCutLink</a></p>
+                                            }
+                                        </dd>
+                                    </div>
+                                }
+                            </dl>
+                        </AiSummary>
+                    </section>
                 }
                 @if (Data.Votes.Length > 0 || Data.SenateVoteGap)
                 {
@@ -96,6 +125,11 @@
                             <dt>CRS summary</dt>
                             <dd>Version @Data.CrsVersion</dd>
                         }
+                        @if (Data.BillText is { } text)
+                        {
+                            <dt>Bill text</dt>
+                            <dd>@TextSourceLine(text)</dd>
+                        }
                         @if (Data.CheckedAtUtc is { } checkedAt && Data.FirstPublishedAtUtc is { } firstPublished)
                         {
                             <dt>Checked</dt>
@@ -103,7 +137,7 @@
                         }
                         @if (!string.IsNullOrWhiteSpace(Data.Summary))
                         {
-                            @foreach (var fact in PublishedRecordLabels.Wording(Data.TextOrigin))
+                            @foreach (var fact in PublishedRecordLabels.Wording(Data.TextOrigin, Data.BillText is null ? PublishedRecordLabels.ModelWording : BillTextWords.Label))
                             {
                                 <dt>@fact.Label</dt>
                                 <dd>@fact.Value</dd>
@@ -148,6 +182,12 @@
             parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
         return string.Join(' ', parts);
     }
+
+    private static string TextSourceLine(BillTextSourceData text) => string.Join(' ', new[]
+    {
+        BillTextWords.SourceLine(text.VersionName, text.VersionDate is { } date ? Moment.Day(date) : null),
+        BillTextWords.CutNote(text.CharsRead, text.CharsTotal)
+    }.OfType<string>());
 
     private static string Article(string word) => "AEIOUaeiou".Contains(word[0]) ? "an" : "a";
 }

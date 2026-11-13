@@ -328,6 +328,82 @@ public sealed class BillDetailPageTests
         Assert.Null(other.QuerySelector(".ai-summary-check"));
     }
 
+    private const string KeyTermsLabel = "Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.";
+
+    private static readonly BillPageData TextBill = Bill with
+    {
+        Summary = "The bill would add a tax credit. It would end in 2030.",
+        Label = BillTextWords.Label,
+        CrsText = null,
+        CrsVersion = null,
+        WhyItMatters = "Families with a child could pay less tax.",
+        BillText = new("Introduced in House", new(2025, 9, 11), 60000, 84210)
+    };
+
+    [Fact]
+    public async Task KeyTermsFollowTheSummaryWithTheirAiLabelAndOnlyACutQuoteShowsTheOwnerCutNoteAndTheCongressGovLink()
+    {
+        var page = await RenderAsync(TextBill with
+        {
+            KeyTerms = [new("Landlord", "The term \"landlord\" means an owner of a dwelling unit", true), new("Tenant", "The term \"tenant\" means a person who rents.", false)],
+            KeyTermsLabel = KeyTermsLabel
+        });
+        var section = page.QuerySelector(".bill-terms")!;
+        var terms = section.QuerySelectorAll(".bill-term").ToArray();
+
+        Assert.Same(section, page.QuerySelector(".bill-main > .ai-summary")!.NextElementSibling);
+        Assert.Equal("Key terms", section.QuerySelector("h2")!.TextContent);
+        var label = section.QuerySelector(".ai-summary.ai-summary-ai > .ai-summary-label")!;
+        Assert.Equal(KeyTermsLabel, label.TextContent);
+        Assert.Equal(["Landlord", "Tenant"], terms.Select(term => term.QuerySelector("dt")!.TextContent));
+        Assert.Equal("The term \"landlord\" means an owner of a dwelling unit", terms[0].QuerySelector("blockquote.quote")!.TextContent);
+        Assert.Equal($"{BillTextWords.KeyTermCutNote} {BillTextWords.KeyTermCutLink}", terms[0].QuerySelector(".bill-term-cut")!.TextContent);
+        Assert.Equal("This quote is only the start of the definition. Read the rest on Congress.gov.", terms[0].QuerySelector(".bill-term-cut")!.TextContent);
+        var link = terms[0].QuerySelector(".bill-term-cut a")!;
+        Assert.Equal(BillTextWords.KeyTermCutLink, link.TextContent);
+        Assert.Equal(TextBill.CongressGovUrl, link.GetAttribute("href"));
+        Assert.Null(terms[1].QuerySelector(".bill-term-cut"));
+        Assert.DoesNotContain(BillTextWords.KeyTermCutNote, terms[1].TextContent);
+    }
+
+    [Fact]
+    public async Task ABillWithNoKeyTermsShowsNoKeyTermSection()
+    {
+        var page = await RenderAsync(TextBill);
+
+        Assert.Null(page.QuerySelector(".bill-terms"));
+        Assert.DoesNotContain("Key terms", page.Body!.TextContent);
+    }
+
+    [Fact]
+    public async Task ATextSummaryShowsItsWhyItMattersPartAndTheSourceFoldCitesTheBillTextVersionDateAndCutNote()
+    {
+        var page = await RenderAsync(TextBill);
+        var summary = page.QuerySelector(".bill-main > .ai-summary")!;
+        var fold = page.QuerySelector("details#source")!;
+        var source = fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Bill text").NextElementSibling!.TextContent;
+
+        Assert.Equal(BillTextWords.Label, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(["The bill would add a tax credit. It would end in 2030.", "Families with a child could pay less tax."], summary.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent));
+        Assert.Equal(BillTextWords.WhyItMattersHeading, summary.QuerySelector("h2.bill-why-title")!.TextContent);
+        Assert.Equal("Based on: Introduced in House, 11 Sep 2025. Read the full text on Congress.gov. This summary covers the first 60,000 of 84,210 characters. Later sections are not covered.", source);
+        Assert.Equal(BillTextWords.Label, fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
+        Assert.Null(page.QuerySelector(".bill-main > details.source-fold"));
+    }
+
+    [Fact]
+    public async Task AWholeBillTextReadGetsNoCutNoteAndACrsSummaryGetsNoWhyItMattersOrBillTextRow()
+    {
+        var whole = (await RenderAsync(TextBill with { BillText = new("Introduced in House", null, 84210, 84210) })).QuerySelector("details#source")!;
+        var crs = await RenderAsync(Bill);
+
+        Assert.Equal("Based on: Introduced in House. Read the full text on Congress.gov.",
+            whole.QuerySelectorAll("dt").Single(term => term.TextContent == "Bill text").NextElementSibling!.TextContent);
+        Assert.Null(crs.QuerySelector(".bill-why-title"));
+        Assert.DoesNotContain(crs.QuerySelectorAll("details#source dt"), term => term.TextContent == "Bill text");
+        Assert.Equal(PublishedRecordLabels.ModelWording, crs.QuerySelectorAll("details#source dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
+    }
+
     private static async Task<IDocument> RenderAsync(BillPageData data)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
