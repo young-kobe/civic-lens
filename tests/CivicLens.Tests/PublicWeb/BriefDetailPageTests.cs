@@ -132,4 +132,14 @@ public sealed class BriefDetailPageTests
         Assert.Equal(["Statement, revision 2", "Executive action, revision 1"], rows.Select(row => row.QuerySelector(".muted")!.TextContent));
         Assert.Equal(PublishedBriefView.CitedRecordsTitle, page.QuerySelector("#brief-cited-title")!.TextContent);
     }
+
+    [Fact]
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    {
+        var corrected = await RenderAsync<BriefDetailPage, BriefPageData>(Brief() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var plain = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
+
+        PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
 }

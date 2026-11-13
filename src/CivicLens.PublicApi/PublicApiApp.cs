@@ -52,7 +52,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));
-        builder.Services.AddSingleton(provider => new VotePageReader(provider.GetRequiredService<VoteStore>(), views));
+        builder.Services.AddSingleton(provider => new VotePageReader(provider.GetRequiredService<VoteStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), views));
         builder.Services.AddSingleton(new PartyAgreementStore(views));
         builder.Services.AddSingleton(provider => new BoardStore(views, provider.GetRequiredService<PartyAgreementStore>()));
         builder.Services.AddSingleton(new MemberVoteStore(views));
@@ -62,11 +62,11 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(snapshot);
         builder.Services.AddSingleton(new StatementStore(views));
-        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<RecordSnapshot>()));
+        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));
-        builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<RecordSnapshot>()));
+        builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new BriefStore(views));
-        builder.Services.AddSingleton(provider => new BriefPageReader(provider.GetRequiredService<BriefStore>()));
+        builder.Services.AddSingleton(provider => new BriefPageReader(provider.GetRequiredService<BriefStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new BriefListReader(views));
         builder.Services.AddSingleton(new IssuesIndexReader(views));
         builder.Services.AddSingleton(new ZipDistrictStore(views));
@@ -79,7 +79,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new WithdrawalStore(views));
         builder.Services.AddSingleton(new CorrectionHistoryStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
-        builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>()));
+        builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton<PageRenderer>();
         if (options.PublicBaseUrl is { } baseUrl)
         {

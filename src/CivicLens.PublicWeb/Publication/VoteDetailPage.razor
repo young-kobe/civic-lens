@@ -19,6 +19,7 @@
             <h1 class="vote-headline">@Data.Headline</h1>
             <AiSummary TextOrigin="@Data.TextOrigin" Label="@summaryLabel"><p>@Data.Summary</p></AiSummary>
         </header>
+        <PublishedCorrectionBanner Kind="PublishedRecordKind.Vote" Corrections="Data.Corrections" />
         <div class="vote-layout">
             <section class="vote-result" aria-labelledby="vote-result-title">
                 <h2 id="vote-result-title">@VotePageView.ResultHeading</h2>

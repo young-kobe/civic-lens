@@ -5,6 +5,7 @@ using CivicLens.PublicApi.Pages;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Officials;
+using CivicLens.Tests.PublicApi.Records;
 using CivicLens.Tests.PublicApi.Votes;
 using Npgsql;
 
@@ -40,6 +41,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
             """);
         await SeedHistoryAsync(host.OperationalDatabase);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('e', "2026-03-03") { BillNumber = 7 }, new SeededVote('f', "2026-03-04") { BillNumber = 8 });
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
         return host;
     }
 
@@ -146,6 +148,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('b', "2026-03-02") { BillType = "s", BillNumber = 9, Sponsorships = [new("p1", "Sponsor", "2026-03-02")] });
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"));
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
 
         var page = await ReadPageAsync(host, new string('b', 64));
 

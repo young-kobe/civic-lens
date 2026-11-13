@@ -8,6 +8,7 @@ using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Boards;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.PartyAgreement;
+using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -32,7 +33,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         if (links.Length > 0) await ViewsSeed.LinkVoteBillsAsync(database, 1, links);
     }
 
-    private static HomePageReader HomeReader(NpgsqlDataSource dataSource) => new(new HomeStore(dataSource), new VotePageReader(new VoteStore(dataSource), dataSource),
+    private static HomePageReader HomeReader(NpgsqlDataSource dataSource) => new(new HomeStore(dataSource), new VotePageReader(new VoteStore(dataSource), new CorrectionHistoryStore(dataSource), dataSource),
         new BoardsPageReader(new BoardStore(dataSource, new PartyAgreementStore(dataSource))), null, NullLogger<HomePageReader>.Instance);
 
     private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null, SeededExecutiveAction[]? executiveActions = null)

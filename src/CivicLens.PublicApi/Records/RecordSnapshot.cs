@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Records;
 
-/// <summary>Reads for the statement and document change pages and for the search ingest. It opens the read-only REPEATABLE READ transaction that one page or one ingest reads inside, so every read comes from one snapshot and one release.
+/// <summary>Reads for the statement, document change, executive action, and brief pages and for the search ingest. It opens the read-only REPEATABLE READ transaction that one page or one ingest reads inside, so every read comes from one snapshot and one release.
 /// It then reads the names that the page shows for its officials and issues. Both name reads go out as one batch. Order follows the order of the IDs. An issue that the release does not hold is left out, because its ID means nothing to a reader.</summary>
 public sealed class RecordSnapshot(NpgsqlDataSource views)
 {

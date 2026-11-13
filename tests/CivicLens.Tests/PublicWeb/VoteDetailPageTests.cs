@@ -292,4 +292,14 @@ public sealed class VoteDetailPageTests
 
     private static string[] Names(AngleSharp.Dom.IDocument page) =>
         [.. page.QuerySelectorAll(".vote-members tbody tr td:first-child").Select(cell => cell.TextContent)];
+
+    [Fact]
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    {
+        var corrected = await RenderAsync(Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var plain = await RenderAsync(Vote());
+
+        PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
 }

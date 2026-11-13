@@ -12,7 +12,7 @@ internal static class PublishedWithdrawalView
 
     /// <summary>The one sentence that says what happened. The stored withdrawal holds no decider, so the sentence names none.</summary>
     public static string Banner(PublishedWithdrawal withdrawal) =>
-        $"Civic Lens withdrew this {PublishedRecordLabels.Kind(withdrawal.Kind).ToLowerInvariant()} on {Moment.Full(withdrawal.WithdrawnAtUtc)}.";
+        $"Civic Lens withdrew this {PublishedRecordLabels.KindInSentence(withdrawal.Kind)} on {Moment.Full(withdrawal.WithdrawnAtUtc)}.";
 
     /// <summary>The owner-approved sentence that tells the reader to drop the withdrawn record.</summary>
     public const string DoNotRely = "Do not rely on it. The page keeps this notice so old links do not break.";

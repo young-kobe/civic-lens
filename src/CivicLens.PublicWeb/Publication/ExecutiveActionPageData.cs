@@ -18,4 +18,8 @@ public sealed record ExecutiveActionPageData(
     string PresidentName,
     ExecutiveActionNoticeData[] Notices,
     ExecutiveActionTargetData[] Targets,
-    ExecutiveActionSummaryData? Summary = null);
+    ExecutiveActionSummaryData? Summary = null)
+{
+    /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
+    public PublishedCorrection[] Corrections { get; init; } = [];
+}

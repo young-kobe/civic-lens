@@ -427,7 +427,7 @@ Run commands are in [operations](../operations.md#run-the-search-service).
 
 ## Limits and planned work
 
-The shared corrections reader must stay undeployed until the production correction history bootstrap and verify pass for the active and retained rollback releases. Publication owns this bootstrap. The gated record pages do not read it yet. A later change adds the correction banner from this reader.
+The shared corrections reader must stay undeployed until the production correction history bootstrap and verify pass for the active and retained rollback releases. Publication owns this bootstrap. The gated record pages read it for the correction banner, so they share this deploy gate.
 
 - Server pages cover the gated Home preview, the public Compare page, and the not found page. Remaining reader routes move under [R-68](../roadmap.md#active-r-68-redesign). A shared file has no hashed name, so it has no long cache value yet.
 - The API exposes stored vote alignment, member party and caucus, vote side and party-majority cast, and official photo paths. A vote member's party comes from the party pinned to its member list. Caucus, state, and district come from the active release's matching chamber term on the vote date; when no matching term exists they remain null. Side maps Yea/Aye and Nay/No to their shared side, leaving other casts null. Party-majority cast uses the stored Democrat or Republican majority for the member's pinned party, leaving other parties and ties null. Photo paths come from the release and are already restricted to publication photo paths.

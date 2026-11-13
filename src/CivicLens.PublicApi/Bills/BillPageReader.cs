@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -8,7 +9,7 @@ namespace CivicLens.PublicApi.Bills;
 /// Reads what the bill page shows and maps it to the public presentation contract. Every part comes from the same active release as the bill.
 /// When a release change splits the parts, the read starts again. Each part is one read that no other part repeats.
 /// </summary>
-public sealed class BillPageReader(BillStore bills, VoteStore votes)
+public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionHistoryStore corrections)
 {
     private const int ActionsPerRead = 500;
     private const int Attempts = 3;
@@ -35,7 +36,9 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
         // The shown list stops at one page, so the gap note reads the chambers from a read that is complete for the bill.
         var chambers = await votes.FindBillChambersAsync(bill.Congress, bill.BillType, bill.BillNumber, cancellationToken);
         if (chambers is null || chambers.Release != detail.Release) return null;
-        return Map(detail, actions, sponsors.Rows, issues, voteRows.Votes, chambers.Chambers);
+        var corrected = await corrections.ListAsync(PublishedRecordKind.Action, bill.RecordId, detail.Release, bill.RevisionNumber, cancellationToken);
+        if (corrected is null) return null;
+        return Map(detail, actions, sponsors.Rows, issues, voteRows.Votes, chambers.Chambers) with { Corrections = corrected };
     }
 
     private async Task<BillActionRow[]?> ReadActionsAsync(string recordId, int release, CancellationToken cancellationToken)

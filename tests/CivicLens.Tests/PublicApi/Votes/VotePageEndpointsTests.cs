@@ -2,6 +2,7 @@ using System.Net;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Votes;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -10,6 +11,7 @@ using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Officials;
+using CivicLens.Tests.PublicApi.Records;
 using CivicLens.Tests.PublicApi.Statements;
 
 namespace CivicLens.Tests.PublicApi.Votes;
@@ -39,6 +41,7 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
                 INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
                 VALUES ('{House.RecordId}', 1, 'Democrat', 1, 1, 0, 0, 0), ('{House.RecordId}', 1, 'Republican', 0, 2, 0, 1, 0);
                 """);
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
         return host;
     }
 
@@ -186,7 +189,7 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         await using var source = new NpgsqlDataSourceBuilder(views)
             .UseLoggerFactory(new CommandLogFactory(commands)).EnableParameterLogging()
             .UsePhysicalConnectionInitializer(_ => connections++, _ => { connections++; return Task.CompletedTask; }).Build();
-        var reader = new VotePageReader(new VoteStore(source), source);
+        var reader = new VotePageReader(new VoteStore(source), new CorrectionHistoryStore(source), source);
 
         var page = await reader.ReadAsync(House.RecordId, CancellationToken.None);
 

@@ -9,6 +9,7 @@
             <h1 class="detail-headline">@Data.Headline</h1>
             <p class="detail-lede">@StatementPageView.DateLine(Data) From <a href="@Data.OriginalUrl" rel="noopener noreferrer nofollow">@Data.OriginalHost</a>.</p>
         </header>
+        <PublishedCorrectionBanner Kind="PublishedRecordKind.Statement" Corrections="Data.Corrections" />
         <div class="detail-layout">
             <div class="detail-main">
                 <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
