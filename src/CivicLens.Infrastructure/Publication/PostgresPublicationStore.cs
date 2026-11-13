@@ -192,6 +192,18 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         return await ReleaseBillStatusRows.InsertMissingAsync(db, releaseNumber, statuses, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<BillStatusGap>> ReadBillStatusGapsAsync(BillStatusGap? after, int limit, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseBillStatusRows.ReadGapsAsync(db, after, limit, cancellationToken);
+    }
+
+    public async Task<int> FillBillStatusStagesAsync(IReadOnlyCollection<BillStatusGap> gaps, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseBillStatusRows.FillStagesAsync(db, gaps, cancellationToken);
+    }
+
     public async Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
