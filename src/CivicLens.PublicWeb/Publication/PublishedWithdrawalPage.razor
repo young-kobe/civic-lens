@@ -2,7 +2,7 @@
 @using CivicLens.PublicWeb.Components.Evidence
 @using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSections.OfRecord(Withdrawal.Kind)" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@Title" Description="@PublishedWithdrawalView.Banner(Withdrawal)" RootPath="@RootPath" TrailKind="Withdrawal.Kind" TrailName="@PublishedWithdrawalView.RecordTitle" NoIndex="true">
+<PublicPage Section="PublicSections.OfRecord(Withdrawal.Kind)" CanonicalPath="@PublicationProtocol.RecordPagePath(Withdrawal.RecordId)" Title="@PublishedWithdrawalView.RecordTitle" Description="@PublishedWithdrawalView.Banner(Withdrawal)" RootPath="@RootPath" TrailKind="Withdrawal.Kind" TrailName="@PublishedWithdrawalView.RecordTitle" NoIndex="true">
     <article class="detail">
         <Notice Tone="Tone.Neutral" Title="@PublishedWithdrawalView.RecordTitle"><b>@PublishedWithdrawalView.Banner(Withdrawal)</b> @PublishedWithdrawalView.DoNotRely</Notice>
         <header class="detail-head">
@@ -14,14 +14,29 @@
                 <h2 id="withdrawal-facts-title">What was withdrawn</h2>
                 <Facts Items="PublishedWithdrawalView.Facts(Withdrawal)" />
             </section>
-            <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+            @if (Withdrawal.Corrections.Length > 0)
+            {
+                <section class="detail-section" aria-labelledby="withdrawal-corrections-title">
+                    <h2 id="withdrawal-corrections-title">Corrections</h2>
+                    <PublishedCorrectionList Corrections="Withdrawal.Corrections" />
+                </section>
+            }
+            <section class="detail-card detail-card-raised" aria-labelledby="withdrawal-next-title">
+                <h2 id="withdrawal-next-title">What you can do</h2>
+                <ul class="detail-list" role="list">
+                    <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search the records</a></li>
+                    <li><a href="@(RootPath + PublicationProtocol.ReportPagePath)">Report a problem with this notice</a></li>
+                    <li><a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we withdraw a record</a></li>
+                </ul>
+            </section>
         </div>
+        <SourceFold>
+            <Facts Items="PublishedWithdrawalView.SourceFacts(Withdrawal)" />
+        </SourceFold>
     </article>
 </PublicPage>
 
 @code {
-
-    private string Title => $"Withdrawn {PublishedRecordLabels.Kind(Withdrawal.Kind).ToLowerInvariant()}: {Withdrawal.RecordId[..12]}";
 
     [Parameter, EditorRequired] public PublishedWithdrawal Withdrawal { get; set; } = default!;
     /// <summary>The path to the site root. The static page sits one folder down, and a server page gets the configured root.</summary>

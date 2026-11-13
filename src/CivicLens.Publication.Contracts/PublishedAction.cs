@@ -56,7 +56,7 @@ public sealed record PublishedAction
 
     public void Validate()
     {
-        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber, PublishedRecordKind.Action);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Action, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");

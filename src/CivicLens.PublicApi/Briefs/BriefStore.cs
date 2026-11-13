@@ -37,8 +37,8 @@ public sealed class BriefStore(NpgsqlDataSource views)
             CutoffReleaseNumber = reader.GetInt32(7),
             CoverageConsidered = reader.GetInt32(8),
             CoverageSentToModel = reader.GetInt32(9),
-            ApprovedAtUtc = Time(reader, 10),
-            FirstPublishedAtUtc = Time(reader, 11)
+            ApprovedAtUtc = ViewColumns.Utc(reader, 10),
+            FirstPublishedAtUtc = ViewColumns.Utc(reader, 11)
         };
         if (reader.IsDBNull(12) || reader.IsDBNull(13))
             throw new InvalidDataException("The active brief has no published content.");
@@ -49,8 +49,4 @@ public sealed class BriefStore(NpgsqlDataSource views)
         PublishedBrief.ValidateContent(paragraphs, citations);
         return new(reader.GetInt32(0), brief, paragraphs, citations);
     }
-
-    private static DateTimeOffset? Time(Npgsql.NpgsqlDataReader reader, int ordinal) =>
-        reader.IsDBNull(ordinal) ? null : new DateTimeOffset(reader.GetInt64(ordinal), TimeSpan.Zero);
-
 }

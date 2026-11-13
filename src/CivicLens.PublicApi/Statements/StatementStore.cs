@@ -20,11 +20,17 @@ public sealed class StatementStore(NpgsqlDataSource views)
                   FROM (SELECT record_id, revision_number, position, extraction_id, quotation_start, quotation_length, kind
                           FROM public_api.statement_quotations
                          WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q),
-               ap.approved_by
+               ap.approved_by,
+               (SELECT json_agg(json_build_object('party', t.party, 'kind', t.kind, 'office', t.office, 'state', t.state, 'district', t.district)
+                    ORDER BY t."position")
+                  FROM public_api.statement_speaker_terms t WHERE t.record_id = s.record_id AND t.revision_number = s.revision_number),
+               e.approved_at_utc_ticks, f.first_published_at_utc_ticks
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.statements s ON s.record_id = @id
           LEFT JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
           LEFT JOIN public_api.statement_approvers ap ON ap.record_id = s.record_id AND ap.revision_number = s.revision_number
+          LEFT JOIN public_api.record_entries e ON e.kind = 'statement' AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+          LEFT JOIN public_api.record_first_publications f ON f.kind = 'statement' AND f.record_id = s.record_id
         """;
 
     public Task<(int? Release, StatementDetail? Detail)> FindAsync(string recordId, CancellationToken cancellationToken) =>
@@ -72,8 +78,26 @@ public sealed class StatementStore(NpgsqlDataSource views)
         var dateEvidence = ReadDateEvidence(reader, source.Text);
         var articleUrl = ViewColumns.Text(reader, 14);
         PublishedStatement.ValidateContent(source, quotations, dateEvidence, articleUrl);
-        return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations));
+        return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations)
+        {
+            SpeakerTerms = ReadSpeakerTerms(reader, statement.SpeakerIds.Length),
+            ApprovedAtUtc = ViewColumns.Utc(reader, 21),
+            FirstPublishedAtUtc = ViewColumns.Utc(reader, 22)
+        });
     }
+
+    /// <summary>One term row for each speaker, in the order of the speakers. The view gives the party and the seat on the statement date.</summary>
+    private static StatementSpeakerTerm[] ReadSpeakerTerms(DbDataReader reader, int speakerCount)
+    {
+        var rows = reader.IsDBNull(20) ? [] : JsonSerializer.Deserialize<StatementSpeakerTermRow[]>(reader.GetString(20), PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("The statement speaker terms view returned invalid content.");
+        if (rows.Length != speakerCount) throw new InvalidDataException("The statement speaker terms view holds one row for each speaker.");
+        return [.. rows.Select(row => new StatementSpeakerTerm(row.Party, row.Kind is null ? null : OfficeKind(row.Kind), row.Office, row.State, row.District))];
+    }
+
+    private static PublishedOfficeKind OfficeKind(string kind) => Enum.TryParse<PublishedOfficeKind>(kind, out var value) && Enum.IsDefined(value)
+        ? value
+        : throw new InvalidDataException("The statement speaker terms view holds an unknown office kind.");
 
     public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken)
     {

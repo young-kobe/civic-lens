@@ -69,7 +69,7 @@ internal static class CorrectionHistoryCopies
         {
             var binding = new PublishedRevisionBinding(PublishedEntries.KindOf(row.Kind), row.RecordId, row.RequestedRevisionNumber);
             var corrections = decoded[row.HistoryId!];
-            PublishedCorrection.ValidateAll(corrections, binding.RevisionNumber);
+            PublishedCorrection.ValidateAll(corrections, binding.RevisionNumber, binding.Kind);
             result.Add(new PublishedRecordReference(binding.Kind, binding.RecordId), new StoredCorrectionHistory(
                 new CorrectionHistoryBinding(binding, row.HistoryId!), (PublishedCorrection[])corrections.Clone()));
         }
@@ -133,7 +133,7 @@ internal static class CorrectionHistoryCopies
         ValidateRecord(history.Record);
         if (history.Corrections is null) throw new InvalidDataException("A correction history cannot be null.");
         var corrections = (PublishedCorrection[])history.Corrections.Clone();
-        PublishedCorrection.ValidateAll(corrections, history.Record.RevisionNumber);
+        PublishedCorrection.ValidateAll(corrections, history.Record.RevisionNumber, history.Record.Kind);
         return new PreparedHistory(history.Record, corrections, PublishedCorrectionHistoryIdentity.Of(corrections));
     }
 

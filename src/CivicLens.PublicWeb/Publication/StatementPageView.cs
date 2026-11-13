@@ -28,12 +28,21 @@ public static class StatementPageView
 
     public static string CheckFor(PublishedTextOrigin origin) => $"{(origin == PublishedTextOrigin.Model ? ModelCheckLine : CheckLine)} {CaptureCaveat}";
 
-    public static string Eyebrow(StatementPageData data) => data.Speakers.Length == 0 ? "Statement" : $"Statement | {data.ShortName}";
+    /// <summary>The eyebrow names the speakers. One speaker also gets the seat and the party, as in the mockup. Several speakers keep their names only, and the rail gives each role.</summary>
+    public static string Eyebrow(StatementPageData data) => data.Speakers switch
+    {
+        [] => "Statement",
+        [{ Role: { } role } speaker] => $"Statement | {speaker.Name}, {role}",
+        _ => $"Statement | {data.ShortName}"
+    };
 
     /// <summary>The date sentence of the lede. An undated statement says so, and names when the source was seen.</summary>
     public static string DateLine(StatementPageData data) => data.StatementDate is not null
         ? $"{RowDate(data.StatementDate)}."
-        : $"{DateNotStated}. Source seen {Moment.Full(data.Source.ObservedAtUtc)}.";
+        : $"{DateNotStated}. {SourceSeenLine(data)}";
+
+    /// <summary>The sentence that says when the source was seen. The lede of an undated statement and the source card both show it.</summary>
+    public static string SourceSeenLine(StatementPageData data) => $"{SourceSeen} {Moment.Full(data.Source.ObservedAtUtc)}.";
 
     /// <summary>The date words of a statement row, the one owner for the vote page and the official page rows.</summary>
     public static string RowDate(DateOnly? date) => date is { } said ? $"Said on {Moment.Day(said)}" : DateNotStated;
@@ -64,6 +73,7 @@ public static class StatementPageView
         facts.Add(new("Date of the statement", DateFact(data)));
         if (data.DateEvidence is { } evidence)
             facts.Add(new Fact("Evidence for the statement date", evidence.Quote).CitedAt(DateEvidenceAnchor));
+        facts.AddRange(PublishedTimeFacts.Of(data.ApprovedAtUtc, data.FirstPublishedAtUtc));
         facts.Add(new("Revision", data.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         return facts;
     }

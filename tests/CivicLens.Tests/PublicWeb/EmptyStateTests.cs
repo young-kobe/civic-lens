@@ -11,18 +11,20 @@ public sealed class EmptyStateTests
 {
     private static RenderFragment Fragment(string html) => builder => builder.AddMarkupContent(0, html);
 
-    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(RenderFragment? content, RenderFragment? action)
+    private static async Task<AngleSharp.Dom.IDocument> RenderAsync(RenderFragment? content, RenderFragment? action, int? level = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () => (await renderer.RenderComponentAsync<EmptyState>(ParameterView.FromDictionary(
-            new Dictionary<string, object?>
-            {
-                [nameof(EmptyState.Title)] = "Nothing here",
-                [nameof(EmptyState.Text)] = "Try again.",
-                [nameof(EmptyState.ChildContent)] = content,
-                [nameof(EmptyState.Action)] = action
-            }))).ToHtmlString());
+        var parameters = new Dictionary<string, object?>
+        {
+            [nameof(EmptyState.Title)] = "Nothing here",
+            [nameof(EmptyState.Text)] = "Try again.",
+            [nameof(EmptyState.ChildContent)] = content,
+            [nameof(EmptyState.Action)] = action
+        };
+        if (level is { } value) parameters[nameof(EmptyState.Level)] = value;
+        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+            (await renderer.RenderComponentAsync<EmptyState>(ParameterView.FromDictionary(parameters))).ToHtmlString());
         return await new HtmlParser().ParseDocumentAsync(html);
     }
 
@@ -42,5 +44,13 @@ public sealed class EmptyStateTests
         var page = await RenderAsync(null, null);
 
         Assert.Equal(["H3", "P"], page.QuerySelector(".empty")!.Children.Select(child => child.TagName));
+    }
+
+    [Fact]
+    public async Task APageThatShowsTheEmptyStateUnderItsTitleGetsALevelTwoHeadingSoNoLevelIsSkipped()
+    {
+        var page = await RenderAsync(null, null, level: 2);
+
+        Assert.Equal(["H2", "P"], page.QuerySelector(".empty")!.Children.Select(child => child.TagName));
     }
 }

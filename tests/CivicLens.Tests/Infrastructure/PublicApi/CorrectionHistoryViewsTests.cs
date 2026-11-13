@@ -47,7 +47,8 @@ public sealed class CorrectionHistoryViewsTests(PostgresCollection postgres) : I
         PublishedCorrection[] corrections =
         [
             Correction(3, CorrectionOneAt, "Corrected account", factsUnchanged: false),
-            Correction(2, CorrectionTwoAt, null, factsUnchanged: true)
+            // Only a vote correction can say that the facts did not change, and these records are an action and a document change.
+            Correction(2, CorrectionTwoAt, null, factsUnchanged: false)
         ];
         var oldBinding = new PublishedRevisionBinding(PublishedRecordKind.Action, ActionA, 3);
         var currentAction = new PublishedRevisionBinding(PublishedRecordKind.Action, ActionA, 4);
@@ -118,9 +119,9 @@ public sealed class CorrectionHistoryViewsTests(PostgresCollection postgres) : I
         Assert.Equal(
             [
                 $"action 0 3 {CorrectionOneAt.UtcTicks} 345 Corrected account false",
-                $"action 1 2 {CorrectionTwoAt.UtcTicks} -240 none true",
+                $"action 1 2 {CorrectionTwoAt.UtcTicks} -240 none false",
                 $"documentChange 0 3 {CorrectionOneAt.UtcTicks} 345 Corrected account false",
-                $"documentChange 1 2 {CorrectionTwoAt.UtcTicks} -240 none true"
+                $"documentChange 1 2 {CorrectionTwoAt.UtcTicks} -240 none false"
             ],
             await PublicAsync("SELECT kind || ' ' || position || ' ' || replaced_revision_number || ' ' || published_at_utc_ticks || ' ' || published_offset_minutes || ' ' || coalesce(note, 'none') || ' ' || facts_unchanged FROM public_api.record_correction_history_entries ORDER BY kind, position"));
 

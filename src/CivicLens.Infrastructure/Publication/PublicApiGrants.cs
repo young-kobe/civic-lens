@@ -141,7 +141,7 @@ internal static class PublicApiGrants
             public_api.vote_first_publications, public_api.vote_party_tallies, public_api.vote_evidence, public_api.vote_sources, public_api.release_issue_party_lineups,
             public_api.release_bill_counts, public_api.release_official_bill_counts, public_api.record_correction_histories,
             public_api.record_correction_history_entries TO civic_lens_public;
-        GRANT SELECT ON public_api.statements, public_api.statement_speakers, public_api.statement_approvers TO civic_lens_public;
+        GRANT SELECT ON public_api.statements, public_api.statement_speakers, public_api.statement_speaker_terms, public_api.statement_approvers TO civic_lens_public;
         GRANT SELECT ON public_api.statement_sources, public_api.statement_quotations TO civic_lens_public;
         GRANT SELECT ON public_api.document_changes, public_api.document_change_officials, public_api.document_change_sources,
             public_api.document_change_hunks, public_api.document_change_word_edits, public_api.document_change_citations TO civic_lens_public;

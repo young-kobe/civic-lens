@@ -90,13 +90,40 @@ public sealed class WithdrawalNoticePageTests
         var page = await RenderAsync(Notice);
 
         Assert.Equal("This record was withdrawn", page.QuerySelector("h1")!.TextContent);
-        var facts = page.QuerySelectorAll("dt").Zip(page.QuerySelectorAll("dd"), (name, value) => (name.TextContent.Trim(), value.TextContent.Trim())).ToArray();
+        var section = page.QuerySelector("[aria-labelledby=withdrawal-facts-title]")!;
+        var facts = section.QuerySelectorAll("dt").Zip(section.QuerySelectorAll("dd"), (name, value) => (name.TextContent.Trim(), value.TextContent.Trim())).ToArray();
         Assert.Equal(
         [
-            ("Kind", "Statement"), ("Record", Notice.RecordId), ("Withdrawn revision", "4"),
+            ("Kind", "Statement"), ("Withdrawn revision", "4"),
             ("First published", "30 Oct 2026, 00:44 UTC"), ("Withdrawn", "6 Nov 2026, 12:30 UTC"), ("Note", Notice.Note)
         ], facts);
         Assert.Null(page.QuerySelector("dd b, dd i"));
+    }
+
+    [Fact]
+    public async Task TheRecordIdStaysOutOfViewInTheSourceFoldAndOutOfTheTabTitle()
+    {
+        var page = await RenderAsync(Notice);
+
+        var fold = page.QuerySelector("details.source-fold")!;
+        Assert.Equal(("Record", Notice.RecordId), (fold.QuerySelector("dt")!.TextContent, fold.QuerySelector("dd")!.TextContent.Trim()));
+        Assert.Single(page.QuerySelectorAll("dd"), value => value.TextContent.Contains(Notice.RecordId, StringComparison.Ordinal));
+        Assert.Equal("Withdrawn record | Civic Lens", page.Title);
+    }
+
+    [Fact]
+    public async Task TheNoticeEndsWithTheApprovedNextStepsThatNeedNoRecordData()
+    {
+        var page = await RenderAsync(Notice);
+
+        var card = page.QuerySelector("[aria-labelledby=withdrawal-next-title]")!;
+        Assert.Equal("What you can do", card.QuerySelector("h2")!.TextContent);
+        Assert.Equal(
+        [
+            ("Search the records", Root + PublicationProtocol.SearchPagePath),
+            ("Report a problem with this notice", Root + PublicationProtocol.ReportPagePath),
+            ("How we withdraw a record", Root + PublicationProtocol.MethodPagePath)
+        ], card.QuerySelectorAll("a").Select(link => (link.TextContent, link.GetAttribute("href")!)));
     }
 
     [Fact]
@@ -119,6 +146,17 @@ public sealed class WithdrawalNoticePageTests
         var page = await RenderAsync(Notice with { Corrections = [] });
 
         Assert.Null(page.QuerySelector(".corrections"));
+        Assert.Null(page.QuerySelector("#withdrawal-corrections-title"));
+    }
+
+    [Fact]
+    public async Task TheCorrectionListHasTheApprovedSectionHeadingAtTheLevelOfTheOtherSections()
+    {
+        var page = await RenderAsync(Notice);
+
+        var section = page.QuerySelector("[aria-labelledby=withdrawal-corrections-title]")!;
+        Assert.Equal(("H2", "Corrections"), (section.QuerySelector("#withdrawal-corrections-title")!.TagName, section.QuerySelector("#withdrawal-corrections-title")!.TextContent));
+        Assert.NotNull(section.QuerySelector(".corrections"));
     }
 
     [Fact]

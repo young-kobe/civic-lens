@@ -37,7 +37,7 @@ public sealed partial record PublishedBrief
 
     public void Validate()
     {
-        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber, PublishedRecordKind.Brief);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Brief, RecordId) || RevisionNumber < 1 ||
             WeekStart.DayOfWeek != DayOfWeek.Monday || CutoffReleaseNumber < 1)
             throw new InvalidDataException("Published brief identity or week is invalid.");

@@ -146,7 +146,8 @@
         const [recordId, revision] = queryInputs.map(input => query.get(input.name) ?? "");
         const panel = form.closest("[data-report-form-panel]");
         const messages = { ok: document.querySelector("[data-report-result]"), bad: document.querySelector("[data-report-failure]") };
-        const category = form.querySelector("#report-category");
+        const categories = form.querySelector("#report-category [data-text-required]");
+        const chosenCategory = () => categories.querySelector("input:checked")?.value ?? "";
         const text = form.querySelector("#report-text");
         const submit = form.querySelector("[type=submit]");
         const show = (tone, message) => {
@@ -160,18 +161,24 @@
             && Number(revision) >= 1 && Number(revision) <= 2147483647;
         if (!validRecord) { document.querySelector("[data-report-missing]").hidden = false; return; }
         const title = query.get(form.dataset.reportTitleParameter) ?? "";
-        const named = title !== "" && title.length <= Number(form.dataset.reportTitleLimit) ? `"${title}", ` : "";
-        document.querySelector("[data-report-subject]").textContent = `You are reporting the record ${named}ID ${recordId}, version ${revision}.`;
+        const recordPage = form.dataset.recordPage.replace("{id}", recordId);
+        if (title !== "" && title.length <= Number(form.dataset.reportTitleLimit)) {
+            const link = document.querySelector("[data-report-subject-link]");
+            link.href = recordPage;
+            link.textContent = title;
+            document.querySelector("[data-report-subject-title]").hidden = false;
+        }
+        document.querySelector("[data-report-subject-revision]").textContent = `Revision ${revision}.`;
         const back = document.querySelector("[data-report-record]");
-        back.href = form.dataset.recordPage.replace("{id}", recordId);
+        back.href = recordPage;
         back.textContent = "Back to the record";
         queryInputs.forEach(input => { input.value = query.get(input.name); });
         const checkText = () => {
-            const required = category.value === category.dataset.textRequired;
+            const required = chosenCategory() === categories.dataset.textRequired;
             text.required = required;
             text.setCustomValidity(required && text.value.trim() === "" ? "Add details to explain what is wrong." : "");
         };
-        category.addEventListener("change", checkText);
+        categories.addEventListener("change", checkText);
         text.addEventListener("input", checkText);
         form.addEventListener("submit", async event => {
             event.preventDefault();

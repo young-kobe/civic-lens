@@ -44,7 +44,7 @@ public static class Glossary
             new("votes-against-their-party", "Votes against their party",
                 "The member voted yes when more members of their party voted no, or the reverse.",
                 "It shows when a member breaks from most party colleagues on a contested vote. It does not show disagreement with an official party position.",
-                "Our page How the counts work"),
+                "How the counts work", SourceHref: PublicationProtocol.MethodPagePath),
             new("split-vote", "Split vote",
                 "Among members voting Yes or No, most Democrats and most Republicans chose opposite sides. We use this label only for substantive roll calls.",
                 "It describes how those members voted on this question. It does not name an official party position.",

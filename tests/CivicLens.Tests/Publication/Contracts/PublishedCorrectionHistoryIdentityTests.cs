@@ -13,7 +13,7 @@ public sealed class PublishedCorrectionHistoryIdentityTests
             Entry(3, new DateTimeOffset(2026, 8, 2, 3, 4, 5, 678, TimeSpan.FromMinutes(-240)).AddTicks(9010), factsUnchanged: true)
         };
 
-        PublishedCorrection.ValidateAll(entries, 10);
+        PublishedCorrection.ValidateAll(entries, 10, PublishedRecordKind.Vote);
 
         Assert.Equal("471b703c6e65089c328d2639d44f8b9bdbedb4a74adc29e6ccbac365efddefeb", PublishedCorrectionHistoryIdentity.Of(entries));
     }
@@ -25,7 +25,7 @@ public sealed class PublishedCorrectionHistoryIdentityTests
             .Select(number => Entry(21 - number, DateTimeOffset.UnixEpoch, $"Fix | line\n{number}: Café e\u0301 \U00010400"))
             .ToArray();
 
-        PublishedCorrection.ValidateAll(entries, 21);
+        PublishedCorrection.ValidateAll(entries, 21, PublishedRecordKind.Vote);
 
         var original = PublishedCorrectionHistoryIdentity.Of(entries);
         entries[^1] = entries[^1] with { Note = "Another correction" };

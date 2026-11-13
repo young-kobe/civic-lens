@@ -7,7 +7,7 @@
     </PageHeader>
     @if (Data.Officials.Count == 0)
     {
-        <EmptyState Title="No official matches these filters." Text="Clear one filter, such as the party. Check the spelling of the name.">
+        <EmptyState Level="2" Title="No official matches these filters." Text="Clear one filter, such as the party. Check the spelling of the name.">
             <Action><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></Action>
         </EmptyState>
     }

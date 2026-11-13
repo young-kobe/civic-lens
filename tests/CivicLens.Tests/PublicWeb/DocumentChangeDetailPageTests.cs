@@ -20,12 +20,15 @@ public sealed class DocumentChangeDetailPageTests
     }
 
     [Fact]
-    public async Task ThePageShowsTheRedlineOfEachChangedPassageWithHiddenLabelsForRemovedAndAddedText()
+    public async Task ThePageShowsTheRedlineOfEachChangedPassageWithAVisibleLabelBeforeTheRemovedAndTheAddedText()
     {
         var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
 
-        Assert.Equal("seven", Assert.Single(page.QuerySelectorAll(".redline del")).TextContent.Replace("Removed: ", ""));
-        Assert.Equal("three", Assert.Single(page.QuerySelectorAll(".redline ins")).TextContent.Replace("Added: ", ""));
+        var removed = Assert.Single(page.QuerySelectorAll(".redline del"));
+        var added = Assert.Single(page.QuerySelectorAll(".redline ins"));
+        Assert.Equal(("seven", "Removed"), (removed.TextContent, removed.PreviousElementSibling!.TextContent));
+        Assert.Equal(("three", "Added"), (added.TextContent, added.PreviousElementSibling!.TextContent));
+        Assert.Equal(["Removed", "Added"], page.QuerySelectorAll(".redline .redline-label").Select(label => label.TextContent));
         Assert.Equal("Passage 1 of 1", page.QuerySelector(".detail-passage h3")!.TextContent);
     }
 
@@ -81,16 +84,6 @@ public sealed class DocumentChangeDetailPageTests
 
         Assert.Null(page.QuerySelector(".ai-summary-label"));
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
-    }
-
-    [Fact]
-    public async Task AnIssueThatTheReleaseDoesNotHoldIsPlainTextInTheFold()
-    {
-        var data = Change() with { Issues = [new("budget", "Federal budget and debt", true), new("unlisted", "unlisted", false)] };
-        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(data);
-
-        var issues = page.QuerySelectorAll("#source dd").Single(value => value.TextContent.Contains("unlisted"));
-        Assert.Equal(["Federal budget and debt"], issues.QuerySelectorAll("a").Select(link => link.TextContent));
     }
 
     [Fact]

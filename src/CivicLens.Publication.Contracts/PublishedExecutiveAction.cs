@@ -60,7 +60,7 @@ public sealed record PublishedExecutiveAction
 
     public void Validate()
     {
-        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber, PublishedRecordKind.ExecutiveAction);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.ExecutiveAction, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || Headline.Length > MaximumHeadlineLength || !Enum.IsDefined(Kind))
             throw new InvalidDataException("Published record identity or wording is invalid.");
