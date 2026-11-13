@@ -166,9 +166,8 @@ public sealed class ActionBillTextDraftTests
     [Fact]
     public async Task ThePassageGradeRoundsToTheLimitAndPrintsTheSameValueThatItCompares()
     {
-        var json = Output([(AtLimitSummary, FirstQuote), (AtLimitSummary, SecondQuote)], [(AtLimitWhy, WhyQuote)])
-            .Replace("H.R. 1 pays landlords for tenants with low income.", AtLimitHeadline, StringComparison.Ordinal);
-        var pieces = new[] { AtLimitHeadline, AtLimitSummary, AtLimitSummary, AtLimitWhy };
+        var json = Output([(AtLimitSummary, FirstQuote), (AtLimitSecond, SecondQuote)], [(AtLimitWhy, WhyQuote)]);
+        var pieces = new[] { AtLimitHeadline, AtLimitSummary, AtLimitSecond, AtLimitWhy };
 
         var accepted = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
 
@@ -177,15 +176,38 @@ public sealed class ActionBillTextDraftTests
         Assert.True(accepted.IsAccepted);
     }
 
-    private const string AtLimitHeadline = "H.R. 1 pays rent for tenants with low income.";
-    private const string AtLimitSummary = "Eligible tenants receive administrative compensation under the program.";
+    private const string AtLimitHeadline = "H.R. 1 pays landlords for tenants with low income.";
+    private const string AtLimitSummary = "The Secretary administers supplementary rental assistance for eligible beneficiaries each year.";
+    private const string AtLimitSecond = "The Secretary administers supplementary rental assistance for eligible beneficiaries in the program.";
     private const string AtLimitWhy = "The Secretary pays landlords for tenants with low income.";
+    private const string Jurisdictions = "Participating jurisdictions administer supplementary assistance.";
+
+    [Fact]
+    public async Task APassageAboveTheTargetGradeAndAtOrBelowTheMaximumIsAccepted()
+    {
+        const string rental = "The Secretary administers supplementary rental assistance for eligible beneficiaries.";
+        var accepted = ActionDraftResolver.ResolveBillText(Output([(Jurisdictions, FirstQuote), (rental, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(13.5, ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", Jurisdictions, rental, WhyPlain]));
+        Assert.True(accepted.IsAccepted);
+    }
+
+    [Fact]
+    public async Task APassageJustAboveTheMaximumIsRefusedWithItsGradeAndAsksForTheTargetGrade()
+    {
+        const string disbursements = "Participating jurisdictions administer compensatory disbursements.";
+        var refused = ActionDraftResolver.ResolveBillText(Output([(disbursements, FirstQuote), (Jurisdictions, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        var error = Assert.Single(refused.Errors);
+        Assert.Equal(14.1, ReadingGrade.RoundedPassage(["H.R. 1 pays landlords for tenants with low income.", disbursements, Jurisdictions, WhyPlain]));
+        Assert.Contains("read at grade 14.1 as one passage. Write at grade 12 or below.", error, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task TheHeadlineIsPartOfThePassage()
     {
         var plainPassage = new[] { FirstPlain, SecondPlain, WhyPlain };
-        var legal = "H.R. 1 authorizes supplementary reimbursements notwithstanding aforementioned administrative eligibility determinations regarding extraordinarily complicated circumstances.";
+        var legal = "H.R. 1 authorizes supplementary reimbursements notwithstanding aforementioned administrative eligibility determinations regarding extraordinarily complicated institutional circumstances.";
         var json = Output().Replace("H.R. 1 pays landlords for tenants with low income.", legal, StringComparison.Ordinal);
 
         var refused = ActionDraftResolver.ResolveBillText(json, await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
