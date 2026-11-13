@@ -1,4 +1,5 @@
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
@@ -22,6 +23,18 @@ public sealed record VoteMapData(
     [
         .. Seats.Select(seat => seat.Mark).Concat(Delegates.Select(VoteMapMarks.Of))
             .GroupBy(mark => mark).OrderBy(group => group.Key).Select(group => (group.Key, group.Count()))
+    ];
+
+    /// <summary>
+    /// The parties of the members on the map, in the party order of every bar, each with its casts. A seat with no member is in no party.
+    /// The casts of one party add up to the members of that party, and the groups add up to every seat and circle that has a member.
+    /// </summary>
+    public IReadOnlyList<VoteMapPartyGroup> PartyLegend =>
+    [
+        .. Seats.Select(seat => seat.Member).Concat(Delegates).OfType<VoteMemberData>()
+            .GroupBy(member => member.Party)
+            .Select(party => new VoteMapPartyGroup(party.Key, [.. party.GroupBy(VoteMapMarks.Of).OrderBy(cast => cast.Key).Select(cast => (cast.Key, cast.Count()))]))
+            .OrderBy(group => group.Party is null ? int.MaxValue : PartyTones.Rank(group.Party)).ThenBy(group => group.Party, StringComparer.Ordinal)
     ];
 
     /// <summary>

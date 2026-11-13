@@ -2,26 +2,61 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<section class="vote-map" aria-labelledby="vote-map-title" data-vote-map>
-    <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
-    <p class="muted small">@VoteMapWords.Intro(Data.Chamber)</p>
-    <div class="segmented vote-map-views" role="group" aria-labelledby="vote-map-views-label" hidden data-vote-map-views>
-        <span class="vote-map-views-label" id="vote-map-views-label">@VoteMapWords.ViewGroup</span>
-        <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
-        <button class="segmented-item" type="button" data-view="tile" aria-pressed="false">@VoteMapWords.TileView</button>
-    </div>
-    @if (Data.Chamber == PublishedChamber.House)
+<section class="vote-map" aria-labelledby="@(Compact ? null : "vote-map-title")" data-vote-map data-view="@(Compact ? "shape" : null)" data-compact="@(Compact ? "" : null)">
+    @if (!Compact)
     {
-        <p class="muted small vote-map-tile-note">@VoteMapWords.TileNote</p>
-    }
-    <h3>@VoteMapWords.LegendHeading</h3>
-    <p class="muted small">@VoteMapWords.LegendNote(Data.Chamber, RollCall, legend.Sum(entry => entry.Count), Data.Delegates.Count > 0)</p>
-    <ul class="vote-map-legend" role="list">
-        @foreach (var (mark, count) in legend)
+        <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
+        @if (ShowIntro)
         {
-            <li><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(mark)" x="1" y="1" width="16" height="16" rx="3" /></svg><b>@count</b> @VoteMapMarks.Label(mark)</li>
+            <p class="muted small">@VoteMapWords.Intro(Data.Chamber)</p>
         }
-    </ul>
+        <div class="segmented vote-map-views" role="group" aria-labelledby="vote-map-views-label" hidden data-vote-map-views>
+            <span class="vote-map-views-label" id="vote-map-views-label">@VoteMapWords.ViewGroup</span>
+            <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
+            <button class="segmented-item" type="button" data-view="tile" aria-pressed="false">@VoteMapWords.TileView</button>
+        </div>
+        @if (ColorModes)
+        {
+            <div class="segmented vote-map-views" role="group" aria-labelledby="vote-map-colors-label" hidden data-vote-map-colors>
+                <span class="vote-map-views-label" id="vote-map-colors-label">@VoteMapWords.ColorGroup</span>
+                <button class="segmented-item" type="button" data-color="vote" aria-pressed="true">@VoteMapWords.ByVote</button>
+                <button class="segmented-item" type="button" data-color="party" aria-pressed="false">@VoteMapWords.ByParty</button>
+            </div>
+        }
+        @if (Data.Chamber == PublishedChamber.House)
+        {
+            <p class="muted small vote-map-tile-note">@VoteMapWords.TileNote</p>
+        }
+        <h3>@VoteMapWords.LegendHeading</h3>
+        <div class="vote-map-legend-vote">
+            <p class="muted small">@VoteMapWords.LegendNote(Data.Chamber, RollCall, legend.Sum(entry => entry.Count), Data.Delegates.Count > 0)</p>
+            <ul class="vote-map-legend" role="list">
+                @foreach (var (mark, count) in legend)
+                {
+                    <li><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(mark)" x="1" y="1" width="16" height="16" rx="3" /></svg><b>@count</b> @VoteMapMarks.Label(mark)</li>
+                }
+            </ul>
+        </div>
+        @if (ColorModes)
+        {
+            <div class="vote-map-legend-party">
+                <p class="muted small">@VoteMapWords.PartyLegendNote(legend.Sum(entry => entry.Count), Data.Delegates.Count > 0)</p>
+                <ul class="vote-map-legend" role="list">
+                    @foreach (var group in Data.PartyLegend)
+                    {
+                        <li><span class="vote-map-swatches">@foreach (var cast in group.Casts)
+                        {
+                            <svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(cast.Mark)" data-party="@VoteMapMarks.Name(group.Tone)" x="1" y="1" width="16" height="16" rx="3" /></svg>
+                        }</span><span><b>@group.Label</b>: @string.Join(", ", group.Casts.Select(cast => $"{cast.Count} {VoteMapMarks.Label(cast.Mark)}"))</span></li>
+                    }
+                    @if (legend.FirstOrDefault(entry => entry.Mark == VoteMapMark.NoMember) is { Count: > 0 } none)
+                    {
+                        <li><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="no-member" x="1" y="1" width="16" height="16" rx="3" /></svg><b>@none.Count</b> @VoteMapMarks.NoMember</li>
+                    }
+                </ul>
+            </div>
+        }
+    }
     <svg class="vote-map-defs" aria-hidden="true" focusable="false">
         <defs>
             <pattern id="vote-map-no" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -40,10 +75,28 @@
                 <rect class="vote-map-paper" width="6" height="6" />
                 <path class="vote-map-line" d="M0 3H6M3 0V6" />
             </pattern>
+            @if (ColorModes)
+            {
+                @foreach (var tone in ToneNames)
+                {
+                    <pattern id="@($"vote-map-party-no-{tone}")" data-party="@tone" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                        <rect class="vote-map-paper" width="6" height="6" />
+                        <rect class="vote-map-ink" width="3" height="6" />
+                    </pattern>
+                    <pattern id="@($"vote-map-party-present-{tone}")" data-party="@tone" width="4" height="4" patternUnits="userSpaceOnUse">
+                        <rect class="vote-map-paper" width="4" height="4" />
+                        <circle class="vote-map-ink" cx="2" cy="2" r="1.2" />
+                    </pattern>
+                    <pattern id="@($"vote-map-party-nv-{tone}")" data-party="@tone" width="8" height="8" patternUnits="userSpaceOnUse">
+                        <rect class="vote-map-paper" width="8" height="8" />
+                        <circle class="vote-map-ring" cx="4" cy="4" r="2.4" />
+                    </pattern>
+                }
+            }
         </defs>
     </svg>
     <div class="vote-map-frame">
-        <svg class="vote-map-shapes" viewBox="@VoteMapGeometry.ViewBox" role="img" aria-label="@VoteMapWords.Description(Data.Chamber)" focusable="false">
+        <svg class="vote-map-shapes" viewBox="@VoteMapGeometry.ViewBox" role="img" aria-label="@Description" focusable="false">
             @if (Data.SplitStates.Count > 0)
             {
                 <defs>
@@ -60,11 +113,11 @@
             {
                 if (seat.Path is { } path)
                 {
-                    <path class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" d="@path"><title>@VoteMapWords.Describe(seat)</title></path>
+                    <path class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" d="@path"><title>@VoteMapWords.Describe(seat)</title></path>
                 }
                 else
                 {
-                    <use class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@VoteMapWords.Describe(seat)</title></use>
+                    <use class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@VoteMapWords.Describe(seat)</title></use>
                 }
             }
             @foreach (var state in Data.SplitStates)
@@ -72,56 +125,62 @@
                 <line class="vote-map-split" x1="@N(state.Middle)" x2="@N(state.Middle)" y1="@N(state.Top)" y2="@N(state.Bottom)" clip-path="url(#@ClipId(state.State, 2))" />
             }
         </svg>
-        <svg class="vote-map-tiles" viewBox="0 0 @N(VoteMapTiles.Width) @N(Data.Tiles.Height)" role="img" aria-label="@VoteMapWords.Description(Data.Chamber)" focusable="false">
-            @foreach (var label in Data.Tiles.Labels)
-            {
-                @Label(label)
-            }
-            @foreach (var seat in Data.Seats)
-            {
-                <rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@VoteMapWords.Describe(seat)</title></rect>
-            }
-        </svg>
+        @if (!Compact)
+        {
+            <svg class="vote-map-tiles" viewBox="0 0 @N(VoteMapTiles.Width) @N(Data.Tiles.Height)" role="img" aria-label="@VoteMapWords.Description(Data.Chamber)" focusable="false">
+                @foreach (var label in Data.Tiles.Labels)
+                {
+                    @Label(label)
+                }
+                @foreach (var seat in Data.Seats)
+                {
+                    <rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@VoteMapWords.Describe(seat)</title></rect>
+                }
+            </svg>
+        }
     </div>
-    @if (Data.Delegates.Count > 0)
+    @if (!Compact)
     {
-        <h3>@VoteMapWords.DelegatesHeading</h3>
-        <p class="muted small">@VoteMapWords.DelegatesNote</p>
-        <ul class="vote-map-delegates" role="list">
-            @foreach (var member in Data.Delegates)
-            {
-                <li><svg class="vote-map-circle" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="vote-map-seat" data-mark="@VoteMapMarks.Name(VoteMapMarks.Of(member))" cx="12" cy="12" r="10" /></svg><span>@VoteMapWords.DelegateSeat(member): @VoteMapWords.Member(member)</span></li>
-            }
-        </ul>
-    }
-    @if (Data.Unplaced > 0)
-    {
-        <p class="muted small">@VoteMapWords.Unplaced(Data.Unplaced)</p>
-    }
-    <details class="vote-fold">
-        <summary>@VoteMapWords.TableFold</summary>
-        <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber, RollCall)" Scroll="true" PagedRows="seats">
-            <Head>
-                <TableCell Header>Seat</TableCell>
-                <TableCell Header>Member</TableCell>
-                <TableCell Header>Party</TableCell>
-                <TableCell Header>Vote</TableCell>
-            </Head>
-            <Row Context="row">
-                <TableCell Main Label="Seat">@row.Seat</TableCell>
-                @if (row.Member is { } member)
+        @if (Data.Delegates.Count > 0)
+        {
+            <h3>@VoteMapWords.DelegatesHeading</h3>
+            <p class="muted small">@VoteMapWords.DelegatesNote</p>
+            <ul class="vote-map-delegates" role="list">
+                @foreach (var member in Data.Delegates)
                 {
-                    <VoteMemberCells Member="member" RootPath="@RootPath" />
+                    <li><svg class="vote-map-circle" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="vote-map-seat" data-mark="@VoteMapMarks.Name(VoteMapMarks.Of(member))" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(member))" cx="12" cy="12" r="10" /></svg><span>@VoteMapWords.DelegateSeat(member): @VoteMapWords.Member(member)</span></li>
                 }
-                else
-                {
-                    <TableCell Label="Member">@VoteMapMarks.NoMember</TableCell>
-                    <TableCell Label="Party"></TableCell>
-                    <TableCell Label="Vote"></TableCell>
-                }
-            </Row>
-        </DataTable>
-    </details>
+            </ul>
+        }
+        @if (Data.Unplaced > 0)
+        {
+            <p class="muted small">@VoteMapWords.Unplaced(Data.Unplaced)</p>
+        }
+        <details class="vote-fold">
+            <summary>@VoteMapWords.TableFold</summary>
+            <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber, RollCall)" Scroll="true" PagedRows="seats">
+                <Head>
+                    <TableCell Header>Seat</TableCell>
+                    <TableCell Header>Member</TableCell>
+                    <TableCell Header>Party</TableCell>
+                    <TableCell Header>Vote</TableCell>
+                </Head>
+                <Row Context="row">
+                    <TableCell Main Label="Seat">@row.Seat</TableCell>
+                    @if (row.Member is { } member)
+                    {
+                        <VoteMemberCells Member="member" RootPath="@RootPath" />
+                    }
+                    else
+                    {
+                        <TableCell Label="Member">@VoteMapMarks.NoMember</TableCell>
+                        <TableCell Label="Party"></TableCell>
+                        <TableCell Label="Vote"></TableCell>
+                    }
+                </Row>
+            </DataTable>
+        </details>
+    }
 </section>
 
 @code {
@@ -131,12 +190,22 @@
     [Parameter, EditorRequired] public VoteMapData Data { get; set; } = default!;
     [Parameter, EditorRequired] public int RollCall { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    /// <summary>Draws the shapes alone, as Home does: no heading, legend, tiles, delegates, or table. The label of the shapes then holds the counts.</summary>
+    [Parameter] public bool Compact { get; set; }
+    /// <summary>Adds the choice between coloring by vote and coloring by party. Its buttons need script, so without it the map stays colored by vote.</summary>
+    [Parameter] public bool ColorModes { get; set; }
+    /// <summary>False when the page already says what each shape is, as the map page does in its lede.</summary>
+    [Parameter] public bool ShowIntro { get; set; } = true;
 
     protected override void OnParametersSet()
     {
         legend = Data.Legend;
         rows = [.. Data.Seats.Select(seat => new VoteMapRow(VoteMapWords.SeatName(seat), seat.Member)), .. Data.Delegates.Select(member => new VoteMapRow(VoteMapWords.DelegateSeat(member), member))];
     }
+
+    private static readonly string[] ToneNames = [VoteMapMarks.Name(PartyTone.Democrat), VoteMapMarks.Name(PartyTone.Republican), VoteMapMarks.Name(PartyTone.Neutral)];
+
+    private string Description => Compact ? VoteMapWords.CompactDescription(Data.Chamber, legend) : VoteMapWords.Description(Data.Chamber);
 
     private static string ShapeId(string state) => $"vote-map-state-{state.ToLowerInvariant()}";
 

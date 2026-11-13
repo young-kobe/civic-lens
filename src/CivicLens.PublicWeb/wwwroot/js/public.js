@@ -1065,10 +1065,24 @@
         narrow.addEventListener("change", showWidthView);
         showWidthView();
         views.hidden = false;
+        initVoteMapColors(map);
+    };
+    // The color buttons switch between coloring by vote and by party. Without script the map stays colored by vote.
+    const initVoteMapColors = map => {
+        const colors = map.querySelector("[data-vote-map-colors]");
+        if (!colors) return;
+        const buttons = Array.from(colors.querySelectorAll("[data-color]"));
+        const show = color => {
+            map.dataset.color = color;
+            buttons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.color === color)));
+        };
+        buttons.forEach(button => button.addEventListener("click", () => show(button.dataset.color)));
+        show("vote");
+        colors.hidden = false;
     };
 
     document.querySelectorAll("table[data-paged]").forEach(initPaged);
-    document.querySelectorAll("[data-vote-map]").forEach(initVoteMapView);
+    document.querySelectorAll("[data-vote-map]:not([data-compact])").forEach(initVoteMapView);
     document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
     document.querySelectorAll("[data-search-api]").forEach(initSearchService);

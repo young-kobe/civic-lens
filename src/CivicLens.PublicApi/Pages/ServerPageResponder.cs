@@ -16,15 +16,20 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
         return await RespondAsync<TComponent>(context, statusCode, release.ReleaseNumber, parameters, cancellationToken);
     }
 
+    public Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
+        IReadOnlyDictionary<string, object?> parameters, CancellationToken cancellationToken) where TComponent : IComponent =>
+        RespondAsync<TComponent>(context, statusCode, releaseNumber, () => Task.FromResult(parameters), cancellationToken);
+
+    /// <summary>For a page whose costly reads belong after the 304 check. The parameters are read only when the page renders.</summary>
     public async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
-        IReadOnlyDictionary<string, object?> parameters, CancellationToken cancellationToken) where TComponent : IComponent
+        Func<Task<IReadOnlyDictionary<string, object?>>> parameters, CancellationToken cancellationToken) where TComponent : IComponent
     {
         if (statusCode is >= 200 and < 300 && cache.IsNotModified(context, releaseNumber))
         {
             cache.Apply(context, releaseNumber);
             return Results.StatusCode(StatusCodes.Status304NotModified);
         }
-        var html = await renderer.RenderAsync<TComponent>(parameters);
+        var html = await renderer.RenderAsync<TComponent>(await parameters());
         cache.Apply(context, releaseNumber);
         return Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
     }
