@@ -146,7 +146,8 @@ public sealed partial class PostgresBillStreamTests
         var stored = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
         var hard = "Comprehensive reauthorization notwithstanding administrative reconsideration necessitates multidimensional intergovernmental accountability.";
         var revision = TextRevision(candidate, stored);
-        var citations = revision.TextCitations.SetItem(0, revision.TextCitations[0] with { Sentence = hard });
+        var citations = revision.TextCitations.SetItem(0, revision.TextCitations[0] with { Sentence = hard }).SetItem(1, revision.TextCitations[1] with { Sentence = hard });
+        Assert.True(ReadingGrade.RoundedPassage([revision.Headline, .. citations.Select(citation => citation.Sentence)]) > ReadingGrade.MaximumGrade);
 
         await SettleTextRevisionAsync(candidate, revision with { TextCitations = citations, Summary = ActionTextCitation.Join(citations.Where(item => item.Part == ActionTextPart.Summary)) });
 

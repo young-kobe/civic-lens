@@ -69,6 +69,6 @@ public static class ExecutiveSummaryResolver
     {
         if (sentences.IsEmpty || ExecutiveSummaryApproval.IsPassageReadable(sentences, out var grade)) return;
         var hardest = sentences.MaxBy(sentence => ReadingGrade.Of(sentence.Sentence))!.Sentence;
-        errors.Add($"The sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.MaximumGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences. Keep the summary at {ExecutiveActionSummary.MinimumSentences} to {ExecutiveActionSummary.MaximumSentences} sentences.");
+        errors.Add($"The sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.TargetGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences. Keep the summary at {ExecutiveActionSummary.MinimumSentences} to {ExecutiveActionSummary.MaximumSentences} sentences.");
     }
 }

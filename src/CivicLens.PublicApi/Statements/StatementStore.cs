@@ -116,14 +116,16 @@ public sealed class StatementStore(NpgsqlDataSource views)
             ? (read.Page, read.Total!.Value)
             : null;
 
-    // OFFSET 0 keeps the link lookup correlated through the security barrier view.
+    // OFFSET 0 keeps the source and link lookups correlated through the security barrier views.
     private const string ListFactsSql = $"""
         SELECT s.record_id, src.url,
                EXISTS (SELECT 1 FROM public_api.record_links l
                         WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote' OFFSET 0),
                {SpeakerTermsSql}
           FROM public_api.statements s
-          JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
+         CROSS JOIN LATERAL (
+              SELECT src.url FROM public_api.statement_sources src
+               WHERE src.record_id = s.record_id AND src.revision_number = s.revision_number OFFSET 0) src
          WHERE s.record_id = ANY(@ids)
         """;
 

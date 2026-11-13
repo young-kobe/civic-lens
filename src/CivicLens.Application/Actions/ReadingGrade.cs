@@ -14,8 +14,11 @@ namespace CivicLens.Application.Actions;
 /// so a headline with no full stop is still one sentence.</summary>
 public static class ReadingGrade
 {
-    /// <summary>A passage above this grade goes back to the model.</summary>
-    public const double MaximumGrade = 12;
+    /// <summary>The grade that the prompts and the repair messages ask for. A passage can read above it and still pass.</summary>
+    public const double TargetGrade = 12;
+
+    /// <summary>The grade that code checks. A passage above it goes back to the model, and an approval check rejects it.</summary>
+    public const double MaximumGrade = 14;
 
     public static double Of(string text)
     {

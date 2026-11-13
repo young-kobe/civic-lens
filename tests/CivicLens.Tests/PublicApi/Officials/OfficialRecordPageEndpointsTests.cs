@@ -179,6 +179,37 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task TheBillsTabCountsAndListsEverySponsoredBillOfEachCongressOnceWithItsOwnStatusInSponsorshipOrder()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('1', "2026-03-02") { BillNumber = 1, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] },
+            new SeededBill('2', "2026-03-03") { BillNumber = 2, Sponsorships = [new("p0", "Sponsor", "2026-03-03"), new("p1", "Cosponsor", "2026-03-03")] },
+            new SeededBill('3', "2026-03-03") { BillNumber = 3, Sponsorships = [new("p0", "Sponsor", "2026-03-03")] },
+            new SeededBill('4', "2024-05-01") { Congress = 118, BillNumber = 4, Sponsorships = [new("p0", "Sponsor", "2024-05-01")] },
+            new SeededBill('5', "2026-03-04") { BillNumber = 5, Sponsorships = [new("p1", "Sponsor", "2026-03-04"), new("p0", "Cosponsor", "2026-03-04")] },
+            new SeededBill('6', "2026-03-05") { BillNumber = 6, FirstRelease = 2, Sponsorships = [new("p0", "Sponsor", "2026-03-05")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.PinnedStatus(1, new string('2', 64), "Referred to the House Committee on Energy and Commerce.", "2026-03-05", 1)}
+            {PublicRecordPageRows.PinnedStatus(1, new string('4', 64), "Referred to the House Committee on Ways and Means.", "2024-05-02", 1)}
+            {PublicRecordPageRows.PinnedStatus(1, new string('5', 64), "Received in the Senate.", "2026-03-06", 1)}
+            """);
+
+        var page = await GetPageAsync(host, "/web/officials/p0/record.html?kind=bills");
+
+        Assert.Equal(["Bills4"], Tabs(page));
+        Assert.Contains("4 bills and resolutions that Ann Able sponsored in this release", page.QuerySelector(".records-lead p")!.TextContent);
+        var rows = page.QuerySelectorAll(".record-row").ToArray();
+        Assert.Equal([.. "2314".Select(id => BaseUrl.Join($"records/{new string(id, 64)}.html"))],
+            rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!).ToArray());
+        Assert.Equal(["In committee", "", "", "In committee"], rows.Select(row => row.QuerySelector(".badge")?.TextContent.Trim() ?? "").ToArray());
+        Assert.Contains("Latest official action 5 Mar 2026", rows[0].TextContent);
+        Assert.Contains("Latest official action 2 May 2024", rows[3].TextContent);
+        Assert.DoesNotContain("Latest official action", rows[1].TextContent);
+    }
+
+    [Fact]
     public async Task TheStatementsTabListsTheStatementsThatNameTheOfficialAsASpeakerWithTheLabelOfTheViewAndTheirDates()
     {
         await using var host = await StartAsync();
