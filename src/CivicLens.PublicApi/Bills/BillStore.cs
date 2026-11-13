@@ -133,12 +133,12 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>
-    private static BillKeyTerm[] ReadKeyTerms(DbDataReader reader)
+    private static BillKeyTermData[] ReadKeyTerms(DbDataReader reader)
     {
         var terms = reader.GetFieldValue<string[]>(31);
         var definitions = reader.GetFieldValue<string[]>(32);
         var cuts = reader.GetFieldValue<bool[]>(33);
-        return [.. terms.Select((term, index) => new BillKeyTerm(term, definitions[index], cuts[index]))];
+        return [.. terms.Select((term, index) => new BillKeyTermData(term, definitions[index], cuts[index]))];
     }
 
     /// <summary>Reads the facts of the bill number match for a bounded set of bills in one query. A bill that left the release has no entry.
