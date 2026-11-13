@@ -182,7 +182,6 @@ public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
     [InlineData("from=2026-03-02&to=2026-03-02", "dbac")]
     [InlineData("from=2026-03-03", "e")]
     [InlineData("to=2026-02-28", "f")]
-    [InlineData("from=2026-03-02&to=2026-03-01", "")]
     public async Task EveryFilterNarrowsTheListAndKeepsTheOrder(string query, string expected)
     {
         await using var host = await StartWithVotesAsync(All);
@@ -216,6 +215,7 @@ public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
     [InlineData("billNumber=0")]
     [InlineData("from=2026-13-01")]
     [InlineData("to=yesterday")]
+    [InlineData("from=2026-03-02&to=2026-03-01")]
     [InlineData("limit=0")]
     [InlineData("limit=51")]
     [InlineData("limit=x")]

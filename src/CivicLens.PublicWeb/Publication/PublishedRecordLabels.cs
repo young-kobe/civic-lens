@@ -68,6 +68,16 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no label.")
     };
 
+    /// <summary>The plural of <see cref="ExecutiveActionKind"/>, as the type chip of the executive action list shows it.</summary>
+    public static string ExecutiveActionKindPlural(PublishedExecutiveActionKind kind) => kind switch
+    {
+        PublishedExecutiveActionKind.ExecutiveOrder => "Executive orders",
+        PublishedExecutiveActionKind.Proclamation => "Proclamations",
+        PublishedExecutiveActionKind.Notice => "Presidential notices",
+        PublishedExecutiveActionKind.Memorandum => "Memorandums",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no plural label.")
+    };
+
     public static string ReportCategory(string category) => category switch
     {
         ReaderReportProtocol.WrongQuoteCategory => "The quoted text is wrong",

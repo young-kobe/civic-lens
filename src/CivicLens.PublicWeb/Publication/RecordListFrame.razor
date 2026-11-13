@@ -1,0 +1,94 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSections.OfRecord(Kind)" CanonicalPath="@List.Path" Title="@List.Label" Description="@Lede" RootPath="@RootPath">
+    <PageHeader Title="@List.Label"><LedeContent>@TotalSentence@if (LedeContent is not null) {@LedeContent} else {@Lede}</LedeContent></PageHeader>
+    <FilterTabs Label="Lists of records" Tabs="Tabs" />
+    @* An empty release shows its one line under the tabs, with no filters and no no match tips. *@
+    @if (IsEmptyRelease)
+    {
+        <EmptyState Title="@EmptyReleaseTitle" Level="2" />
+    }
+    else
+    {
+        <details class="list-fold" open="@Filter.IsActive" data-wide-open>
+            <summary>@FilterSummary</summary>
+            <form class="in" method="get" aria-label="@($"Filter {List.Label.ToLowerInvariant()}")">
+                <div class="lists-filter">@Fields</div>
+                <div class="lists-filter-actions">
+                    <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
+                    @if (Filter.IsActive)
+                    {
+                        <a href="?">Clear filters</a>
+                    }
+                </div>
+            </form>
+        </details>
+    }
+    @* A refused request shows the form with the refused field marked, and no rows. *@
+    @if (!IsEmptyRelease && Filter.Invalid is null)
+    {
+        <p class="list-status" role="status">Showing @RowCount @(RowCount == 1 ? Singular : Plural) on this page.</p>
+        @if (AllChips.Count > 0)
+        {
+            <ul class="detail-chips list-chips" aria-label="Active filters">
+                @foreach (var chip in AllChips)
+                {
+                    <li><StatusBadge Text="@chip" /></li>
+                }
+            </ul>
+        }
+        @if (RowCount == 0)
+        {
+            <EmptyState Title="@EmptyTitle" Level="2">
+                <ul class="search-next">@EmptyTips</ul>
+            </EmptyState>
+        }
+        else
+        {
+            <ul class="record-rows" role="list">@Rows</ul>
+            @if (NextCursor is { } cursor)
+            {
+                <Pager Label="@($"{List.Label} pages")" ForwardOnly="true" OlderHref="@Filter.Query(cursor)" OlderText="Next page" />
+            }
+        }
+    }
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    /// <summary>The approved lede of the list. It is also the description of the page.</summary>
+    [Parameter, EditorRequired] public string Lede { get; set; } = default!;
+    /// <summary>The counted total of the active release, which no filter changes. Null or zero shows no number.</summary>
+    [Parameter] public int? Total { get; set; }
+    [Parameter, EditorRequired] public string FilterSummary { get; set; } = default!;
+    [Parameter, EditorRequired] public string Singular { get; set; } = default!;
+    [Parameter, EditorRequired] public string Plural { get; set; } = default!;
+    [Parameter, EditorRequired] public int RowCount { get; set; }
+    [Parameter, EditorRequired] public RecordListFilter Filter { get; set; } = default!;
+    /// <summary>One short text for each active filter other than the dates, in form order. The frame adds the date chip.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<string?> Chips { get; set; } = default!;
+    [Parameter] public string? NextCursor { get; set; }
+    /// <summary>The approved lede with links in its text, such as the page that the lede names. Its text must be <see cref="Lede"/>.</summary>
+    [Parameter] public RenderFragment? LedeContent { get; set; }
+    [Parameter, EditorRequired] public string EmptyTitle { get; set; } = default!;
+    /// <summary>The line of a release that holds no record of this kind, such as "No votes are published yet."</summary>
+    [Parameter, EditorRequired] public string EmptyReleaseTitle { get; set; } = default!;
+    /// <summary>The words after the noun of the total sentence that name what the total covers, such as " of the 119th Congress". Empty when it covers the release.</summary>
+    [Parameter] public string TotalScope { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public RenderFragment EmptyTips { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment Fields { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment Rows { get; set; } = default!;
+
+    private PublicSections.RecordList List => PublicSections.ListOf(Kind);
+
+    private string? TotalSentence => Total is > 0 and var total ? $"{total} {(total == 1 ? Singular : Plural)}{TotalScope} {(total == 1 ? "is" : "are")} in this release. " : null;
+
+    /// <summary>No row and no filter: the release holds no record of this kind, so the filters and the no match tips do not apply.</summary>
+    private bool IsEmptyRelease => RowCount == 0 && !Filter.IsActive;
+
+    private IReadOnlyList<string> AllChips => [.. Chips.Append(Filter.DateChip).OfType<string>()];
+
+    private IReadOnlyList<FilterTab> Tabs => [.. PublicSections.RecordLists.Select(list => FilterTab.Link(list.Label, list.Href, list.Kind == Kind))];
+}

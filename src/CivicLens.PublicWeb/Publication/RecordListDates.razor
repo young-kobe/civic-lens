@@ -1,0 +1,16 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+<Field Label="From date" For="@FromId" Error="@FromError"><input id="@FromId" name="from" type="date" value="@Filter.Value("from")" @attributes="FromAttributes" /></Field>
+<Field Label="To date" For="@ToId" Error="@ToError"><input id="@ToId" name="to" type="date" value="@Filter.Value("to")" @attributes="ToAttributes" /></Field>
+
+@code {
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = default!;
+    [Parameter, EditorRequired] public RecordListFilter Filter { get; set; } = default!;
+
+    private string FromId => $"{IdPrefix}-from";
+    private string ToId => $"{IdPrefix}-to";
+    private string? FromError => Filter.ErrorOf("from");
+    private string? ToError => Filter.ErrorOf("to");
+    private IReadOnlyDictionary<string, object> FromAttributes => Filter.InputAttributes("from", FromId);
+    private IReadOnlyDictionary<string, object> ToAttributes => Filter.InputAttributes("to", ToId);
+}

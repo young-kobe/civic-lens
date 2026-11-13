@@ -195,4 +195,41 @@ public sealed class BillStatusMeaningTests
     {
         Assert.Null(BillStatusMeaning.Label(text, billType));
     }
+
+    [Theory]
+    [InlineData("Referred to the House Committee on Ways and Means.", "hr", BillStatusStage.InCommittee)]
+    [InlineData("Referred to the Subcommittee on Health.", "hr", BillStatusStage.InCommittee)]
+    [InlineData("Received in the Senate.", "hr", BillStatusStage.PassedHouse)]
+    [InlineData("Received in the House.", "s", BillStatusStage.PassedSenate)]
+    [InlineData("Became Public Law No: 119-4.", "hr", BillStatusStage.BecameLaw)]
+    [InlineData("Placed on Senate Legislative Calendar under General Orders. Calendar No. 70.", "s", BillStatusStage.Other)]
+    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "hr", BillStatusStage.Other)]
+    [InlineData("Ordered to be Reported by Voice Vote.", "hr", BillStatusStage.Other)]
+    [InlineData("Something odd happened", "hr", BillStatusStage.Other)]
+    [InlineData("Motion to reconsider laid on the table.", "s", BillStatusStage.Other)]
+    public void TheStageOfAStatusFollowsTheSameRuleThatPicksItsLabelAndEveryWaitingReportedOrUnmatchedTextIsOther(string text, string billType, BillStatusStage expected)
+    {
+        Assert.Equal(expected, BillStatusMeaning.StageOf(text, billType));
+    }
+
+    [Theory]
+    [InlineData("Received in the Senate.", "s")]
+    [InlineData("Received in the House.", "hr")]
+    public void AReceivedTextOfTheChamberThatStartedTheBillIsNotAPassageSoItsStageIsOther(string text, string billType)
+    {
+        Assert.Equal(BillStatusStage.Other, BillStatusMeaning.StageOf(text, billType));
+    }
+
+    [Fact]
+    public void TheFiveStageNamesAreTheFilterNamesInEnumOrderAndTheFirstFourAreLabelsOfTheMeaning()
+    {
+        string[] names = [.. Enum.GetValues<BillStatusStage>().Select(BillStatusMeaning.StageName)];
+
+        Assert.Equal(["In committee", "Passed the House", "Passed the Senate", "Became law", "Other"], names);
+        Assert.Equal(names[..4], new[]
+        {
+            BillStatusMeaning.Label("Referred to the Subcommittee on Health.", "hr"), BillStatusMeaning.Label("Received in the Senate.", "hr"),
+            BillStatusMeaning.Label("Received in the House.", "s"), BillStatusMeaning.Label("Became Public Law No: 119-4.", "hr")
+        });
+    }
 }

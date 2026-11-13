@@ -1,7 +1,9 @@
+using CivicLens.Application.Actions;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using Microsoft.EntityFrameworkCore;
@@ -66,17 +68,56 @@ public sealed class PostgresReleaseBillStatusesTests(PostgresCollection postgres
     {
         await CommitAsync(1, null, [Status(Action1, "Received in the Senate.", 5)]);
 
-        var written = await publications.AddBillStatusesAsync(1, [Status(Action1, "Another text.", 9), Status(Action2, "Referred to the Committee on Rules.", 6)], default);
+        var written = await publications.AddBillStatusesAsync(1, [Status(Action1, "Another text.", 9).Status, Status(Action2, "Referred to the Committee on Rules.", 6).Status], default);
 
         Assert.Equal(1, written);
         Assert.Equal(["a|Received in the Senate.|5", "b|Referred to the Committee on Rules.|6"],
             await ReadAsync("SELECT left(record_id, 1) || '|' || latest_action_text || '|' || read_at_utc_ticks FROM release_bill_statuses ORDER BY 1"));
     }
 
-    private static PublishedBillStatus Status(string record, string text, long ticks) =>
-        new() { RecordId = record, Text = text, Date = new(2026, 2, 13), ObservedAtUtc = new DateTimeOffset(ticks, TimeSpan.Zero) };
+    [Fact]
+    public async Task ACommitWritesTheStageOfEachStatusFromItsTextAndBillTypeBecauseThePublicListFiltersOnTheStoredStage()
+    {
+        await CommitAsync(1, null, [Status(Action1, "Received in the Senate.", 5), Status(Action2, "Received in the Senate.", 6, "s")]);
 
-    private Task CommitAsync(int number, int? baseNumber, PublishedBillStatus[] statuses) =>
+        Assert.Equal(["a|PassedHouse", "b|Other"], await ReadAsync("SELECT left(record_id, 1) || '|' || status FROM release_bill_statuses ORDER BY 1"));
+    }
+
+    [Fact]
+    public async Task TheBackfillOfAStageFillsARowWithNoStageFromTheBillTypeOfItsRecordAndLeavesAFilledRowAsItIs()
+    {
+        await CommitAsync(1, null, [Status(Action1, "Received in the Senate.", 5), Status(Action2, "Received in the Senate.", 6)]);
+        await publications.AddBillStatusesAsync(1, [Status(new string('c', 64), "Received in the Senate.", 7, "s").Status], default);
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            {PublicActionRows.ActionRevision(Action1, 1, "Code", null, null, billType: "hr")}
+            {PublicActionRows.ActionRevision(Action2, 1, "Code", null, null, billType: "hr")}
+            {PublicActionRows.ActionRevision(new string('c', 64), 1, "Code", null, null, billType: "s")}
+            UPDATE release_bill_statuses SET status = NULL WHERE record_id = '{Action1}';
+            UPDATE release_bill_statuses SET status = 'InCommittee' WHERE record_id = '{Action2}';
+            """);
+        var scenario = new PublicationScenario();
+        var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
+
+        var first = await backfill.ExecuteAsync(PublicationScenario.Owner);
+        var second = await backfill.ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal((2, 0), (first.BillStatusesFilled, second.BillStatusesFilled));
+        Assert.Equal(["a|PassedHouse", "b|InCommittee", "c|Other"], await ReadAsync("SELECT left(record_id, 1) || '|' || status FROM release_bill_statuses ORDER BY 1"));
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static ActionBillStatus Status(string record, string text, long ticks, string billType = "hr") =>
+        new(new() { RecordId = record, Text = text, Date = new(2026, 2, 13), ObservedAtUtc = new DateTimeOffset(ticks, TimeSpan.Zero) }, billType);
+
+    private Task CommitAsync(int number, int? baseNumber, ActionBillStatus[] statuses) =>
         publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [], [])
         {
             Withdrawals = [],

@@ -39,7 +39,7 @@ public sealed class PublishBillStatusTests
 
         var fileRows = ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records;
         Assert.Single(fileRows);
-        Assert.Equal(fileRows, scenario.Publications.LastCommit!.BillStatuses);
+        Assert.Equal(fileRows, scenario.Publications.LastCommit!.BillStatuses.Select(row => row.Status));
     }
 
     [Fact]

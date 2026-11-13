@@ -1,0 +1,58 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Total="Data.VotesInRelease" RowCount="Data.Votes.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+                 Lede="@Lede"
+                 FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters."
+                 EmptyReleaseTitle="No votes are published yet.">
+    <LedeContent>@LedeLead<a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>.</LedeContent>
+    <Fields>
+        <RecordListSelect Id="votes-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Filter="Data.Filter" AnyText="All" />
+        <RecordListSelect Id="votes-kind" Name="kind" Label="Kind of vote" Choices="Data.Kinds" Filter="Data.Filter" />
+        <RecordListSelect Id="votes-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Data.Filter" />
+        <RecordListText Id="votes-bill" Name="bill" Label="Bill number" Placeholder="H.R. 5334" Filter="Data.Filter" />
+        <RecordListDates IdPrefix="votes" Filter="Data.Filter" />
+    </Fields>
+    <EmptyTips>
+        <li>Clear one filter, such as the kind of vote.</li>
+        <li>Use a wider date range.</li>
+        <li>Search a bill number, such as <a href="@(RootPath + PublicationProtocol.SearchPagePath)?q=5334">5334</a>.</li>
+        <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></li>
+    </EmptyTips>
+    <Rows>
+        @foreach (var vote in Data.Votes)
+        {
+            <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label" LabelOrigin="vote.TextOrigin"
+                             Meta="@Meta(vote)" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@(PlainVoteWords.ResultWord(vote.Result) ?? vote.Result)">
+                @if (VoteWords.Badge(vote.Alignment) is { } badge)
+                {
+                    <p><StatusBadge Text="@badge.Text" /></p>
+                }
+            </PublicRecordRow>
+        }
+    </Rows>
+</RecordListFrame>
+
+@code {
+    [Parameter, EditorRequired] public VoteListPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private const string LedeLead = "House and Senate roll call votes, newest first. To see how one member voted, open their page from ";
+
+    /// <summary>The approved lede. The header links its last word to the officials list.</summary>
+    private const string Lede = LedeLead + "Officials.";
+
+    private static readonly SearchChoiceData[] Chambers = [new("house", "House"), new("senate", "Senate")];
+
+    /// <summary>The chips in the order of the mockup: chamber, kind of vote, bill number, issue.</summary>
+    private IReadOnlyList<string?> Chips =>
+    [
+        RecordListSelect.LabelOf(Chambers, Data.Filter.Value("chamber")), RecordListSelect.LabelOf(Data.Kinds, Data.Filter.Value("kind")),
+        Data.Filter.Value("bill") is { } bill ? $"Bill {bill}" : null, RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue"))
+    ];
+
+    private static string Meta(VoteListRowData vote) => string.Join(", ", new[]
+    {
+        $"Voted on {Moment.Day(vote.VotedOn)}", $"{vote.Chamber} roll call {vote.RollCall}", PlainVoteWords.Kind(vote.Kind), vote.BillNumber
+    }.OfType<string>());
+}

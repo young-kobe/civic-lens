@@ -112,6 +112,7 @@ body.public .notice-neutral { background: var(--raised); color: var(--ink); box-
 .field-optional { color: var(--muted); font-weight: 400; }
 .field-hint { color: var(--muted); font-size: var(--t-xs); }
 .field-error { color: var(--del); font-size: var(--t-xs); }
+.field [aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--del); }
 .field :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) { width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 1px var(--control-line); font-size: var(--t-base); transition: box-shadow var(--fast); }
 .field :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select):hover { box-shadow: inset 0 0 0 1px var(--muted); }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus), 0 0 0 3px var(--focus-halo); }

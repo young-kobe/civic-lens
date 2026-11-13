@@ -1,3 +1,4 @@
+using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Search;
 using Microsoft.AspNetCore.Http;
@@ -11,6 +12,10 @@ public sealed record BillRequest
     public string? BillType { get; init; }
     public int? BillNumber { get; init; }
     public string? Sponsor { get; init; }
+    /// <summary>The start of a sponsor name, as <see cref="Officials.OfficialRequest.NameOf"/> reads it. Only the list page sets it; the JSON query string never does.</summary>
+    public string? SponsorName { get; init; }
+    /// <summary>The stored status of the bill, as <see cref="BillStatusMeaning.StageOf"/> wrote it. Only the list page sets it; the JSON query string never does.</summary>
+    public BillStatusStage? Status { get; init; }
     public string? Issue { get; init; }
     public string? PolicyArea { get; init; }
     public DateOnly? From { get; init; }
@@ -21,7 +26,8 @@ public sealed record BillRequest
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static BillRequest Parse(IQueryCollection query)
     {
-        var request = new BillRequest
+        var (from, to) = QueryValues.DateRange(query);
+        return new BillRequest
         {
             Congress = QueryValues.Number(query, "congress", 1, int.MaxValue),
             BillType = QueryValues.Filter(query, "billType")?.ToLowerInvariant(),
@@ -29,11 +35,10 @@ public sealed record BillRequest
             Sponsor = QueryValues.Filter(query, "sponsor"),
             Issue = QueryValues.Filter(query, "issue"),
             PolicyArea = QueryValues.Filter(query, "policyArea"),
-            From = QueryValues.Date(query, "from"),
-            To = QueryValues.Date(query, "to"),
+            From = from,
+            To = to,
             Cursor = BillCursor.Parse(QueryValues.Value(query, "cursor")),
             Limit = QueryValues.Number(query, "limit", 1, SearchRequest.MaximumLimit) ?? SearchRequest.DefaultLimit
         };
-        return request.From > request.To ? throw new ArgumentException("from must not be after to.", "from") : request;
     }
 }

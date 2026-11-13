@@ -237,6 +237,7 @@ bill_status revision_number
 bill_status latest_action_text
 bill_status latest_action_date
 bill_status read_at_utc_ticks
+bill_status status
 record_headlines kind
 record_headlines record_id
 record_headlines headline

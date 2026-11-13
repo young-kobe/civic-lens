@@ -1,0 +1,14 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+<Field Label="@Label" For="@Id" Error="@Filter.ErrorOf(Name)">
+    <input id="@Id" type="search" name="@Name" placeholder="@Placeholder" autocomplete="off" value="@Filter.Value(Name)" @attributes="Filter.InputAttributes(Name, Id)" />
+</Field>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = default!;
+    [Parameter, EditorRequired] public string Name { get; set; } = default!;
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public string Placeholder { get; set; } = default!;
+    /// <summary>The filters of the request. They give the typed text and whether the server refused this field.</summary>
+    [Parameter, EditorRequired] public RecordListFilter Filter { get; set; } = default!;
+}
