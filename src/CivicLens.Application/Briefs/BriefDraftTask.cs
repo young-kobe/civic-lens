@@ -7,7 +7,7 @@ public static class BriefDraftTask
 {
     public const string Task = "brief-draft";
     public const string TaskVersion = "brief-draft-v1";
-    public const string PromptVersion = "brief-draft-prompt-v1";
+    public const string PromptVersion = "brief-draft-prompt-v2";
     public const string SchemaVersion = "brief-draft-schema-v1";
     public const string Model = "claude-sonnet-5-5";
     public const int MaximumOutputTokens = 8_000;

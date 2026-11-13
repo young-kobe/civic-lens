@@ -7,7 +7,7 @@ public static class RelationshipDraftTask
 {
     public const string Task = "relationship-draft";
     public const string TaskVersion = "relationship-draft-v1";
-    public const string PromptVersion = "relationship-draft-prompt-v1";
+    public const string PromptVersion = "relationship-draft-prompt-v2";
     public const string SchemaVersion = "relationship-draft-schema-v1";
     public const string Model = "claude-haiku-5-5";
     public const int MaximumOutputTokens = 1_000;

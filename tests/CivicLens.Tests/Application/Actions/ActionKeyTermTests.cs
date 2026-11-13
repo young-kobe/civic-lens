@@ -36,7 +36,7 @@ public sealed class ActionKeyTermTests
         var section = BillDefinitionsSection.Find(text.Body)!;
         Assert.All(revision.KeyTerms, term => Assert.True(section.Contains(term.Span.Start - text.BodyStart, term.Span.Length)));
         var request = Assert.Single(model.Requests);
-        Assert.Equal(("action-text-prompt-v7", "action-text-schema-v2"), (request.PromptVersion, request.SchemaVersion));
+        Assert.Equal(("action-text-prompt-v9", "action-text-schema-v2"), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains("\"keyTerms\"", request.SchemaJson, StringComparison.Ordinal);
         Assert.Contains("\"definitionsSection\"", request.UserPrompt, StringComparison.Ordinal);
         Assert.Contains("\"heading\": \"SEC. 2. DEFINITIONS.\"", request.UserPrompt, StringComparison.Ordinal);

@@ -631,7 +631,7 @@ public sealed partial class PostgresBillStreamTests
         _ = await InsertRunAsync(candidate, ActionDraftTask.TextPromptVersion, DateTimeOffset.UnixEpoch.UtcTicks + 1,
             schemaVersion: ActionDraftTask.TextSchemaVersion);
 
-        Assert.Equal("action-text-prompt-v6", ActionDraftTask.TextPromptVersion);
+        Assert.Equal("action-text-prompt-v8", ActionDraftTask.TextPromptVersion);
         Assert.False((await ActionStore(draftsKeyTerms: false).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
         Assert.False((await ActionStore(draftsKeyTerms: true).ReadEvidenceAsync(candidate, false, default))!.HasStaleDraft);
         Assert.Equal(0, await ActionStore(draftsKeyTerms: true).RequeueStaleAsync(default));
@@ -645,8 +645,10 @@ public sealed partial class PostgresBillStreamTests
     [Theory]
     [InlineData("action-draft-prompt-v3", 1)]
     [InlineData("action-draft-prompt-v4", 1)]
-    [InlineData("action-draft-prompt-v5", 0)]
-    [InlineData("action-issue-prompt-v3", 0)]
+    [InlineData("action-draft-prompt-v5", 1)]
+    [InlineData("action-draft-prompt-v6", 0)]
+    [InlineData("action-issue-prompt-v3", 1)]
+    [InlineData("action-issue-prompt-v4", 0)]
     public async Task RedraftTreatsOnlyAnOldFullDraftAsStaleBecauseBothCurrentPromptsNameAFinishedDraft(string newestDraftPrompt, int requeued)
     {
         var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
@@ -674,7 +676,7 @@ public sealed partial class PostgresBillStreamTests
     {
         var (older, newer) = await TwoSettledCandidatesAsync(ActionDraftErrorCodes.SupersededByNewerCandidate, null);
         await InsertRunAsync(older, "action-draft-prompt-v3", 1);
-        var issueRun = await InsertRunAsync(newer, "action-issue-prompt-v3", 2);
+        var issueRun = await InsertRunAsync(newer, ActionDraftTask.IssuePromptVersion, 2);
         await InsertDraftAndRevisionAsync("Code", "civic-lens:code", issueRun);
 
         Assert.Equal(0, await ActionStore().RequeueStaleAsync(default));

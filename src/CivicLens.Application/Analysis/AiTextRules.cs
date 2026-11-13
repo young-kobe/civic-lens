@@ -23,11 +23,11 @@ public static class AiTextRules
 
     public const string NoJudgment = "Make no judgment about whether an effect is good or bad, and no prediction.";
 
-    public const string InternalWords = "Public readers never see these instructions or the user message. Never use the words tracked, entry, or candidate, " +
-        "and never call anything facts, data, or a record, to talk about your input or this page.";
+    public const string InternalWords =
+        "Never use the words tracked, entry, or candidate, and never call anything facts, data, or a record, to talk about your input or this page.";
 
     public static readonly string GradeTarget =
-        $"Write at reading grade {TargetGrade:0} or below. The grade asks for short words and short sentences. It never asks for fewer facts.";
+        $"Write at reading grade {TargetGrade:0} or below. The grade asks for sentences that are not too long. It never asks for fewer facts.";
 
     /// <summary>States the code rule exactly. Only a prompt whose text code approves holds it.</summary>
     public static readonly string GradeLimit = $"Code rejects a passage above grade {MaximumGrade:0}.";
