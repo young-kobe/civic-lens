@@ -55,16 +55,91 @@ public sealed class ExecutiveActionDetailPageTests
     public async Task ASummaryWithNoLabelGetsNoModelStylingBecauseOnlyTheViewLabelMakesTextModelText()
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(
-            Action() with { Summary = new(PublishedTextOrigin.Model, null, false, ["A sentence."]) });
+            Action() with { Summary = new(PublishedTextOrigin.Model, null, false, [], null) });
 
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
         Assert.Null(page.QuerySelector(".ai-summary-label"));
     }
 
-    private static ExecutiveActionPageData WithSummary(bool cut) => Action() with
+    private const string BodyText = "Section 1. Each agency shall act on this order. Sec. 2. Each agency shall report within 30 days. Sec. 3. Unread body words.";
+
+    private const string FactsText = "Federal Register document: 2026-21599\nSigned: 2026-10-16\nCitation: 91 FR 66627";
+
+    private static readonly PublishedDocumentVersion Body = new()
     {
-        Summary = new(PublishedTextOrigin.Model, ExecutiveSummaryWords.Label, cut, ["The order tells agencies to act.", "Each agency reports in 30 days."])
+        ExtractionId = "body",
+        Url = "https://www.federalregister.gov/documents/full_text/html/2026/10/21/2026-21599.html",
+        ObservedAtUtc = new(2026, 10, 30, 15, 4, 0, TimeSpan.Zero),
+        Text = BodyText
     };
+
+    private static readonly PublishedDocumentVersion FactsSource = new()
+    {
+        ExtractionId = "facts",
+        Url = "https://www.federalregister.gov/api/v1/documents/2026-21599.json",
+        ObservedAtUtc = new(2026, 10, 30, 15, 3, 0, TimeSpan.Zero),
+        Text = FactsText
+    };
+
+    private static PublishedCitation Cite(PublishedDocumentVersion source, string quote) => new()
+    {
+        ExtractionId = source.ExtractionId,
+        Start = source.Text.IndexOf(quote, StringComparison.Ordinal),
+        Length = quote.Length,
+        Quote = quote
+    };
+
+    private static PublishedExecutiveSentence Sentence(string sentence, string quote) => new() { Sentence = sentence, Citation = Cite(Body, quote) };
+
+    private static ExecutiveActionPageData WithSummary(bool cut) => WithFacts() with
+    {
+        Summary = new(PublishedTextOrigin.Model, ExecutiveSummaryWords.Label, cut,
+            [Sentence("The order tells agencies to act.", "Each agency shall act on this order."), Sentence("Each agency reports in 30 days.", "Each agency shall report within 30 days.")], Body)
+    };
+
+    private static ExecutiveActionPageData WithFacts() => Action() with
+    {
+        Facts = [.. new[] { ("Federal Register document", "2026-21599"), ("Signed", "2026-10-16"), ("Citation", "91 FR 66627") }
+            .Select(fact => new PublishedExecutiveActionFact { Label = fact.Item1, Value = fact.Item2, Citation = Cite(FactsSource, $"{fact.Item1}: {fact.Item2}") })],
+        Sources = [FactsSource]
+    };
+
+    [Fact]
+    public async Task TheSourceFoldShowsEachSummarySentenceWithItsExactQuoteAndLinksTheBodyTextWithoutShowingIt()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: false));
+
+        var quotes = page.QuerySelector("#source .executive-quotes")!;
+        Assert.Equal(ExecutiveActionWords.QuotesHeading, quotes.QuerySelector("h3")!.TextContent);
+        Assert.Equal(["The order tells agencies to act.", "Each agency reports in 30 days."], quotes.QuerySelectorAll(".choice-label").Select(label => label.TextContent));
+        Assert.Equal(["Each agency shall act on this order.", "Each agency shall report within 30 days."], quotes.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
+        Assert.Equal(Body.Url, quotes.QuerySelector("a")!.GetAttribute("href"));
+        Assert.DoesNotContain("Unread body words", page.Body!.TextContent);
+        Assert.DoesNotContain(ExecutiveSummaryWords.CutNote, quotes.TextContent);
+    }
+
+    [Fact]
+    public async Task ACutTextShowsTheCutNoteBesideTheQuotes()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: true));
+
+        Assert.Contains(ExecutiveSummaryWords.CutNote, page.QuerySelector("#source .executive-quotes")!.TextContent);
+    }
+
+    [Fact]
+    public async Task WithoutASummaryTheFoldShowsNoQuotesAndEachCitedFactLinksToItsMarkedLineInTheSavedRecord()
+    {
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithFacts());
+
+        var fold = page.QuerySelector("#source")!;
+        Assert.Null(fold.QuerySelector(".executive-quotes"));
+        Assert.Contains("91 FR 66627", fold.QuerySelectorAll("dd").First(value => value.PreviousElementSibling!.TextContent == "Federal Register citation").TextContent);
+        var links = fold.QuerySelectorAll("a.source-line");
+        Assert.Equal(3, links.Length);
+        var marked = links.Select(link => fold.QuerySelector(link.GetAttribute("href")!)!.TextContent).ToArray();
+        Assert.Equal(["Federal Register document: 2026-21599", "Signed: 2026-10-16", "Citation: 91 FR 66627"], marked);
+        Assert.Equal(["Signed", "2026-10-16"], [links[1].Closest("dd")!.PreviousElementSibling!.TextContent, links[1].Closest("dd")!.FirstChild!.TextContent.Trim()]);
+    }
 
     [Fact]
     public async Task EachCorrectionNoticeShowsItsExactDateAndLinksToTheNotice()

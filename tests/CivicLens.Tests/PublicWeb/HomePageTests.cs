@@ -88,6 +88,7 @@ public sealed class HomePageTests
     [Theory]
     [InlineData(12, 7, 4, "12 substantive votes", "7 bills", "4 records in this release")]
     [InlineData(1, 1, 1, "1 substantive vote", "1 bill", "1 record in this release")]
+    [InlineData(1234, 12345, 4, "1,234 substantive votes", "12,345 bills", "4 records in this release")]
     public async Task IssuesAndExecutiveGroupsRenderTheirScopedPublishedFacts(
         int substantiveVotes, int bills, int executiveRecords, string voteCount, string billCount, string executiveCount)
     {
@@ -370,7 +371,7 @@ public sealed class HomePageTests
 
     private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>
         [.. Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('b' + index), 64), new(2026, 3, 2),
-            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed",
+            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, PublishedTextOrigin.Person, "Passed",
             VotePageView.ChamberBar(index < 2 ? PublishedChamber.House : PublishedChamber.Senate, 216, 214, 0, 5, VoteThreshold.None), null)
         { Alignment = alignment })];
 

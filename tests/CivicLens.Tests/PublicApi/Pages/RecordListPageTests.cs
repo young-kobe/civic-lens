@@ -327,6 +327,28 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AVoteOrBillListFilteredByAKnownIssueTakesTheHeadingOfTheIssuePageSectionAndAnyOtherListKeepsItsLabel()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('a', "2026-03-02") { Issues = ["health"] }, Vote('b', "2026-03-03", 2));
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('c', "2026-03-01") { Issues = ["health"], BillNumber = 1 }, new SeededBill('d', "2026-03-02") { BillNumber = 2 });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
+            + "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
+
+        var votes = await GetPageAsync(host, "/web/votes?issue=health");
+        var bills = await GetPageAsync(host, "/web/bills?issue=health");
+
+        Assert.Equal(IssueRecordWords.VotesHeading("Health care"), votes.QuerySelector("h1")!.TextContent);
+        Assert.Equal(["Headline a"], Titles(votes));
+        Assert.StartsWith("Roll call votes on Health care", votes.Title);
+        Assert.Equal((IssueRecordWords.BillsHeading("Health care"), 1), (bills.QuerySelector("h1")!.TextContent, Rows(bills).Length));
+        Assert.StartsWith("Bills tagged Health care", bills.Title);
+        Assert.Equal("Votes", (await GetPageAsync(host, "/web/votes")).QuerySelector("h1")!.TextContent);
+        Assert.Equal("Votes", (await GetPageAsync(host, "/web/votes?issue=nothing")).QuerySelector("h1")!.TextContent);
+        Assert.Equal("Bills", (await GetPageAsync(host, "/web/bills?issue=nothing")).QuerySelector("h1")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheBillListFiltersByTypeStatusSponsorNameIssuePolicyAreaBillNumberAndDateAndPagesByTwentyFive()
     {
         await using var host = await StartAsync();

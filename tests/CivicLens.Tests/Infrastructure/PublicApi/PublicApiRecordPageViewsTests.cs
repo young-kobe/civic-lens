@@ -434,6 +434,65 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
                  ('{record}', 2, 0, 'The order tells agencies to act.', '{new string('e', 64)}', 0, 10);
         """;
 
+    private const string BodyText = "Sec. 1. Agencies shall act. Sec. 2. Agencies shall report in 30 days. Sec. 3. Words past the quotes.";
+
+    private static readonly string BodyX = new('2', 64);
+
+    private static int At(string text, string quote) => text.IndexOf(quote, StringComparison.Ordinal);
+
+    // The fixture cites two fact lines and both notices. These rows add the notes citation, the body text, and a summary whose sentences go in out of order.
+    private static string EvidenceRows(string record) => $"""
+        SET session_replication_role = replica;
+        UPDATE executive_action_revisions SET disposition_notes = 'Amends EO 1', disposition_notes_extraction_id = '{record}',
+            disposition_notes_start = {PublicRecordPageRows.FactAt("Disposition")}, disposition_notes_length = 30 WHERE record_id = '{record}' AND revision_number = 2;
+        INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
+            outcome, has_response, response_status_code, response_content_encodings, has_sent_validators, capture_sha256, elapsed_milliseconds)
+        VALUES ('body-attempt', 'fr', 'https://fr.example/body/1', 'https://fr.example/body/1', 2000, 'captured', true, 200, ARRAY[]::text[], false, REPEAT('a', 64), 0);
+        INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256) VALUES ('{BodyX}', 'body-attempt', 'test', '{BodyText}', REPEAT('c', 64));
+        UPDATE executive_action_revisions SET summary_text_origin = 'Model', summary_cut = true WHERE record_id = '{record}' AND revision_number = 2;
+        INSERT INTO executive_action_revision_summary_sentences (record_id, revision_number, "position", sentence, quote_extraction_id, quote_start, quote_length)
+          VALUES ('{record}', 2, 1, 'Each agency reports in 30 days.', '{BodyX}', {At(BodyText, "Agencies shall report")}, 33),
+                 ('{record}', 2, 0, 'The order tells agencies to act.', '{BodyX}', {At(BodyText, "Agencies shall act")}, 19);
+        """;
+
+    [Fact]
+    public async Task TheEvidenceViewsGiveTheFactSpansInPublishedOrderTheQuoteSpansAndTheOneBodyTextThatTheQuotesCite()
+    {
+        await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));
+        await ExecuteAsync(EvidenceRows(Action1));
+
+        Assert.Equal(["0|0|37", "1|38|18", "2|57|30", "3|88|29", "4|118|29"], await PublicAsync(
+            "SELECT \"position\" || '|' || citation_start || '|' || citation_length FROM public_api.executive_action_facts WHERE record_id = '" + Action1 + "' ORDER BY \"position\""));
+        Assert.Equal([$"0|{BodyX}|{At(BodyText, "Agencies shall act")}|19", $"1|{BodyX}|{At(BodyText, "Agencies shall report")}|33"], await PublicAsync(
+            "SELECT \"position\" || '|' || extraction_id || '|' || quote_start || '|' || quote_length FROM public_api.executive_action_summary_sentences ORDER BY \"position\""));
+        Assert.Equal([$"2|{BodyX}|https://fr.example/body/1|2000"], await PublicAsync(
+            "SELECT revision_number || '|' || extraction_id || '|' || url || '|' || observed_at_utc_ticks FROM public_api.executive_action_summary_sources"));
+    }
+
+    [Fact]
+    public async Task ThePageReaderReadsEachCitedFactAndEachSummaryQuoteFromTheSavedTextAtItsSpan()
+    {
+        await SeedAsync(PublicRecordPageRows.ExecutiveAction(Action1));
+        await ExecuteAsync(EvidenceRows(Action1));
+        await CivicLens.Tests.PublicApi.Records.CorrectionHistorySeed.BindEmptyAsync(connectionString);
+        var builder = new NpgsqlConnectionStringBuilder(connectionString) { Username = Role, Password = LoginPassword };
+        await using var views = NpgsqlDataSource.Create(builder.ConnectionString);
+        var reader = new CivicLens.PublicApi.ExecutiveActions.ExecutiveActionPageReader(new(views), new(), new(views), new(views));
+
+        var page = (await reader.ReadAsync(Action1, default))!;
+
+        Assert.Equal(["Federal Register document|2026-00001", "Signed|2026-01-20", "Disposition notes|Amends EO 1", "Correction notice|2026-00009", "Correction notice|2026-00005"],
+            page.Facts.Select(fact => fact.Label + "|" + fact.Value));
+        Assert.Equal([Action1], page.Sources.Select(source => source.ExtractionId));
+        var summary = page.Summary!;
+        Assert.Equal(["The order tells agencies to act.|Agencies shall act.", "Each agency reports in 30 days.|Agencies shall report in 30 days."],
+            summary.Sentences.Select(sentence => sentence.Sentence + "|" + sentence.Citation.Quote));
+        Assert.Equal(("https://fr.example/body/1", true), (summary.Source!.Url, summary.Cut));
+
+        await ExecuteAsync($"UPDATE executive_action_revision_summary_sentences SET quote_length = 500 WHERE record_id = '{Action1}' AND \"position\" = 1");
+        await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadAsync(Action1, default));
+    }
+
     [Fact]
     public async Task ACorrectionNoticeWithNoUrlGivesNoRowBecauseTheRouteReadsTheUrlAsTextAndANullWouldFailTheRequest()
     {

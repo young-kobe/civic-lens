@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace CivicLens.Publication.Contracts;
 
 /// <summary>
@@ -26,7 +24,5 @@ public static class BillTextWords
 
     /// <summary>The note for a text that the model read in part, or null when it read all of it. It counts characters of the one bill text version.</summary>
     public static string? CutNote(int charsRead, int charsTotal) => charsRead >= charsTotal ? null :
-        $"This summary covers the first {Count(charsRead)} of {Count(charsTotal)} characters. Later sections are not covered.";
-
-    private static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
+        $"This summary covers the first {PublishedWording.Count(charsRead)} of {PublishedWording.Count(charsTotal)} characters. Later sections are not covered.";
 }

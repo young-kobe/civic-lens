@@ -13,8 +13,8 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class IssuePageTests
 {
     private const string Root = "https://civic-lens.test/";
-    private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, "Passed", 52, 48);
-    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
+    private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, PublishedTextOrigin.Person, "Passed", 52, 48);
+    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
 
     private static IssuePageData Data(IssueLineUpData? lineUp = null, IssueVoteData[]? votes = null, IssueBillData[]? bills = null) =>
         new(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
@@ -43,6 +43,22 @@ public sealed class IssuePageTests
         Assert.Contains("The 1 newest of 5.", page.QuerySelector("#bills")!.TextContent);
         Assert.Contains("3 bills and resolutions tagged Firearms", page.QuerySelector("#parties")!.TextContent);
         Assert.Equal(["2 Democrat sponsor", "1 Republican sponsor"], page.QuerySelectorAll("#parties .party-bar-legend li").Select(row => Compact(row.TextContent)));
+    }
+
+    [Fact]
+    public async Task EachListedSectionLinksItsFullListFilteredByTheIssueAndAnEmptySectionHasNoLink()
+    {
+        var page = await RenderAsync(Data() with { BillCount = 1234 });
+
+        var votes = Assert.Single(page.QuerySelectorAll("#votes a[href*='?issue=']"));
+        Assert.Equal(("/web/votes?issue=firearms", "See all roll call votes tagged Firearms"), (votes.GetAttribute("href"), votes.TextContent));
+        Assert.Equal("See all roll call votes tagged Firearms, of every kind and Congress, newest first.", votes.ParentElement!.TextContent);
+        var bills = Assert.Single(page.QuerySelectorAll("#bills a[href*='?issue=']"));
+        Assert.Equal(("/web/bills?issue=firearms", "See all 1,234 bills"), (bills.GetAttribute("href"), bills.TextContent));
+        Assert.Equal("See all 1,234 bills, newest first.", bills.ParentElement!.TextContent);
+
+        var empty = await RenderAsync(Data(votes: [], bills: []));
+        Assert.Empty(empty.QuerySelectorAll("a[href*='?issue=']"));
     }
 
     private static string Compact(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

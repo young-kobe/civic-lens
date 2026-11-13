@@ -152,6 +152,31 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AVoteRowAndABillRowColorTheirLabelAsAiOnlyWhenTheViewSaysAModelWroteTheText()
+    {
+        var votes = new[]
+        {
+            new SeededVote('1', "2026-03-02") { RollCall = 1, Issues = ["tax"], TextOrigin = "Model" },
+            new SeededVote('2', "2026-03-01") { RollCall = 2, Issues = ["tax"], TextOrigin = "Code" }
+        };
+        var bills = new[]
+        {
+            new SeededBill('a', "2026-03-02") { BillNumber = 1, Issues = ["tax"], TextOrigin = "Model" },
+            new SeededBill('b', "2026-03-01") { BillNumber = 2, Issues = ["tax"], TextOrigin = "Code" }
+        };
+        await using var host = await StartAsync(votes, bills);
+
+        var page = await GetPageAsync(host);
+
+        foreach (var section in new[] { "#votes", "#bills" })
+        {
+            var labels = page.QuerySelectorAll($"{section} .record-row-label");
+            Assert.Equal(["model", null], labels.Select(label => label.GetAttribute("data-origin")));
+            Assert.All(labels, label => Assert.NotEmpty(label.TextContent));
+        }
+    }
+
+    [Fact]
     public async Task ABillRowNamesItsSponsorAndNotItsCosponsorAndAnUnnamedSponsorShowsNoSponsorLine()
     {
         var named = new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"], Sponsorships = [new("p2", "Cosponsor", "2026-01-10"), new("p1", "Sponsor", "2026-01-10")] };
