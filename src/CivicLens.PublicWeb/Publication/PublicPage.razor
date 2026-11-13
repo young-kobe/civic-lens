@@ -103,6 +103,8 @@
     [Parameter] public PublishedRecordKind? TrailKind { get; set; }
     /// <summary>The last crumb when the title is too long or too technical for it. A reported record names the crumb with its short name instead.</summary>
     [Parameter] public string? TrailName { get; set; }
+    /// <summary>One more link before the last crumb, for a page below a record page, such as its map.</summary>
+    [Parameter] public PublicBreadcrumbItem? TrailParent { get; set; }
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public bool NoIndex { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
@@ -126,6 +128,7 @@
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
         trail = CanonicalPath == string.Empty ? null : PublicSections.Trail(Section, Title, CanonicalPath, Record?.Kind ?? TrailKind, Record?.ShortName ?? TrailName);
+        if (trail is not null && TrailParent is { } parent) trail = trail with { Parents = [.. trail.Parents, parent] };
         membersStrip = Services.GetService<MembersStripSlot>();
         canonicalUrl = CanonicalPath is null ? null : Services.GetService<PublicBaseUrl>()?.Join(CanonicalPath);
     }

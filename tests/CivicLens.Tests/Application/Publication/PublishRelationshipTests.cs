@@ -29,6 +29,23 @@ public sealed class PublishRelationshipTests
             (entry.LinkType, entry.StatementRecordId, entry.TargetKind, entry.TargetRecordId));
     }
 
+    [Theory]
+    [InlineData(true, PublishedApprover.Code)]
+    [InlineData(false, PublishedApprover.Person)]
+    public async Task ARelationshipNamesWhoApprovedItInTheRecordFileAndTheEntry(bool approvedByCode, PublishedApprover expected)
+    {
+        var scenario = new PublicationScenario();
+        var (statement, action, _) = await PublishRecordsAsync(scenario);
+        var relationship = scenario.AddRelationship('e', statement, action, approvedByCode: approvedByCode);
+
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
+
+        var record = JsonSerializer.Deserialize<PublishedRelationship>(
+            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(relationship)], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(expected, record.ApprovedBy);
+        Assert.Equal(expected, ReadManifest(scenario, summary.DirectoryName).Records.Single(candidate => candidate.RecordId == relationship).ApprovedBy);
+    }
+
     [Fact]
     public async Task TheActionEntryCarriesTheOfficialBillTitleSoALinkedBillShowsItWithoutReadingTheActionFile()
     {

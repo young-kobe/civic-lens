@@ -148,7 +148,7 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task ALinkedVoteShowsTheChamberTotalsAsTheSharedPartyBarAndTheSplitBadgeFromItsAlignment()
     {
-        var totals = VotePageView.CastBar("House members", PartyTone.Neutral, 262, 159, 0, 12, 0, false);
+        var totals = VotePageView.CastBar("House members", PartyTone.Neutral, 262, 159, 0, 12, 0, VoteThreshold.None);
         var votes = Bill.Votes.Select(vote => vote with { Totals = totals, Alignment = PublishedVoteAlignment.Split }).ToArray();
 
         var page = await RenderAsync(Bill with { Votes = votes });

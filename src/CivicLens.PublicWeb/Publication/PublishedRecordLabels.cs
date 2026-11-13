@@ -107,6 +107,18 @@ public static class PublishedRecordLabels
     private static string StatementModelLabel(PublishedApprover approver) =>
         approver == PublishedApprover.Code ? StatementModelWording : StatementCheckedByPersonWording;
 
+    public const string LinkCheckedByCodeWording = "Code checked this link";
+
+    public const string LinkCheckedByPersonWording = "A reviewer checked this link";
+
+    /// <summary>Who checked a link between a statement and a vote or bill. Null when the entry of the link names no approver yet, so the page shows no label and guesses none.</summary>
+    public static string? LinkChecker(PublishedApprover? approver) => approver switch
+    {
+        PublishedApprover.Code => LinkCheckedByCodeWording,
+        PublishedApprover.Person => LinkCheckedByPersonWording,
+        _ => null
+    };
+
     public const string ModelDateCheckedByCode = "Date found by an AI model and checked by code against the quote";
 
     public static string StatementDate(PublishedApprover approver, bool hasDateEvidence, string date) =>

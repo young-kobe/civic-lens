@@ -2393,6 +2393,15 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
+    public async Task TheMethodPageDoesNotSayThatAReviewerApprovedEachLinkBecauseCodeApprovesSomeLinks()
+    {
+        var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;
+
+        Assert.Contains("A link joins one statement to one bill or one vote.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("A reviewer approved each link", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheMethodPageSaysWhereSenateVotesComeFromAndThatNoVicePresidentTieBreakVoteIsListed()
     {
         var text = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None)).QuerySelector("main")!.TextContent;

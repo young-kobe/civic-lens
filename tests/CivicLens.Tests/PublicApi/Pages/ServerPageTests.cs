@@ -120,6 +120,27 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AHeldFreshnessAnswers304WithoutReadingTheLazyParameters()
+    {
+        await using var views = NpgsqlDataSource.Create("Host=unused.invalid");
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache, new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
+        var context = new DefaultHttpContext();
+        context.Request.Headers.IfNoneMatch = cache.ETag(9).ToString();
+        var reads = 0;
+
+        var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, new ReleaseFreshness(9, null, null), () =>
+        {
+            reads++;
+            return Task.FromResult<IReadOnlyDictionary<string, object?>>(new Dictionary<string, object?>());
+        }, default);
+
+        Assert.Equal(StatusCodes.Status304NotModified, Assert.IsAssignableFrom<IStatusCodeHttpResult>(response).StatusCode);
+        Assert.Equal(0, reads);
+    }
+
+    [Fact]
     public async Task AFailedRenderWithAStaleValidatorLeavesNoCacheHeaders()
     {
         await using var host = await StartAsync();
@@ -202,7 +223,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
         var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
-        var row = Assert.Single(page.QuerySelectorAll(".record-rows li"));
+        var row = Assert.Single(page.QuerySelectorAll(".record-rows > li"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Headline f", row.TextContent);

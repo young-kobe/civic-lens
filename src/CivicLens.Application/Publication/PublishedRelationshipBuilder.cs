@@ -31,6 +31,7 @@ internal sealed class PublishedRelationshipBuilder(PublishedRecordRules rules)
             Officials = rules.MapOfficials(review.RecordId, statement.SpeakerOfficialIds),
             IssueIds = [.. statement.IssueIds.Union(target.IssueIds, StringComparer.Ordinal)],
             PolicyAreaIds = [.. statement.PolicyAreaIds.Union(target.PolicyAreaIds, StringComparer.Ordinal)],
+            ApprovedBy = PublishedRecordRules.ApproverOf(revision.RevisionNumber, review.Decisions),
             ApprovedAtUtc = PublishedRecordRules.GetApprovalTime(revision.RevisionNumber, review.Decisions),
             FirstPublishedAtUtc = firstPublishedAtUtc ?? now,
             Corrections = corrections

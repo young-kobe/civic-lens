@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -182,7 +183,11 @@ public sealed class HomePageTests
         Assert.Equal("Published vote", row.QuerySelector("a > span")!.TextContent);
         Assert.Contains("AI label", row.QuerySelector("a")!.TextContent);
         Assert.Contains("House, 2 Mar 2026", row.QuerySelector("a")!.TextContent);
-        Assert.Equal("216Yes214NoPassed", row.QuerySelector(".record-counts")!.TextContent.Replace(" ", ""));
+        Assert.Equal("Passed", row.QuerySelector(".record-counts")!.TextContent.Trim());
+        Assert.Equal("House members", row.QuerySelector(".party-bar figcaption")!.TextContent);
+        Assert.Equal(["216 Yes", "214 No", "5 Not voting"], row.QuerySelectorAll(".party-bar-legend li").Select(item => item.TextContent.Trim()));
+        Assert.Null(row.QuerySelector(".party-bar-mark"));
+        Assert.Equal(VoteWords.SplitBadge, row.QuerySelector(".badge")!.TextContent);
         Assert.Equal("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
         var billParagraph = row.QuerySelector(".bill-line")!.ParentElement!;
@@ -192,19 +197,197 @@ public sealed class HomePageTests
         Assert.DoesNotContain(PublishedWording.BillLineSource, rows[1].TextContent);
     }
 
+    private static VotePageData FeaturedDetail(params VoteMemberData[] members) => VoteDetailPageFixture.Vote() with { Members = members };
+
+    private static VoteMemberData Seat(string id, string cast, string party, string state, int district) =>
+        new(id, id, cast, party, VoteDetailPageFixture.Cite(VoteDetailPageFixture.Lines[4]), state, district);
+
+    private static readonly VoteMemberData[] SeatedMembers = [Seat("Ada", "Aye", "Democrat", "MA", 7), Seat("Ben", "Nay", "Republican", "TX", 1), Seat("Cy", "Not Voting", "Republican", "TX", 2)];
+
+    [Fact]
+    public async Task EachBarSentenceShowsOnlyWhenEveryRecentVoteRowDrawsItsBar()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        var withBars = await RenderAsync(new(7, Featured, votes, null));
+        Assert.Equal(4, withBars.QuerySelectorAll(".record-rows .party-bar").Length);
+        Assert.Contains("Each bar counts the members", withBars.QuerySelector(".home-votes .home-section-lede")!.TextContent);
+
+        votes[3] = votes[3] with { Totals = null };
+        var oneWithout = await RenderAsync(new(7, Featured, votes, null));
+        Assert.Equal(3, oneWithout.QuerySelectorAll(".record-rows .party-bar").Length);
+        Assert.Null(oneWithout.QuerySelector(".home-votes .home-section-lede"));
+    }
+
+    [Fact]
+    public async Task ARecentVoteRowShowsTheBadgeOfItsAlignmentAndNoneForAMixedVote()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        votes[1] = votes[1] with { Alignment = PublishedVoteAlignment.PartiesAgree };
+        votes[2] = votes[2] with { Alignment = PublishedVoteAlignment.Mixed };
+        var rows = (await RenderAsync(new(7, Featured, votes, null))).QuerySelectorAll(".record-rows > li");
+
+        Assert.Equal([VoteWords.SplitBadge, VoteWords.PartiesAgreedBadge, null, VoteWords.SplitBadge], rows.Select(row => row.QuerySelector(".badge")?.TextContent));
+    }
+
+    [Fact]
+    public async Task TheFeaturedVoteShowsTheCompactMapItsCountsAndTheLinkToTheFullMap()
+    {
+        const string mapHref = "/web/records/map.html";
+        var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) }, featuredMapHref: mapHref);
+        var featured = page.QuerySelector(".home-featured")!;
+
+        var map = featured.QuerySelector(".vote-map[data-compact]")!;
+        Assert.Equal("Map of the vote. Each shape is one House seat, filled by how its member voted: 1 Yes, 1 No, 1 Not voting, 432 No member in the record.",
+            map.QuerySelector(".vote-map-shapes")!.GetAttribute("aria-label"));
+        Assert.Equal(435, map.QuerySelectorAll(".vote-map-shapes .vote-map-seat").Length);
+        Assert.Null(map.QuerySelector(".vote-map-tiles"));
+        Assert.Null(map.QuerySelector("h2, table, [data-vote-map-views], [data-vote-map-colors]"));
+        var link = featured.QuerySelector(".home-featured-map-link")!;
+        Assert.Equal(VoteMapWords.OpenFullMap, link.TextContent);
+        Assert.Equal(mapHref, link.GetAttribute("href"));
+        Assert.Null((await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) })).QuerySelector(".home-featured-map-link"));
+    }
+
+    [Fact]
+    public async Task TheFeaturedVoteNamesItsFixedRuleAndPointsToTheZipLookupOnlyWhenTheLookupIsOnThePage()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
+        var featured = page.QuerySelector(".home-featured")!;
+
+        Assert.Equal("Civic Lens picks this vote by a fixed rule: the latest passage vote on a bill.", featured.QuerySelector(".home-featured-rule")!.TextContent);
+        var prompt = featured.QuerySelector(".home-featured-zip")!;
+        Assert.Equal("Enter your ZIP code to see how your members voted on this.", prompt.TextContent);
+        Assert.Equal("#" + page.QuerySelector("input[name=zip]")!.Id, prompt.QuerySelector("a")!.GetAttribute("href"));
+
+        var noLookup = await RenderAsync(new(7, Featured, [], null));
+        Assert.NotNull(noLookup.QuerySelector(".home-featured .home-featured-rule"));
+        Assert.Null(noLookup.QuerySelector(".home-featured-zip"));
+    }
+
+    [Fact]
+    public async Task TheFeaturedVoteShowsOnePartyBarForEachPartyCountOfItsRelease()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) });
+
+        var bars = page.QuerySelectorAll(".home-featured-parties .party-bar").ToArray();
+        Assert.Equal(["House Democrats", "House Republicans", "House Independents"], bars.Select(bar => bar.QuerySelector("figcaption")!.TextContent));
+    }
+
+    [Fact]
+    public void ThePartyBarsUnderTheMapDropTheirTopMarginSoTheMapLinkDoesNotLeaveADoubleGap() =>
+        Assert.Contains(".home-featured-map + .home-featured-parties { margin-top: 0; }", WebStyleSheets.Read("public.css"));
+
+    [Fact]
+    public async Task WithoutTheFeaturedPageDataOrSeatsTheHeroShowsNoMapAndNoMapLink()
+    {
+        var withoutDetail = await RenderAsync(new(7, Featured, [], null));
+        Assert.Null(withoutDetail.QuerySelector(".vote-map"));
+        Assert.Null(withoutDetail.QuerySelector(".home-featured-map-link"));
+        Assert.Null(withoutDetail.QuerySelector(".home-featured-parties"));
+
+        var otherCongress = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) with { Congress = 118, PartyTallies = null } });
+        Assert.Null(otherCongress.QuerySelector(".vote-map"));
+        Assert.Null(otherCongress.QuerySelector(".home-featured-map-link"));
+        Assert.Null(otherCongress.QuerySelector(".home-featured-parties"));
+    }
+
+    [Fact]
+    public async Task TheRecentVotesHeadingExplainsSubstantiveInAPopoverAndCountsTheVotesOnlyWhenThereAreFour()
+    {
+        var four = await RenderAsync(new(7, Featured, RecentVotes(PublishedVoteAlignment.Split), null));
+        var heading = four.QuerySelector("#home-recent-title")!;
+        Assert.StartsWith("Four recent substantive", heading.TextContent);
+        Assert.EndsWith("votes", heading.TextContent.Trim());
+        Assert.Equal("substantive", heading.QuerySelector("button.term")!.TextContent);
+        Assert.Equal(Glossary.Term("substantive-vote").Means, heading.QuerySelector(".term-means")!.TextContent);
+        Assert.Equal("Latest votes in Congress", four.QuerySelector(".home-eyebrow")!.TextContent);
+        Assert.StartsWith("Two House votes and two Senate votes", four.QuerySelector(".home-votes .home-section-lede")!.TextContent);
+
+        var three = await RenderAsync(new(7, Featured, RecentVotes(PublishedVoteAlignment.Split)[..3], null));
+        Assert.StartsWith("Recent substantive", three.QuerySelector("#home-recent-title")!.TextContent);
+        Assert.Null(three.QuerySelector(".home-votes .home-section-lede"));
+    }
+
+    private static BoardPanelData Panel(PublishedChamber chamber, string party, int? congress, params (string Name, string? Seat, int Cast, int Breaks)[] rows) =>
+        new(chamber, party, congress, null, null, rows.Length > 0,
+            [.. rows.Select(row => new BoardRowData(PublicationProtocol.OfficialCongressPagePath(row.Name.ToLowerInvariant(), congress ?? 119), row.Name, row.Seat, row.Cast, row.Breaks))]);
+
+    private static BoardPanelData[] FourPanels(int senateCongress = 119) =>
+    [
+        Panel(PublishedChamber.House, "Democrat", 119, ("Henry Cuellar", null, 254, 160), ("Second Dem", null, 200, 1)),
+        Panel(PublishedChamber.House, "Republican", 119, ("James Moylan", "Delegate for Guam", 51, 26)),
+        Panel(PublishedChamber.Senate, "Democrat", senateCongress, ("John Fetterman", null, 337, 66)),
+        Panel(PublishedChamber.Senate, "Republican", senateCongress, ("Lisa Murkowski", null, 341, 58))
+    ];
+
+    [Fact]
+    public async Task TheBreakBoardShowsTheFirstMemberOfEachBoardWithTheirCountsAndLinksToAllFourBoards()
+    {
+        var page = await RenderAsync(new(7, null, [], null) { Boards = FourPanels() });
+        var section = page.QuerySelector(".home-breakers")!;
+
+        Assert.Equal("Who broke from their party most", section.QuerySelector("h2")!.TextContent);
+        var cards = section.QuerySelectorAll(".home-breaker-card").ToArray();
+        Assert.Equal(["Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski"], cards.Select(card => card.QuerySelector(".home-breaker-name")!.TextContent));
+        Assert.Equal(["160 of 254", "26 of 51", "66 of 337", "58 of 341"], cards.Select(card => card.QuerySelector(".home-breaker-figure")!.TextContent));
+        Assert.Equal(["House Democrats", "House Republicans, Delegate for Guam", "Senate Democrats", "Senate Republicans"], cards.Select(card => card.QuerySelectorAll("p")[0].TextContent));
+        Assert.Equal(["split votes cast against most Democrats", "split votes cast against most Republicans", "split votes cast against most Democrats", "split votes cast against most Republicans"],
+            cards.Select(card => card.QuerySelectorAll("p")[1].TextContent));
+        Assert.Equal(Root + PublicationProtocol.OfficialCongressPagePath("henry cuellar", 119), cards[0].QuerySelector("a")!.GetAttribute("href"));
+        var lede = section.QuerySelector(".home-section-lede")!;
+        Assert.Contains("most often in the 119th Congress. A member needs at least", lede.TextContent);
+        Assert.Equal("split vote", lede.QuerySelector("button.term")!.TextContent);
+        Assert.Equal(Root + PublicSections.StaticBoardsPath, section.QuerySelectorAll(".home-breakers-more a").Single(link => link.TextContent == "See all four party boards").GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.MethodPagePath, section.QuerySelectorAll(".home-breakers-more a").Single(link => link.TextContent == "How we choose these members").GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task WhenTheBoardsKeepDifferentCongressesEachCardNamesItsOwn()
+    {
+        var page = await RenderAsync(new(7, null, [], null) { Boards = FourPanels(118) });
+
+        var lede = page.QuerySelector(".home-breakers .home-section-lede")!;
+        lede.QuerySelector(".term-popover")!.Remove();
+        Assert.Equal("Each name below is the member in one chamber and party who voted against most of their own party on split vote most often. A member needs at least 25 split votes cast to count.",
+            lede.TextContent);
+        Assert.Equal(["split votes cast against most Democrats, 119th Congress", "split votes cast against most Republicans, 119th Congress",
+            "split votes cast against most Democrats, 118th Congress", "split votes cast against most Republicans, 118th Congress"],
+            page.QuerySelectorAll(".home-breaker-card").Select(card => card.QuerySelectorAll("p")[1].TextContent));
+    }
+
+    [Fact]
+    public async Task ABoardWithoutAMemberOrWithoutFiguresAddsNoCardAndNoBoardsOmitsTheSection()
+    {
+        var panels = FourPanels();
+        panels[1] = Panel(PublishedChamber.House, "Republican", 119);
+        panels[2] = Panel(PublishedChamber.Senate, "Democrat", null);
+        var page = await RenderAsync(new(7, null, [], null) { Boards = panels });
+
+        Assert.Equal(["Henry Cuellar", "Lisa Murkowski"], page.QuerySelectorAll(".home-breaker-name").Select(name => name.TextContent));
+        Assert.Null((await RenderAsync(new(7, null, [], null))).QuerySelector(".home-breakers"));
+        Assert.Null((await RenderAsync(new(7, null, [], null) { Boards = [panels[1], panels[2]] })).QuerySelector(".home-breakers"));
+    }
+
     private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>
         [.. Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('b' + index), 64), new(2026, 3, 2),
-            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed", 216, 214, null)
+            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed",
+            VotePageView.ChamberBar(index < 2 ? PublishedChamber.House : PublishedChamber.Senate, 216, 214, 0, 5, VoteThreshold.None), null)
         { Alignment = alignment })];
 
-    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
+    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null, string? featuredMapHref = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var output = await renderer.RenderComponentAsync<HomePage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(HomePage.Data)] = data, [nameof(HomePage.RootPath)] = Root, [nameof(HomePage.BrowserApiUrl)] = browserApiUrl }));
+                new Dictionary<string, object?>
+                {
+                    [nameof(HomePage.Data)] = data,
+                    [nameof(HomePage.RootPath)] = Root,
+                    [nameof(HomePage.BrowserApiUrl)] = browserApiUrl,
+                    [nameof(HomePage.FeaturedMapHref)] = featuredMapHref
+                }));
             return output.ToHtmlString();
         });
         return await new HtmlParser().ParseDocumentAsync(html);

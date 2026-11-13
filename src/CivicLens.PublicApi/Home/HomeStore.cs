@@ -12,7 +12,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
     private const string VoteColumns = """
         v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number,
         v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number, v.summary, v.text_origin, v.alignment,
-        v.bill_record_id
+        v.bill_record_id, v.present, v.not_voting
         """;
 
     private static readonly string Sql = $"""
@@ -20,7 +20,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
                s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
-               freshness.house, freshness.senate
+               freshness.house, freshness.senate, s.present, s.not_voting
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           CROSS JOIN LATERAL (
                SELECT max(v.voted_on) FILTER (WHERE v.chamber = 'House') AS house,
@@ -44,7 +44,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                         WHERE l.record_id = v.bill_record_id) AS bill_line,
                       v.summary, v.text_origin, v.alignment,
                       NULL::text AS action_kind, NULL::integer AS action_count, NULL::text AS newest_record_id,
-                      NULL::text AS newest_title, NULL::date AS newest_signed_on
+                      NULL::text AS newest_title, NULL::date AS newest_signed_on, v.present, v.not_voting
                  FROM LATERAL (
                       SELECT true AS is_featured, featured.* WHERE featured.record_id IS NOT NULL
                       UNION ALL
@@ -69,7 +69,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                UNION ALL
                SELECT false, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                       NULL, NULL,
-                      e.kind, e.action_count, e.record_id, e.headline, e.signed_on
+                      e.kind, e.action_count, e.record_id, e.headline, e.signed_on, NULL::integer, NULL::integer
                  FROM (
                       SELECT kind, record_id, headline, signed_on,
                              (count(*) OVER (PARTITION BY kind))::integer AS action_count,
@@ -164,7 +164,9 @@ public sealed class HomeStore(NpgsqlDataSource views)
             ViewColumns.Number(reader, 16)!.Value, ViewColumns.Text(reader, 17), ViewColumns.Number(reader, 18), billLine,
             billLine is null ? null : PublishedWording.BillLineSource)
         {
-            Alignment = reader.IsDBNull(22) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 22)
+            Alignment = reader.IsDBNull(22) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 22),
+            Present = ViewColumns.Number(reader, 30),
+            NotVoting = ViewColumns.Number(reader, 31)
         };
     }
 }

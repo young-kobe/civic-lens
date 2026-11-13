@@ -15,6 +15,9 @@ internal static class ViewColumns
     public static DateOnly? Date(DbDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateOnly>(ordinal);
 
+    public static T? NullableEnum<T>(DbDataReader reader, int ordinal) where T : struct, Enum =>
+        reader.IsDBNull(ordinal) ? null : Enum<T>(reader, ordinal);
+
     public static T Enum<T>(DbDataReader reader, int ordinal) where T : struct, Enum =>
         System.Enum.TryParse<T>(reader.GetString(ordinal), out var value) && System.Enum.IsDefined(value)
             ? value
