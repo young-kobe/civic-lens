@@ -7,19 +7,20 @@ namespace CivicLens.PublicApi.Ingest;
 /// Makes the release of the manifest the active release, in one transaction.
 /// A release that is stored already only becomes active again. That is how the service follows a rollback of the static site.
 /// </summary>
-public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database)
+public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource database)
 {
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
-        var release = await feed.ReadChangedManifestAsync(cancellationToken);
-        if (release is null) return IngestResult.NotModified;
+        await using var read = await source.ReadChangedAsync(cancellationToken);
+        if (read is null) return IngestResult.NotModified;
 
+        var release = read.Release;
         await using var index = await IndexTransaction.BeginAsync(database, cancellationToken);
         var result = await index.HasReleaseAsync(release.ReleaseNumber, cancellationToken)
             ? await ActivateAsync(index, release.ReleaseNumber, cancellationToken)
-            : await IngestAsync(index, release, cancellationToken);
+            : await IngestAsync(index, read, cancellationToken);
         await index.CommitAsync(cancellationToken);
-        feed.KeepValidators();
+        source.Stored();
         return result;
     }
 
@@ -30,45 +31,26 @@ public sealed class ReleaseIngest(ReleaseFeed feed, NpgsqlDataSource database)
         return new(moved ? IngestOutcome.Activated : IngestOutcome.AlreadyActive, number, 0, 0, []);
     }
 
-    private async Task<IngestResult> IngestAsync(IndexTransaction index, PublicationRelease release, CancellationToken cancellationToken)
+    private static async Task<IngestResult> IngestAsync(IndexTransaction index, IReleaseRead read, CancellationToken cancellationToken)
     {
+        var release = read.Release;
         var previous = await index.LatestReleaseAsync(cancellationToken);
         if (previous > release.ReleaseNumber)
             throw new InvalidDataException($"Release {release.ReleaseNumber} is older than the newest stored release and was never stored.");
 
-        await index.AddReleaseAsync(release, cancellationToken);
+        // The records are read before the index writes, so the snapshot of the source stays open for as short a time as possible.
         var stored = await index.StoredRevisionsAsync(cancellationToken);
-        var listed = release.Records.Select(entry => (entry.RecordId, Revision: entry.RevisionNumber)).ToHashSet();
+        var missing = release.Records.Where(record => !stored.ContainsKey((record.RecordId, record.RevisionNumber))).ToArray();
+        var batch = await read.ReadRecordsAsync(missing, cancellationToken);
+
+        await index.AddReleaseAsync(release, cancellationToken);
+        var listed = release.Records.Select(record => (record.RecordId, Revision: record.RevisionNumber)).ToHashSet();
         var returning = listed.Where(key => stored.TryGetValue(key, out var open) && !open).ToArray();
         var dropped = stored.Where(item => item.Value && !listed.Contains(item.Key)).Select(item => item.Key).ToArray();
         await index.ReturnAsync(returning, release.ReleaseNumber, cancellationToken);
         await index.CloseAsync(dropped, previous.GetValueOrDefault(), cancellationToken);
-
-        var failures = new List<RecordFailure>();
-        var indexed = 0;
-        foreach (var entry in release.Records.Where(entry => !stored.ContainsKey((entry.RecordId, entry.RevisionNumber))))
-        {
-            var record = await TryReadAsync(entry, failures, cancellationToken);
-            if (record is null) continue;
-            await index.InsertAsync(record, release.ReleaseNumber, cancellationToken);
-            indexed++;
-        }
+        foreach (var record in batch.Records) await index.InsertAsync(record, release.ReleaseNumber, cancellationToken);
         await index.SetActiveReleaseAsync(release.ReleaseNumber, cancellationToken);
-        return new(IngestOutcome.Ingested, release.ReleaseNumber, indexed, dropped.Length, failures);
-    }
-
-    private async Task<IndexedRecord?> TryReadAsync(PublishedRecordEntry entry, List<RecordFailure> failures,
-        CancellationToken cancellationToken)
-    {
-        var json = await feed.ReadRecordAsync(entry.RecordId, cancellationToken);
-        try
-        {
-            return RecordReader.Read(entry, json);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            failures.Add(new(entry.RecordId, exception.Message));
-            return null;
-        }
+        return new(IngestOutcome.Ingested, release.ReleaseNumber, batch.Records.Count, dropped.Length, batch.Failures);
     }
 }
