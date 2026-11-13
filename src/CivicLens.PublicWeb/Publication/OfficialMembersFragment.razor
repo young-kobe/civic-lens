@@ -11,7 +11,7 @@
                 <text>Your other members: </text>@for (var index = 0; index < others.Length; index++)
                 {
                     @(index == 0 ? "" : index == others.Length - 1 ? " and " : ", ")<a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(others[index].OfficialId)))">@others[index].Name</a>
-                }<text>. </text><a href="@(RootPath + "compare.html")">Compare all @(others.Length + 1)</a>
+                }<text>. </text><a href="@(RootPath + PublicationProtocol.ComparePagePath)">Compare all @(others.Length + 1)</a>
             }
         </p>
         <ZipDistrictCountNote DistrictCount="Data.DistrictCount" />
