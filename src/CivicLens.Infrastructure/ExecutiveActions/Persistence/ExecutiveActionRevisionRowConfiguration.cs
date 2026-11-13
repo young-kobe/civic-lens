@@ -23,7 +23,12 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
         {
             table.HasCheckConstraint("ck_executive_action_revisions_number", "revision_number >= 1");
             table.HasCheckConstraint("ck_executive_action_revisions_author",
-                $"author_kind = '{nameof(ReviewAuthorKind.Code)}' AND author_subject = '{ReviewAuthor.CodeSubject}'");
+                $"author_kind = '{nameof(ReviewAuthorKind.Code)}' AND author_subject = '{ReviewAuthor.CodeSubject}' OR " +
+                $"author_kind = '{nameof(ReviewAuthorKind.Analysis)}' AND author_subject = '{ReviewAuthor.AnalysisSubject}'");
+            table.HasCheckConstraint("ck_executive_action_revisions_run", $"(author_kind = '{nameof(ReviewAuthorKind.Analysis)}') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_executive_action_revisions_summary_written", "(summary_text_origin IS NULL) = (summary_cut IS NULL)");
+            table.HasCheckConstraint("ck_executive_action_revisions_summary_analysis", $"author_kind <> '{nameof(ReviewAuthorKind.Analysis)}' OR summary_text_origin IS NOT NULL");
+            table.HasCheckConstraint("ck_executive_action_revisions_summary_origin", EnumChecks.InList("summary_text_origin", [nameof(ReviewTextOrigin.Model)]));
             table.HasCheckConstraint("ck_executive_action_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
             table.HasCheckConstraint("ck_executive_action_revisions_kind", EnumChecks.InList("kind", Enum.GetNames<ExecutiveActionKind>()));
             table.HasCheckConstraint("ck_executive_action_revisions_ids",
@@ -55,6 +60,12 @@ internal sealed class ExecutiveActionRevisionRowConfiguration : IEntityTypeConfi
         builder.Property(row => row.PersonId).HasColumnName("person_id").HasMaxLength(ReviewTextRules.MaximumConfigurationIdLength);
         builder.Property(row => row.DocumentUrl).HasColumnName("document_url").HasMaxLength(ExecutiveActionRevision.MaximumFieldLength);
         builder.Property(row => row.DispositionNotes).HasColumnName("disposition_notes").HasMaxLength(ExecutiveActionRevision.MaximumDispositionNotesLength);
+        builder.Property(row => row.RunId).HasColumnName("run_id").HasMaxLength(32);
+        builder.Property(row => row.SummaryTextOrigin).HasColumnName("summary_text_origin").HasConversion<string>().HasMaxLength(16);
+        builder.Property(row => row.SummaryCut).HasColumnName("summary_cut");
+        builder.HasIndex(row => row.RunId).IsUnique();
+        builder.HasOne<ExecutiveSummaryAnalysisRunRow>().WithMany().HasForeignKey(row => row.RunId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(row => row.SummarySentences).WithOne().HasForeignKey(sentence => new { sentence.RecordId, sentence.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);
         SourceSpanColumns.Configure(builder, "executive_action_revisions", "DispositionNotes", "disposition_notes", optional: true);
         builder.HasOne<ExecutiveActionDraftRow>().WithMany().HasForeignKey(row => row.RecordId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(row => row.Facts).WithOne().HasForeignKey(fact => new { fact.RecordId, fact.RevisionNumber }).OnDelete(DeleteBehavior.Restrict);

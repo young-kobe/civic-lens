@@ -28,6 +28,10 @@ internal sealed class ExecutiveActionRevisionRow : IReviewRevisionRow
     public string? DispositionNotesExtractionId { get; set; }
     public int? DispositionNotesStart { get; set; }
     public int? DispositionNotesLength { get; set; }
+    public string? RunId { get; set; }
+    public ReviewTextOrigin? SummaryTextOrigin { get; set; }
+    public bool? SummaryCut { get; set; }
+    public List<ExecutiveActionRevisionSummarySentenceRow> SummarySentences { get; set; } = [];
     public List<ExecutiveActionRevisionFactRow> Facts { get; set; } = [];
     public List<ExecutiveActionRevisionNoticeRow> Notices { get; set; } = [];
     public List<ExecutiveActionRevisionDispositionTargetRow> DispositionTargets { get; set; } = [];

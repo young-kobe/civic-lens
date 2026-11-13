@@ -24,6 +24,12 @@ public sealed record ActionTextMeasureBill(string BillId, string? Title, ActionT
     ImmutableArray<ActionTextMeasurePass> Passes, BillFigureCounts TextFigures, BillFigureCounts SentenceFigures, double? PassageGrade,
     ImmutableArray<string> MissingDates, ImmutableArray<ActionTextMeasureKeyTerm> KeyTerms, string? DefinitionsHeading)
 {
+    /// <summary>True when the sent text is the first window of a longer document. Only the executive summary measure sets it.</summary>
+    public bool Cut { get; init; }
+
+    /// <summary>The number of rejected answers that held a phrase of the closed list. Only the executive summary measure counts it.</summary>
+    public int PhraseRejections { get; init; }
+
     /// <summary>The key terms of the accepted answer that code left out. It is empty when code kept every term or no answer was accepted.</summary>
     public ImmutableArray<ActionTextMeasureDroppedKeyTerm> DroppedKeyTerms { get; init; } = [];
 
@@ -62,6 +68,8 @@ public static class ActionTextMeasureReason
 {
     public const string NoCandidate = "no-candidate";
     public const string NoBillText = "no-bill-text";
+    public const string NoRecord = "no-record";
+    public const string NoDocumentText = "no-document-text";
     public const string NotTextPrompt = "step-does-not-use-the-text-prompt";
     public const string SpendCap = "spend-cap";
     public const string ModelFailure = "an-earlier-bill-ended-the-run-with-a-model-failure";
