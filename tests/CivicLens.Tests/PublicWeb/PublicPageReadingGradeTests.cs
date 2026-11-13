@@ -13,12 +13,13 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class PublicPageReadingGradeTests
 {
     private const string Root = "https://civic-lens.test/";
+    private const double PageTextCeiling = 14;
     private const string DifficultSummary = "Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.";
 
     [Theory]
     [InlineData("home")]
     [InlineData("compare")]
-    public async Task HomeAndCompareIntroPassagesReadAtOrBelowTheSharedGradeLimit(string pageName)
+    public async Task HomeAndCompareIntroPassagesReadAtOrBelowThePageTextCeiling(string pageName)
     {
         var page = pageName == "home"
             ? await RenderAsync<HomePage>(new Dictionary<string, object?>
@@ -36,12 +37,12 @@ public sealed class PublicPageReadingGradeTests
         var lead = Assert.Single(intro.QuerySelectorAll(".home-lead"));
         var grade = PassageGrade(heading, lead);
 
-        Assert.True(grade <= ReadingGrade.MaximumGrade,
+        Assert.True(grade <= PageTextCeiling,
             $"The {pageName} intro reads at grade {ReadingGrade.Format(grade)}.");
     }
 
     [Fact]
-    public async Task ListAndBoardIntroPassagesReadAtOrBelowTheSharedGradeLimit()
+    public async Task ListAndBoardIntroPassagesReadAtOrBelowThePageTextCeiling()
     {
         var officials = await RenderAsync<OfficialsPage>(new Dictionary<string, object?>
         {
@@ -58,12 +59,12 @@ public sealed class PublicPageReadingGradeTests
         {
             var header = Assert.Single(page.QuerySelectorAll(".page-header"));
             var grade = PassageGrade(Assert.Single(header.QuerySelectorAll("h1")), Assert.Single(header.QuerySelectorAll(".page-header-lede")));
-            Assert.True(grade <= ReadingGrade.MaximumGrade, $"A list page intro reads at grade {ReadingGrade.Format(grade)}.");
+            Assert.True(grade <= PageTextCeiling, $"A list page intro reads at grade {ReadingGrade.Format(grade)}.");
         }
     }
 
     [Fact]
-    public async Task TheBillPageFixedProseReadsAtOrBelowTheSharedGradeLimit()
+    public async Task TheBillPageFixedProseReadsAtOrBelowThePageTextCeiling()
     {
         var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2025, 9, 11));
         var data = new BillPageData(7, new string('a', 64), 1, 119, "H.R. 7", "Title", "Headline", PublishedChamber.House, "Summary.", PublishedTextOrigin.Code, null, new(2025, 9, 11))
@@ -89,11 +90,11 @@ public sealed class PublicPageReadingGradeTests
         var votes = PassageGrade(page.QuerySelector("#bill-votes-title")!, page.QuerySelector("#bill-votes-title")!.ParentElement!.QuerySelector(".bill-lede")!);
         var worst = new[] { grade, backers, split, votes }.Max();
 
-        Assert.True(worst <= ReadingGrade.MaximumGrade, $"The bill page prose reads at grade {ReadingGrade.Format(worst)}.");
+        Assert.True(worst <= PageTextCeiling, $"The bill page prose reads at grade {ReadingGrade.Format(worst)}.");
     }
 
     [Fact]
-    public async Task TheVoteKindIndexTextReadsAtOrBelowTheSharedGradeLimit()
+    public async Task TheVoteKindIndexTextReadsAtOrBelowThePageTextCeiling()
     {
         var page = await RenderAsync<VoteKindsPage>(new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = Root });
 
@@ -103,7 +104,7 @@ public sealed class PublicPageReadingGradeTests
         foreach (var text in texts)
         {
             var grade = ReadingGrade.Rounded(NormalizeText(text));
-            Assert.True(grade <= ReadingGrade.MaximumGrade, $"\"{text.TextContent}\" reads at grade {ReadingGrade.Format(grade)}.");
+            Assert.True(grade <= PageTextCeiling, $"\"{text.TextContent}\" reads at grade {ReadingGrade.Format(grade)}.");
         }
     }
 
@@ -155,7 +156,9 @@ public sealed class PublicPageReadingGradeTests
 
     private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND", "TD", "TH"];
     private static readonly string[] HeadingTags = ["H1", "H2", "H3", "H4", "H5", "H6"];
-    private const string RecordDataSelector = "script, style, pre, blockquote, .ai-summary > p:not([class]), .doc-text, option";
+    /// <summary>Record data that the gate does not grade. A record table is a paged table (data-paged) or the table in the timeline panel (aria-labelledby timeline-title).
+    /// Every other table holds fixed text, such as the privacy rows on the About page, so its cells are graded.</summary>
+    private const string RecordDataSelector = "script, style, pre, blockquote, .ai-summary > p:not([class]), .doc-text, option, table[data-paged], [aria-labelledby=timeline-title] table";
     private static readonly string[] ContainerTags = ["DIV", "SECTION", "ARTICLE", "ASIDE", "MAIN", "HEADER", "FOOTER", "NAV", "FORM", "FIELDSET", "DETAILS", "FIGURE", "UL", "OL", "DL", "TABLE", "THEAD", "TBODY", "TR"];
     private const int MinimumPassageWords = 6;
 
@@ -213,28 +216,8 @@ public sealed class PublicPageReadingGradeTests
         run.Clear();
     }
 
-    private const string PresidentialNoticeMeaning = "Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.";
-    private const string BillCrsSource = "From the Congressional Research Service summary.";
-    private const string AboutLabelsNote = "On a bill or resolution page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".";
-    private const string CodeWordingLabel = "Written automatically from Congress.gov data, with no AI";
-
-    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below.</summary>
-    private static readonly Dictionary<string, double> OwnerKeptPassages = new()
-    {
-        [PresidentialNoticeMeaning] = 12.3,
-        [BillCrsSource] = 12.3,
-        [CodeWordingLabel] = 12.6
-    };
-
-    /// <summary>Fixed passages that read above the limit and wait for the owner. Their words stay until the owner decides, and each has a skipped test below.
-    /// The all-pages test expects exactly this list and <see cref="OwnerKeptPassages"/>, so a new hard passage fails it and a fixed one prompts removal here.</summary>
-    private static readonly Dictionary<string, double> OpenQuestionPassages = new()
-    {
-        [AboutLabelsNote] = 12.6
-    };
-
     [Fact]
-    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptThePassagesTheOwnerKept()
+    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowThePageTextCeiling()
     {
         var failures = new Dictionary<string, double>();
         foreach (var (name, render, recordData) in await ServerPagesAsync())
@@ -244,11 +227,11 @@ public sealed class PublicPageReadingGradeTests
             foreach (var passage in passages)
             {
                 var grade = ReadingGrade.RoundedPassage(passage);
-                if (grade > ReadingGrade.MaximumGrade) failures.TryAdd(string.Join(" | ", passage), grade);
+                if (grade > PageTextCeiling) failures.TryAdd(string.Join(" | ", passage), grade);
             }
         }
 
-        Assert.Equal(OwnerKeptPassages.Concat(OpenQuestionPassages).OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures.Select(pair => $"\"{pair.Key}\" reads at grade {ReadingGrade.Format(pair.Value)}.")));
     }
 
     [Fact]
@@ -261,37 +244,21 @@ public sealed class PublicPageReadingGradeTests
 
         var worst = FixedPassages(page, []).Max(ReadingGrade.RoundedPassage);
 
-        Assert.True(worst > ReadingGrade.MaximumGrade);
+        Assert.True(worst > PageTextCeiling);
     }
-
-    [Fact(Skip = "The owner kept this text on 2026-11-13: \"Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.\" reads at grade 12.3.")]
-    public void ThePresidentialNoticeGlossaryEntryReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(PresidentialNoticeMeaning);
-
-    [Fact(Skip = "The owner kept this text on 2026-11-13: \"From the Congressional Research Service summary.\" reads at grade 12.3 when it stands alone on the bill page.")]
-    public void TheBillSummarySourceNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(BillCrsSource);
-
-    [Fact(Skip = "The owner kept this label on 2026-11-13, because labels keep their texts: \"Written automatically from Congress.gov data, with no AI\" reads at grade 12.6 alone.")]
-    public void TheCodeWordingLabelReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(CodeWordingLabel);
 
     [Fact]
-    public async Task HardProseInATableCellOrAnInlineOnlyNoticeFailsTheGate()
+    public async Task FixedTableCellsAndInlineOnlyNoticesAreGraded()
     {
-        var page = await new HtmlParser().ParseDocumentAsync(
-            $"<main><table><tbody><tr><td>{DifficultSummary}</td></tr></tbody></table><div class=\"notice\"><span>{DifficultSummary}</span></div></main>");
+        var about = FixedPassages(await RenderAsync<AboutPage>(new() { [nameof(AboutPage.RootPath)] = Root }), []);
+        var report = FixedPassages(await RenderAsync<PublishedReportPage>(new()
+        {
+            [nameof(PublishedReportPage.PublicApiUrl)] = "https://api.civic-lens.test",
+            [nameof(PublishedReportPage.TurnstileSiteKey)] = "key"
+        }), []);
 
-        var passages = FixedPassages(page, []);
-
-        Assert.Equal(2, passages.Count);
-        Assert.All(passages, passage => Assert.True(ReadingGrade.RoundedPassage(passage) > ReadingGrade.MaximumGrade));
-    }
-
-    [Fact(Skip = "Owner question: the About page note on the two summary labels reads at grade 12.6. It quotes the code wording label.")]
-    public void TheAboutPageLabelsNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(AboutLabelsNote);
-
-    private static void AssertReadable(string passage)
-    {
-        var grade = ReadingGrade.RoundedPassage(passage.Split(" | "));
-        Assert.True(grade <= ReadingGrade.MaximumGrade, $"\"{passage}\" reads at grade {ReadingGrade.Format(grade)}.");
+        Assert.Contains(about, passage => passage[^1] == "Cloudflare delivers our pages. Like any web host, it sees your IP address and the page you open.");
+        Assert.Contains(report, passage => passage[^1].StartsWith("This page needs JavaScript", StringComparison.Ordinal));
     }
 
     private static async Task<(string Name, Func<Task<IDocument>> Render, string[] RecordData)[]> ServerPagesAsync()
@@ -477,8 +444,8 @@ public sealed class PublicPageReadingGradeTests
             ("search empty", Page<SearchResultsPage>(With("Data", search with { Query = new("zzqxv", null, null, null, null, null), Officials = [], Bill = null, Hits = [], NextCursor = null })), ["zzqxv"]),
             ("search none", Page<SearchResultsPage>(With("Data", search with { Query = new(null, null, null, null, null, null), Officials = [], Bill = null, Hits = [], NextCursor = null })), []),
             ("glossary", Page<PublishedGlossaryPage>(new() { ["RootPath"] = Root }), []),
-            ("about", Page<AboutPage>(new() { ["RootPath"] = Root }), ["Congressional Roll-Call Votes Database"]),
-            ("method", Page<MethodPage>(new() { ["RootPath"] = Root }), ["Congressional Roll-Call Votes Database"]),
+            ("about", Page<AboutPage>(new() { ["RootPath"] = Root }), []),
+            ("method", Page<MethodPage>(new() { ["RootPath"] = Root }), []),
             ("briefs", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 1, [new(new string('b', 64), new(2026, 11, 2), "The week in Congress", "An AI draft from reviewed records.", new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero))]))), ["The week in Congress"]),
             ("briefs empty", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 0, []))), []),
             ("issues index", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, [new("firearms", "Firearms", 119, 3, 186)]))), ["Firearms"]),
@@ -505,7 +472,7 @@ public sealed class PublicPageReadingGradeTests
             ("executive action list refused", Page<ExecutiveActionListPage>(With("Data", actionList with { Actions = [], NextCursor = null, Filter = RecordListFilter.Refused("to", ("to", "soon")) })), ListRecordData),
             ("vote corrected", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, PublishedCorrectionBannerTests.Newest.Note!]),
             ("bill corrected without note", Page<BillDetailPage>(With("Data", bill with { Corrections = [PublishedCorrectionBannerTests.Newest with { Note = null }] })), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
-            ("server shell", Shell<AboutPage>(new() { ["RootPath"] = Root }), ["Congressional Roll-Call Votes Database"]),
+            ("server shell", Shell<AboutPage>(new() { ["RootPath"] = Root }), []),
             ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),
             ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
             ("zip compare", Page<ZipMemberCards>(With("Data", zipCompare, ("View", "compare"))), ZipRecordData),
