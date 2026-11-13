@@ -107,6 +107,8 @@
     [Parameter] public PublicBreadcrumbItem? TrailParent { get; set; }
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public bool NoIndex { get; set; }
+    /// <summary>True for a server page that the public site already serves on its own path, such as Compare. It keeps the public header links, because the preview links reach only the API host.</summary>
+    [Parameter] public bool OnPublicRoute { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
@@ -124,7 +126,7 @@
 
     protected override void OnParametersSet()
     {
-        headerLinks = Context is null ? PublicSections.Header : PublicSections.PreviewHeader;
+        headerLinks = Context is null || OnPublicRoute ? PublicSections.Header : PublicSections.PreviewHeader;
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
         trail = CanonicalPath == string.Empty ? null : PublicSections.Trail(Section, Title, CanonicalPath, Record?.Kind ?? TrailKind, Record?.ShortName ?? TrailName);

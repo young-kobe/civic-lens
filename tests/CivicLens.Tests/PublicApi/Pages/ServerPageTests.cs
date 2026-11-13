@@ -141,6 +141,25 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task APageOfAnEarlierReleaseShowsNoFreshnessLineInsteadOfTheDaysOfTheActiveRelease()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), new PageCache(TestCodeVersion.Sha, BaseUrl),
+            new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
+        var parameters = new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = "https://civic-lens.test/" };
+
+        var same = await responder.RespondAsync<PublishedNotFoundPage>(new DefaultHttpContext(), StatusCodes.Status404NotFound, 4, parameters, default);
+        var earlier = await responder.RespondAsync<PublishedNotFoundPage>(new DefaultHttpContext(), StatusCodes.Status404NotFound, 3, parameters, default);
+
+        Assert.Contains("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(same).ResponseContent);
+        Assert.DoesNotContain("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(earlier).ResponseContent);
+    }
+
+    [Fact]
     public async Task AFailedRenderWithAStaleValidatorLeavesNoCacheHeaders()
     {
         await using var host = await StartAsync();
@@ -349,6 +368,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal("Compare your members", page.QuerySelector("h1")!.TextContent);
         Assert.Null(page.QuerySelector("[data-zip-api]"));
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.FacetsPath), page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
         Assert.Equal("https://civic-lens.test/officials.html", page.QuerySelector(".home-browse a")!.GetAttribute("href"));
     }
 

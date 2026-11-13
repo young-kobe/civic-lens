@@ -253,9 +253,17 @@ public sealed class PublicNavigationTests
         Assert.Null(neither.QuerySelector(".public-freshness"));
     }
 
+    [Fact]
+    public async Task APageOnAPublicRouteKeepsTheStaticIssuesLink()
+    {
+        var page = await RenderFramedAsync(new(null, null), onPublicRoute: true);
+
+        Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(page).GetAttribute("href"));
+    }
+
     private static IElement IssuesLink(IDocument page) => page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues");
 
-    private static Task<IDocument> RenderFramedAsync(ServerPageContext context) => RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
+    private static Task<IDocument> RenderFramedAsync(ServerPageContext context, bool onPublicRoute = false) => RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
     {
         [nameof(ServerPageFrame.Context)] = context,
         [nameof(ServerPageFrame.Page)] = typeof(PublicPage),
@@ -265,7 +273,8 @@ public sealed class PublicNavigationTests
             [nameof(PublicPage.Description)] = "Test page",
             [nameof(PublicPage.CanonicalPath)] = "x.html",
             [nameof(PublicPage.RootPath)] = Root,
-            [nameof(PublicPage.Section)] = PublicSection.Officials!
+            [nameof(PublicPage.Section)] = PublicSection.Officials!,
+            [nameof(PublicPage.OnPublicRoute)] = onPublicRoute
         }
     });
 

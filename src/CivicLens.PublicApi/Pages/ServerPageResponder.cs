@@ -1,3 +1,4 @@
+using CivicLens.PublicWeb.Publication;
 using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Http;
 using Microsoft.AspNetCore.Components;
@@ -35,8 +36,12 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
             return Results.StatusCode(StatusCodes.Status304NotModified);
         }
         if ((read ?? await releases.FindFreshnessAsync(cancellationToken)) is not { } freshness) return ApiResults.NoRelease();
-        var html = await renderer.RenderPageAsync<TComponent>(await parameters(), freshness.PageContext);
+        var html = await renderer.RenderPageAsync<TComponent>(await parameters(), FreshnessOf(freshness, releaseNumber));
         cache.Apply(context, releaseNumber);
         return Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
     }
+
+    /// <summary>The freshness line describes the release of the page. When a release activated between the page read and the freshness read, the days belong to another release, so the page shows no line.</summary>
+    private static ServerPageContext FreshnessOf(ReleaseFreshness freshness, int pageRelease) =>
+        freshness.ReleaseNumber == pageRelease ? freshness.PageContext : new(null, null);
 }
