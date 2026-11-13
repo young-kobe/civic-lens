@@ -87,10 +87,12 @@
             {
                 <section class="executive-quotes" aria-labelledby="executive-quotes-title">
                     <h3 id="executive-quotes-title">@ExecutiveActionWords.QuotesHeading</h3>
-                    @foreach (var sentence in quoted.Sentences)
-                    {
-                        <CitationQuote Label="@sentence.Sentence" Quote="@sentence.Citation.Quote" />
-                    }
+                    <ul class="choices detail-quotes">
+                        @foreach (var sentence in quoted.Sentences)
+                        {
+                            <li><CitationQuote Label="@sentence.Sentence" Quote="@sentence.Citation.Quote" /></li>
+                        }
+                    </ul>
                     @if (quoted.Cut)
                     {
                         <p class="small muted">@ExecutiveSummaryWords.CutNote</p>
