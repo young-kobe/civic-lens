@@ -184,16 +184,16 @@ public sealed class PublicPageReadingGradeTests
     private const string PresidentialNoticeMeaning = "Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.";
     private const string BillCrsSource = "From the Congressional Research Service summary.";
 
-    /// <summary>Fixed passages that read above the limit today. The owner chooses new words, so each has a skipped test below. The all-pages test expects exactly these and no others,
+    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below. The all-pages test expects exactly these and no others,
     /// so a new hard passage fails it and a fixed one prompts removal here.</summary>
-    private static readonly Dictionary<string, double> OpenQuestions = new()
+    private static readonly Dictionary<string, double> OwnerKeptPassages = new()
     {
         [PresidentialNoticeMeaning] = 12.3,
         [BillCrsSource] = 12.3
     };
 
     [Fact]
-    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptTheOpenQuestions()
+    public async Task EveryFixedPassageOnEveryServerPageReadsAtOrBelowTheSharedGradeLimitExceptThePassagesTheOwnerKept()
     {
         var failures = new Dictionary<string, double>();
         foreach (var (name, render, recordData) in await ServerPagesAsync())
@@ -207,7 +207,7 @@ public sealed class PublicPageReadingGradeTests
             }
         }
 
-        Assert.Equal(OpenQuestions.OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
+        Assert.Equal(OwnerKeptPassages.OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
     }
 
     [Fact]
@@ -223,10 +223,10 @@ public sealed class PublicPageReadingGradeTests
         Assert.True(worst > ReadingGrade.MaximumGrade);
     }
 
-    [Fact(Skip = "Owner question: \"Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.\" reads at grade 12.3.")]
+    [Fact(Skip = "The owner kept this text on 2026-11-13: \"Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.\" reads at grade 12.3.")]
     public void ThePresidentialNoticeGlossaryEntryReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(PresidentialNoticeMeaning);
 
-    [Fact(Skip = "Owner question: \"From the Congressional Research Service summary.\" reads at grade 12.3 when it stands alone on the bill page.")]
+    [Fact(Skip = "The owner kept this text on 2026-11-13: \"From the Congressional Research Service summary.\" reads at grade 12.3 when it stands alone on the bill page.")]
     public void TheBillSummarySourceNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(BillCrsSource);
 
     private static void AssertReadable(string passage)
