@@ -23,7 +23,7 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(bool withSeats = true, ILoggerProvider? logs = null, bool everyMemberNamed = true)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl }, logProvider: logs);
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl }, logProvider: logs);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, House);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,

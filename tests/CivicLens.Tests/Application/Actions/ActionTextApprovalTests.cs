@@ -29,8 +29,19 @@ public sealed class ActionTextApprovalTests
 
         var error = Assert.Throws<ArgumentException>(() => ActionTextApproval.Validate(Revision("H.R. 1 reauthorizes housing assistance.", hard), Extractions));
 
-        Assert.Contains("read at grade", error.Message, StringComparison.Ordinal);
-        Assert.Contains("limit is grade 12.0", error.Message, StringComparison.Ordinal);
+        Assert.Contains("read at grade 14.1 as one passage", error.Message, StringComparison.Ordinal);
+        Assert.Contains("limit is grade 14.0", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelTextAboveTheTargetGradeAndAtOrBelowTheMaximumIsApprovedByTheChecks()
+    {
+        var hard = "Comprehensive reauthorization notwithstanding administrative reconsideration necessitates multidimensional intergovernmental accountability.";
+        var revision = Revision("H.R. 1 renews housing assistance.", hard);
+
+        ActionTextApproval.Validate(revision, Extractions);
+
+        Assert.Equal(13.6, ReadingGrade.RoundedPassage([revision.Headline, .. revision.TextCitations.Select(citation => citation.Sentence)]));
     }
 
     [Fact]

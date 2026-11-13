@@ -16,7 +16,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(bool withNames = true, bool withServerPages = false, bool withBrowserApi = true)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        var host = await ApiHost.StartAsync(postgres, options => options with
         {
             PublicBaseUrl = withServerPages ? PublicBaseUrl.Parse("https://civic-lens.test", "test") : null,
             BrowserApiUrl = withServerPages && withBrowserApi ? PublicBaseUrl.Parse("https://api.civic-lens.test", "test") : null
@@ -347,7 +347,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task MembersRouteWithoutAnActiveReleaseReturnsPrivateNoStoreServiceUnavailable()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         await AssertProblemAsync(host, "/v1/zip-districts/36009/members", HttpStatusCode.ServiceUnavailable);
     }

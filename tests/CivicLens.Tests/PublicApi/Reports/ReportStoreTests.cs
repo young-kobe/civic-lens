@@ -40,12 +40,8 @@ public sealed class ReportStoreTests(PostgresCollection postgres)
         await using var world = await SearchWorld.CreateAsync(postgres);
         var record = PublishedSamples.Statement('a', "Rent cap");
         await world.PublishAndIngestAsync(1, record);
-        world.Site.Publish(2, [new PublishedWithdrawal
-        {
-            Kind = record.Entry.Kind, RecordId = RecordId, WithdrawnRevisionNumber = 1, FirstPublishedAtUtc = record.Entry.FirstPublishedAtUtc,
-            WithdrawnAtUtc = record.Entry.FirstPublishedAtUtc.AddDays(1), Note = "Wrong.", Corrections = []
-        }]);
-        await world.IngestAsync();
+        // Publication closes the range of a withdrawn revision, so release 2 lists no record.
+        await world.PublishAndIngestAsync(2);
 
         var receipt = await world.Reports.StoreAsync(new(RecordId, 1, "other", "The page said something wrong.", "token"), CancellationToken.None);
 

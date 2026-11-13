@@ -73,7 +73,7 @@ public sealed class ActionHistoryEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Observed);
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, [new('a', "2026-03-02"), new('b', "2026-03-02")]);
         return host;

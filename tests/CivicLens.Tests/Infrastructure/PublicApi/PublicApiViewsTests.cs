@@ -258,7 +258,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     {
         Assert.Equal(["false 5 true false false false"], roleAfterMigration);
         var settings = await QueryAsync($"SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = '{Role}'::regrole ORDER BY 1", connectionString);
-        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "idle_session_timeout=60s", "statement_timeout=2s"], settings);
+        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "idle_session_timeout=60s", "jit=off", "statement_timeout=2s"], settings);
         var owner = await QueryAsync($"SELECT rolcanlogin FROM pg_roles WHERE rolname = '{Owner}'", connectionString);
         Assert.Equal(["False"], owner);
     }
@@ -584,7 +584,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
                AND has_function_privilege('public', p.oid, 'EXECUTE')
             """, connectionString));
         Assert.Equal(before, await GrantStateAsync());
-        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "idle_session_timeout=60s", "statement_timeout=2s"],
+        Assert.Equal(["default_transaction_read_only=on", "idle_in_transaction_session_timeout=10s", "idle_session_timeout=60s", "jit=off", "statement_timeout=2s"],
             await QueryAsync($"SELECT unnest(setconfig) FROM pg_db_role_setting WHERE setrole = '{Role}'::regrole ORDER BY 1", connectionString));
         await using var restored = await OpenPublicAsync();
         await AssertDeniedAsync(restored, "SELECT pg_advisory_lock(1)");

@@ -11,7 +11,7 @@ public sealed class RateLimitTests(PostgresCollection postgres)
     [Fact]
     public async Task TheRateLimitCountsEachForwardedClientSeparatelyWhenTheConnectionIsTrusted()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        await using var host = await ApiHost.StartAsync(postgres, options => options with
         {
             RequestsPerMinute = 2,
             TrustedProxyRanges = [IPNetwork.Parse("127.0.0.0/8")]
@@ -26,7 +26,7 @@ public sealed class RateLimitTests(PostgresCollection postgres)
     [Fact]
     public async Task TheRateLimitIgnoresAForgedHeaderFromAnUntrustedConnectionSoRotatingItBuysNoMoreRequests()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with
+        await using var host = await ApiHost.StartAsync(postgres, options => options with
         {
             RequestsPerMinute = 2,
             TrustedProxyRanges = [IPNetwork.Parse("203.0.113.0/24")]
@@ -41,7 +41,7 @@ public sealed class RateLimitTests(PostgresCollection postgres)
     [Fact]
     public async Task TheZipRouteCountsAgainstTheGlobalLimitLikeTheVoteRoutes()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { RequestsPerMinute = 2 });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { RequestsPerMinute = 2 });
 
         Assert.Equal([HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable, HttpStatusCode.TooManyRequests],
             await StatusesAsync(host, "198.51.100.1", 3, "/v1/zip-districts/99501"));

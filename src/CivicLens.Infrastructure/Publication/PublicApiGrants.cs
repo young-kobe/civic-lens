@@ -24,6 +24,8 @@ internal static class PublicApiGrants
         ALTER ROLE civic_lens_public CONNECTION LIMIT 5;
         ALTER ROLE civic_lens_public SET default_transaction_read_only = on;
         ALTER ROLE civic_lens_public SET statement_timeout = '2s';
+        -- The public reads are short. JIT compiling costs more than it saves within the statement timeout.
+        ALTER ROLE civic_lens_public SET jit = off;
         ALTER ROLE civic_lens_public SET idle_in_transaction_session_timeout = '10s';
         -- Keep this above PublicApiOptions.PublicViewsIdleLifetime plus the 10 second pruning interval of the pool of the API.
         ALTER ROLE civic_lens_public SET idle_session_timeout = '60s';

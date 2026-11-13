@@ -124,7 +124,7 @@ public sealed class ExecutiveSummaryTests
         Assert.Null(ExecutiveSummaryPhrases.FindIn(sentence));
 
     [Fact]
-    public void ASummaryThatReadsAboveGradeTwelveAsOnePassageIsRejected()
+    public void ASummaryThatReadsAboveTheMaximumGradeAsOnePassageIsRejected()
     {
         const string Hard = "Notwithstanding antecedent administrative determinations, interdepartmental coordination necessitates comprehensive reconsideration of multifaceted regulatory methodologies. " +
             "Implementation responsibilities notwithstanding, extraordinarily consequential institutional accountability mechanisms require comprehensive documentation.";
@@ -133,6 +133,30 @@ public sealed class ExecutiveSummaryTests
 
         Assert.False(resolution.IsAccepted);
         Assert.Contains(resolution.Errors, error => error.Contains("as one passage", StringComparison.Ordinal));
+    }
+
+    private const string ImportRule = "The Secretary of Commerce reviews each import rule.";
+
+    [Fact]
+    public void ASummaryAboveTheTargetGradeAndAtOrBelowTheMaximumIsAccepted()
+    {
+        const string agencies = "The Secretary of Commerce reviews administrative regulations with other agencies.";
+
+        var resolution = Resolve(Output((ImportRule, FirstQuote), (agencies, SecondQuote)));
+
+        Assert.Equal(13.5, ReadingGrade.RoundedPassage([ImportRule, agencies]));
+        Assert.True(resolution.IsAccepted);
+    }
+
+    [Fact]
+    public void ASummaryJustAboveTheMaximumIsRefusedWithItsGradeAndAsksForTheTargetGrade()
+    {
+        const string regulations = "The Secretary of Commerce reviews administrative regulations.";
+
+        var resolution = Resolve(Output((ImportRule, FirstQuote), (regulations, SecondQuote)));
+
+        Assert.Equal(14.1, ReadingGrade.RoundedPassage([ImportRule, regulations]));
+        Assert.Contains(resolution.Errors, error => error.Contains("read at grade 14.1 as one passage. Write at grade 12 or below.", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -275,22 +299,36 @@ public sealed class ExecutiveSummaryTests
     }
 
     [Fact]
-    public void ASummaryThatReadsAboveGradeTwelveFailsTheApprovalCheckEvenWhenItsQuotesAreExact()
+    public void ASummaryThatReadsAboveTheMaximumGradeFailsTheApprovalCheckEvenWhenItsQuotesAreExact()
     {
-        const string Hard = "Notwithstanding antecedent administrative determinations, interdepartmental coordination necessitates comprehensive reconsideration of multifaceted regulatory methodologies.";
+        var (summary, extractions) = ApprovalCase(ImportRule, "The Secretary of Commerce reviews administrative regulations.");
+
+        var failure = Assert.Throws<ArgumentException>(() => ExecutiveSummaryApproval.Validate(summary, extractions));
+
+        Assert.Equal("The summary reads at grade 14.1 as one passage. The limit is grade 14.0.", failure.Message);
+    }
+
+    [Fact]
+    public void ASummaryAboveTheTargetGradeAndAtOrBelowTheMaximumPassesTheApprovalCheck()
+    {
+        var (summary, extractions) = ApprovalCase(ImportRule, "The Secretary of Commerce reviews administrative regulations with other agencies.");
+
+        ExecutiveSummaryApproval.Validate(summary, extractions);
+    }
+
+    // The accepted good summary with its two sentences replaced. The quotes stay exact, so only the grade check can fail.
+    private static (ExecutiveActionRevision Summary, Dictionary<string, DocumentExtraction> Extractions) ApprovalCase(string first, string second)
+    {
         var evidence = Evidence();
         var summary = Resolve(Good(), evidence).Accepted!;
-        var hard = summary with { Summary = summary.Summary! with { Sentences = [.. summary.Summary.Sentences.Select(sentence => sentence with { Sentence = Hard })] } };
+        var sentences = summary.Summary!.Sentences;
+        var replaced = summary with { Summary = summary.Summary with { Sentences = [sentences[0] with { Sentence = first }, sentences[1] with { Sentence = second }] } };
         var document = FederalRegisterFixtures.Document(FederalRegisterFixtures.TrumpOrder);
-        var extractions = new Dictionary<string, DocumentExtraction>
+        return (replaced, new Dictionary<string, DocumentExtraction>
         {
             [Extraction("x", "facts-attempt").ExtractionId] = Extraction(FederalRegisterRenderer.Render(document), "facts-attempt"),
             [evidence.Text.ExtractionId] = Extraction(evidence.Text.Text)
-        };
-
-        var failure = Assert.Throws<ArgumentException>(() => ExecutiveSummaryApproval.Validate(hard, extractions));
-
-        Assert.Contains("as one passage", failure.Message, StringComparison.Ordinal);
+        });
     }
 
     private static ExecutiveSummaryStep Step(FakeExecutiveSummaryModel model) =>
