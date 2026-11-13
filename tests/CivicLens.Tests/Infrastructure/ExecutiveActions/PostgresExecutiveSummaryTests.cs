@@ -1,4 +1,16 @@
 using System.Text.Json;
+using CivicLens.Application.Issues;
+using CivicLens.Application.Publication;
+using CivicLens.Application.Review;
+using CivicLens.Host.Publication;
+using CivicLens.Infrastructure.Actions;
+using CivicLens.Infrastructure.Briefs;
+using CivicLens.Infrastructure.Publication;
+using CivicLens.Infrastructure.Relationships;
+using CivicLens.Infrastructure.Review;
+using CivicLens.Infrastructure.Statements;
+using CivicLens.Infrastructure.Votes;
+using CivicLens.Publication.Contracts;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.ExecutiveActions;
 using CivicLens.Core.Review;
@@ -135,6 +147,89 @@ public sealed class PostgresExecutiveSummaryTests(PostgresCollection postgres) :
         Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM executive_action_drafts"));
         Assert.Equal("DraftDiscarded", await ScalarAsync("SELECT outcome FROM exec_summary_analysis_runs"));
         Assert.Equal("recordRejected", await ScalarAsync("SELECT error_code FROM exec_summary_analysis"));
+    }
+
+    [Fact]
+    public async Task PublicationReadsTheApprovedSummaryWithTheExtractionOfItsQuotes()
+    {
+        var (recordId, textId) = await seeder.AdmitWithTextAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden", Body);
+        await RunWorkerAsync(new FakeExecutiveSummaryModel().Draft(Output()));
+
+        var publishable = (await ReviewStore().GetForPublicationAsync([recordId], default))[recordId];
+
+        Assert.Equal(2, publishable.Review.CurrentRevision.Summary!.Sentences.Length);
+        Assert.Contains(textId, publishable.Extractions.Keys);
+    }
+
+    [Fact]
+    public async Task APublishedReleaseCarriesTheSummaryWithItsQuotesAndTheTextAsASourceOfTheRecord()
+    {
+        var (recordId, textId) = await seeder.AdmitWithTextAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden", Body);
+        await RunWorkerAsync(new FakeExecutiveSummaryModel().Draft(Output()));
+
+        var release = await PublishAsync(recordId);
+
+        var record = JsonSerializer.Deserialize<PublishedExecutiveAction>(
+            File.ReadAllBytes(Directory.EnumerateFiles(Path.Combine(captureRoot, "releases"), recordId + ".json", SearchOption.AllDirectories).First()),
+            PublicationProtocol.JsonOptions)!;
+        Assert.Equal(1, release.RecordCount);
+        Assert.Equal([Quote, SecondQuote], record.Summary!.Sentences.Select(sentence => sentence.Citation.Quote));
+        Assert.False(record.Summary.Cut);
+        Assert.Contains(textId, record.Sources.Select(source => source.ExtractionId));
+    }
+
+    [Fact]
+    public async Task PublishingStopsAndWritesNoReleaseWhenTheSummaryQuotesAnotherExtraction()
+    {
+        var (recordId, textId) = await seeder.AdmitWithTextAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden", Body);
+        await RunWorkerAsync(new FakeExecutiveSummaryModel().Draft(Output()));
+        var other = (string)(await ScalarAsync($"SELECT extraction_id FROM document_extractions WHERE extraction_id <> '{textId}' LIMIT 1"))!;
+        _ = await ExecuteAsync($"UPDATE executive_action_texts SET extraction_id = '{other}'");
+
+        await Assert.ThrowsAsync<ArgumentException>(() => PublishAsync(recordId));
+
+        Assert.Equal(0L, await ScalarAsync("SELECT count(*) FROM publication_releases"));
+    }
+
+    private async Task<PublicationReleaseSummary> PublishAsync(string recordId)
+    {
+        var factory = AnalysisDbContextFactory.Create(connectionString);
+        var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+        var directory = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
+        var publish = new PublishRelease(store, directory, new ReleaseRenderer(null, null),
+            new PublishedRecordLoaders(new PostgresDocumentChangeReviewStore(factory),
+                new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory), new PostgresVoteReviewStore(factory),
+                new PostgresRelationshipReviewStore(factory), new PostgresBriefReviewStore(factory), ReviewStore()),
+            new PublicationCatalog(new Dictionary<string, string> { ["joe-biden"] = "Joe Biden" }, IssueConfiguration.None, IssueIconConfiguration.None),
+            FixedRosters.NamedOnly(["joe-biden"]), PhotoCaptures.None(), TimeProvider.System,
+            new PruneReleases(store, directory, NullLogger<PruneReleases>.Instance));
+        return await publish.ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner),
+            new PublishReleaseRequest([new(PublishedRecordKind.ExecutiveAction, recordId)], "publish"));
+    }
+
+    [Fact]
+    public async Task PublicationStopsWhenTheSummaryQuotesAnExtractionThatIsNotTheStoredTextOfItsDocument()
+    {
+        var (recordId, textId) = await seeder.AdmitWithTextAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden", Body);
+        await RunWorkerAsync(new FakeExecutiveSummaryModel().Draft(Output()));
+        var other = (string)(await ScalarAsync($"SELECT extraction_id FROM document_extractions WHERE extraction_id <> '{textId}' LIMIT 1"))!;
+        _ = await ExecuteAsync($"UPDATE executive_action_texts SET extraction_id = '{other}'");
+
+        var stop = await Assert.ThrowsAsync<ArgumentException>(() => ReviewStore().GetForPublicationAsync([recordId], default));
+
+        Assert.Contains("not the stored text", stop.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PublicationStopsWhenTheCutFlagOfTheSummaryDiffersFromTheStoredCounts()
+    {
+        var (recordId, _) = await seeder.AdmitWithTextAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden", Body);
+        await RunWorkerAsync(new FakeExecutiveSummaryModel().Draft(Output()));
+        _ = await ExecuteAsync("UPDATE executive_action_texts SET chars_total = 70000");
+
+        var stop = await Assert.ThrowsAsync<ArgumentException>(() => ReviewStore().GetForPublicationAsync([recordId], default));
+
+        Assert.Contains("cut flag", stop.Message, StringComparison.Ordinal);
     }
 
     [Fact]
