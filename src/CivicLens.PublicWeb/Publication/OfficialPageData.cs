@@ -28,5 +28,7 @@ public sealed record OfficialPageData(
     /// <summary>True when a reviewer linked any statement of the official to a vote or a bill. <c>Statements</c> lists only the vote links.</summary>
     public bool HasLinkedStatements { get; init; }
     public OfficialBillData[] Bills { get; init; } = [];
+    /// <summary>How many bills the official sponsored in every Congress of the release. It is the count of the bills tab of the record page. <c>Bills</c> holds only the newest ones of one Congress.</summary>
+    public int RecordBills { get; init; }
     public OfficialExecutiveData? Executive { get; init; }
 }

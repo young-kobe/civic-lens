@@ -16,13 +16,13 @@
     }
     else
     {
-        <section class="record-section" aria-label="The record of @Data.Name">
+        <section class="record-section">
             <div data-record-filters><FilterTabs Label="@OfficialRecordText.TabsLabel" Tabs="tabs" /></div>
             <div class="records-lead"><p class="muted small">@OfficialRecordText.CountLine(Data.Selected, Data.SelectedCount, Data.Name)</p></div>
             @switch (Data.Selected)
             {
                 case OfficialRecordKind.Votes:
-                    <SharedVoteRows Data="VoteRows" RootPath="@RootPath" SingleMember="true" />
+                    <SharedVoteRows Data="VoteRows" RootPath="@RootPath" SingleMember="true" HeadingLevel="1" />
                     break;
                 case OfficialRecordKind.Bills:
                     @if (Data.Bills.Any(bill => bill.BillLine is not null))
@@ -33,7 +33,7 @@
                         @foreach (var bill in Data.Bills)
                         {
                             <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.BillTitle"
-                                             Meta="@BillMeta(bill)" BillLine="@bill.BillLine" ShowBillLineSource="false">
+                                             MetaParts="@OfficialPageText.BillMeta(bill)" BillLine="@bill.BillLine" ShowBillLineSource="false">
                                 @if (bill.LatestAction is { } action && BillStatusMeaning.Label(action, bill.BillType) is { } status)
                                 {
                                     <StatusBadge Text="@status" />
@@ -47,7 +47,7 @@
                         @foreach (var statement in Data.Statements)
                         {
                             <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline"
-                                             Label="@statement.Label" Meta="@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")" />
+                                             Label="@statement.Label" Meta="@OfficialPageText.StatementMeta(statement.StatementDate)" />
                         }
                     </ul>
                     break;
@@ -56,19 +56,19 @@
                         @foreach (var action in Data.ExecutiveActions)
                         {
                             <PublicRecordRow Icon="IconName.ExecutiveAction" Href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))" Headline="@action.Title"
-                                             Meta="@($"{PublishedRecordLabels.ExecutiveActionKind(action.Kind)}, signed {Moment.Day(action.SignedOn)}")" />
+                                             MetaParts="@OfficialPageText.ExecutiveMeta(action.Kind, action.SignedOn)" />
                         }
                     </ul>
                     break;
             }
             <Pager Label="@OfficialRecordText.PagerLabel" ForwardOnly="true" Summary="@OfficialRecordText.PagerSummary(Shown, Data.SelectedCount)"
-                   OlderHref="@NextHref" OlderText="Next page" />
+                   OlderHref="@NextHref" OlderText="Next page" LastPage="@(Data.LaterPage && Data.NextCursor is null)" />
         </section>
     }
     @if (Data.Offices.Length > 0)
     {
         <SourceFold Summary="@OfficialRecordText.OfficesSummary(Data.Offices.Length)" FoldId="@OfficialRecordText.OfficesAnchor">
-            <ul role="list">
+            <ul class="record-rows" role="list">
                 @foreach (var office in Data.Offices)
                 {
                     <li>@OfficialRecordText.Office(office)</li>
@@ -94,8 +94,4 @@
     };
 
     private string? NextHref => Data.NextCursor is null ? null : OfficialRecordText.Path(RootPath, Data.OfficialId, Data.Selected, Data.NextCursor);
-
-    private static string BillMeta(OfficialBillData bill) => bill.LatestAction is not null && bill.LatestActionOn is { } on
-        ? $"Introduced {Moment.Day(bill.IntroducedOn)}. Latest official action {Moment.Day(on)}: {BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)}"
-        : $"Introduced {Moment.Day(bill.IntroducedOn)}";
 }

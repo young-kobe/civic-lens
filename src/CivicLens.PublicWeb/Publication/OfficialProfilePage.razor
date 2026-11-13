@@ -80,7 +80,7 @@
                             <ul class="official-strip" role="list" aria-label="Votes against the party and missed roll calls">
                                 @foreach (var mark in Data.Marks)
                                 {
-                                    <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" data-tone="@(mark.IsMissed ? null : PartyTones.Of(mark.Party ?? string.Empty).ToString().ToLowerInvariant())" title="@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@Moment.Day(mark.VotedOn), @mark.Chamber roll call @mark.RollCall: @OfficialPageText.MarkName(mark)</span></a></li>
+                                    <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" data-tone="@(mark.IsMissed ? null : PartyTones.Of(mark.Party ?? string.Empty).ToString().ToLowerInvariant())" title="@Moment.Day(mark.VotedOn), @VoteWords.RollCall(mark.Chamber, mark.RollCall): @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@Moment.Day(mark.VotedOn), @VoteWords.RollCall(mark.Chamber, mark.RollCall): @OfficialPageText.MarkName(mark)</span></a></li>
                                 }
                             </ul>
                             @if (Data.MarksTotal > Data.Marks.Length)
@@ -122,8 +122,8 @@
                                         {
                                             <span class="official-source-label" data-origin="@statement.TextOrigin?.ToString().ToLowerInvariant()">@statement.Label</span>
                                         }
-                                        <p class="official-meta"><span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span></p>
-                                        <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
+                                        <p class="official-meta"><span>@OfficialPageText.StatementMeta(statement.StatementDate)</span></p>
+                                        <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@VoteWords.RollCall(statement.VoteChamber, statement.VoteRollCall), @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
                                             @if (voteLabel is not null)
                                             {
                                                 <span class="official-source-label" data-origin="@statement.VoteTextOrigin?.ToString().ToLowerInvariant()">@voteLabel</span>
@@ -159,10 +159,9 @@
                                     <div>
                                         <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a>
                                         <PublishedBillLine Line="@bill.BillLine" />
-                                        <p class="official-meta"><span>Introduced @Moment.Day(bill.IntroducedOn)</span>
-                                            @if (bill.LatestAction is not null && bill.LatestActionOn is { } actionOn)
+                                        <p class="official-meta">@foreach (var part in OfficialPageText.BillMeta(bill))
                                             {
-                                                <span>Latest official action @Moment.Day(actionOn): @BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)</span>
+                                                <span>@part</span>
                                             }
                                         </p>
                                     </div>
@@ -173,9 +172,9 @@
                                 </li>
                             }
                         </ul>
-                        @if (Data.SponsoredBills > Data.Bills.Length)
+                        @if (Data.RecordBills > Data.Bills.Length)
                         {
-                            <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Bills)">See all @Data.SponsoredBills bills</a></p>
+                            <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Bills)">See all @Data.RecordBills bills</a></p>
                         }
                     </section>
                 }

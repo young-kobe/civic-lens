@@ -12,7 +12,10 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
 {
     private static readonly OfficialRecordKind[] TabOrder = Enum.GetValues<OfficialRecordKind>();
 
-    /// <summary>Reads the page. Null means that no release is active or that the active release names no such official.</summary>
+    /// <summary>
+    /// Reads the page. Null means that no release is active or that the active release names no such official.
+    /// A cursor of another release reads no rows and no offices, because the endpoint sends the reader to the first page.
+    /// </summary>
     public async Task<OfficialRecordPageData?> ReadAsync(string officialId, OfficialRecordRequest request, CancellationToken cancellationToken)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
@@ -21,11 +24,11 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
         var counts = await OfficialRecordQueries.ReadCountsAsync(connection, transaction, officialId, cancellationToken);
         var tabs = TabOrder.Where(kind => counts[kind] > 0).Select(kind => new OfficialRecordCountData(kind, counts[kind])).ToArray();
         var selected = request.Kind is { } asked && counts[asked] > 0 ? asked : tabs.FirstOrDefault()?.Kind ?? OfficialRecordKind.Votes;
-        var page = new OfficialRecordPageData(release, official.OfficialId, official.Name, official.Kind, tabs, selected)
-        {
-            Offices = await ReadOfficesAsync(connection, transaction, officialId, cancellationToken)
-        };
-        return tabs.Length == 0 ? page : await ReadPageAsync(connection, transaction, page, request.Kind == selected ? request.Cursor : null, cancellationToken);
+        var page = new OfficialRecordPageData(release, official.OfficialId, official.Name, official.Kind, tabs, selected);
+        if (request.Cursor is { } stale && stale.Release != release) return page;
+        page = page with { Offices = await ReadOfficesAsync(connection, transaction, officialId, cancellationToken) };
+        var after = request.Kind == selected ? request.Cursor : null;
+        return tabs.Length == 0 ? page : await ReadPageAsync(connection, transaction, page with { LaterPage = after is not null }, after, cancellationToken);
     }
 
     private static async Task<OfficialOfficeData[]> ReadOfficesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)

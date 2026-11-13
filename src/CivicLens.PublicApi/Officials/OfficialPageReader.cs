@@ -43,7 +43,9 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
             MarksTotal = marksTotal,
             Statements = statements,
             HasLinkedStatements = statements.Length > 0 || await OfficialPageQueries.ReadHasBillLinkedStatementAsync(connection, transaction, id, cancellationToken),
-            Bills = bills
+            Bills = bills,
+            // Only a page that shows bills has a "See all" link that needs the count.
+            RecordBills = bills.Length > 0 ? await OfficialRecordQueries.ReadBillCountAsync(connection, transaction, id, cancellationToken) : 0
         };
     }
 

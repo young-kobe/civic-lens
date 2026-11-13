@@ -22,6 +22,9 @@ public static class VoteWords
 
     public const string TrackedOnly = "This record lists only the officials that Civic Lens tracks.";
 
+    /// <summary>The short name of a roll call that names its chamber, such as "House roll call 20". House and Senate roll call numbers overlap.</summary>
+    public static string RollCall(PublishedChamber chamber, int rollCall) => $"{chamber} roll call {rollCall}";
+
     /// <summary>The badge text and meaning of a stored alignment. A mixed alignment has no badge.</summary>
     public static (string Text, string Meaning)? Badge(PublishedVoteAlignment? alignment) => alignment switch
     {

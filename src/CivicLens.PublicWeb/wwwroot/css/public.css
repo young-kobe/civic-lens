@@ -62,9 +62,9 @@ table[data-paged]:focus { outline: none; }
 .shared-vote-icon { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1.5px solid var(--vote-ink); border-radius: 10px; background: var(--vote-surface); color: var(--vote-ink); }
 .shared-vote-icon .icon { width: 20px; height: 20px; }
 .shared-vote-content, .shared-vote-summary { min-width: 0; }
-.shared-vote-rows .shared-vote-summary h3 { margin: 0; font-family: var(--ui); font-size: var(--t-base); line-height: 1.35; text-wrap: wrap; }
-.shared-vote-summary h3 a { color: var(--info); text-decoration: underline; text-underline-offset: .16em; overflow-wrap: anywhere; }
-.shared-vote-summary h3 a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.shared-vote-rows .shared-vote-title { margin: 0; font-family: var(--ui); font-size: var(--t-base); font-weight: 700; letter-spacing: -.01em; line-height: 1.35; text-wrap: wrap; }
+.shared-vote-title a { color: var(--info); text-decoration: underline; text-underline-offset: .16em; overflow-wrap: anywhere; }
+.shared-vote-title a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .shared-vote-meta { margin: 2px 0 0; color: var(--muted); font-size: .875rem; line-height: 1.45; }
 .shared-vote-label { display: inline-block; margin-inline-start: var(--s1); color: var(--ai-ink); }
 .shared-vote-casts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s2) 0 0; padding: 0; list-style: none; }
@@ -89,6 +89,7 @@ table[data-paged]:focus { outline: none; }
 .home-method-steps h3 { margin: 0 0 var(--s2); font-size: var(--t-lg); font-weight: 800; }
 .home-method-steps p { margin: 0; color: var(--muted); font-size: .875rem; line-height: 1.55; }
 .record-rows { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.record-row-meta { display: flex; flex-wrap: wrap; gap: 2px var(--s4); }
 .record-row { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: var(--s3); padding: 14px 16px; border-radius: 20px; background: var(--surface); }
 .record-row-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1.5px solid var(--vote-ink); border-radius: 12px; background: var(--vote-surface); color: var(--vote-ink); }
 .record-row-icon .icon { width: 20px; height: 20px; }

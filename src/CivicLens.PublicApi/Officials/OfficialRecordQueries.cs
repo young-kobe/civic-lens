@@ -23,11 +23,16 @@ internal static class OfficialRecordQueries
 
     private const string StatementDay = "COALESCE(s.statement_date, DATE '0001-01-01')";
 
+    // The bills tab count. The official page reads it alone for its "See all" link, so the link and the tab show one number.
+    private const string BillCountSql = """
+        SELECT count(*) FROM public_api.bill_sponsorships p
+          JOIN public_api.bills b ON b.record_id = p.record_id AND b.revision_number = p.revision_number
+         WHERE p.official_id = @id AND p.role = 'Sponsor'
+        """;
+
     private const string CountsSql = $"""
         SELECT (SELECT count(*) FROM public_api.member_votes v WHERE v.official_id = @id AND v.kind = ANY(@kinds)),
-               (SELECT count(*) FROM public_api.bill_sponsorships p
-                  JOIN public_api.bills b ON b.record_id = p.record_id AND b.revision_number = p.revision_number
-                 WHERE p.official_id = @id AND p.role = 'Sponsor'),
+               ({BillCountSql}),
                (SELECT count(*) FROM public_api.statements s WHERE {SpokenBy}),
                (SELECT count(*) FROM public_api.executive_actions e WHERE e.official_id = @id)
         """;
@@ -83,12 +88,20 @@ internal static class OfficialRecordQueries
         };
     }
 
+    /// <summary>Reads how many bills the official sponsored in the release, the count of the bills tab.</summary>
+    public static async Task<int> ReadBillCountAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(BillCountSql, connection, transaction);
+        command.Parameters.AddWithValue("id", officialId);
+        return (int)(long)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
     public static Task<Page<SharedVoteRowData>> ReadVotesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordCursor? after,
         CancellationToken cancellationToken) =>
         ReadPageAsync(connection, transaction, VotesSql, officialId, after, reader =>
         {
             var vote = MemberVoteStore.ReadVote(reader);
-            return (OfficialPageReader.Vote(officialId, vote), vote.VotedOn, vote.RecordId);
+            return (OfficialPageReader.Vote(officialId, vote) with { Chamber = vote.Chamber }, vote.VotedOn, vote.RecordId);
         }, cancellationToken, withKinds: true);
 
     public static Task<Page<OfficialBillData>> ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordCursor? after,

@@ -36,5 +36,5 @@ public sealed record VotePageData(
 
     public VoteWordingSource WordingSource => new(Kind, Chamber, Source, Result, KindCitation, Facts, BillType, BillNumber);
 
-    public string ShortName => $"{Chamber} roll call {RollCall}";
+    public string ShortName => VoteWords.RollCall(Chamber, RollCall);
 }

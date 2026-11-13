@@ -85,4 +85,15 @@ public static class OfficialPageText
 
     public static string ExecutiveHeading(PublishedExecutiveActionKind kind, int count) =>
         $"{char.ToUpperInvariant(ExecutivePlural(kind, 2)[0])}{ExecutivePlural(kind, 2)[1..]} ({count})";
+
+    /// <summary>The meta of a statement row on the official page and on the record page.</summary>
+    public static string StatementMeta(DateOnly? statementDate) => statementDate is { } said ? $"Said on {Moment.Day(said)}" : StatementPageView.DateNotStated;
+
+    /// <summary>The meta parts of a bill row on the official page and on the record page: the introduced date, then the latest official action when the release holds one.</summary>
+    public static string[] BillMeta(OfficialBillData bill) => bill.LatestAction is not null && bill.LatestActionOn is { } actionOn
+        ? [$"Introduced {Moment.Day(bill.IntroducedOn)}", $"Latest official action {Moment.Day(actionOn)}: {BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)}"]
+        : [$"Introduced {Moment.Day(bill.IntroducedOn)}"];
+
+    /// <summary>The meta parts of an executive action row on the President page and on the record page: the type, then the signed date.</summary>
+    public static string[] ExecutiveMeta(PublishedExecutiveActionKind kind, DateOnly signedOn) => [PublishedRecordLabels.ExecutiveActionKind(kind), $"Signed {Moment.Day(signedOn)}"];
 }

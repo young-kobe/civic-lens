@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.PublicApi.Officials;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -10,6 +11,7 @@ using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Home;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Officials;
 
@@ -90,9 +92,57 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Contains("kind=votes&cursor=r.1.", next);
         Assert.Equal(2, second.QuerySelectorAll(".shared-vote-row").Length);
         Assert.Null(second.QuerySelector(".pager a[rel=next]"));
-        var seen = first.QuerySelectorAll(".shared-vote-row h3 a").Concat(second.QuerySelectorAll(".shared-vote-row h3 a")).Select(link => link.GetAttribute("href")!).ToArray();
+        Assert.Equal("2 on this page. 27 in all.", second.QuerySelector(".pager span")!.TextContent);
+        var seen = first.QuerySelectorAll(".shared-vote-row h2 a").Concat(second.QuerySelectorAll(".shared-vote-row h2 a")).Select(link => link.GetAttribute("href")!).ToArray();
         Assert.Equal(27, seen.Distinct().Count());
         Assert.Equal(Enumerable.Range(0, 27).Select(number => BaseUrl.Join($"records/{Id(number)}.html")).ToArray(), seen);
+    }
+
+    [Fact]
+    public async Task AListOfOnePageShowsNoPagerLine()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('a', "2026-02-01") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 1 });
+
+        var page = await GetPageAsync(host, "/web/officials/p0/record.html");
+
+        Assert.Null(page.QuerySelector(".pager"));
+    }
+
+    [Fact]
+    public async Task VoteRowsAreH2UnderTheH1AndNameTheChamberOfEachRollCallForAMemberWhoHeldTwoSeats()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2022-02-01") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 20 },
+            new SeededVote('b', "2026-02-03") { Chamber = "Senate", Casts = ["Yea"], PersonIds = ["p0"], RollCall = 20 });
+
+        var page = await GetPageAsync(host, "/web/officials/p0/record.html");
+
+        Assert.Equal(["h1", "h2", "h2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.LocalName).Take(3).ToArray());
+        Assert.Empty(page.QuerySelectorAll(".shared-vote-row h3"));
+        var meta = page.QuerySelectorAll(".shared-vote-meta").Select(line => line.TextContent).ToArray();
+        Assert.Contains("Senate roll call 20,", meta[0]);
+        Assert.Contains("House roll call 20,", meta[1]);
+    }
+
+    [Fact]
+    public async Task ACursorOfAnotherReleaseReadsNoRowsAndNoOfficesBeforeTheRedirect()
+    {
+        await using var host = await StartAsync();
+        await AddManyVotesAsync(host);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var reader = new OfficialRecordPageReader(views);
+
+        var stale = await reader.ReadAsync("p0", new(OfficialRecordKind.Votes, new(7, new(2026, 1, 10), Id(3))), CancellationToken.None);
+        var current = await reader.ReadAsync("p0", new(OfficialRecordKind.Votes, new(1, new(2026, 1, 10), Id(3))), CancellationToken.None);
+
+        Assert.Equal(1, stale!.Release);
+        Assert.Empty(stale.Votes);
+        Assert.Empty(stale.Offices);
+        Assert.NotEmpty(current!.Votes);
+        Assert.NotEmpty(current.Offices);
+        Assert.True(current.LaterPage);
     }
 
     [Fact]
@@ -123,7 +173,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Equal([BaseUrl.Join($"records/{new string('2', 64)}.html"), BaseUrl.Join($"records/{new string('1', 64)}.html")],
             page.QuerySelectorAll(".record-row > div > a").Select(link => link.GetAttribute("href")!).ToArray());
         Assert.Contains("Pays landlords.", page.Body!.TextContent);
-        Assert.Contains("Introduced 3 Mar 2026", page.QuerySelector(".record-row")!.TextContent);
+        Assert.Equal(["Introduced 3 Mar 2026"], page.QuerySelectorAll(".record-row-meta > span").Select(part => part.TextContent).Take(1).ToArray());
         Assert.Contains("2 bills and resolutions that Ann Able sponsored in this release", page.QuerySelector(".records-lead p")!.TextContent);
     }
 
@@ -163,7 +213,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
 
         Assert.Equal(["Executive actions2"], Tabs(page));
         Assert.Equal(["Newer order", "A proclamation"], page.QuerySelectorAll(".record-row > div > a > span:first-child").Select(title => title.TextContent).ToArray());
-        Assert.Contains("Executive order, signed 20 May 2026", page.QuerySelector(".record-row")!.TextContent);
+        Assert.Equal(["Executive order", "Signed 20 May 2026"], page.QuerySelector(".record-row-meta")!.Children.Select(part => part.TextContent).ToArray());
     }
 
     [Fact]
@@ -176,7 +226,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         var asked = await GetPageAsync(host, "/web/officials/p0/record.html?kind=bills");
 
         Assert.Equal("Statements1", Tabs(plain).Single());
-        Assert.Equal("true", plain.QuerySelector(".segmented-item")!.GetAttribute("aria-current") ?? "true");
+        Assert.Equal("true", plain.QuerySelector(".segmented-item")!.GetAttribute("aria-current"));
         Assert.Equal(Tabs(plain), Tabs(asked));
         Assert.Single(asked.QuerySelectorAll(".record-row"));
     }
@@ -204,7 +254,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
 
         Assert.Equal("Offices held (2 terms)", held.QuerySelector("#offices summary")!.TextContent);
         Assert.Equal(["Representative for MA, district 7, Democrat, 3 Jan 2021 to 3 Jan 2023", "Senator for MA, Democrat, 3 Jan 2023 to Present"],
-            held.QuerySelectorAll("#offices li").Select(item => item.TextContent).ToArray());
+            held.QuerySelectorAll("#offices ul.record-rows > li").Select(item => item.TextContent).ToArray());
         Assert.Null(none.QuerySelector("#offices"));
         Assert.Equal("All records of Cy Cole", none.QuerySelector("h1")!.TextContent);
     }

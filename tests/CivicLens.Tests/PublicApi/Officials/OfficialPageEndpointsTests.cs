@@ -172,6 +172,21 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task TheSeeAllBillsLinkCountsEveryCongressOfTheReleaseAsTheBillsTabDoesAndNotTheBillFigureOfOneCongress()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('4', "2024-05-01") { Congress = 118, BillNumber = 4, Sponsorships = [new("p0", "Sponsor", "2024-05-01")] });
+
+        var page = await GetPageAsync(host, "/web/officials/p0");
+
+        Assert.Equal(2, page.QuerySelectorAll("#bills .official-rows li").Length);
+        var link = page.QuerySelector("#bills .official-more a")!;
+        Assert.Equal("See all 3 bills", link.TextContent);
+        Assert.Equal(BaseUrl.Join("officials/p0/record.html?kind=bills"), link.GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task KnownIssuesRemainVisibleWhenTheBillCountSnapshotIsUnavailable()
     {
         await using var host = await StartAsync(storeBillCounts: false);
