@@ -141,13 +141,13 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     /// <summary>The four arrays come from one view, ordered by the same position, so they pair by index.</summary>
-    private static BillKeyTerm[] ReadKeyTerms(DbDataReader reader)
+    private static BillKeyTermData[] ReadKeyTerms(DbDataReader reader)
     {
         var terms = reader.GetFieldValue<string[]>(31);
         var definitions = reader.GetFieldValue<string[]>(32);
         var cuts = reader.GetFieldValue<bool[]>(33);
         var quotes = reader.GetFieldValue<string[]>(38);
-        return [.. terms.Select((term, index) => new BillKeyTerm(term, definitions[index], cuts[index], quotes[index]))];
+        return [.. terms.Select((term, index) => new BillKeyTermData(term, definitions[index], cuts[index], quotes[index]))];
     }
 
     /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>

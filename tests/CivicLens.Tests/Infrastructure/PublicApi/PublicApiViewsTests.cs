@@ -879,7 +879,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             new(PublishedTextPart.WhyItMatters, "It names who runs the program.", SecretaryQuote)
         ];
         Assert.Equal(sentences, model.TextSentences);
-        Assert.Equal(new CivicLens.PublicApi.Bills.BillKeyTerm("grant", "The term \"grant\" means a payment under § 3.", true, GrantQuote), Assert.Single(model.KeyTerms));
+        Assert.Equal(new CivicLens.PublicWeb.Publication.BillKeyTermData("grant", "The term \"grant\" means a payment under § 3.", true, GrantQuote), Assert.Single(model.KeyTerms));
         Assert.Empty(person.TextSentences);
         Assert.Empty(person.KeyTerms);
     }

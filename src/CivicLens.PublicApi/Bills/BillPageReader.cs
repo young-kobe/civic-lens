@@ -88,6 +88,10 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
             Votes = [.. voteRows.Select(VoteRowOf)],
             SenateVoteGap = BillSteps.SenateActedAfterIntroduction(steps) && !votedChambers.Contains(PublishedChamber.Senate),
             Issues = issues,
+            WhyItMatters = bill.WhyItMatters,
+            BillText = TextSourceOf(bill),
+            KeyTerms = detail.KeyTerms,
+            KeyTermsLabel = detail.KeyTermsLabel,
             CrsText = detail.CrsSummaryText,
             CrsVersion = detail.CrsSummaryVersion,
             SummaryFromCrs = detail.SummaryFromCrs,
@@ -106,6 +110,11 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
             ? VotePageView.ChamberBar(vote.Chamber, yes, no, present, notVoting, VoteThreshold.None)
             : null
     };
+
+    /// <summary>The view fills the version name and both counts from one stored row of the cited version, so a summary that cites no bill text has none of them.</summary>
+    private static BillTextSourceData? TextSourceOf(BillRow bill) => bill is { TextVersionName: { } name, TextCharsRead: { } read, TextCharsTotal: { } total }
+        ? new(name, bill.TextVersionDate, read, total)
+        : null;
 
     private static BillSponsorData Person(BillSponsorRow row) => new(row.OfficialId, row.Name, row.Party, row.SponsoredOn);
 }

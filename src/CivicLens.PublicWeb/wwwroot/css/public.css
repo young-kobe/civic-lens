@@ -523,6 +523,14 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .bill-card-raised { box-shadow: inset 0 0 0 2px var(--marigold); }
 .bill-members [data-bill-members-body]:empty { display: none; }
 .bill-card-heading { margin: 0; font-family: var(--heading); font-size: 1.25rem; font-weight: 800; letter-spacing: -.015em; }
+.bill-page .ai-summary-ai .ai-summary-label { border-radius: 14px; }
+.bill-why-title { margin: var(--s4) 0 var(--s2); font-size: var(--t-lg); font-weight: 800; line-height: 1.25; }
+.bill-terms { display: grid; gap: var(--s3); }
+.bill-terms > h2 { margin: 0; font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; }
+.bill-terms-list { display: grid; gap: var(--s4); margin: 0; }
+.bill-term dt { font-family: var(--heading); font-size: var(--t-lg); font-weight: 800; }
+.bill-term dd { margin: 0; }
+.bill-term .bill-term-cut { margin: var(--s2) 0 0; font-size: var(--t-sm); }
 @media (min-width: 761px) {
     .bill-section { padding: 32px; }
     .bill-kv { grid-template-columns: 200px minmax(0, 1fr); }
@@ -645,7 +653,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 }
 
 /* Official and President pages, server rendered. */
-.public-main:has(> .content > .official-page) { padding: 24px 16px 48px; }
+.public-main:has(> .content > .official-page) { padding: 24px var(--frame-pad) 48px; }
 .official-page { display: grid; gap: var(--s4); min-width: 0; font-size: 1rem; }
 .official-page > * { min-width: 0; margin: 0; }
 .official-page a:not(.btn) { color: var(--ink); text-decoration-thickness: 1px; text-underline-offset: .16em; }

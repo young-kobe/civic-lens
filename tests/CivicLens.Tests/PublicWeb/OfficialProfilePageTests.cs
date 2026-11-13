@@ -523,6 +523,16 @@ public sealed class OfficialProfilePageTests
         Assert.True(reach * 2 <= gap, $"Each hit area reaches {reach}px, and the gap between squares is {gap}px.");
     }
 
+    [Fact]
+    public void TheOfficialPageUsesTheSharedFrameGutterSoItsContentLinesUpWithTheTrailTheHeaderAndTheFooter()
+    {
+        var css = WebStyleSheets.Read("public.css");
+        var rule = System.Text.RegularExpressions.Regex.Match(css, @"(?m)^\.public-main:has\(> \.content > \.official-page\) \{ padding: (\S+) (\S+) (\S+); \}");
+
+        Assert.True(rule.Success, "The official page frame rule sets one padding shorthand with top, inline and bottom values.");
+        Assert.Equal("var(--frame-pad)", rule.Groups[2].Value);
+    }
+
     private static int Px(string css, string pattern)
     {
         var match = System.Text.RegularExpressions.Regex.Match(css, pattern);
