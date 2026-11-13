@@ -25,7 +25,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, new DateTimeOffset(2026, 6, 9, 12, 0, 0, TimeSpan.Zero));
         return host;
     }
@@ -150,7 +150,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task WithoutAnActiveReleaseTheSitemapAnswers503()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
 
         using var response = await GetAsync(host, PublicationProtocol.SitemapPath);
 
