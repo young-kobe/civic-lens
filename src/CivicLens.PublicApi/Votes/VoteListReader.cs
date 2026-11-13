@@ -24,13 +24,12 @@ public sealed class VoteListReader(VoteStore votes, IssueStore issues)
 
     public async Task<VoteListPageData?> ReadAsync(VoteRequest request, CancellationToken cancellationToken)
     {
-        if (await votes.ListAsync(request, cancellationToken) is not { } page) return null;
+        if (await votes.ListWithTotalAsync(request, cancellationToken) is not var (page, total)) return null;
         var choices = (await issues.ListOptionsAsync(cancellationToken)).Select(issue => issue.ToChoice()).ToArray();
         var rows = page.Votes.Select(vote => new VoteListRowData(vote.RecordId, vote.Headline, vote.Label, vote.Chamber, vote.RollCall, vote.VotedOn, vote.Kind,
             vote.BillType is { } type && vote.BillNumber is { } number ? BillNumbers.Of(type, number) : null, vote.Result, vote.Alignment, vote.Yea, vote.Nay)).ToArray();
-        var filter = RecordListFilter.Of(("chamber", request.Chamber is { } chamber ? chamber.ToString().ToLowerInvariant() : null),
-            ("kind", request.Kind is { } kind ? QueryValues.ChoiceText(kind) : null), ("issue", request.Issue), ("bill", QueryValues.BillNumberText(request.BillType, request.BillNumber)),
-            ("from", request.From?.ToString("yyyy-MM-dd")), ("to", request.To?.ToString("yyyy-MM-dd")));
-        return new(page.Release, rows, filter, page.NextCursor, Kinds, choices);
+        var filter = RecordListFilter.Of(request.From, request.To, ("chamber", request.Chamber is { } chamber ? chamber.ToString().ToLowerInvariant() : null),
+            ("kind", request.Kind is { } kind ? QueryValues.ChoiceText(kind) : null), ("issue", request.Issue), ("bill", QueryValues.BillNumberText(request.BillType, request.BillNumber)));
+        return new(page.Release, total, rows, filter, page.NextCursor, Kinds, choices);
     }
 }

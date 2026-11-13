@@ -2,6 +2,7 @@ using CivicLens.PublicWeb.Publication;
 using System.Data.Common;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -39,7 +40,7 @@ public sealed class BillStore(NpgsqlDataSource views)
          WHERE b.record_id = ANY(@ids)
         """;
     private const string ListFactsSql = $"""
-        SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date
+        SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, t.status
           FROM public_api.bills b
           LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
          WHERE b.record_id = ANY(@ids)
@@ -69,6 +70,30 @@ public sealed class BillStore(NpgsqlDataSource views)
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
         return new(active, page, next);
+    }
+
+    /// <summary>Reads one page of the bills of the newest Congress that the active release holds, its Congress, and the stored bill total of that Congress, in one query.
+    /// The total comes from <c>public_api.release_bill_counts</c>, as the official page reads it, and is null when the release stores none. A filter never changes it.
+    /// Null means that no release is active, and a release with no bill gives a null Congress and an empty page.</summary>
+    public async Task<NewestCongressBills?> ListNewestCongressAsync(BillRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Congress is not null) throw new ArgumentException("The newest Congress list takes its own Congress.", nameof(request));
+        await using var command = views.CreateCommand(NewestCongressSql(request));
+        AddParameters(command, request);
+        var rows = new List<BillRow>();
+        int? release = null, congress = null, total = null;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                release = reader.GetInt32(0);
+                congress = ViewColumns.Number(reader, reader.FieldCount - 2);
+                total = ViewColumns.Number(reader, reader.FieldCount - 1);
+                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
+            }
+        if (release is not { } active) return null;
+        var page = rows.Take(request.Limit).ToArray();
+        var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
+        return new(new BillPage(active, page, next), congress, total);
     }
 
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
@@ -133,7 +158,7 @@ public sealed class BillStore(NpgsqlDataSource views)
         return facts;
     }
 
-    /// <summary>Reads the sponsor and the latest action of a bounded set of bills in one query. A bill that left the release has no entry.</summary>
+    /// <summary>Reads the sponsor, the latest action, and its stored status of a bounded set of bills in one query. A bill that left the release has no entry.</summary>
     public async Task<Dictionary<string, BillListFacts>> ReadListFactsAsync(string[] recordIds, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand(ListFactsSql);
@@ -141,7 +166,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         var facts = new Dictionary<string, BillListFacts>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            facts[reader.GetString(0)] = new(ViewColumns.Text(reader, 1), ViewColumns.Text(reader, 2), ViewColumns.Date(reader, 3));
+            facts[reader.GetString(0)] = new(ViewColumns.Text(reader, 1), ViewColumns.Text(reader, 2), ViewColumns.Date(reader, 3),
+                reader.IsDBNull(4) ? null : ViewColumns.Enum<BillStatusStage>(reader, 4));
         return facts;
     }
 
@@ -259,6 +285,20 @@ public sealed class BillStore(NpgsqlDataSource views)
          ORDER BY {Order}
         """;
 
+    private static string NewestCongressSql(BillRequest request) => $"""
+        WITH newest AS MATERIALIZED (SELECT max(b.congress) AS congress FROM public_api.bills b)
+        SELECT a.release_number, {Columns}, n.congress, t.bills
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+         CROSS JOIN newest n
+          LEFT JOIN public_api.release_bill_counts t ON t.congress = n.congress
+          LEFT JOIN LATERAL (
+               SELECT b.* FROM public_api.bills b
+                WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
+                ORDER BY {Order} LIMIT @take) b
+            ON TRUE
+         ORDER BY {Order}
+        """;
+
     private static string Filters(BillRequest request) =>
         (request.Congress is null ? "" : " AND b.congress = @congress") +
         (request.BillType is null ? "" : " AND b.bill_type = @bill_type") +
@@ -268,6 +308,15 @@ public sealed class BillStore(NpgsqlDataSource views)
              AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s
                           WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.official_id = @sponsor
                             AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}')
+            """) +
+        (request.SponsorName is null ? "" : $"""
+             AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s JOIN public_api.officials o ON o.official_id = s.official_id
+                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number
+                            AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}' AND {OfficialStore.NameMatchSql("o")})
+            """) +
+        (request.Status is null ? "" : """
+             AND EXISTS (SELECT 1 FROM public_api.bill_status t
+                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number AND t.status = @status)
             """) +
         (request.Issue is null ? "" : """
              AND EXISTS (SELECT 1 FROM public_api.bill_issues i
@@ -285,6 +334,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         if (request.BillNumber is { } billNumber) parameters.AddWithValue("bill_number", billNumber);
         if (request.PolicyArea is not null) parameters.AddWithValue("policy_area", request.PolicyArea);
         if (request.Sponsor is not null) parameters.AddWithValue("sponsor", request.Sponsor);
+        if (request.SponsorName is not null) parameters.AddWithValue("name_prefix", request.SponsorName);
+        if (request.Status is { } status) parameters.AddWithValue("status", status.ToString());
         if (request.Issue is not null) parameters.AddWithValue("issue", request.Issue);
         if (request.From is { } from) parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
         if (request.To is { } to) parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });

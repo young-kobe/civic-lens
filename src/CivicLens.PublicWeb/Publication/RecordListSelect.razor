@@ -17,4 +17,8 @@
     [Parameter, EditorRequired] public IReadOnlyList<SearchChoiceData> Choices { get; set; } = default!;
     [Parameter] public string? Selected { get; set; }
     [Parameter] public string AnyText { get; set; } = "Any";
+
+    /// <summary>The label of the selected choice, as a filter chip shows it, or null when no choice is selected.</summary>
+    public static string? LabelOf(IReadOnlyList<SearchChoiceData> choices, string? selected) =>
+        selected is null ? null : choices.FirstOrDefault(choice => choice.Value == selected)?.Label;
 }

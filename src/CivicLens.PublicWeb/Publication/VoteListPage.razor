@@ -1,21 +1,12 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Release="Data.Release" RowCount="Data.Votes.Count" Filter="Data.Filter" NextCursor="@Data.NextCursor"
-                 Description="House and Senate roll call votes of the published release, newest first. Each vote links to its record page."
+<RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Total="Data.VotesInRelease" RowCount="Data.Votes.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="House and Senate roll call votes, newest first. To see how one member voted, open their page from Officials."
-                 FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes"
-                 Scope="This page counts House and Senate roll call votes in this release that match the filters. A page holds 25 votes."
-                 EmptyTitle="No vote matches these filters.">
+                 FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters.">
     <Meta><a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a></Meta>
     <Fields>
-        <Field Label="Chamber" For="votes-chamber">
-            <select id="votes-chamber" name="chamber">
-                <option value="">All</option>
-                <option value="house" selected="@(Data.Filter.Value("chamber") == "house")">House</option>
-                <option value="senate" selected="@(Data.Filter.Value("chamber") == "senate")">Senate</option>
-            </select>
-        </Field>
+        <RecordListSelect Id="votes-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Selected="@Data.Filter.Value("chamber")" AnyText="All" />
         <RecordListSelect Id="votes-kind" Name="kind" Label="Kind of vote" Choices="Data.Kinds" Selected="@Data.Filter.Value("kind")" />
         <RecordListSelect Id="votes-issue" Name="issue" Label="Issue" Choices="Data.Issues" Selected="@Data.Filter.Value("issue")" />
         <Field Label="Bill number" For="votes-bill"><input id="votes-bill" type="search" name="bill" placeholder="H.R. 5334" autocomplete="off" value="@Data.Filter.Value("bill")" /></Field>
@@ -44,6 +35,15 @@
 @code {
     [Parameter, EditorRequired] public VoteListPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private static readonly SearchChoiceData[] Chambers = [new("house", "House"), new("senate", "Senate")];
+
+    /// <summary>The chips in the order of the mockup: chamber, kind of vote, bill number, issue.</summary>
+    private IReadOnlyList<string?> Chips =>
+    [
+        RecordListSelect.LabelOf(Chambers, Data.Filter.Value("chamber")), RecordListSelect.LabelOf(Data.Kinds, Data.Filter.Value("kind")),
+        Data.Filter.Value("bill") is { } bill ? $"Bill {bill}" : null, RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue"))
+    ];
 
     private static string Meta(VoteListRowData vote) => string.Join(", ", new[]
     {

@@ -26,22 +26,30 @@ public sealed class VoteStore(NpgsqlDataSource views)
         """;
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
-    public async Task<VotePage?> ListAsync(VoteRequest request, CancellationToken cancellationToken)
+    public async Task<VotePage?> ListAsync(VoteRequest request, CancellationToken cancellationToken) =>
+        (await ReadPageAsync(request, withTotal: false, cancellationToken))?.Page;
+
+    /// <summary>Reads one page and the number of votes of the active release, in one query, as the officials list reads its total. A filter never changes the total.</summary>
+    public async Task<(VotePage Page, int VotesInRelease)?> ListWithTotalAsync(VoteRequest request, CancellationToken cancellationToken) =>
+        await ReadPageAsync(request, withTotal: true, cancellationToken) is { } read ? (read.Page, read.Total!.Value) : null;
+
+    private async Task<(VotePage Page, int? Total)?> ReadPageAsync(VoteRequest request, bool withTotal, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(ListSql(request));
+        await using var command = views.CreateCommand(ListSql(request, withTotal));
         AddParameters(command, request);
         var rows = new List<VoteRow>();
-        int? release = null;
+        int? release = null, total = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
+                if (withTotal) total = ViewColumns.Total(reader);
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? VoteCursor.Of(active, page[^1]).Encode() : null;
-        return new(active, page, next);
+        return (new(active, page, next), total);
     }
 
     private const string BillChambersSql = """
@@ -352,8 +360,8 @@ public sealed class VoteStore(NpgsqlDataSource views)
         (request.Officials.Length == 0 ? "" : " AND m.official_id = ANY(@officials)") +
         (request.Cursor is null ? "" : " AND m.\"position\" > @after");
 
-    private static string ListSql(VoteRequest request) => $"""
-        SELECT a.release_number, {Columns}
+    private static string ListSql(VoteRequest request, bool withTotal) => $"""
+        SELECT a.release_number, {Columns}{(withTotal ? ViewColumns.TotalColumn("public_api.votes") : "")}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.* FROM public_api.votes v

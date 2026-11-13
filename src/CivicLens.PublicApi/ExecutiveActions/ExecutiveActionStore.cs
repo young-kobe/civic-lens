@@ -29,7 +29,8 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
          WHERE e.record_id = @id
         """;
 
-    /// <summary>Reads one page of the list, newest signature first. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
+    /// <summary>Reads one page of the list, newest signature first, and the number of executive actions of the active release in the same query.
+    /// Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<ExecutiveActionPage?> ListAsync(ExecutiveActionListRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand(ListSql(request));
@@ -44,20 +45,22 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
         }
         var rows = new List<ExecutiveActionRow>();
         int? release = null;
+        var total = 0;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
+                total = ViewColumns.Total(reader);
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
-        return new(active, page, rows.Count > request.Limit ? ExecutiveActionCursor.Of(active, page[^1]).Encode() : null);
+        return new(active, total, page, rows.Count > request.Limit ? ExecutiveActionCursor.Of(active, page[^1]).Encode() : null);
     }
 
     private static string ListSql(ExecutiveActionListRequest request) => $"""
         SELECT a.release_number, e.record_id, e.revision_number, e.headline, e.kind, e.document_number, e.signed_on, e.published_on,
-               e.federal_register_citation, e.document_url, e.official_id, e.president_name
+               e.federal_register_citation, e.document_url, e.official_id, e.president_name{ViewColumns.TotalColumn("public_api.executive_actions")}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT e.* FROM public_api.executive_actions e

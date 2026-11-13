@@ -19,14 +19,13 @@ public static class PublicSections
     /// <summary>The folder of the gated server preview. <c>ServerPageEndpoints</c> serves every preview route under it.</summary>
     public const string PreviewFolder = "web";
 
-    /// <summary>The five per-kind list pages, in tab order. The one owner of their labels and paths.</summary>
+    /// <summary>The four per-kind list pages, in tab order. The one owner of their labels and paths.</summary>
     public static readonly IReadOnlyList<RecordList> RecordLists =
     [
         new(PublishedRecordKind.Vote, "Votes", PreviewFolder + "/votes"),
         new(PublishedRecordKind.Action, "Bills", PreviewFolder + "/bills"),
         new(PublishedRecordKind.Statement, "Statements", PreviewFolder + "/statements"),
-        new(PublishedRecordKind.ExecutiveAction, "Executive actions", PreviewFolder + "/executive-actions"),
-        new(PublishedRecordKind.DocumentChange, "Document changes", PreviewFolder + "/document-changes")
+        new(PublishedRecordKind.ExecutiveAction, "Executive actions", PreviewFolder + "/executive-actions")
     ];
 
     public static RecordList ListOf(PublishedRecordKind kind) => RecordLists.Single(list => list.Kind == kind);

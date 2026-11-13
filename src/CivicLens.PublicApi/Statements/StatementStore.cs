@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -75,18 +76,22 @@ public sealed class StatementStore(NpgsqlDataSource views)
         return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations));
     }
 
-    public Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken) =>
-        ReadPageAsync(views.CreateCommand(ListSql(request)), request, cancellationToken);
+    public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken) =>
+        (await ReadAsync(views.CreateCommand(ListSql(request)), request, withTotal: false, cancellationToken))?.Page;
 
-    /// <summary>Reads the page inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
-    public Task<StatementPage?> ListAsync(NpgsqlTransaction transaction, StatementRequest request, CancellationToken cancellationToken) =>
-        ReadPageAsync(new NpgsqlCommand(ListSql(request), transaction.Connection, transaction), request, cancellationToken);
+    /// <summary>Reads the page and the number of statements of the active release inside the transaction of the caller, so that it shares a snapshot
+    /// with the other reads of that transaction. A filter never changes the total.</summary>
+    public async Task<(StatementPage Page, int StatementsInRelease)?> ListWithTotalAsync(NpgsqlTransaction transaction, StatementRequest request,
+        CancellationToken cancellationToken) =>
+        await ReadAsync(new NpgsqlCommand(ListSql(request, withTotal: true), transaction.Connection, transaction), request, withTotal: true, cancellationToken) is { } read
+            ? (read.Page, read.Total!.Value)
+            : null;
 
-    private static string ListSql(StatementRequest request) => $"""
+    private static string ListSql(StatementRequest request, bool withTotal = false) => $"""
         SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
                ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
                       WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
-               s.issue_ids
+               s.issue_ids{(withTotal ? ViewColumns.TotalColumn("public_api.statements") : "")}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT s.* FROM public_api.statements s
@@ -95,11 +100,12 @@ public sealed class StatementStore(NpgsqlDataSource views)
          ORDER BY s.statement_date DESC NULLS LAST, s.record_id
         """;
 
-    private static async Task<StatementPage?> ReadPageAsync(NpgsqlCommand command, StatementRequest request, CancellationToken cancellationToken)
+    private static async Task<(StatementPage Page, int? Total)?> ReadAsync(NpgsqlCommand command, StatementRequest request, bool withTotal, CancellationToken cancellationToken)
     {
         await using var _ = command;
         command.Parameters.AddWithValue("take", request.Limit + 1);
         if (request.Official is not null) command.Parameters.AddWithValue("official", request.Official);
+        if (request.SpeakerName is not null) command.Parameters.AddWithValue("name_prefix", request.SpeakerName);
         if (request.Issue is not null) command.Parameters.AddWithValue("issue", request.Issue);
         if (request.From is { } from) command.Parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
         if (request.To is { } to) command.Parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
@@ -109,17 +115,18 @@ public sealed class StatementStore(NpgsqlDataSource views)
             if (cursor.StatementDate is { } date) command.Parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = date });
         }
         var rows = new List<StatementRow>();
-        int? release = null;
+        int? release = null, total = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
+                if (withTotal) total = ViewColumns.Total(reader);
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? StatementCursor.Of(active, page[^1]).Encode() : null;
-        return new(active, page, next);
+        return (new(active, page, next), total);
     }
 
     private const string AfterDated = " AND (s.statement_date < @cursor_date OR s.statement_date IS NULL OR (s.statement_date = @cursor_date AND s.record_id > @cursor_id))";
@@ -134,6 +141,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
     // OFFSET 0 keeps the speaker lookup correlated through the security barrier view.
     private static string Filters(StatementRequest request) =>
         (request.Official is null ? "" : " AND EXISTS (SELECT 1 FROM public_api.statement_speakers p WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND p.official_id = @official OFFSET 0)") +
+        (request.SpeakerName is null ? "" : $" AND EXISTS (SELECT 1 FROM public_api.statement_speakers p JOIN public_api.officials o ON o.official_id = p.official_id WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND {OfficialStore.NameMatchSql("o")} OFFSET 0)") +
         (request.Issue is null ? "" : " AND @issue = ANY(s.issue_ids)") +
         (request.From is null ? "" : " AND s.statement_date >= @from") +
         (request.To is null ? "" : " AND s.statement_date <= @to");

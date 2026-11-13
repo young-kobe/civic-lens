@@ -99,7 +99,6 @@ public static class PublicApiApp
         builder.Services.AddSingleton<BillListReader>();
         builder.Services.AddSingleton<StatementListReader>();
         builder.Services.AddSingleton<ExecutiveActionListReader>();
-        builder.Services.AddSingleton<DocumentChangeListReader>();
         builder.Services.AddSingleton<BoardsPageReader>();
         builder.Services.AddSingleton<SearchPageReader>();
         builder.Services.AddSingleton(new OfficialPageReader(views));

@@ -1,3 +1,4 @@
+using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Search;
 using Microsoft.AspNetCore.Http;
@@ -11,6 +12,10 @@ public sealed record BillRequest
     public string? BillType { get; init; }
     public int? BillNumber { get; init; }
     public string? Sponsor { get; init; }
+    /// <summary>The start of a sponsor name, as <see cref="Officials.OfficialRequest.NameOf"/> reads it. Only the list page sets it; the JSON query string never does.</summary>
+    public string? SponsorName { get; init; }
+    /// <summary>The stored status of the bill, as <see cref="BillStatusMeaning.StageOf"/> wrote it. Only the list page sets it; the JSON query string never does.</summary>
+    public BillStatusStage? Status { get; init; }
     public string? Issue { get; init; }
     public string? PolicyArea { get; init; }
     public DateOnly? From { get; init; }

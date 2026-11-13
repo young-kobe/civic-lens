@@ -7,6 +7,8 @@ namespace CivicLens.PublicApi.Statements;
 public sealed record StatementRequest
 {
     public string? Official { get; init; }
+    /// <summary>The start of a speaker name, as <see cref="Officials.OfficialRequest.NameOf"/> reads it. Only the list page sets it; the JSON query string never does.</summary>
+    public string? SpeakerName { get; init; }
     public string? Issue { get; init; }
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }

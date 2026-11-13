@@ -1,5 +1,4 @@
 using CivicLens.PublicApi.Bills;
-using CivicLens.PublicApi.DocumentChanges;
 using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Statements;
@@ -10,7 +9,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Pages;
 
-/// <summary>The gated per-kind list pages: votes, bills, statements, executive actions, and document changes. A page of one release, filter, and cursor never changes,
+/// <summary>The gated per-kind list pages: votes, bills, statements, and executive actions. A page of one release, filter, and cursor never changes,
 /// so each uses the shared page cache, as the officials list does. A cursor of another release redirects to the first page of the same filters.</summary>
 public static class ListPageEndpoints
 {
@@ -49,16 +48,6 @@ public static class ListPageEndpoints
             return await reader.ReadAsync(request, cancellationToken) is not { } data ? ApiResults.NoRelease()
                 : request.Cursor is { } cursor && cursor.Release != data.Release ? FirstPage(context.Request)
                 : await RespondAsync<ExecutiveActionListPage>(context, responder, baseUrl, data.Release, data, cancellationToken);
-        });
-
-    public static Task<IResult> DocumentChangesAsync(HttpContext context, DocumentChangeListReader reader, ServerPageResponder responder, PublicBaseUrl baseUrl,
-        CancellationToken cancellationToken) =>
-        ApiResults.GuardAsync(async () =>
-        {
-            var request = DocumentChangeListReader.Parse(context.Request.Query);
-            return await reader.ReadAsync(request, cancellationToken) is not { } data ? ApiResults.NoRelease()
-                : request.Cursor is { } cursor && cursor.Release != data.Release ? FirstPage(context.Request)
-                : await RespondAsync<DocumentChangeListPage>(context, responder, baseUrl, data.Release, data, cancellationToken);
         });
 
     /// <summary>Every list page component takes the same two parameters, named <c>Data</c> and <c>RootPath</c>.</summary>

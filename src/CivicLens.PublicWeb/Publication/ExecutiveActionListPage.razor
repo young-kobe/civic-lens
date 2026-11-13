@@ -1,12 +1,9 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.ExecutiveAction" RootPath="@RootPath" Release="Data.Release" RowCount="Data.Actions.Count" Filter="Data.Filter" NextCursor="@Data.NextCursor"
-                 Description="Documents that the President signed and the Federal Register printed, newest first. Civic Lens copies each title and date from the Federal Register."
+<RecordListFrame Kind="PublishedRecordKind.ExecutiveAction" RootPath="@RootPath" Total="Data.ActionsInRelease" RowCount="Data.Actions.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="Documents that the President signed and the Federal Register printed, newest first. Civic Lens copies each title and date from the Federal Register."
-                 FilterSummary="Filter by type of document or date" Singular="executive action" Plural="executive actions"
-                 Scope="This page counts documents that the President signed and the Federal Register printed, in this release, that match the filters. A page holds 25."
-                 EmptyTitle="No executive action matches these filters.">
+                 FilterSummary="Filter by type of document or date" Singular="executive action" Plural="executive actions" EmptyTitle="No executive action matches these filters.">
     <Fields>
         <RecordListSelect Id="executive-type" Name="type" Label="Type of document" Choices="Data.Kinds" Selected="@Data.Filter.Value("type")" />
         <RecordListDates IdPrefix="executive" Filter="Data.Filter" />
@@ -16,13 +13,10 @@
         <li>Use a wider date range.</li>
         <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></li>
     </EmptyTips>
-    <Intro>
-        <Notice Title="What these documents are">The President signs these documents. The Federal Register prints them, and Civic Lens copies each title and date from there. A title alone does not show what a document does, so each page links to the full text.</Notice>
-    </Intro>
     <Rows>
         @foreach (var action in Data.Actions)
         {
-            <PublicRecordRow Icon="IconName.ExecutiveAction" Href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))" Headline="@action.Headline" Label="@action.Label"
+            <PublicRecordRow Icon="IconName.ExecutiveAction" Href="@(RootPath + PublicationProtocol.RecordPagePath(action.RecordId))" Headline="@action.Headline"
                              Meta="@($"{PublishedRecordLabels.ExecutiveActionKind(action.Kind)}, Signed {Moment.Day(action.SignedOn)}")" />
         }
     </Rows>
@@ -31,4 +25,6 @@
 @code {
     [Parameter, EditorRequired] public ExecutiveActionListPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private IReadOnlyList<string?> Chips => [Data.Type is { } type ? PublishedRecordLabels.ExecutiveActionKindPlural(type) : null];
 }

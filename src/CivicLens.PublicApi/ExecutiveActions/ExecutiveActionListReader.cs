@@ -18,9 +18,8 @@ public sealed class ExecutiveActionListReader(ExecutiveActionStore store)
     public async Task<ExecutiveActionListPageData?> ReadAsync(ExecutiveActionListRequest request, CancellationToken cancellationToken)
     {
         if (await store.ListAsync(request, cancellationToken) is not { } page) return null;
-        var rows = page.Actions.Select(action => new ExecutiveActionListRowData(action.RecordId, action.Headline, null, action.Kind, action.SignedOn)).ToArray();
-        var filter = RecordListFilter.Of(("type", request.Kind is { } kind ? QueryValues.ChoiceText(kind) : null),
-            ("from", request.From?.ToString("yyyy-MM-dd")), ("to", request.To?.ToString("yyyy-MM-dd")));
-        return new(page.Release, rows, filter, page.NextCursor, Kinds);
+        var rows = page.Actions.Select(action => new ExecutiveActionListRowData(action.RecordId, action.Headline, action.Kind, action.SignedOn)).ToArray();
+        var filter = RecordListFilter.Of(request.From, request.To, ("type", request.Kind is { } kind ? QueryValues.ChoiceText(kind) : null));
+        return new(page.Release, page.ActionsInRelease, rows, filter, request.Kind, page.NextCursor, Kinds);
     }
 }
