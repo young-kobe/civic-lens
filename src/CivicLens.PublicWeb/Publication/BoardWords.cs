@@ -24,6 +24,8 @@ public static class BoardWords
 
     public const string CaucusRule = "An independent who caucuses with a party counts with that party.";
 
+    public const string AgreementId = "parties-agreed";
+
     public const string AgreementTotalLabel = "All substantive votes";
 
     public const string AgreementCaution = "That the parties voted the same way is about the question of each vote. It does not show that they agree on an issue.";

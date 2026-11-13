@@ -134,7 +134,7 @@ table[data-paged]:focus { outline: none; }
 .home-executive-list li > div:last-child > p:last-child { margin: var(--s2) 0 0; }
 .home-executive-list li > div:last-child > a { font-weight: 700; text-underline-offset: .16em; }
 .home-executive-icon { border-color: var(--exec-ink); background: var(--exec-surface); color: var(--exec-ink); }
-.home-freshness { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: 0; color: var(--muted); font-size: var(--t-sm); }
+.public-freshness { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s6) 0 0; color: var(--muted); font-size: var(--t-sm); }
 
 .home-brief-line { margin: var(--s6) 0 0; padding-top: var(--s4); border-top: 1px solid var(--line); }
 .home-brief-line > span:first-child { font-weight: 700; }

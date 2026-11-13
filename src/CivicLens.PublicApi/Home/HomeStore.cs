@@ -9,7 +9,6 @@ namespace CivicLens.PublicApi.Home;
 /// <summary>Reads home highlights and issue counts from one active-release snapshot.</summary>
 public sealed class HomeStore(NpgsqlDataSource views)
 {
-    private const int VotesPerChamber = 2;
     private const string VoteColumns = """
         v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number,
         v.headline, v.label, v.result, v.yea, v.nay, v.bill_type, v.bill_number, v.summary, v.text_origin, v.alignment,
@@ -96,7 +95,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
         await using var command = new NpgsqlCommand(Sql, connection, transaction);
         command.Parameters.AddWithValue("chambers", Enum.GetNames<PublishedChamber>());
         command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
-        command.Parameters.AddWithValue("take", VotesPerChamber);
+        command.Parameters.AddWithValue("take", PublishedCountRules.HomeVotesPerChamber);
         var votes = new List<HomeVote>();
         HomeFeaturedVote? featured = null;
         HomeBrief? brief = null;

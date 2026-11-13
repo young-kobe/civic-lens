@@ -9,21 +9,18 @@ public sealed record HomeHighlights(ImmutableArray<PublishedRecordEntry> Votes, 
 {
     public ReleaseBillLines BillLines { get; init; } = ReleaseBillLines.None;
 
-    public const int VotesPerChamber = 2;
-    public const int ExecutiveActionCount = 3;
-
     public static HomeHighlights From(PublicationRelease release, ImmutableArray<OfficialBoardPage> boards, int officialCount)
     {
         var byKind = release.Records.ToLookup(entry => entry.Kind);
-        return new(SubstantiveVotes(byKind[PublishedRecordKind.Vote]), NewestOf(byKind[PublishedRecordKind.ExecutiveAction], ExecutiveActionCount),
+        return new(SubstantiveVotes(byKind[PublishedRecordKind.Vote]), NewestOf(byKind[PublishedRecordKind.ExecutiveAction], PublishedCountRules.HomeExecutiveActionCount),
             BreakLeader.All(boards), officialCount);
     }
 
     private static ImmutableArray<PublishedRecordEntry> SubstantiveVotes(IEnumerable<PublishedRecordEntry> votes)
     {
         var byChamber = votes.Where(entry => entry.Alignment is not null).ToLookup(entry => entry.Chamber);
-        var chosen = NewestOf(byChamber[PublishedChamber.House], VotesPerChamber).Concat(NewestOf(byChamber[PublishedChamber.Senate], VotesPerChamber));
-        return NewestOf(chosen, 2 * VotesPerChamber);
+        var chosen = NewestOf(byChamber[PublishedChamber.House], PublishedCountRules.HomeVotesPerChamber).Concat(NewestOf(byChamber[PublishedChamber.Senate], PublishedCountRules.HomeVotesPerChamber));
+        return NewestOf(chosen, 2 * PublishedCountRules.HomeVotesPerChamber);
     }
 
     private static ImmutableArray<PublishedRecordEntry> NewestOf(IEnumerable<PublishedRecordEntry> entries, int count) =>

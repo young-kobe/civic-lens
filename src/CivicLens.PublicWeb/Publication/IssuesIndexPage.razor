@@ -1,0 +1,31 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.Issues" CanonicalPath="@PublicationProtocol.FacetsPath" Title="Issues" Description="@Lede" RootPath="@RootPath">
+    <PageHeader Title="Issues" Lede="@Lede" />
+    @if (Data.Issues.Length == 0)
+    {
+        <Panel Label="Issues" Padded="true">
+            <EmptyState Level="2" Title="None yet" Text="No published record has one." />
+        </Panel>
+    }
+    else
+    {
+        @* The tiles carry their own border, so no panel frames them: a card inside a card costs width at 360 px. *@
+        <section aria-label="Issues">
+            <ul class="home-issue-list" role="list">
+                @foreach (var issue in Data.Issues)
+                {
+                    <li><IssueTile Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))" Name="@issue.Name" Congress="issue.Congress"
+                                   SubstantiveVotes="issue.SubstantiveVotes" Bills="issue.Bills" /></li>
+                }
+            </ul>
+        </section>
+    }
+</PublicPage>
+
+@code {
+    private const string Lede = "Each page lists the published records that name the issue.";
+
+    [Parameter, EditorRequired] public IssuesIndexData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+}

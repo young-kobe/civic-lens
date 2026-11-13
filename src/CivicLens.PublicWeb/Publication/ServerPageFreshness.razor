@@ -1,0 +1,19 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+@if (Context.NewestHouseRollCall is not null || Context.NewestSenateRollCall is not null)
+{
+    <p class="public-freshness">
+        @if (Context.NewestHouseRollCall is { } house)
+        {
+            <span>Newest published House roll call: @Moment.Day(house)</span>
+        }
+        @if (Context.NewestSenateRollCall is { } senate)
+        {
+            <span>Newest published Senate roll call: @Moment.Day(senate)</span>
+        }
+    </p>
+}
+
+@code {
+    [Parameter, EditorRequired] public ServerPageContext Context { get; set; } = default!;
+}

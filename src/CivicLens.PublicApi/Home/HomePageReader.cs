@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Boards;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Components.Ui;
@@ -8,14 +9,15 @@ using Microsoft.Extensions.Logging;
 namespace CivicLens.PublicApi.Home;
 
 /// <summary>
-/// Maps the current public home answer to the public presentation contract. The featured vote page and the party boards come from their own readers.
+/// Maps the current public home answer to the public presentation contract, with the freshness of the same answer, without rereading its release.
+/// The featured vote page and the party boards come from their own readers.
 /// Each one joins the page only when it read the same release as the home answer, so the page never mixes two releases.
 /// </summary>
 public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsPageReader boards, PublicBaseUrl? browserApiUrl, ILogger<HomePageReader> logger)
 {
     public string? BrowserApiRoot => browserApiUrl?.Join(string.Empty).TrimEnd('/');
 
-    public async Task<HomePageData?> ReadAsync(CancellationToken cancellationToken)
+    public async Task<HomePageRead?> ReadAsync(CancellationToken cancellationToken)
     {
         if (await home.ReadAsync(cancellationToken) is not { } answer) return null;
         var featured = answer.FeaturedVote is { } vote
@@ -30,13 +32,12 @@ public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsP
             group.Kind, group.Count, group.NewestRecordId, group.NewestTitle, group.NewestSignedOn)).ToArray();
         var issues = answer.Issues.Select(issue => new HomeIssueData(
             issue.IssueId, issue.Name, issue.Congress, issue.SubstantiveVotes, issue.Bills)).ToArray();
-        return new(answer.Release, featured, votes, brief)
+        var data = new HomePageData(answer.Release, featured, votes, brief)
         {
             ExecutiveActions = executiveActions,
-            Issues = issues,
-            NewestHouseRollCall = answer.NewestHouseRollCall,
-            NewestSenateRollCall = answer.NewestSenateRollCall
+            Issues = issues
         };
+        return new(data, new(answer.Release, answer.NewestHouseRollCall, answer.NewestSenateRollCall));
     }
 
     /// <summary>The chamber bar of a recent vote, as the bill page draws it: no half line, and no bar without all four counts.</summary>

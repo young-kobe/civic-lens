@@ -65,7 +65,7 @@
             @Split(Page.Loyalists, PublishedBoardView.LoyalistsTitle(Board), PublishedBoardView.WithShareHeader(Board), member => member.Matched, member => member.MatchShare, congress)
         </Panel>
         <Panel Title="@PublishedBoardView.MissedTitle(Board)" Padded="true">
-            <p>@PublishedOfficialView.MissedVoteMeaning</p>
+            <p>@VoteWords.MissedVoteMeaning</p>
             <p class="muted small">@PublishedBoardView.Cause</p>
             <DataTable Roles="true" PagedRows="officials" Items="Page.MostMissed" Caption="@PublishedBoardView.MissedTitle(Board)" DefaultOrder="@PublishedBoardView.MostMissedOrder">
                 <Head><TableCell Header Sort="SortKind.Text">Official</TableCell><TableCell Header Sort="SortKind.Number" DefaultSort="true">Missed votes</TableCell></Head>

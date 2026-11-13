@@ -1,0 +1,96 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="PublicSection.About" CanonicalPath="@PublicationProtocol.AboutPagePath" Title="About Civic Lens" Description="What Civic Lens covers, where its records come from, and who approves them." RootPath="@RootPath">
+    <PageHeader Title="About Civic Lens" Lede="Civic Lens shows what U.S. officials say and do, using official records you can check yourself. Each record shows its sources. Civic Lens is not part of any government office, party, campaign or company." />
+    <Panel Title="What it covers" Padded="true">
+        <p>Civic Lens covers the federal government of the United States: the members of Congress and the President. Most records are from the current Congress. Some pages also show earlier Congresses and former officials.</p>
+    </Panel>
+    <Panel Title="Where the records come from" Padded="true">
+        <p>Most records come from official sources: Congress.gov, the House Clerk, the <Term Key="federal-register">Federal Register</Term> and officials' own websites. Senate votes come from @PublishedRecordLabels.Voteview. Voteview is not an official source, so each Senate vote page links the official Senate roll call.</p>
+        <p>Each record shows its sources and the exact text it cites.</p>
+    </Panel>
+    <Panel Title="Who approves a record" Padded="true">
+        <p>Here, code means software that we wrote. It follows fixed rules. No AI decides an approval.</p>
+        <p>Code approves the bill and resolution records, the vote records, and the records of presidential documents from the Federal Register. Code first checks their citations against the source.</p>
+        <p>Code also approves a <Term Key="statement">statement</Term> when the statement comes from the own website of the office of that official and names no other speaker. An AI model drafts these statements, finds their issues, and proposes their date. Code then checks the quote and the date against the saved page. A statement with a date must show the date in the quote, and the date must be within @PublishedCountRules.StatementDateWindowDays days before Civic Lens saved the page.</p>
+        <p>A record of a presidential document shows the official title from the Federal Register. Civic Lens does not summarize these documents yet.</p>
+        <p>A model drafts some records. A person checks and approves each <Term Key="document-change">document change</Term>, brief, and link, and each statement that code does not approve. A model never approves a record.</p>
+        <p>On a bill or resolution page or a vote page, a summary that a model wrote has the label "@PublishedRecordLabels.ModelWording". Wording that code wrote from the bill title, the sponsor, and the introduction date has the label "@PublishedRecordLabels.CodeWording".</p>
+        <p>On a statement page, a summary that a model wrote has this label when code approved it: "@PublishedRecordLabels.StatementModelWording" When a person approved it, the label is this: "@PublishedRecordLabels.StatementCheckedByPersonWording"</p>
+        <p>A link joins a statement to a bill or a vote. A link is not a verdict. It does not say that the vote or the bill matches the statement.</p>
+    </Panel>
+    <Panel Title="Weekly briefs" Padded="true">
+        <p>A weekly brief is a sample. It is not a full account of the week. Each brief says how many records it cites and how many records Civic Lens considered. <a href="@(RootPath + PublicationProtocol.BriefsPagePath(1))">See all weekly briefs.</a></p>
+    </Panel>
+    <Panel Title="Corrections and withdrawals" Padded="true">
+        <p>A record page shows each <Term Key="correction">correction</Term>. A person can withdraw a record. The page of a withdrawn record says that it is withdrawn. Its content is no longer published.</p>
+        <p>You can tell us about a mistake on the <a href="@(RootPath + PublicationProtocol.ReportPagePath)">report page</a>. A person checks each report.</p>
+    </Panel>
+    <Panel Title="Contact" Padded="true">
+        <p><strong>If a record is wrong:</strong> Open the record. Use the link in the footer that starts with "@PublishedRecordLabels.ReportLinkStart". The report names the exact record and version, so we can find and fix the problem fast.</p>
+        <p><strong>For anything else:</strong> Send an email to <a href="mailto:@PublishedRecordLabels.ContactEmail">@PublishedRecordLabels.ContactEmail</a>. We read every message. We cannot promise to answer each one.</p>
+        <p>Officials and their staff use the same two ways. Please do not send private details about yourself or other people.</p>
+    </Panel>
+    <Panel Title="Privacy" Padded="true">
+        <p>You do not need an account. We set no cookies. We use no analytics and no ad trackers. We never sell data.</p>
+        <DataTable Roles="true" Items="PrivacyRows" Caption="What we keep and who else sees it">
+            <Head><TableCell Header>When you</TableCell><TableCell Header>What we keep</TableCell><TableCell Header>Who else sees it</TableCell></Head>
+            <Row Context="row">
+                <TableCell Main>@row.Action</TableCell>
+                <TableCell Label="What we keep">@row.Kept</TableCell>
+                <TableCell Label="Who else sees it">@row.SeenBy</TableCell>
+            </Row>
+        </DataTable>
+        <p>Cloudflare keeps its own logs under its <a href="@CloudflarePrivacyUrl" rel="noopener noreferrer">privacy policy</a>.</p>
+        <p>We keep your report in our review system. The copy on the report server is deleted after @ReaderReportProtocol.PurgeAfterDays days, once the review system has it.</p>
+        <p>After a person closes your report, we delete it from the review system after one year. Our encrypted backups can keep it for up to 6 more months.</p>
+    </Panel>
+    <Panel Title="Using our records" Padded="true">
+        <p>You may copy, share and build on our records. Please credit us and link to the record.</p>
+        <DataTable Roles="true" Items="ReuseRows" Caption="Terms for each kind of material">
+            <Head><TableCell Header>What</TableCell><TableCell Header>Terms</TableCell><TableCell Header>Credit</TableCell></Head>
+            <Row Context="row">
+                <TableCell Main>@row.What</TableCell>
+                <TableCell Label="Terms">@row.Terms@if (row.LicenseName is not null) {<text> <a href="@row.LicenseUrl" rel="noopener noreferrer">@row.LicenseName</a>.</text>}</TableCell>
+                <TableCell Label="Credit">@row.Credit</TableCell>
+            </Row>
+        </DataTable>
+        <p>A record can be corrected or withdrawn. Link to it, so your readers see the current version. Do not suggest that Civic Lens supports you, a product or a campaign.</p>
+    </Panel>
+    <Panel Title="More information" Padded="true">
+        <p>The page <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How the counts work</a> explains how the counts on each official page work.</p>
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private const string CloudflarePrivacyUrl = "https://www.cloudflare.com/privacypolicy/";
+    private const string CreativeCommonsUrl = "https://creativecommons.org/licenses/by/4.0/";
+    private const string VoteviewCitation = "Lewis, Jeffrey B., Keith Poole, Howard Rosenthal, Adam Boche, Aaron Rudkin, and Luke Sonnet (2026). Voteview: Congressional Roll-Call Votes Database. https://voteview.com/";
+    private const string CreditLine = "\"Civic Lens, civic-lens.info\" and a link to the record.";
+
+    private static readonly IReadOnlyList<PrivacyRow> PrivacyRows =
+    [
+        new("Read a page", "Nothing.", "Cloudflare delivers our pages. Like any web host, it sees your IP address and the page you open."),
+        new("Pick light or dark", "Your choice, saved in your own browser only.", "No one."),
+        new("Look up your ZIP", "Your ZIP, saved in your browser until you use Forget.", "Cloudflare carries your lookup to us. It sees your IP address and ZIP."),
+        new("Search", "Nothing. The search service does not save your words or your IP address.", "Cloudflare carries your search to us and sees your IP address and your search words, because they are in the page address."),
+        new("Report a problem", "The record, the problem type and your text. No name, no email and no IP address.", "Cloudflare carries your report to us and sees your IP address. Its Turnstile check confirms you are a person and does not read your text."),
+        new("Email us", "Your message and your email address, so we can answer.", "Cloudflare passes your email to our mailbox at Google (Gmail). Our reply goes out through Resend, a mail delivery service.")
+    ];
+
+    private static readonly IReadOnlyList<ReuseRow> ReuseRows =
+    [
+        new("Our records, summaries and weekly briefs", "Free to reuse, also for business, under", CreditLine, "CC BY 4.0", CreativeCommonsUrl),
+        new("Our data files", "The same terms. Each release has a file for every record.", "The same."),
+        new("Words we quote from officials and Congress", "Not ours. Most work of the federal government is public domain in the US.", "Name the original source. Each record names it or links to the record that does."),
+        new("Senate vote data from Voteview", "Not ours. Voteview asks everyone who uses its data to cite it.", VoteviewCitation),
+        new("Official portraits", "Public domain, from the Government Publishing Office.", "The credit shown with each photo or below the list."),
+        new("Source code", "AGPL-3.0, on", "Keep the license notice.", "GitHub", "https://github.com/young-kobe/civic-lens")
+    ];
+
+    private sealed record PrivacyRow(string Action, string Kept, string SeenBy);
+
+    private sealed record ReuseRow(string What, string Terms, string Credit, string? LicenseName = null, string? LicenseUrl = null);
+}

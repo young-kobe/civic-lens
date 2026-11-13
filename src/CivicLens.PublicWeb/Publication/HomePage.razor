@@ -79,19 +79,6 @@
     </Hero>
     <ChildContent>
         <div class="home-grid">
-            @if (Data.NewestHouseRollCall is not null || Data.NewestSenateRollCall is not null)
-            {
-                <p class="home-freshness">
-                    @if (Data.NewestHouseRollCall is { } newestHouse)
-                    {
-                        <span>Newest published House roll call: @newestHouse.ToString("d MMM yyyy")</span>
-                    }
-                    @if (Data.NewestSenateRollCall is { } newestSenate)
-                    {
-                        <span>Newest published Senate roll call: @newestSenate.ToString("d MMM yyyy")</span>
-                    }
-                </p>
-            }
             @if (BrowserApiUrl is not null)
             {
                 <ZipLookupResults />
@@ -145,14 +132,8 @@
                     <ul class="home-issue-list" role="list">
                         @foreach (var issue in Data.Issues)
                         {
-                            <li>
-                                <a class="home-issue-tile" href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">
-                                    <span class="home-issue-name">@issue.Name</span>
-                                    <span class="home-issue-counts">@issue.SubstantiveVotes substantive vote@(issue.SubstantiveVotes == 1 ? "" : "s")</span>
-                                    <span class="home-issue-counts">@issue.Bills bill@(issue.Bills == 1 ? "" : "s")</span>
-                                    <span class="home-issue-congress muted small">@CongressCalendar.Ordinal(issue.Congress) Congress</span>
-                                </a>
-                            </li>
+                            <li><IssueTile Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))" Name="@issue.Name" Congress="issue.Congress"
+                                           SubstantiveVotes="issue.SubstantiveVotes" Bills="issue.Bills" /></li>
                         }
                     </ul>
                 </section>

@@ -23,6 +23,13 @@ public static class PublicSections
         new(PublicSection.Boards, "Compare parties", StaticBoardsPath)
     ];
 
+    /// <summary>The path of the server issues index on the gated preview. Only a server page links it, until the cutover PR maps <see cref="PublicationProtocol.FacetsPath"/>.</summary>
+    public const string PreviewIssuesPath = "web/" + PublicationProtocol.FacetsPath;
+
+    /// <summary>The header of a server page. It is the header with the Issues link on the server issues index.</summary>
+    public static readonly IReadOnlyList<NavLink> PreviewHeader =
+        [.. Header.Select(link => link.Section == PublicSection.Issues ? link with { Path = PreviewIssuesPath } : link)];
+
     /// <summary>The old all records list. It is outside the header, and it names its own page in the trail.</summary>
     private static readonly NavLink AllRecords = new(PublicSection.AllRecords, "Votes and bills", PublicationProtocol.AllRecordsPagePath(1));
 

@@ -1,0 +1,80 @@
+@using CivicLens.Publication.Contracts
+
+<PublicPage Section="null" CanonicalPath="@PublicationProtocol.MethodPagePath" Title="How the counts work" Description="How Civic Lens builds the counts on each official page. Code builds them from published records. No model is used." RootPath="@RootPath">
+    <PageHeader Title="How the counts work" Lede="Code builds the counts on the page of each member of Congress. No model is used. An official outside Congress, such as the President, casts no votes in Congress. Their page lists only their published records." />
+    <Panel Title="What the issue counts mean" Padded="true">
+        <p>The tab "Issues they work on" has one row for each tracked issue. Each row has three counts.</p>
+        <ul>
+            <li><Term Key="statement">Their statements</Term>: the published statements of the official on the issue. A statement counts in the Congress of its day. The day is the statement day, or the first publication day when the statement has no day.</li>
+            <li><Term Key="bill">Bills</Term> they sponsored: the published bills on the issue that name the official as <Term Key="sponsor">sponsor</Term>. The row lists the official title of each bill. <Term Key="cosponsor">Cosponsors</Term> do not count. A bill counts in the Congress of its latest sponsorship day.</li>
+            <li>Votes they cast: the substantive <Term Key="roll-call-vote">roll call votes</Term> on the issue where the official cast a vote. A roll call counts once. A cast of <Term Key="not-voting">Not voting</Term> does not count. Any other cast counts.</li>
+        </ul>
+        <p>Each count is a number of records. It is not a share, a rank, or a measure of how much the official cares about the issue. A record on several issues counts once for each issue. A record with no tracked issue is in no row.</p>
+    </Panel>
+    <Panel Title="Missed votes" Padded="true">
+        <p>@VoteWords.MissedVoteMeaning The count covers the roll calls of the current Congress on this site, in each chamber where the official has votes.</p>
+        <p>The total is the number of roll calls on this site that the chamber held while the official served. A roll call that is not on this site is in neither number.</p>
+        <p>The page shows a share only when the total is at least @PublishedCountRules.MinimumRecordsForShare roll calls.</p>
+    </Panel>
+    <Panel Title="Votes with their party" Padded="true">
+        <p>@VoteWords.SplitMeaning</p>
+        <p>Example: a member casts <Term Key="yea">Yes</Term> or <Term Key="nay">No</Term> on 48 split votes and votes with most of their party on 45. The page shows 45 of 48.</p>
+        <p>The majority of a party is the Yes or No cast that more of its members made. A party with equal Yes and No counts has no majority, so its roll call is not a split vote. A vote for a candidate, such as the election of the Speaker, is never a split vote.</p>
+        <p>The page counts only split votes where the official cast Yes (Yea or Aye) or No (Nay). The official votes with the party when the cast equals the majority of the official party in the same chamber. The party is the party of the official on the day of the vote, or the party they caucus with.</p>
+        <p>A cast of <Term Key="present">Present</Term> or Not voting is not in either number. The page states how many split votes it left out. It shows a percent only when the official cast Yes or No on at least @PublishedCountRules.MinimumRecordsForShare split votes.</p>
+        <p>An independent who caucuses with the @(PublishedPartyMajority.Democrat)s or the @(PublishedPartyMajority.Republican)s, which means they work with that party in Congress, counts with that party. The page leaves out votes that the official cast while in another party and not caucusing with either. For a member who has left Congress, the page uses the party letter in the vote record, so the page does not count the votes of an independent who left.</p>
+    </Panel>
+    <Panel Title="The voting boards" Padded="true">
+        <p>Each voting board page lists the members of one party in one chamber. It has three lists: the share of split votes where the member voted against most of the party, the share where the member voted with most of the party, and the number of missed votes. The lists use the figures that the official pages show, for one Congress in each chamber. That is the newest Congress with vote figures in this release, once any member of the chamber has at least @OfficialBoardPage.MinimumSplitVotes split votes cast in it. Until then the page keeps the next older Congress and says so. The House and the Senate can show different Congresses.</p>
+        <p>The two lists of split votes rank only members with at least @OfficialBoardPage.MinimumSplitVotes split votes cast as Yes or No. Each row shows the count and the total. A smaller total can come from a late start. It can also come from split votes that the member skipped. The page names the members with fewer split votes and does not rank them. The list of missed votes ranks by the number of missed votes. Each row shows the roll calls held while the member served and the dates.</p>
+        <p>The missed vote count has no party. A member who changed party shows the same missed count on the board of each party.</p>
+        <p>A board never mixes parties or chambers. The page names the officials that it leaves out, such as officials with no vote figures in this release.</p>
+        <p><a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Open the boards from the officials page.</a></p>
+    </Panel>
+    <Panel Title="What a link is" Padded="true">
+        <p>A link joins one statement to one bill or one vote. @OfficialPageText.LinkMeaning The reviewer read the statement and the bill or vote, and judged that the statement is about it.</p>
+        <p>There are four kinds of link. "Describes own bill" means the statement describes a bill that the speaker sponsors or cosponsors. "States position on" means the statement says what the speaker thinks or wants about a bill. "Claims credit for" means the statement says the speaker caused or achieved a bill, or part of it. "Statement about a vote" means the statement is about a roll call vote.</p>
+        <p>The page shows the vote of the official next to the link and leaves the judgment to the reader. A link belongs to the Congress of the day of its statement. A statement with no day belongs to the Congress of its bill or vote.</p>
+    </Panel>
+    <Panel Title="The window" Padded="true">
+        <p>All three counts use the current Congress. The current Congress of an official is the newest Congress with a published vote of that official.</p>
+    </Panel>
+    <Panel Title="Substantive votes" Padded="true">
+        <p>A vote is substantive when its kind is one of these: @SubstantiveKinds. The count of votes they cast leaves out all other kinds, such as rules, <Term Key="cloture">cloture</Term>, and motions. These are procedural votes.</p>
+    </Panel>
+    <Panel Title="The picks on the home page" Id="home-picks" Padded="true">
+        <p>Code picks the items on the home page from the published records. No model picks them. The same records on the same release day give the same picks.</p>
+        <p>The party card, "Who broke from their party most", on the home page names, for each chamber and party, the member with the highest share of split votes cast against most of the party. It uses the Congress of the voting board of that chamber, and the lede of the card names it. The board uses the newest Congress once any member has at least @OfficialBoardPage.MinimumSplitVotes split votes cast in it, and the next older Congress until then. It counts only members with at least @OfficialBoardPage.MinimumSplitVotes split votes cast as Yes or No and at least one vote against the party. A member with no such record is not named. An independent who caucuses with a party counts with that party and can be named. A former member who sat as an independent counts with no party and is never named. A member with no vote figures on this site is not counted, so the card cannot tell a member with no breaks from a member with no figures.</p>
+        <p>The list "Latest from the record" shows the @PublishedCountRules.HomeVotesPerChamber newest substantive votes of the House, the @PublishedCountRules.HomeVotesPerChamber newest substantive votes of the Senate, and the @PublishedCountRules.HomeExecutiveActionCount newest executive actions on this site, by their date. A vote counts when it is substantive and both the Democrats and the Republicans voted in it. So a procedural vote, such as a vote on a rule, and the election of the Speaker are not in the list. Each vote row names its chamber. Code picks them. A vote title can be an AI summary of the official record, and the vote page says so. The title of an executive action is the title from the Federal Register.</p>
+    </Panel>
+    <Panel Title="Vote badges in lists" Id="vote-badges" Padded="true">
+        <p>A vote row in a list shows a badge when the vote is substantive and both the Democrats and the Republicans have a majority on one side. The badge says whether the two majorities took opposite sides or the same side. A row has no badge when the vote is procedural, when the vote is for a candidate, as in the election of the Speaker, or when one of the two parties has no majority. A row has no badge either when the record lacks a party row for the Democrats or the Republicans. The line with the Yes and No counts shows in a row of the page when the list entry holds the counts. A row that the browser builds after a sort leaves out the kind icon, the party badge, and the vote counts.</p>
+    </Panel>
+    <Panel Title="When both parties agreed" Id="@BoardWords.AgreementId" Padded="true">
+        <p>Each voting board page shows how often most Democrats and most Republicans voted the same way in its chamber. Code counts the substantive roll call votes on this site in the Congress of the board. No model is used.</p>
+        <p>A vote is in the total when its kind is substantive and both the Democrats and the Republicans voted in it. The parties agreed when the majority of each party was on the same side. The majority counts only Yes and No casts. When a party has a tie, that party has no majority. That vote is in the total, but it is in neither group.</p>
+        <p>Each member counts with the party of the roster on the day of the vote. An independent who caucuses with a party counts with that party. A member who has left the roster counts with the party letter in the vote record.</p>
+        <p>The page shows the count for each kind of vote. The kinds differ a lot. Many Senate nominations pass with votes from both parties. Many amendments split the parties. So the total alone can mislead.</p>
+        <p>@BoardWords.AgreementCaution A vote by voice or by unanimous consent has no roll call, so this count leaves it out. This site does not hold every roll call vote.</p>
+        <p>The count does not appear until every vote on this site names its Congress. A vote with no Congress cannot be placed in the Congress of the board.</p>
+    </Panel>
+    <Panel Title="Presidential documents" Padded="true">
+        <p>The page of a President lists the <Term Key="executive-order">executive orders</Term>, <Term Key="proclamation">proclamations</Term>, <Term Key="presidential-notice">notices</Term>, and <Term Key="memorandum">memoranda</Term> that the <Term Key="federal-register">Federal Register</Term> published. The counts above do not include them.</p>
+        <p>Each record shows the title and the facts from the Federal Register. Code checks the facts against the saved record. No person or model summarizes the document.</p>
+    </Panel>
+    <Panel Title="Where the issues come from" Id="issue-tags" Padded="true">
+        <p>A person reviews and approves the issue tags of each statement that code does not approve. For the other statements, an AI model finds the issues and quotes the article. Code checks that the quote is in the article. No person checks that pick. Some tags can still be wrong. For a sponsored bill or a vote on a bill, the policy area in Congress.gov gives the possible issues. An AI model chooses the issues of a bill or vote. It reads the title, the policy area, and the subjects that Congress.gov lists for the bill, when there are any. A bill with no fitting issue shows no issue. Subjects cover only some bills. No person checks that pick. Older records list every possible issue.</p>
+    </Panel>
+    <Panel Title="Where the Senate votes come from" Padded="true">
+        <p>Senate votes come from @PublishedRecordLabels.Voteview. Each vote page also links the official roll call page on senate.gov.</p>
+        <p>Code checks the Voteview counts against the casts of the senators before it keeps a roll call. It skips a roll call whose counts differ.</p>
+        <p>Voteview does not list a Vice President tie-break vote. A roll call that ended 50 to 50 shows the result of the vote without the vote of the Vice President. The official roll call page on senate.gov shows that vote.</p>
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    private static string SubstantiveKinds => string.Join(", ", Enum.GetValues<PublishedVoteKind>()
+        .Where(kind => kind.IsSubstantive()).Select(kind => $"\"{PlainVoteWords.Kind(kind)}\""));
+}
