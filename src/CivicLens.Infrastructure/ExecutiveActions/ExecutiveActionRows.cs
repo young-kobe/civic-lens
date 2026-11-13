@@ -82,6 +82,20 @@ internal sealed class ExecutiveActionRows
         return revision;
     }
 
+    /// <summary>The analysis worker appends the revision that holds the summary. The review lock comes first. The revision must follow the current one
+    /// and the record must not be rejected. Code approves it in the same transaction when the approval checks pass. A refusal returns its error code and adds nothing.</summary>
+    public async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, ExecutiveActionRevision revision, string runId,
+        CancellationToken cancellationToken)
+    {
+        revision.ValidateShape();
+        await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.ExecutiveActionReview, cancellationToken);
+        var draft = await db.Set<ExecutiveActionDraftRow>().SingleOrDefaultAsync(row => row.RecordId == revision.RecordId, cancellationToken);
+        if (draft is null || draft.CurrentRevisionNumber != revision.RevisionNumber - 1) return ExecutiveSummaryErrorCodes.RevisionConflict;
+        if (draft.ReviewStatus == ReviewStatus.Rejected) return ExecutiveSummaryErrorCodes.RecordRejected;
+        await AppendApprovedAsync(db, draft, revision, cancellationToken, runId: runId);
+        return null;
+    }
+
     private static async Task<bool> CorrectsACorrectionAsync(CollectionAttemptDbContext db, string sourceId, string documentNumber,
         string correctedNumber, CancellationToken cancellationToken)
     {
@@ -115,10 +129,10 @@ internal sealed class ExecutiveActionRows
     }
 
     private async Task AppendApprovedAsync(CollectionAttemptDbContext db, ExecutiveActionDraftRow draft, ExecutiveActionRevision revision,
-        CancellationToken cancellationToken, string? correctionNote = null)
+        CancellationToken cancellationToken, string? correctionNote = null, string? runId = null)
     {
         revision.ValidateShape();
-        await Records.AppendCodeApprovedAsync(db, draft, revision, ExecutiveActionRevisionRows.Create(revision, codeVersion), await Records.ReadCycleAsync(db, draft, cancellationToken),
+        await Records.AppendCodeApprovedAsync(db, draft, revision, ExecutiveActionRevisionRows.Create(revision, codeVersion, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresExecutiveActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)), correctionNote);
     }
 

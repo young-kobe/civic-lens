@@ -788,6 +788,16 @@ The command prints `pendingJobs`, `examined`, `admitted`, `refetches`, and `noUr
 
 Run order: run the command and wait until its jobs end. Repeat until `examined` and `refetches` are both 0. Then read `noUrlWithRefetch`. A count above 0 after all jobs end means the origin gave no URL or a refetch job failed. Check `jobs list` for those jobs.
 
+### Executive action summary
+
+The summary step writes a short AI summary of the body text of each executive action. It is off until `CIVIC_LENS_EXECUTIVE_SUMMARY_DAILY_TOKENS` is set. It needs `ANTHROPIC_API_KEY`. Leave it unset until the owner reads the measure. The limit is per UTC day and separate from the other limits. Code approves each summary after its checks pass. A summary that fails a check waits for a person.
+
+The owner measures the prompt first. The command calls the paid model, so run it on request only. It reads the stored text of each document from the database that `CIVIC_LENS_DATABASE` names. Point it at the dev database. The documents file holds a JSON array of Federal Register document numbers, such as `2025-01953`. The report goes to `artifacts/action-text-measure/`. It shows each sentence with its quote, the grade, the cut flag, and the count of answers that held a phrase of the closed list. The first argument is the spend cap in tokens. The command stops before a call that could pass it.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions text measure 1500000 <documents-file>
+```
+
 ### Executive action revision backfill
 
 R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.

@@ -19,6 +19,17 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
     public const int MaximumNotices = 8;
     public static readonly int MaximumDispositionNotesLength = DocumentExtraction.MaximumTextLength - ExecutiveActionFacts.DispositionNotes.Length - 2;
 
+    /// <summary>The summary of the body text. A revision of the analysis author always holds one. A later code revision of the record copies it.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ExecutiveActionSummary? Summary { get; init; }
+
+    [JsonIgnore]
+    public ReviewAuthorKind AuthorKind => ReviewAuthor.KindOf(AuthorSubject);
+
+    /// <summary>The quote spans of the summary, in the extraction of the body text. They are not citations of the record, so no page or release lists them as sources.</summary>
+    [JsonIgnore]
+    public IEnumerable<SourceSpan> SummarySpans => Summary?.Spans ?? [];
+
     [JsonIgnore]
     public IEnumerable<ExecutiveActionFact> OriginalFacts => DispositionNotes is { } notes ? Facts.Append(notes) : Facts;
 
@@ -30,8 +41,11 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
     {
         if (!LowercaseHex.Is(RecordId, 64))
             throw new ArgumentException("An executive action revision needs a valid record ID.");
-        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc) || !ReviewAuthor.IsCode(AuthorSubject))
-            throw new ArgumentException("An executive action revision needs a number, the code author, and a UTC creation time.");
+        if (!ReviewAuthor.IsValidRevisionHeader(RevisionNumber, AuthorSubject, CreatedAtUtc) || AuthorKind == ReviewAuthorKind.Person)
+            throw new ArgumentException("An executive action revision needs a number, the code or analysis author, and a UTC creation time.");
+        if (AuthorKind == ReviewAuthorKind.Analysis && Summary is null)
+            throw new ArgumentException("A revision of the analysis author holds the summary.");
+        Summary?.ValidateShape();
         if (!Enum.IsDefined(Kind) || SignedOn == default || PublishedOn == default)
             throw new ArgumentException("An executive action revision needs a kind, a signing date, and a publication date.");
         foreach (var (_, value) in ExpectedFacts())
@@ -63,6 +77,7 @@ public sealed record ExecutiveActionRevision(string RecordId, int RevisionNumber
     {
         foreach (var fact in OriginalFacts) RequireQuote(extractions, fact.Citation, fact.Text);
         foreach (var notice in Notices) RequireQuote(extractions, notice.Citation, notice.Text);
+        Summary?.ValidateAgainst(extractions);
     }
 
     private static void RequireQuote(IReadOnlyDictionary<string, DocumentExtraction> extractions, SourceSpan citation, string text)

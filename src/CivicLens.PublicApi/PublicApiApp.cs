@@ -79,6 +79,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(provider => new HomePageReader(provider.GetRequiredService<HomeStore>(), options.BrowserApiUrl));
         builder.Services.AddSingleton(new RelatedStore(views));
         builder.Services.AddSingleton(new WithdrawalStore(views));
+        builder.Services.AddSingleton(new CorrectionHistoryStore(views));
         builder.Services.AddSingleton(new ExecutiveActionStore(views));
         builder.Services.AddSingleton(provider => new ExecutiveActionPageReader(provider.GetRequiredService<ExecutiveActionStore>()));
         builder.Services.AddSingleton<PageRenderer>();
@@ -140,6 +141,7 @@ public static class PublicApiApp
         app.MapHome();
         app.MapRelated();
         app.MapWithdrawals();
+        app.MapCorrectionHistories();
         app.MapExecutiveActions();
         app.MapOfficials();
         app.MapSearch();
