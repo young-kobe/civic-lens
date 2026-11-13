@@ -31,7 +31,7 @@
                     </div>
                 </FieldSet>
                 <Field Label="Details" For="report-text"
-                       Hint="@($"Say where in the record the problem is. Details are required for \"{PublishedRecordLabels.ReportCategory(ReaderReportProtocol.OtherCategory)}\". Use at most {ReaderReportProtocol.MaximumTextCharacters:N0} characters. Do not add your name or contact details.")">
+                       Hint="@($"Say where in the record the problem is. Details are required for \"{PublishedRecordLabels.ReportCategory(ReaderReportProtocol.OtherCategory)}\". Use at most {PublishedWording.Count(ReaderReportProtocol.MaximumTextCharacters)} characters. Do not add your name or contact details.")">
                     <textarea id="report-text" name="@ReaderReportProtocol.TextField" rows="5" maxlength="@ReaderReportProtocol.MaximumTextCharacters" aria-describedby="report-text-hint"></textarea>
                 </Field>
                 <div class="cf-turnstile" data-sitekey="@TurnstileSiteKey"></div>

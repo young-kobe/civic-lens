@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CivicLens.Publication.Contracts;
 
 /// <summary>The one owner of public wording that the Host pages and the public API both show. A page never keeps its own copy. A view repeats it only under a comparison test.</summary>
@@ -26,4 +28,7 @@ public static class PublishedWording
             ? ($"{splitVotes} of {votes} was a ", "split vote")
             : ($"{splitVotes} of {votes} were ", "split votes");
     }
+
+    /// <summary>The one number format of public text: whole numbers with a comma between groups of three digits, such as 1,234.</summary>
+    public static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 }

@@ -88,6 +88,7 @@ public sealed class HomePageTests
     [Theory]
     [InlineData(12, 7, 4, "12 substantive votes", "7 bills", "4 records in this release")]
     [InlineData(1, 1, 1, "1 substantive vote", "1 bill", "1 record in this release")]
+    [InlineData(1234, 12345, 4, "1,234 substantive votes", "12,345 bills", "4 records in this release")]
     public async Task IssuesAndExecutiveGroupsRenderTheirScopedPublishedFacts(
         int substantiveVotes, int bills, int executiveRecords, string voteCount, string billCount, string executiveCount)
     {

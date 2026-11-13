@@ -1,4 +1,3 @@
-@using System.Globalization
 @using CivicLens.Application.Publication
 @using CivicLens.Publication.Contracts
 
@@ -94,7 +93,7 @@
     [Parameter, EditorRequired] public ReleaseFacets Facets { get; set; } = default!;
     [Parameter] public string? PublicApiUrl { get; set; }
 
-    private static string SourceTextLimit => PublicationProtocol.SearchSourceTextCharacters.ToString("N0", CultureInfo.InvariantCulture);
+    private static string SourceTextLimit => PublishedWording.Count(PublicationProtocol.SearchSourceTextCharacters);
 
     private IEnumerable<PublishedOfficial> Officials => Release.Records.SelectMany(entry => entry.Officials)
         .DistinctBy(official => official.Id).OrderBy(official => official.Name, StringComparer.Ordinal);
