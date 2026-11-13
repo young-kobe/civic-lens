@@ -325,7 +325,7 @@ public sealed class ReleaseRendererTests
 
         Assert.Equal(ReaderReportProtocol.TitleParameter, form.GetAttribute("data-report-title-parameter"));
         Assert.Equal(ReaderReportProtocol.MaximumTitleCharacters.ToString(), form.GetAttribute("data-report-title-limit"));
-        Assert.Contains("[data-report-subject]\").textContent = ", script, StringComparison.Ordinal);
+        Assert.Contains("[data-report-subject-revision]\").textContent = `Revision ${revision}.`", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -459,10 +459,15 @@ public sealed class ReleaseRendererTests
         var form = document.QuerySelector("form[data-report-api]")!;
         Assert.Equal("https://api.example.test" + ReaderReportProtocol.SubmitPath, form.GetAttribute("data-report-api"));
         Assert.Equal("site-key-1", document.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
-        Assert.Equal(["", .. ReaderReportProtocol.Categories],
-            document.QuerySelectorAll("#report-category option").Select(option => option.GetAttribute("value")));
-        Assert.All(document.QuerySelectorAll("#report-category option[value]:not([value=''])"),
-            option => Assert.Equal(PublishedRecordLabels.ReportCategory(option.GetAttribute("value")!), option.TextContent));
+        var categories = document.QuerySelectorAll("fieldset#report-category input[type=radio]").ToList();
+        Assert.Equal(ReaderReportProtocol.Categories, categories.Select(option => option.GetAttribute("value")));
+        Assert.All(categories, option =>
+        {
+            Assert.Equal(ReaderReportProtocol.CategoryField, option.GetAttribute("name"));
+            Assert.True(option.HasAttribute("required"));
+            Assert.Equal(PublishedRecordLabels.ReportCategory(option.GetAttribute("value")!), option.Closest("label")!.TextContent);
+        });
+        Assert.Equal("What is wrong", document.QuerySelector("fieldset#report-category legend")!.TextContent);
         Assert.Equal([ReaderReportProtocol.RecordIdField, ReaderReportProtocol.RevisionField],
             form.QuerySelectorAll("input[type=hidden][data-report-query]").Select(input => input.GetAttribute("name")));
         Assert.Equal(ReaderReportProtocol.TextField, document.QuerySelector("#report-text")!.GetAttribute("name"));

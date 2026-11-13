@@ -7,7 +7,10 @@ table[data-paged]:focus { outline: none; }
 .public .panel > .table-wrap:first-child { border-top-left-radius: var(--r-panel); border-top-right-radius: var(--r-panel); }
 .public .panel > .table-wrap:last-child { border-bottom-left-radius: var(--r-panel); border-bottom-right-radius: var(--r-panel); }
 .public .panel > .panel-note { margin: 0; padding: var(--s3) var(--s4) var(--s4); }
-.report-subject { margin: 0 0 var(--s4); overflow-wrap: anywhere; }
+.report-subject { display: grid; gap: var(--s1); margin: 0 0 var(--s4); padding-bottom: var(--s4); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.report-subject p { margin: 0; }
+.report-subject-eyebrow { color: var(--muted); font-size: .75rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.report-subject-title { margin: 0; font-size: 1.25rem; }
 .public .page-header-lede { margin-top: var(--s3); font-size: 1.125rem; }
 .page-header-eyebrow { margin: 0 0 var(--s2); color: var(--muted); font-size: .75rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .public .page-header h1 { font-size: var(--t-h1); line-height: 1.05; }
