@@ -9,7 +9,8 @@ public sealed record PublishedExecutiveAction
     public const int MaximumHeadlineLength = 1_000;
     public const int MaximumNotices = 8;
     public const int MaximumFacts = 16 + MaximumNotices;
-    public const int MaximumSources = 1 + MaximumNotices;
+    /// <summary>The facts extraction, the body text that an AI summary quotes, and one extraction for each correction notice.</summary>
+    public const int MaximumSources = 2 + MaximumNotices;
     public const string DocumentNumberLabel = "Federal Register document";
     public const string TitleLabel = "Title";
     public const string SignedLabel = "Signed";
