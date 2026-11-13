@@ -4,8 +4,8 @@
     <span class="home-issue-name">@Name</span>
     @if (Congress is { } congress && SubstantiveVotes is { } votes && Bills is { } bills)
     {
-        <span class="home-issue-counts">@votes substantive vote@(votes == 1 ? "" : "s")</span>
-        <span class="home-issue-counts">@bills bill@(bills == 1 ? "" : "s")</span>
+        <span class="home-issue-counts">@PublishedWording.Count(votes) substantive vote@(votes == 1 ? "" : "s")</span>
+        <span class="home-issue-counts">@PublishedWording.Count(bills) bill@(bills == 1 ? "" : "s")</span>
         <span class="home-issue-congress muted small">@CongressCalendar.Ordinal(congress) Congress</span>
     }
 </a>

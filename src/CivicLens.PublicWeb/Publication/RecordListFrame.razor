@@ -1,8 +1,8 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSections.OfRecord(Kind)" CanonicalPath="@List.Path" Title="@List.Label" Description="@Lede" RootPath="@RootPath">
-    <PageHeader Title="@List.Label"><LedeContent>@TotalSentence@if (LedeContent is not null) {@LedeContent} else {@Lede}</LedeContent></PageHeader>
+<PublicPage Section="PublicSections.OfRecord(Kind)" CanonicalPath="@List.Path" Title="@Title" Description="@Lede" RootPath="@RootPath">
+    <PageHeader Title="@Title"><LedeContent>@TotalSentence@if (LedeContent is not null) {@LedeContent} else {@Lede}</LedeContent></PageHeader>
     <FilterTabs Label="Lists of records" Tabs="Tabs" />
     @* An empty release shows its one line under the tabs, with no filters and no no match tips. *@
     @if (IsEmptyRelease)
@@ -80,8 +80,12 @@
     [Parameter, EditorRequired] public RenderFragment EmptyTips { get; set; } = default!;
     [Parameter, EditorRequired] public RenderFragment Fields { get; set; } = default!;
     [Parameter, EditorRequired] public RenderFragment Rows { get; set; } = default!;
+    /// <summary>The title of a list that a filter narrows to one named thing, such as the heading of the issue page section that links to the list. Null keeps the list label.</summary>
+    [Parameter] public string? Heading { get; set; }
 
     private PublicSections.RecordList List => PublicSections.ListOf(Kind);
+
+    private string Title => Heading ?? List.Label;
 
     private string? TotalSentence => Total is > 0 and var total ? $"{total} {(total == 1 ? Singular : Plural)}{TotalScope} {(total == 1 ? "is" : "are")} in this release. " : null;
 

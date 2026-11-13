@@ -289,7 +289,7 @@ public sealed class PublicPageReadingGradeTests
         var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3), PublishedChamber.House, "Published headline", null, "Published summary",
             PublishedTextOrigin.Model, "Passed", 216, 214, "Current bill line.", PublishedWording.BillLineSource);
         var recent = Enumerable.Range(0, 4).Select(index => index < 2 ? PublishedChamber.House : PublishedChamber.Senate).Select((chamber, index) => new HomeVoteData(
-            new string((char)('a' + index), 64), new(2026, 3, 2), chamber, "Published vote", "AI label", "Passed",
+            new string((char)('a' + index), 64), new(2026, 3, 2), chamber, "Published vote", "AI label", PublishedTextOrigin.Model, "Passed",
             VotePageView.ChamberBar(chamber, 216, 214, 0, 5, VoteThreshold.None), "Current bill line.")
         { Alignment = PublishedVoteAlignment.Split }).ToArray();
         static BoardPanelData Board(PublishedChamber chamber, string party, string name, int cast, int breaks) =>
@@ -334,8 +334,8 @@ public sealed class PublicPageReadingGradeTests
             ])
         };
         var issue = new IssuePageData(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186,
-            [new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, "Passed", 52, 48)],
-            [new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro")],
+            [new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, PublishedTextOrigin.Person, "Passed", 52, 48)],
+            [new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro")],
             new IssueLineUpData(119, 3, [new("Democrat", 2), new("Republican", 1)], 0));
         var search = new SearchPageData(new("5334", null, null, null, null, null), 1028,
             [new("jimmy-panetta", "Jimmy Panetta", PublishedOfficeKind.Representative, null, "CA", 19, "Democrat")], true,

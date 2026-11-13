@@ -4,7 +4,7 @@
 <RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Total="Data.VotesInRelease" RowCount="Data.Votes.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="@Lede"
                  FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters."
-                 EmptyReleaseTitle="No votes are published yet.">
+                 EmptyReleaseTitle="No votes are published yet." Heading="@Heading">
     <LedeContent>@LedeLead<a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>.</LedeContent>
     <Fields>
         <RecordListSelect Id="votes-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Filter="Data.Filter" AnyText="All" />
@@ -50,6 +50,9 @@
         RecordListSelect.LabelOf(Chambers, Data.Filter.Value("chamber")), RecordListSelect.LabelOf(Data.Kinds, Data.Filter.Value("kind")),
         Data.Filter.Value("bill") is { } bill ? $"Bill {bill}" : null, RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue"))
     ];
+
+    /// <summary>A list filtered by one known issue takes the heading of the votes section of the issue page.</summary>
+    private string? Heading => RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue")) is { } issue ? IssueRecordWords.VotesHeading(issue) : null;
 
     private static string Meta(VoteListRowData vote) => string.Join(", ", new[]
     {

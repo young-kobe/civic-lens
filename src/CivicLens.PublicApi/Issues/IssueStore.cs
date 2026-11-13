@@ -72,13 +72,13 @@ public sealed class IssueStore(NpgsqlDataSource views)
         """;
 
     private static readonly string VotesSql = $"""
-        SELECT v.record_id, v.voted_on, v.chamber, v.headline, v.label, v.result, v.yea, v.nay
+        SELECT v.record_id, v.voted_on, v.chamber, v.headline, v.label, v.result, v.yea, v.nay, v.text_origin
           {PageVoteSet}
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
 
     private const string BillsSql = $"""
-        SELECT b.record_id, b.headline, b.label, b.event_date, b.bill_line, {BillStore.SponsorNameSql}
+        SELECT b.record_id, b.headline, b.label, b.event_date, b.bill_line, {BillStore.SponsorNameSql}, b.text_origin
           {PageBillSet}
          ORDER BY b.event_date DESC, b.record_id LIMIT @take
         """;
@@ -152,7 +152,8 @@ public sealed class IssueStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             votes.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetString(3),
-                ViewColumns.Text(reader, 4), PlainVoteWords.Result(reader.GetString(5)), ViewColumns.Number(reader, 6), ViewColumns.Number(reader, 7)));
+                ViewColumns.Text(reader, 4), ViewColumns.Enum<PublishedTextOrigin>(reader, 8), PlainVoteWords.Result(reader.GetString(5)), ViewColumns.Number(reader, 6),
+                ViewColumns.Number(reader, 7)));
         return [.. votes];
     }
 
@@ -165,7 +166,8 @@ public sealed class IssueStore(NpgsqlDataSource views)
         var bills = new List<IssueBill>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            bills.Add(new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), reader.GetFieldValue<DateOnly>(3), ViewColumns.Text(reader, 4), ViewColumns.Text(reader, 5)));
+            bills.Add(new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), ViewColumns.Enum<PublishedTextOrigin>(reader, 6), reader.GetFieldValue<DateOnly>(3),
+                ViewColumns.Text(reader, 4), ViewColumns.Text(reader, 5)));
         return [.. bills];
     }
 

@@ -16,7 +16,7 @@ public static class IssueLineUpBar
                 .Select(party => new PartyBarSegment($"{party.Party} sponsor", party.Bills, PartyTones.Of(party.Party), FillOf(party.Party)))
         ];
         if (lineUp.UnknownBills > 0) segments.Add(new(UnknownLabel, lineUp.UnknownBills, PartyTone.Quiet, PartyBarFill.Open));
-        return new($"Bills tagged {issueName}", segments);
+        return new(IssueRecordWords.BillsHeading(issueName), segments);
     }
 
     private static PartyBarFill FillOf(string party) => PartyTones.Rank(party) switch
