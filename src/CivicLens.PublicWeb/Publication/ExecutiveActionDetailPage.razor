@@ -19,10 +19,7 @@
                 <section class="official-fixed executive-explain" aria-labelledby="executive-explain-title">
                     <h2 id="executive-explain-title">@ExecutiveActionWords.ExplainerHeading(Data.Kind)</h2>
                     <p>@ExecutiveActionWords.ExplainerArticle(Data.Kind) <Term Key="@PublishedRecordLabels.ExecutiveActionTermKey(Data.Kind)">@ExecutiveActionWords.KindName(Data.Kind)</Term> is @ExecutiveActionWords.ExplainerMeaning(Data.Kind) @ExecutiveActionWords.ExplainerWhy(Data.Kind)</p>
-                    @if (Data.Kind == PublishedExecutiveActionKind.ExecutiveOrder)
-                    {
-                        <p class="small muted">@ExecutiveActionWords.OrderReadHint</p>
-                    }
+                    <p class="small muted">@ExecutiveActionWords.ReadHint(Data.Kind)</p>
                 </section>
                 @if (Data.Summary is { } summary)
                 {

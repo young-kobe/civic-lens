@@ -29,8 +29,15 @@ public static class ExecutiveActionWords
         _ => throw new ArgumentOutOfRangeException(nameof(relation))
     };
 
-    /// <summary>The line under the explainer of an executive order. The other kinds show none until the owner approves their text.</summary>
-    public const string OrderReadHint = "Read it to see which agencies it directs and what they must do.";
+    /// <summary>The line under the explainer of each kind: what to look for in the document text.</summary>
+    public static string ReadHint(PublishedExecutiveActionKind kind) => kind switch
+    {
+        PublishedExecutiveActionKind.ExecutiveOrder => "Read it to see which agencies it directs and what they must do.",
+        PublishedExecutiveActionKind.Proclamation => "Read the text to see what it announces or orders.",
+        PublishedExecutiveActionKind.Memorandum => "Read it to see who it directs and what they must do.",
+        PublishedExecutiveActionKind.Notice => "Read it to see what it announces.",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
 
     /// <summary>The kind name in running text, such as "executive order".</summary>
     public static string KindName(PublishedExecutiveActionKind kind) => PublishedRecordLabels.ExecutiveActionKind(kind).ToLowerInvariant();
