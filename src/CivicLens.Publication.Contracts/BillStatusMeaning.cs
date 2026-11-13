@@ -31,6 +31,19 @@ public static partial class BillStatusMeaning
     /// <summary>The short label of the status, such as "In committee". Each label uses only words of the plain meaning of the same text. A text that no rule matches has no label.</summary>
     public static string? Label(string text, string billType) => Known(text, billType)?.Label;
 
+    /// <summary>The stage of the status. A text that no rule matches, and a known text that is a waiting or reported label, has the stage Other.</summary>
+    public static BillStatusStage StageOf(string text, string billType) => Known(text, billType)?.Stage ?? BillStatusStage.Other;
+
+    public static string StageName(BillStatusStage stage) => stage switch
+    {
+        BillStatusStage.InCommittee => InCommittee,
+        BillStatusStage.PassedHouse => PassedHouse,
+        BillStatusStage.PassedSenate => PassedSenate,
+        BillStatusStage.BecameLaw => BecameLaw,
+        BillStatusStage.Other => "Other",
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "The bill status stage is not known.")
+    };
+
     private static Status? Known(string text, string billType)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
@@ -41,43 +54,46 @@ public static partial class BillStatusMeaning
     private static string Sentence(string text) => text.EndsWith('.') ? text : text + ".";
 
     private static Status? Subcommittee(string text) =>
-        SubcommitteeText().Match(text) is { Success: true } match ? new(InCommittee, $"In committee: sent to the Subcommittee on {match.Groups["name"].Value}.") : null;
+        SubcommitteeText().Match(text) is { Success: true } match ? new(InCommittee, BillStatusStage.InCommittee, $"In committee: sent to the Subcommittee on {match.Groups["name"].Value}.") : null;
 
     private static Status? Committee(string text)
     {
         if (CommitteeText().Match(text) is not { Success: true } match) return null;
         var chamber = match.Groups["chamber"].Success ? match.Groups["chamber"].Value + " " : "";
         var addition = match.Groups["more"].Success ? $", and in addition to the {match.Groups["plural"].Value} on {match.Groups["more"].Value}" : "";
-        return new(InCommittee, $"In committee: sent to the {chamber}Committee on {match.Groups["name"].Value}{addition}.");
+        return new(InCommittee, BillStatusStage.InCommittee, $"In committee: sent to the {chamber}Committee on {match.Groups["name"].Value}{addition}.");
     }
 
     private static Status? Chamber(string text, string billType)
     {
         var fromHouse = BillNumbers.ChamberOf(billType) == PublishedChamber.House;
-        if (fromHouse && ReceivedInSenate().IsMatch(text)) return new("Passed the House", "Passed the House. Now in the Senate.");
-        if (!fromHouse && ReceivedInHouse().IsMatch(text)) return new("Passed the Senate", "Passed the Senate. Now in the House.");
+        if (fromHouse && ReceivedInSenate().IsMatch(text)) return new(PassedHouse, BillStatusStage.PassedHouse, "Passed the House. Now in the Senate.");
+        if (!fromHouse && ReceivedInHouse().IsMatch(text)) return new(PassedSenate, BillStatusStage.PassedSenate, "Passed the Senate. Now in the House.");
         return null;
     }
 
     private static Status? Calendar(string text)
     {
         if (text.StartsWith("Placed on Senate Legislative Calendar", StringComparison.Ordinal))
-            return new("Waiting for a possible Senate floor vote", "Waiting for a possible Senate floor vote.");
+            return new("Waiting for a possible Senate floor vote", BillStatusStage.Other, "Waiting for a possible Senate floor vote.");
         if (text.StartsWith("Placed on the Union Calendar", StringComparison.Ordinal) || text.StartsWith("Placed on the House Calendar", StringComparison.Ordinal))
-            return new("Waiting for a possible House floor vote", "Waiting for a possible House floor vote.");
+            return new("Waiting for a possible House floor vote", BillStatusStage.Other, "Waiting for a possible House floor vote.");
         return null;
     }
 
     private static Status? Reported(string text, string billType) => OrderedToBeReported().IsMatch(text)
-        ? new("A committee voted to send this to the full chamber", $"A committee voted to send this {Noun(billType)} to the full chamber.")
+        ? new("A committee voted to send this to the full chamber", BillStatusStage.Other, $"A committee voted to send this {Noun(billType)} to the full chamber.")
         : null;
 
     private static Status? Law(string text) =>
-        PublicLawNumberOf(text) is { } number ? new("Became law", $"Became law: Public Law {number}.") : null;
+        PublicLawNumberOf(text) is { } number ? new(BecameLaw, BillStatusStage.BecameLaw, $"Became law: Public Law {number}.") : null;
 
-    private sealed record Status(string Label, string Meaning);
+    private sealed record Status(string Label, BillStatusStage Stage, string Meaning);
 
     private const string InCommittee = "In committee";
+    private const string PassedHouse = "Passed the House";
+    private const string PassedSenate = "Passed the Senate";
+    private const string BecameLaw = "Became law";
 
     private static string Noun(string billType) => billType is "hr" or "s" ? "bill" : "measure";
 

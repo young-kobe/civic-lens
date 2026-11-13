@@ -9,7 +9,11 @@
             <p class="page-header-eyebrow">@Eyebrow</p>
         }
         <h1>@Title</h1>
-        @if (Lede is not null)
+        @if (LedeContent is not null)
+        {
+            <p class="page-header-lede">@LedeContent</p>
+        }
+        else if (Lede is not null)
         {
             <p class="page-header-lede">@Lede</p>
         }
@@ -32,6 +36,8 @@
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? RecordId { get; set; }
     [Parameter] public string? Lede { get; set; }
+    /// <summary>A lede with links in its text. It replaces <see cref="Lede"/> when both are given.</summary>
+    [Parameter] public RenderFragment? LedeContent { get; set; }
     /// <summary>A short line above the title that names the scope of the page, such as its Congress.</summary>
     [Parameter] public string? Eyebrow { get; set; }
     [Parameter] public RenderFragment? Portrait { get; set; }

@@ -19,12 +19,12 @@ internal static class PublicRecordPageRows
         """;
 
     /// <summary>The status that a release pinned for an action record. Release 2 is a release that is not active. Run it with <c>session_replication_role = replica</c>.</summary>
-    public static string PinnedStatus(int release, string record, string text, string date, long readTicks) => $"""
+    public static string PinnedStatus(int release, string record, string text, string date, long readTicks, string? stage = null) => $"""
         {ActiveRelease}
         INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
           VALUES (2, '000002-00000000000000000000000000000002', 'test', 2, 1, false) ON CONFLICT DO NOTHING;
-        INSERT INTO release_bill_statuses (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks)
-          VALUES ({release}, '{record}', '{text}', '{date}', {readTicks});
+        INSERT INTO release_bill_statuses (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks, status)
+          VALUES ({release}, '{record}', '{text}', '{date}', {readTicks}, {(stage is null ? "NULL" : $"'{stage}'")});
         """;
 
     /// <summary>One approval of a statement revision by an actor. The latest review state version names the approver.</summary>

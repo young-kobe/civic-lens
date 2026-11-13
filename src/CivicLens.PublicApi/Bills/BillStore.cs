@@ -2,6 +2,7 @@ using CivicLens.PublicWeb.Publication;
 using System.Data.Common;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -38,6 +39,18 @@ public sealed class BillStore(NpgsqlDataSource views)
             ON TRUE
          WHERE b.record_id = ANY(@ids)
         """;
+    private const string ListFactsSql = $"""
+        SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, t.status
+          FROM public_api.bills b
+          LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+         WHERE b.record_id = ANY(@ids)
+        """;
+
+    private const string PolicyAreasSql = """
+        SELECT DISTINCT b.policy_area_id, b.policy_area FROM public_api.bills b
+         WHERE b.congress = @congress AND b.policy_area_id IS NOT NULL AND b.policy_area IS NOT NULL ORDER BY b.policy_area, b.policy_area_id
+        """;
+
     private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
@@ -57,6 +70,30 @@ public sealed class BillStore(NpgsqlDataSource views)
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
         return new(active, page, next);
+    }
+
+    /// <summary>Reads one page of the bills of the newest Congress that the active release holds and that Congress, in one query, inside the transaction of the caller.
+    /// Null means that no release is active, and a release with no bill gives a null Congress and an empty page.</summary>
+    public async Task<NewestCongressBills?> ListNewestCongressAsync(NpgsqlTransaction transaction, BillRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Congress is not null) throw new ArgumentException("The newest Congress list takes its own Congress.", nameof(request));
+        await using var command = new NpgsqlCommand(NewestCongressSql(request), transaction.Connection, transaction);
+        AddParameters(command, request);
+        var rows = new List<BillRow>();
+        int? release = null, congress = null;
+        var total = 0;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                release = reader.GetInt32(0);
+                congress = ViewColumns.Number(reader, reader.FieldCount - 2);
+                total = ViewColumns.Total(reader);
+                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
+            }
+        if (release is not { } active) return null;
+        var page = rows.Take(request.Limit).ToArray();
+        var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
+        return new(new BillPage(active, page, next), congress, total);
     }
 
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
@@ -119,6 +156,30 @@ public sealed class BillStore(NpgsqlDataSource views)
             facts[reader.GetString(0)] = new(reader.GetString(0), ViewColumns.Text(reader, 1), lawDate, vote);
         }
         return facts;
+    }
+
+    /// <summary>Reads the sponsor, the latest action, and its stored status of a bounded set of bills in one query. A bill that left the release has no entry.</summary>
+    public async Task<Dictionary<string, BillListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, string[] recordIds, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(ListFactsSql, transaction.Connection, transaction);
+        command.Parameters.AddWithValue("ids", recordIds);
+        var facts = new Dictionary<string, BillListFacts>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            facts[reader.GetString(0)] = new(ViewColumns.Text(reader, 1), ViewColumns.Text(reader, 2), ViewColumns.Date(reader, 3),
+                reader.IsDBNull(4) ? null : ViewColumns.Enum<BillStatusStage>(reader, 4));
+        return facts;
+    }
+
+    /// <summary>Lists the policy areas that bills of one Congress of the active release hold, as a filter lists them, inside the transaction of the caller.</summary>
+    public async Task<SearchChoiceData[]> ListPolicyAreasAsync(NpgsqlTransaction transaction, int congress, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(PolicyAreasSql, transaction.Connection, transaction);
+        command.Parameters.AddWithValue("congress", congress);
+        var areas = new List<SearchChoiceData>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) areas.Add(new(reader.GetString(0), reader.GetString(1)));
+        return [.. areas];
     }
 
     /// <summary>Reads one page of the sponsorships of a bill. Null means that no release is active or that the active release holds no such bill.</summary>
@@ -225,6 +286,20 @@ public sealed class BillStore(NpgsqlDataSource views)
          ORDER BY {Order}
         """;
 
+    private static string NewestCongressSql(BillRequest request) => $"""
+        WITH newest AS MATERIALIZED (SELECT max(b.congress) AS congress FROM public_api.bills b)
+        SELECT a.release_number, {Columns}, n.congress,
+               (SELECT count(*) FROM public_api.bills c WHERE c.congress = n.congress) AS in_congress
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+         CROSS JOIN newest n
+          LEFT JOIN LATERAL (
+               SELECT b.* FROM public_api.bills b
+                WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
+                ORDER BY {Order} LIMIT @take) b
+            ON TRUE
+         ORDER BY {Order}
+        """;
+
     private static string Filters(BillRequest request) =>
         (request.Congress is null ? "" : " AND b.congress = @congress") +
         (request.BillType is null ? "" : " AND b.bill_type = @bill_type") +
@@ -234,6 +309,15 @@ public sealed class BillStore(NpgsqlDataSource views)
              AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s
                           WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.official_id = @sponsor
                             AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}')
+            """) +
+        (request.SponsorName is null ? "" : $"""
+             AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s JOIN public_api.officials o ON o.official_id = s.official_id
+                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number
+                            AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}' AND {OfficialStore.NameMatchSql("o")})
+            """) +
+        (request.Status is null ? "" : """
+             AND EXISTS (SELECT 1 FROM public_api.bill_status t
+                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number AND t.status = @status)
             """) +
         (request.Issue is null ? "" : """
              AND EXISTS (SELECT 1 FROM public_api.bill_issues i
@@ -251,6 +335,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         if (request.BillNumber is { } billNumber) parameters.AddWithValue("bill_number", billNumber);
         if (request.PolicyArea is not null) parameters.AddWithValue("policy_area", request.PolicyArea);
         if (request.Sponsor is not null) parameters.AddWithValue("sponsor", request.Sponsor);
+        if (request.SponsorName is not null) parameters.AddWithValue("name_prefix", request.SponsorName);
+        if (request.Status is { } status) parameters.AddWithValue("status", status.ToString());
         if (request.Issue is not null) parameters.AddWithValue("issue", request.Issue);
         if (request.From is { } from) parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
         if (request.To is { } to) parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });

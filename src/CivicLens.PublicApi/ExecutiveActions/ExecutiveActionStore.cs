@@ -2,6 +2,7 @@ using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.ExecutiveActions;
 
@@ -32,6 +33,51 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
           LEFT JOIN public_api.executive_action_summaries m ON m.record_id = e.record_id AND m.revision_number = e.revision_number
          WHERE e.record_id = @id
         """;
+
+    /// <summary>Reads one page of the list, newest signature first, and the number of executive actions of the active release in the same query.
+    /// Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
+    public async Task<ExecutiveActionPage?> ListAsync(ExecutiveActionListRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(ListSql(request));
+        command.Parameters.AddWithValue("take", request.Limit + 1);
+        if (request.Kind is { } kind) command.Parameters.AddWithValue("kind", kind.ToString());
+        if (request.From is { } from) command.Parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
+        if (request.To is { } to) command.Parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
+        if (request.Cursor is { } cursor)
+        {
+            command.Parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = cursor.SignedOn });
+            command.Parameters.AddWithValue("cursor_id", cursor.RecordId);
+        }
+        var rows = new List<ExecutiveActionRow>();
+        int? release = null;
+        var total = 0;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                release = reader.GetInt32(0);
+                total = ViewColumns.Total(reader);
+                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
+            }
+        if (release is not { } active) return null;
+        var page = rows.Take(request.Limit).ToArray();
+        return new(active, total, page, rows.Count > request.Limit ? ExecutiveActionCursor.Of(active, page[^1]).Encode() : null);
+    }
+
+    private static string ListSql(ExecutiveActionListRequest request) => $"""
+        SELECT a.release_number, e.record_id, e.revision_number, e.headline, e.kind, e.document_number, e.signed_on, e.published_on,
+               e.federal_register_citation, e.document_url, e.official_id, e.president_name, (SELECT count(*) FROM public_api.executive_actions) AS in_release
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN LATERAL (
+               SELECT e.* FROM public_api.executive_actions e
+                WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : " AND (e.signed_on < @cursor_date OR (e.signed_on = @cursor_date AND e.record_id > @cursor_id))")}
+                ORDER BY e.signed_on DESC, e.record_id LIMIT @take) e ON TRUE
+         ORDER BY e.signed_on DESC, e.record_id
+        """;
+
+    private static string Filters(ExecutiveActionListRequest request) =>
+        (request.Kind is null ? "" : " AND e.kind = @kind") +
+        (request.From is null ? "" : " AND e.signed_on >= @from") +
+        (request.To is null ? "" : " AND e.signed_on <= @to");
 
     /// <summary>Reads one executive action. Null means that the active release holds no such record.</summary>
     public Task<ExecutiveActionDetail?> FindAsync(string recordId, CancellationToken cancellationToken) =>

@@ -117,6 +117,7 @@ table[data-paged]:focus { outline: none; }
 .record-counts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s3) 0; font-variant-numeric: tabular-nums; }
 .record-counts b { font-family: var(--heading); font-size: var(--t-lg); }
 .record-row .record-counts { font-size: .875rem; }
+.record-row-label[data-origin="model"] { color: var(--ai-ink); }
 .record-row .record-counts b { font-family: inherit; font-size: inherit; }
 .home-grid .home-brief-line { margin: 0; padding: 0; border: 0; }
 .home-issues { background: var(--surface); }
@@ -367,7 +368,7 @@ body.public > main { flex: 1 0 auto; }
 .glossary-term dd { margin: 0 0 var(--s2); }
 .glossary-term dl { max-width: var(--measure); }
 
-@media (max-width: 1139px) {
+@media (max-width: 1279px) {
     .public-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand tools" "members members" "search search"; gap: 0 var(--s3); padding-block: 10px 14px; }
     .public-brand { grid-area: brand; }
     .public-header .topbar-tools { grid-area: tools; }
@@ -867,7 +868,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .lists-filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); min-height: 44px; }
 .lists-filter :is(select, input), .lists-filter-actions .btn, .list-fold .in > .btn { min-height: 44px; }
 .list-status { margin: var(--s4) 0 var(--s1); color: var(--muted); font-size: var(--t-sm); }
-.list-scope { max-width: var(--measure); margin: 0 0 var(--s3); }
+.list-chips { margin: 0 0 var(--s3); }
+.list-chips .badge { max-width: 100%; white-space: normal; line-height: 1.3; }
 .list-rows { margin: var(--s3) 0 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
 .list-row { display: grid; gap: 6px var(--s4); padding: 14px 0; border-bottom: 1px solid var(--line); }
 .list-row-title { display: inline-block; min-height: 24px; color: var(--ink); font-weight: 700; text-decoration-color: var(--line-strong); text-underline-offset: .18em; }

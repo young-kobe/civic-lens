@@ -476,9 +476,15 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag);
 
     /// <summary>The served page without the three things that only a server page adds: the members strip, the freshness line, and the preview Issues link.</summary>
-    private static string ServerShellOnly(string served) => System.Text.RegularExpressions.Regex.Replace(
-        served.Replace(MembersStripHtml, string.Empty).Replace(PublicSections.PreviewIssuesPath, BaseUrl.Join(PublicationProtocol.FacetsPath)),
-        "<p class=\"public-freshness\">.*?</p>", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
+    /// <summary>The served page with the parts that only a server page has put back to the static form: the members strip, the freshness line,
+    /// and the preview header links of the issues index and the three kind lists, which the static header points at the issues page and the search page.</summary>
+    private static string ServerShellOnly(string served)
+    {
+        var staticHeader = PublicSections.RecordLists.Where(list => list.Kind is PublishedRecordKind.Vote or PublishedRecordKind.Action or PublishedRecordKind.ExecutiveAction)
+            .Aggregate(served.Replace(MembersStripHtml, string.Empty).Replace(PublicSections.PreviewIssuesPath, BaseUrl.Join(PublicationProtocol.FacetsPath)),
+                (html, list) => html.Replace($"\"{list.Href}\"", $"\"{BaseUrl.Join(PublicationProtocol.SearchByKindPath(list.Kind))}\""));
+        return System.Text.RegularExpressions.Regex.Replace(staticHeader, "<p class=\"public-freshness\">.*?</p>", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
+    }
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 

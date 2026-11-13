@@ -20,6 +20,7 @@ internal sealed class ReleaseBillStatusRowConfiguration : IEntityTypeConfigurati
         builder.Property(row => row.LatestActionText).HasColumnName("latest_action_text").HasMaxLength(PublishedBillStatus.MaximumTextLength);
         builder.Property(row => row.LatestActionDate).HasColumnName("latest_action_date");
         builder.Property(row => row.ReadAtUtcTicks).HasColumnName("read_at_utc_ticks");
+        builder.Property(row => row.Status).HasColumnName("status").HasConversion<string>();
         builder.HasOne<PublicationReleaseRow>().WithMany().HasForeignKey(row => row.ReleaseNumber).OnDelete(DeleteBehavior.Restrict);
     }
 }

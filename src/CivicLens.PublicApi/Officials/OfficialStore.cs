@@ -107,6 +107,10 @@ public sealed class OfficialStore(NpgsqlDataSource views)
          ORDER BY {OrderOf(request)}
         """;
 
+    /// <summary>True when the parameter <c>@name_prefix</c>, in lower case, starts the lower case name of the official <paramref name="alias"/>, or starts any word after a space in it.
+    /// The one owner of the name match. <see cref="OfficialRequest.NameOf"/> reads the text.</summary>
+    internal static string NameMatchSql(string alias) => $"strpos(' ' || lower({alias}.name), ' ' || lower(@name_prefix)) > 0";
+
     // An exact name match sorts first. The cursor does not carry that rule, so the request refuses the two together.
     private static string OrderOf(OfficialRequest request) => request.ExactNameFirst ? $"(lower(o.name) = @name_prefix) DESC, {Order}" : Order;
 
@@ -114,7 +118,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         (request.Kind is null ? "" : " AND o.kind = @kind") +
         (request.State is null ? "" : " AND o.state = @state") +
         (request.Party is null ? "" : " AND lower(o.party) = @party") +
-        (request.NamePrefix is null ? "" : " AND strpos(' ' || lower(o.name), ' ' || @name_prefix) > 0") +
+        (request.NamePrefix is null ? "" : " AND " + NameMatchSql("o")) +
         (request.Cursor is null ? "" : " AND (o.name, o.official_id) > (@cursor_name, @cursor_id)");
 
     private static void AddParameters(NpgsqlCommand command, OfficialRequest request)

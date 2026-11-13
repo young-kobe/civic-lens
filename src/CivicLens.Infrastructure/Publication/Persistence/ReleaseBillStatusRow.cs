@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.Infrastructure.Publication.Persistence;
 
 internal sealed class ReleaseBillStatusRow
@@ -7,4 +9,5 @@ internal sealed class ReleaseBillStatusRow
     public string LatestActionText { get; set; } = string.Empty;
     public DateOnly LatestActionDate { get; set; }
     public long ReadAtUtcTicks { get; set; }
+    public BillStatusStage? Status { get; set; }
 }
