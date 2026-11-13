@@ -549,6 +549,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .issue-note { margin: 0 0 var(--s4); color: var(--ink-2); }
 .issue-members:not([hidden]) { display: grid; gap: var(--s4); }
 .issue-members > [data-zip-member-fragment] { display: grid; gap: var(--s4); }
+.official-members > [data-zip-member-fragment] { display: grid; gap: var(--s4); }
+.official-members-note { margin: 0; max-width: var(--measure); }
 .public-hero:has(> .issue-hero) { padding-inline: var(--frame-pad); }
 .public-main:has(> .content > .issue-grid) { padding: 24px var(--frame-pad) 48px; }
 @media (min-width: 720px) {
@@ -682,6 +684,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .official-fixed { padding: 14px 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
 .official-fixed h2 { margin: 0 0 var(--s2); font-size: var(--t-md); font-weight: 800; }
 .official-fixed p { max-width: var(--measure); margin: 0; }
+.official-fixed p + p { margin-top: var(--s2); }
 .official-page :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .official-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s5); align-items: start; }
 .official-layout > .official-head { grid-column: 1; grid-row: 1; }

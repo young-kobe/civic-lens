@@ -16,6 +16,11 @@
         </header>
         <div class="detail-layout">
             <div class="detail-main">
+                <section class="official-fixed executive-explain" aria-labelledby="executive-explain-title">
+                    <h2 id="executive-explain-title">@ExecutiveActionWords.ExplainerHeading(Data.Kind)</h2>
+                    <p>@ExecutiveActionWords.ExplainerArticle(Data.Kind) <Term Key="@PublishedRecordLabels.ExecutiveActionTermKey(Data.Kind)">@ExecutiveActionWords.KindName(Data.Kind)</Term> is @ExecutiveActionWords.ExplainerMeaning(Data.Kind) @ExecutiveActionWords.ExplainerWhy(Data.Kind)</p>
+                    <p class="small muted">@ExecutiveActionWords.ReadHint(Data.Kind)</p>
+                </section>
                 @if (Data.Summary is { } summary)
                 {
                     <AiSummary TextOrigin="@summary.TextOrigin" Label="@summary.Label">

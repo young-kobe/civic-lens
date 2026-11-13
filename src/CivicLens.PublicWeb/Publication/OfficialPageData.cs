@@ -12,6 +12,10 @@ public sealed record OfficialPageData(
 {
     /// <summary>The day of the release. A term that ended before it is a former term.</summary>
     public DateOnly? PublishedOn { get; init; }
+    /// <summary>The dated terms of the official in the release. The tenure sentence reads them.</summary>
+    public PublishedOfficeTerm[] Terms { get; init; } = [];
+    /// <summary>The official's own website, a valid https address from the release names, or null when the release holds none.</summary>
+    public string? Website { get; init; }
     public OfficialAttendanceData[] Attendance { get; init; } = [];
     public OfficialPartyLineData[] PartyLines { get; init; } = [];
     public int? BillsCongress { get; init; }

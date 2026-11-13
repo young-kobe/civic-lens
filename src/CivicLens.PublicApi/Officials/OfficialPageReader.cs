@@ -38,6 +38,7 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
         var statements = await OfficialPageQueries.ReadStatementsAsync(connection, transaction, id, cancellationToken);
         return page with
         {
+            Website = await OfficialPageQueries.ReadWebsiteAsync(connection, transaction, id, cancellationToken),
             Votes = [.. (recent?.Officials[0].Votes ?? []).Select(vote => Vote(id, vote))],
             Marks = marks,
             MarksTotal = marksTotal,
@@ -53,6 +54,10 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
         return new(detail.Release, official.OfficialId, official.Name, official.Kind, official.Office, official.State, official.District, official.Party,
             official.Caucus, official.TermEndsOn, official.PhotoPath)
         {
+            Terms = [.. detail.Terms.Select(term => new PublishedOfficeTerm
+            {
+                Office = term.Office, Kind = term.Kind, State = term.State, District = term.District, Party = term.Party, Caucus = term.Caucus, Start = term.StartsOn, End = term.EndsOn
+            })],
             PublishedOn = publishedAtUtcTicks is { } ticks ? DateOnly.FromDateTime(new DateTime(ticks, DateTimeKind.Utc)) : null,
             Attendance = [.. detail.MissedVotes.Select(figure => new OfficialAttendanceData(figure.Chamber, figure.Congress, figure.Missed, figure.Held,
                 figure.FirstVotedOn, figure.LastVotedOn))],
