@@ -27,14 +27,14 @@ internal static class ReleaseBillStatuses
     public static IEnumerable<string> ActionIdsOf(IEnumerable<PublishedRevisionBinding> bindings) =>
         bindings.Where(binding => binding.Kind == PublishedRecordKind.Action).Select(binding => binding.RecordId);
 
-    /// <summary>The rows that a release pins: the status of each of its action records that has one. The file and the commit both take these rows.</summary>
-    public static ImmutableArray<PublishedBillStatus> RowsOf(IEnumerable<string> actionIds, IReadOnlyDictionary<string, ActionBillStatus> statuses) =>
-        [.. actionIds.Select(id => statuses.GetValueOrDefault(id)?.Status).OfType<PublishedBillStatus>()
-            .OrderBy(status => status.RecordId, StringComparer.Ordinal)];
+    /// <summary>The rows that a release pins: the status of each of its action records that has one. The file and the commit both take these rows. The commit also needs the bill type.</summary>
+    public static ImmutableArray<ActionBillStatus> RowsOf(IEnumerable<string> actionIds, IReadOnlyDictionary<string, ActionBillStatus> statuses) =>
+        [.. actionIds.Select(id => statuses.GetValueOrDefault(id)).OfType<ActionBillStatus>()
+            .OrderBy(status => status.Status.RecordId, StringComparer.Ordinal)];
 
-    public static Task WriteAsync(IReleaseStaging staging, ImmutableArray<PublishedBillStatus> rows, CancellationToken cancellationToken)
+    public static Task WriteAsync(IReleaseStaging staging, ImmutableArray<ActionBillStatus> rows, CancellationToken cancellationToken)
     {
-        var file = new PublishedBillStatuses { Records = [.. rows] };
+        var file = new PublishedBillStatuses { Records = [.. rows.Select(row => row.Status)] };
         file.Validate();
         var json = JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions);
         if (json.Length > PublishedBillStatuses.MaximumBytes)

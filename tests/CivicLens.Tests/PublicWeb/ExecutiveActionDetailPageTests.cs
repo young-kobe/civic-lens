@@ -133,4 +133,14 @@ public sealed class ExecutiveActionDetailPageTests
         Assert.NotNull(report.Closest(".public-footer"));
         Assert.Contains("Report a problem with this executive action", report.TextContent);
     }
+
+    [Fact]
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    {
+        var corrected = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var plain = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action());
+
+        PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
 }

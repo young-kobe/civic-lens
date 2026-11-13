@@ -755,6 +755,11 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public Task<int> FillEntryCongressesAsync(IReadOnlyCollection<PublishedEntryDay> entries, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    public Task<IReadOnlyList<BillStatusGap>> ReadBillStatusGapsAsync(BillStatusGap? after, int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<BillStatusGap>>([]);
+
+    public Task<int> FillBillStatusStagesAsync(IReadOnlyCollection<BillStatusGap> gaps, CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<int> FillApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 

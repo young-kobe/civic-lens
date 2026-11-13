@@ -23,9 +23,34 @@ public sealed class CorrectionHistoryStore(NpgsqlDataSource views)
          LIMIT @take
         """;
 
-    public async Task<(int? Release, CorrectionHistoryDetail? Detail)> FindAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken)
+    public Task<(int? Release, CorrectionHistoryDetail? Detail)> FindAsync(PublishedRecordKind kind, string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(views.CreateCommand(Sql), kind, recordId, cancellationToken);
+
+    /// <summary>Reads the corrections of a record page inside the transaction of the page, so that the page and its corrections share one snapshot.</summary>
+    public async Task<PublishedCorrection[]> ListAsync(NpgsqlTransaction transaction, PublishedRecordKind kind, string recordId, int revisionNumber,
+        CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(Sql);
+        var (_, detail) = await ReadDetailAsync(new NpgsqlCommand(Sql, transaction.Connection, transaction), kind, recordId, cancellationToken);
+        return CorrectionsOf(detail, revisionNumber);
+    }
+
+    /// <summary>Reads the corrections of a record page that reads its parts outside one transaction. Null means that the active release is no longer the release of the page, so the page reads again.</summary>
+    public async Task<PublishedCorrection[]?> ListAsync(PublishedRecordKind kind, string recordId, int release, int revisionNumber, CancellationToken cancellationToken)
+    {
+        var (read, detail) = await FindAsync(kind, recordId, cancellationToken);
+        return read == release ? CorrectionsOf(detail, revisionNumber) : null;
+    }
+
+    /// <summary>The page found the record in the same release, so the view must hold the same revision. Any other answer is a view fault, and the page fails.</summary>
+    private static PublishedCorrection[] CorrectionsOf(CorrectionHistoryDetail? detail, int revisionNumber) =>
+        detail is not null && detail.RevisionNumber == revisionNumber
+            ? detail.Corrections
+            : throw new InvalidDataException("The active record view does not hold the revision that the page shows.");
+
+    private static async Task<(int? Release, CorrectionHistoryDetail? Detail)> ReadDetailAsync(NpgsqlCommand command, PublishedRecordKind kind, string recordId,
+        CancellationToken cancellationToken)
+    {
+        await using var _ = command;
         command.Parameters.AddWithValue("kind", PublicationProtocol.KindText(kind));
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("take", PublishedCorrection.MaximumEntries + 1);

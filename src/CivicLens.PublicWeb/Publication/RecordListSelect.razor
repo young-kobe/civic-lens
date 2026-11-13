@@ -1,0 +1,25 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+<Field Label="@Label" For="@Id" Error="@Filter.ErrorOf(Name)">
+    <select id="@Id" name="@Name" @attributes="Filter.InputAttributes(Name, Id)">
+        <option value="">@AnyText</option>
+        @foreach (var choice in Choices)
+        {
+            <option value="@choice.Value" selected="@(Filter.Value(Name) == choice.Value)">@choice.Label</option>
+        }
+    </select>
+</Field>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = default!;
+    [Parameter, EditorRequired] public string Name { get; set; } = default!;
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<SearchChoiceData> Choices { get; set; } = default!;
+    /// <summary>The filters of the request. They give the selected choice and whether the server refused this field.</summary>
+    [Parameter, EditorRequired] public RecordListFilter Filter { get; set; } = default!;
+    [Parameter] public string AnyText { get; set; } = "Any";
+
+    /// <summary>The label of the selected choice, as a filter chip shows it, or null when no choice is selected.</summary>
+    public static string? LabelOf(IReadOnlyList<SearchChoiceData> choices, string? selected) =>
+        selected is null ? null : choices.FirstOrDefault(choice => choice.Value == selected)?.Label;
+}

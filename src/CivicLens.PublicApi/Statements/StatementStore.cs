@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Officials;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -9,7 +10,14 @@ namespace CivicLens.PublicApi.Statements;
 
 public sealed class StatementStore(NpgsqlDataSource views)
 {
-    private const string DetailSql = """
+    // The term of each speaker on the statement date, as one JSON array in speaker order. The detail and the list read it through ReadSpeakerTerms.
+    private const string SpeakerTermsSql = """
+        (SELECT json_agg(json_build_object('party', t.party, 'kind', t.kind, 'office', t.office, 'state', t.state, 'district', t.district)
+             ORDER BY t."position")
+           FROM public_api.statement_speaker_terms t WHERE t.record_id = s.record_id AND t.revision_number = s.revision_number)
+        """;
+
+    private const string DetailSql = $"""
         SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
                ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
                       WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
@@ -21,9 +29,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
                           FROM public_api.statement_quotations
                          WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q),
                ap.approved_by,
-               (SELECT json_agg(json_build_object('party', t.party, 'kind', t.kind, 'office', t.office, 'state', t.state, 'district', t.district)
-                    ORDER BY t."position")
-                  FROM public_api.statement_speaker_terms t WHERE t.record_id = s.record_id AND t.revision_number = s.revision_number),
+               {SpeakerTermsSql},
                e.approved_at_utc_ticks, f.first_published_at_utc_ticks
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.statements s ON s.record_id = @id
@@ -80,16 +86,16 @@ public sealed class StatementStore(NpgsqlDataSource views)
         PublishedStatement.ValidateContent(source, quotations, dateEvidence, articleUrl);
         return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations)
         {
-            SpeakerTerms = ReadSpeakerTerms(reader, statement.SpeakerIds.Length),
+            SpeakerTerms = ReadSpeakerTerms(reader, 20, statement.SpeakerIds.Length),
             ApprovedAtUtc = ViewColumns.Utc(reader, 21),
             FirstPublishedAtUtc = ViewColumns.Utc(reader, 22)
         });
     }
 
     /// <summary>One term row for each speaker, in the order of the speakers. The view gives the party and the seat on the statement date.</summary>
-    private static StatementSpeakerTerm[] ReadSpeakerTerms(DbDataReader reader, int speakerCount)
+    private static StatementSpeakerTerm[] ReadSpeakerTerms(DbDataReader reader, int ordinal, int speakerCount)
     {
-        var rows = reader.IsDBNull(20) ? [] : JsonSerializer.Deserialize<StatementSpeakerTermRow[]>(reader.GetString(20), PublicationProtocol.JsonOptions)
+        var rows = reader.IsDBNull(ordinal) ? [] : JsonSerializer.Deserialize<StatementSpeakerTermRow[]>(reader.GetString(ordinal), PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("The statement speaker terms view returned invalid content.");
         if (rows.Length != speakerCount) throw new InvalidDataException("The statement speaker terms view holds one row for each speaker.");
         return [.. rows.Select(row => new StatementSpeakerTerm(row.Party, row.Kind is null ? null : OfficeKind(row.Kind), row.Office, row.State, row.District))];
@@ -99,22 +105,62 @@ public sealed class StatementStore(NpgsqlDataSource views)
         ? value
         : throw new InvalidDataException("The statement speaker terms view holds an unknown office kind.");
 
-    public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken)
+    public async Task<StatementPage?> ListAsync(StatementRequest request, CancellationToken cancellationToken) =>
+        (await ReadAsync(views.CreateCommand(ListSql(request)), request, withTotal: false, cancellationToken))?.Page;
+
+    /// <summary>Reads the page and the number of statements of the active release inside the transaction of the caller, so that it shares a snapshot
+    /// with the other reads of that transaction. A filter never changes the total.</summary>
+    public async Task<(StatementPage Page, int StatementsInRelease)?> ListWithTotalAsync(NpgsqlTransaction transaction, StatementRequest request,
+        CancellationToken cancellationToken) =>
+        await ReadAsync(new NpgsqlCommand(ListSql(request, withTotal: true), transaction.Connection, transaction), request, withTotal: true, cancellationToken) is { } read
+            ? (read.Page, read.Total!.Value)
+            : null;
+
+    // OFFSET 0 keeps the link lookup correlated through the security barrier view.
+    private const string ListFactsSql = $"""
+        SELECT s.record_id, src.url,
+               EXISTS (SELECT 1 FROM public_api.record_links l
+                        WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote' OFFSET 0),
+               {SpeakerTermsSql}
+          FROM public_api.statements s
+          JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
+         WHERE s.record_id = ANY(@ids)
+        """;
+
+    /// <summary>Reads the source site, the vote link, and the term of each speaker on the statement date of a bounded set of statements in one query, inside the transaction of the caller.
+    /// A statement that left the release has no entry.</summary>
+    public async Task<Dictionary<string, StatementListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, IReadOnlyList<StatementRow> statements,
+        CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand($"""
-            SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
-                   ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
-                          WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
-                   s.issue_ids
-              FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
-              LEFT JOIN LATERAL (
-                   SELECT s.* FROM public_api.statements s
-                    WHERE TRUE{Filters(request)}{Cursor(request)}
-                    ORDER BY s.statement_date DESC NULLS LAST, s.record_id LIMIT @take) s ON TRUE
-             ORDER BY s.statement_date DESC NULLS LAST, s.record_id
-            """);
+        var speakerCounts = statements.ToDictionary(statement => statement.RecordId, statement => statement.SpeakerIds.Length, StringComparer.Ordinal);
+        await using var command = new NpgsqlCommand(ListFactsSql, transaction.Connection, transaction);
+        command.Parameters.AddWithValue("ids", speakerCounts.Keys.ToArray());
+        var facts = new Dictionary<string, StatementListFacts>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            facts[reader.GetString(0)] = new(reader.GetString(1), reader.GetBoolean(2), ReadSpeakerTerms(reader, 3, speakerCounts[reader.GetString(0)]));
+        return facts;
+    }
+
+    private static string ListSql(StatementRequest request, bool withTotal = false) => $"""
+        SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
+               ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
+                      WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
+               s.issue_ids{(withTotal ? ", (SELECT count(*) FROM public_api.statements) AS in_release" : "")}
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN LATERAL (
+               SELECT s.* FROM public_api.statements s
+                WHERE TRUE{Filters(request)}{Cursor(request)}
+                ORDER BY s.statement_date DESC NULLS LAST, s.record_id LIMIT @take) s ON TRUE
+         ORDER BY s.statement_date DESC NULLS LAST, s.record_id
+        """;
+
+    private static async Task<(StatementPage Page, int? Total)?> ReadAsync(NpgsqlCommand command, StatementRequest request, bool withTotal, CancellationToken cancellationToken)
+    {
+        await using var _ = command;
         command.Parameters.AddWithValue("take", request.Limit + 1);
         if (request.Official is not null) command.Parameters.AddWithValue("official", request.Official);
+        if (request.SpeakerName is not null) command.Parameters.AddWithValue("name_prefix", request.SpeakerName);
         if (request.Issue is not null) command.Parameters.AddWithValue("issue", request.Issue);
         if (request.From is { } from) command.Parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
         if (request.To is { } to) command.Parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
@@ -124,17 +170,18 @@ public sealed class StatementStore(NpgsqlDataSource views)
             if (cursor.StatementDate is { } date) command.Parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = date });
         }
         var rows = new List<StatementRow>();
-        int? release = null;
+        int? release = null, total = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
+                if (withTotal) total = ViewColumns.Total(reader);
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? StatementCursor.Of(active, page[^1]).Encode() : null;
-        return new(active, page, next);
+        return (new(active, page, next), total);
     }
 
     private const string AfterDated = " AND (s.statement_date < @cursor_date OR s.statement_date IS NULL OR (s.statement_date = @cursor_date AND s.record_id > @cursor_id))";
@@ -149,6 +196,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
     // OFFSET 0 keeps the speaker lookup correlated through the security barrier view.
     private static string Filters(StatementRequest request) =>
         (request.Official is null ? "" : " AND EXISTS (SELECT 1 FROM public_api.statement_speakers p WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND p.official_id = @official OFFSET 0)") +
+        (request.SpeakerName is null ? "" : $" AND EXISTS (SELECT 1 FROM public_api.statement_speakers p JOIN public_api.officials o ON o.official_id = p.official_id WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number AND {OfficialStore.NameMatchSql("o")} OFFSET 0)") +
         (request.Issue is null ? "" : " AND @issue = ANY(s.issue_ids)") +
         (request.From is null ? "" : " AND s.statement_date >= @from") +
         (request.To is null ? "" : " AND s.statement_date <= @to");

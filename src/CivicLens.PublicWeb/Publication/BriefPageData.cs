@@ -18,5 +18,8 @@ public sealed record BriefPageData(
     DateTimeOffset? ApprovedAtUtc,
     DateTimeOffset? FirstPublishedAtUtc)
 {
+    /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
+    public PublishedCorrection[] Corrections { get; init; } = [];
+
     public string ShortName => PublishedBriefView.ShortName(WeekStart);
 }

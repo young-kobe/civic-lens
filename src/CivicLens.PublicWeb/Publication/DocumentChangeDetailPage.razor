@@ -9,6 +9,7 @@
             <h1 class="detail-headline">@Data.Headline</h1>
             <p class="detail-lede">@DocumentChangeWords.Lede(Data)</p>
         </header>
+        <PublishedCorrectionBanner Kind="PublishedRecordKind.DocumentChange" Corrections="Data.Corrections" />
         <div class="detail-stack">
             <section class="detail-card" aria-labelledby="change-when-title">
                 <h2 id="change-when-title">@DocumentChangeWords.WhenHeading</h2>

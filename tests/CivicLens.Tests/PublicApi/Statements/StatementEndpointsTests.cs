@@ -236,6 +236,19 @@ internal static class StatementsSeed
         foreach (var statement in statements) await ViewsSeed.ExecuteAsync(database, Insert(statement));
     }
 
+    /// <summary>One source page for each statement, as <c>public_api.statement_sources</c> reads it: a capture of the URL, its text, and the candidate that cites it.</summary>
+    public static Task AddSourcesAsync(string database, params (string RecordId, string Url)[] sources) => ViewsSeed.ExecuteAsync(database,
+        "SET session_replication_role = replica;\n" + string.Join('\n', sources.Select(source => $"""
+            INSERT INTO collection_attempts (attempt_id, source_id, requested_url, final_url, observed_at_utc_ticks,
+                outcome, has_response, response_status_code, response_content_encodings, has_sent_validators,
+                capture_sha256, elapsed_milliseconds)
+            VALUES ('a-{source.RecordId[2..]}', 'source', '{source.Url}', '{source.Url}', 1, 'captured', true, 200, ARRAY[]::text[], false, REPEAT('a', 64), 0);
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+            VALUES (md5('{source.RecordId}') || md5('{source.RecordId}'), 'a-{source.RecordId[2..]}', 'test', 'Text', REPEAT('b', 64));
+            INSERT INTO statement_candidates (candidate_id, source_id, url, extraction_id, attempt_id, created_at_utc_ticks)
+            VALUES ('{source.RecordId}', 'source', '{source.Url}', md5('{source.RecordId}') || md5('{source.RecordId}'), 'a-{source.RecordId[2..]}', 1);
+            """)));
+
     private static string Insert(SeededStatement statement)
     {
         var metadata = statement.HasMetadata ? $"'Headline {statement.Id}', 'Summary {statement.Id}'" : "NULL, NULL";

@@ -184,4 +184,14 @@ public sealed class StatementDetailPageTests
 
         Assert.Equal("Speakers, issues, and source", page.QuerySelector("aside.detail-rail")!.GetAttribute("aria-label"));
     }
+
+    [Fact]
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    {
+        var corrected = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var plain = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+
+        PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
 }

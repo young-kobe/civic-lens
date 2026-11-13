@@ -28,7 +28,7 @@ public sealed record OfficialRequest
         Kind = Chamber(QueryValues.Value(query, "chamber")),
         State = QueryValues.Filter(query, "state")?.ToUpperInvariant(),
         Party = QueryValues.Filter(query, "party")?.ToLowerInvariant(),
-        NamePrefix = Prefix(QueryValues.Value(query, "name")),
+        NamePrefix = NameOf(query, "name")?.ToLowerInvariant(),
         Cursor = OfficialCursor.Parse(QueryValues.Value(query, "cursor")),
         Limit = QueryValues.PageLimit(query)
     };
@@ -41,9 +41,12 @@ public sealed record OfficialRequest
         _ => throw new ArgumentException("chamber must be house, senate, executive.", "chamber")
     };
 
-    private static string? Prefix(string? value)
+    /// <summary>The typed name text of a parameter, which <see cref="OfficialStore.NameMatchSql"/> matches. Empty is no filter.
+    /// The officials list, the bill sponsor filter, and the statement official filter read it.</summary>
+    internal static string? NameOf(IQueryCollection query, string name)
     {
+        var value = QueryValues.Value(query, name);
         if (string.IsNullOrEmpty(value)) return null;
-        return value.Length <= MaximumNameLength ? value.ToLowerInvariant() : throw new ArgumentException($"name holds at most {MaximumNameLength} characters.", "name");
+        return value.Length <= MaximumNameLength ? value : throw new ArgumentException($"{name} holds at most {MaximumNameLength} characters.", name);
     }
 }

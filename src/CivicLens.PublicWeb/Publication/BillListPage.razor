@@ -1,0 +1,67 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" Total="Data.Total" TotalScope="@TotalScope" RowCount="Data.Bills.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+                 Lede="@Lede" FilterSummary="Filter by status, sponsor or date" Singular="bill or resolution" Plural="bills and resolutions" EmptyTitle="No bill matches these filters."
+                 EmptyReleaseTitle="No bills or resolutions are published yet.">
+    <Fields>
+        <RecordListSelect Id="bills-type" Name="type" Label="Bill type" Choices="BillTypes" Filter="Data.Filter" />
+        <RecordListSelect Id="bills-status" Name="status" Label="Status" Choices="Data.Statuses" Filter="Data.Filter" />
+        <RecordListSelect Id="bills-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Data.Filter" />
+        <RecordListSelect Id="bills-area" Name="policyArea" Label="Policy area" Choices="Data.PolicyAreas" Filter="Data.Filter" />
+        <RecordListText Id="bills-sponsor" Name="sponsor" Label="Sponsor" Placeholder="Type a name" Filter="Data.Filter" />
+        <RecordListText Id="bills-number" Name="bill" Label="Bill number" Placeholder="H.R. 5334" Filter="Data.Filter" />
+        <RecordListDates IdPrefix="bills" Filter="Data.Filter" />
+    </Fields>
+    <EmptyTips>
+        <li>Clear one filter, such as the status.</li>
+        <li>Check the spelling of the sponsor.</li>
+        <li>Search a bill number, such as <a href="@(RootPath + PublicationProtocol.SearchPagePath)?q=5334">5334</a>.</li>
+        <li><a href="@(RootPath + PublicationProtocol.SearchPagePath)">Search all records</a></li>
+    </EmptyTips>
+    <Rows>
+        @foreach (var bill in Data.Bills)
+        {
+            <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label" LabelOrigin="bill.TextOrigin"
+                             Sponsor="@bill.Sponsor" Meta="@($"Latest sponsorship {Moment.Day(bill.EventDate)}")">
+                @if (bill.LatestActionText is { } text && bill.LatestActionDate is { } day)
+                {
+                    <p class="small muted">Latest official action @Moment.Day(day): @BillStatusMeaning.Plain(text, bill.BillType)</p>
+                }
+                @if (bill.Status is { } status and not BillStatusStage.Other)
+                {
+                    <p><StatusBadge Text="@BillStatusMeaning.StageName(status)" /></p>
+                }
+            </PublicRecordRow>
+        }
+    </Rows>
+</RecordListFrame>
+
+@code {
+    [Parameter, EditorRequired] public BillListPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    /// <summary>The bill type choices, in the order of the mockup. Each label starts with the printed type of <see cref="BillNumbers"/>.</summary>
+    private static readonly SearchChoiceData[] BillTypes =
+    [
+        Type("hr", "House bill"), Type("s", "Senate bill"), Type("hres", "House resolution"), Type("sres", "Senate resolution"),
+        Type("hjres", "House joint resolution"), Type("sjres", "Senate joint resolution"), Type("hconres", "House concurrent resolution"), Type("sconres", "Senate concurrent resolution")
+    ];
+
+    private static SearchChoiceData Type(string billType, string words) => new(billType, $"{BillNumbers.TypeLabel(billType)} ({words})");
+
+    /// <summary>The total covers the newest Congress only, as the page does.</summary>
+    private string TotalScope => Data.Congress is { } congress ? $" of the {CongressCalendar.Ordinal(congress)} Congress" : string.Empty;
+
+    /// <summary>A release with no bill has no Congress, so the lede names none.</summary>
+    private string Lede => (Data.Congress is { } congress ? $"Bills and resolutions in the {CongressCalendar.Ordinal(congress)} Congress" : "Bills and resolutions")
+        + ", with the latest official action on each. A bill moves up the list when a member signs on to it.";
+
+    /// <summary>The chips in the order of the mockup: bill type, bill number, sponsor, status, issue, policy area.</summary>
+    private IReadOnlyList<string?> Chips =>
+    [
+        RecordListSelect.LabelOf(BillTypes, Data.Filter.Value("type")), Data.Filter.Value("bill") is { } bill ? $"Number {bill}" : null,
+        Data.Filter.Value("sponsor") is { } sponsor ? $"Sponsor: {sponsor}" : null, RecordListSelect.LabelOf(Data.Statuses, Data.Filter.Value("status")),
+        RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue")), RecordListSelect.LabelOf(Data.PolicyAreas, Data.Filter.Value("policyArea"))
+    ];
+}

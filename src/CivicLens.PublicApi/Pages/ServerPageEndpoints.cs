@@ -22,9 +22,9 @@ namespace CivicLens.PublicApi.Pages;
 public static class ServerPageEndpoints
 {
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
-    public const string Prefix = "/web";
+    public const string Prefix = "/" + PublicSections.PreviewFolder;
 
-    /// <summary>Maps the gated home, Compare, officials, boards, search, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, officials, boards, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -46,6 +46,10 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
         routes.MapFixedPages(baseUrl);
+        routes.MapGet(PublicSections.ListOf(PublishedRecordKind.Vote).Href, ListPageEndpoints.VotesAsync);
+        routes.MapGet(PublicSections.ListOf(PublishedRecordKind.Action).Href, ListPageEndpoints.BillsAsync);
+        routes.MapGet(PublicSections.ListOf(PublishedRecordKind.Statement).Href, ListPageEndpoints.StatementsAsync);
+        routes.MapGet(PublicSections.ListOf(PublishedRecordKind.ExecutiveAction).Href, ListPageEndpoints.ExecutiveActionsAsync);
         routes.MapGet(Prefix + "/officials", OfficialsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/boards", BoardsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
@@ -94,7 +98,7 @@ public static class ServerPageEndpoints
             var kind = PublicationProtocol.IsAnyRecordId(recordId) ? await kinds.FindAsync(recordId, cancellationToken) : null;
             switch (kind)
             {
-                case PublishedRecordKind.Vote when await votes.ReadAsync(recordId, cancellationToken) is { } vote:
+                case PublishedRecordKind.Vote when await votes.ReadRecordPageAsync(recordId, cancellationToken) is { } vote:
                     var filter = new VoteMemberFilter(QueryValues.FilterValue(QueryValues.Value(context.Request.Query, "q")?.Trim(), "q"), QueryValues.Filter(context.Request.Query, "cast"),
                         QueryValues.Filter(context.Request.Query, "party"));
                     return await responder.RespondAsync<VoteDetailPage>(context, StatusCodes.Status200OK, vote.Release, new Dictionary<string, object?>

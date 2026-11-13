@@ -340,4 +340,14 @@ public sealed class BillDetailPageTests
         });
         return await new HtmlParser().ParseDocumentAsync(html);
     }
+
+    [Fact]
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    {
+        var corrected = await RenderAsync(Bill with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var plain = await RenderAsync(Bill);
+
+        PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
 }

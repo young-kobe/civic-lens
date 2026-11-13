@@ -18,6 +18,9 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
+    /// <summary>The kind word inside a sentence, such as "this vote". The withdrawal notice, the correction banner, and the report link use it.</summary>
+    public static string KindInSentence(PublishedRecordKind kind) => Kind(kind).ToLowerInvariant();
+
     public static IconName Icon(PublishedRecordKind kind) => kind switch
     {
         PublishedRecordKind.DocumentChange => IconName.DocumentChange,
@@ -66,6 +69,16 @@ public static class PublishedRecordLabels
         PublishedExecutiveActionKind.Notice => "Presidential notice",
         PublishedExecutiveActionKind.Memorandum => "Memorandum",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no label.")
+    };
+
+    /// <summary>The plural of <see cref="ExecutiveActionKind"/>, as the type chip of the executive action list shows it.</summary>
+    public static string ExecutiveActionKindPlural(PublishedExecutiveActionKind kind) => kind switch
+    {
+        PublishedExecutiveActionKind.ExecutiveOrder => "Executive orders",
+        PublishedExecutiveActionKind.Proclamation => "Proclamations",
+        PublishedExecutiveActionKind.Notice => "Presidential notices",
+        PublishedExecutiveActionKind.Memorandum => "Memorandums",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no plural label.")
     };
 
     public static string ReportCategory(string category) => category switch
@@ -154,7 +167,7 @@ public static class PublishedRecordLabels
 
     public const string ReportLinkStart = "Report a problem with this";
 
-    public static string ReportKindLink(PublishedRecordKind kind) => $"{ReportLinkStart} {Kind(kind).ToLowerInvariant()}";
+    public static string ReportKindLink(PublishedRecordKind kind) => $"{ReportLinkStart} {KindInSentence(kind)}";
 
     public const string ContactEmail = "contact@civic-lens.info";
 

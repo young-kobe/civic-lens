@@ -118,4 +118,14 @@ public sealed class DocumentChangeDetailPageTests
         Assert.Equal("Example Agency changed its visitor policy page", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
         Assert.NotNull(Assert.Single(page.QuerySelectorAll("a[href*='report']")).Closest(".public-footer"));
     }
+
+    [Fact]
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    {
+        var corrected = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var plain = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
+
+        PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
 }

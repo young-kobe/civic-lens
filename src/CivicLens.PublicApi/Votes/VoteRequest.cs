@@ -22,18 +22,22 @@ public sealed record VoteRequest
     public int Limit { get; init; } = SearchRequest.DefaultLimit;
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
-    public static VoteRequest Parse(IQueryCollection query) => new()
+    public static VoteRequest Parse(IQueryCollection query)
     {
-        Chamber = QueryValues.Choice<PublishedChamber>(query, "chamber"),
-        Congress = QueryValues.Number(query, "congress", 1, int.MaxValue),
-        Session = QueryValues.Number(query, "session", 1, 2),
-        Kind = QueryValues.Choice<PublishedVoteKind>(query, "kind"),
-        BillType = QueryValues.Filter(query, "billType")?.ToLowerInvariant(),
-        BillNumber = QueryValues.Number(query, "billNumber", 1, int.MaxValue),
-        Issue = QueryValues.Filter(query, "issue"),
-        From = QueryValues.Date(query, "from"),
-        To = QueryValues.Date(query, "to"),
-        Cursor = VoteCursor.Parse(QueryValues.Value(query, "cursor")),
-        Limit = QueryValues.PageLimit(query)
-    };
+        var (from, to) = QueryValues.DateRange(query);
+        return new()
+        {
+            Chamber = QueryValues.Choice<PublishedChamber>(query, "chamber"),
+            Congress = QueryValues.Number(query, "congress", 1, int.MaxValue),
+            Session = QueryValues.Number(query, "session", 1, 2),
+            Kind = QueryValues.Choice<PublishedVoteKind>(query, "kind"),
+            BillType = QueryValues.Filter(query, "billType")?.ToLowerInvariant(),
+            BillNumber = QueryValues.Number(query, "billNumber", 1, int.MaxValue),
+            Issue = QueryValues.Filter(query, "issue"),
+            From = from,
+            To = to,
+            Cursor = VoteCursor.Parse(QueryValues.Value(query, "cursor")),
+            Limit = QueryValues.PageLimit(query)
+        };
+    }
 }

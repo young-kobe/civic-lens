@@ -57,6 +57,12 @@ public interface IPublicationStore
 
     Task<int> AddBillStatusesAsync(int releaseNumber, IReadOnlyCollection<PublishedBillStatus> statuses, CancellationToken cancellationToken);
 
+    /// <summary>Reads up to <paramref name="limit"/> bill status rows with no stage that follow <paramref name="after"/> in key order.</summary>
+    Task<IReadOnlyList<BillStatusGap>> ReadBillStatusGapsAsync(BillStatusGap? after, int limit, CancellationToken cancellationToken);
+
+    /// <summary>Writes the stage of each row that holds none. It returns the number of rows that it wrote.</summary>
+    Task<int> FillBillStatusStagesAsync(IReadOnlyCollection<BillStatusGap> gaps, CancellationToken cancellationToken);
+
     /// <summary>Adds the vote links of one release and returns the number of rows added.</summary>
     Task<int> AddVoteBillsAsync(int releaseNumber, IReadOnlyCollection<ReleaseVoteBill> voteBills, CancellationToken cancellationToken);
 
