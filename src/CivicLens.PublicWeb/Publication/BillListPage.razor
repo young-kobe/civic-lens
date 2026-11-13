@@ -3,7 +3,7 @@
 
 <RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" Total="Data.Total" TotalScope="@TotalScope" RowCount="Data.Bills.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="@Lede" FilterSummary="Filter by status, sponsor or date" Singular="bill or resolution" Plural="bills and resolutions" EmptyTitle="No bill matches these filters."
-                 EmptyReleaseTitle="No bills or resolutions are published yet.">
+                 EmptyReleaseTitle="No bills or resolutions are published yet." Heading="@Heading">
     <Fields>
         <RecordListSelect Id="bills-type" Name="type" Label="Bill type" Choices="BillTypes" Filter="Data.Filter" />
         <RecordListSelect Id="bills-status" Name="status" Label="Status" Choices="Data.Statuses" Filter="Data.Filter" />
@@ -56,6 +56,9 @@
     /// <summary>A release with no bill has no Congress, so the lede names none.</summary>
     private string Lede => (Data.Congress is { } congress ? $"Bills and resolutions in the {CongressCalendar.Ordinal(congress)} Congress" : "Bills and resolutions")
         + ", with the latest official action on each. A bill moves up the list when a member signs on to it.";
+
+    /// <summary>A list filtered by one known issue takes the heading of the bills section of the issue page.</summary>
+    private string? Heading => RecordListSelect.LabelOf(Data.Issues, Data.Filter.Value("issue")) is { } issue ? IssueRecordWords.BillsHeading(issue) : null;
 
     /// <summary>The chips in the order of the mockup: bill type, bill number, sponsor, status, issue, policy area.</summary>
     private IReadOnlyList<string?> Chips =>

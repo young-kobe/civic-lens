@@ -48,7 +48,7 @@
                 }
             </section>
             <section class="issue-section" id="votes" aria-labelledby="issue-votes-title">
-                <h2 id="issue-votes-title">Roll call votes on @Data.Name</h2>
+                <h2 id="issue-votes-title">@IssueRecordWords.VotesHeading(Data.Name)</h2>
                 @if (Data.Votes.Length == 0)
                 {
                     <p>No substantive roll call vote in this release is tagged @Data.Name.</p>
@@ -67,10 +67,11 @@
                     {
                         <p class="small muted">The @Data.Votes.Length newest of @Data.SubstantiveVotes.</p>
                     }
+                    <p class="small"><a href="@IssueRecordWords.ListHref(PublishedRecordKind.Vote, Data.IssueId)">@IssueRecordWords.AllVotesLink(Data.Name)</a>@IssueRecordWords.AllVotesScope</p>
                 }
             </section>
             <section class="issue-section" id="bills" aria-labelledby="issue-bills-title">
-                <h2 id="issue-bills-title">Bills tagged @Data.Name</h2>
+                <h2 id="issue-bills-title">@IssueRecordWords.BillsHeading(Data.Name)</h2>
                 @if (Data.Bills.Length == 0)
                 {
                     <p>No bill or resolution in this release is tagged @Data.Name.</p>
@@ -89,6 +90,7 @@
                     {
                         <p class="small muted">The @Data.Bills.Length newest of @Data.BillCount.</p>
                     }
+                    <p class="small"><a href="@IssueRecordWords.ListHref(PublishedRecordKind.Action, Data.IssueId)">@IssueRecordWords.AllBillsLink(Data.BillCount)</a>@IssueRecordWords.AllBillsScope</p>
                 }
             </section>
             @if (Data.LineUp is { Bills: > 0 } lineUp)
