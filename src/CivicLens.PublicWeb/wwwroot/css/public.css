@@ -645,7 +645,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 }
 
 /* Official and President pages, server rendered. */
-.public-main:has(> .content > .official-page) { padding: 24px 16px 48px; }
+.public-main:has(> .content > .official-page) { padding: 24px var(--frame-pad) 48px; }
 .official-page { display: grid; gap: var(--s4); min-width: 0; font-size: 1rem; }
 .official-page > * { min-width: 0; margin: 0; }
 .official-page a:not(.btn) { color: var(--ink); text-decoration-thickness: 1px; text-underline-offset: .16em; }
