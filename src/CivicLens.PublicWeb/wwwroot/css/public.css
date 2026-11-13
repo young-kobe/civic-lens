@@ -54,6 +54,20 @@ table[data-paged]:focus { outline: none; }
 .home-preview-section { margin-top: var(--s6); }
 .home-preview-section > h2 { margin: 0 0 var(--s4); font-size: var(--t-h2); }
 .home-vote-caption { margin: 0 0 var(--s4); }
+.home-eyebrow { margin: 0 0 var(--s2); color: var(--muted); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.home-section-lede { max-width: 44rem; margin: 0 0 var(--s4); line-height: 1.55; }
+.home-featured-map { display: grid; gap: var(--s2); margin-block: var(--s4); }
+.home-featured-map .vote-map-frame { max-width: 520px; }
+.home-featured-map-link { justify-self: start; display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; }
+.home-featured-parties { display: grid; gap: var(--s3); margin-block: var(--s4); }
+.home-featured-map + .home-featured-parties { margin-top: 0; }
+.home-votes .record-rows .party-bar { max-width: 28rem; }
+.home-breaker-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--s3); margin: 0 0 var(--s4); padding: 0; list-style: none; }
+.home-breaker-card { display: grid; align-content: start; gap: var(--s1); min-width: 0; padding: var(--s4); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.home-breaker-card p { margin: 0; }
+.home-breaker-name { font-weight: 800; }
+.home-breaker-figure { font-family: var(--heading); font-size: var(--t-h2); font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-breakers-more { margin: 0; }
 .shared-vote-rows { min-width: 0; padding: 20px 14px; border-radius: 28px; background: var(--vote-surface); }
 .shared-vote-rows > h2 { margin: 0 0 var(--s2); font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; text-wrap: wrap; }
 .shared-vote-rows.single { padding: 0; background: none; }
@@ -751,6 +765,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-map-views-label { flex: 1 1 100%; color: var(--muted); font-size: var(--t-sm); font-weight: 650; }
 .vote-map-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .vote-map-frame svg { display: block; width: 100%; height: auto; }
+.vote-map-shapes { max-width: 960px; }
 .vote-map-frame .vote-map-tiles, .vote-map-tile-note { display: none; }
 .vote-map-tile-note { margin-bottom: var(--s3); }
 .vote-map-tiles { max-width: 392px; }
@@ -780,6 +795,25 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-map-circle { flex: none; width: 24px; height: 24px; }
 .vote-map .vote-fold { margin-top: var(--s4); border: 1px solid var(--line); box-shadow: none; }
 .vote-map .vote-fold > :not(summary) { margin: var(--s4); }
+/* Party color mode. Red and blue mark the parties. Yes is solid, No is striped, Present is dotted, and Not voting is ringed, as in vote mode, so color is never the only cue. A neutral party is gray. */
+.vote-map:not([data-color="party"]) .vote-map-legend-party, .vote-map[data-color="party"] .vote-map-legend-vote { display: none; }
+.vote-map-swatches { display: inline-flex; flex: none; gap: 2px; }
+.vote-map-defs [data-party="democrat"], .vote-map-seat[data-party="democrat"] { --tone: var(--party-dem); }
+.vote-map-defs [data-party="republican"], .vote-map-seat[data-party="republican"] { --tone: var(--party-rep); }
+.vote-map-defs [data-party="neutral"], .vote-map-seat[data-party="neutral"] { --tone: var(--muted); }
+.vote-map-defs [data-party] .vote-map-ink { fill: var(--tone); }
+.vote-map-defs [data-party] .vote-map-ring { stroke: var(--tone); }
+.vote-map[data-color="party"] .vote-map-seat:is([data-mark="yes"], [data-mark="no"], [data-mark="present"], [data-mark="not-voting"]) { stroke: var(--tone); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="yes"] { fill: var(--tone); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="no"][data-party="democrat"] { fill: url(#vote-map-party-no-democrat); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="no"][data-party="republican"] { fill: url(#vote-map-party-no-republican); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="no"][data-party="neutral"] { fill: url(#vote-map-party-no-neutral); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="present"][data-party="democrat"] { fill: url(#vote-map-party-present-democrat); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="present"][data-party="republican"] { fill: url(#vote-map-party-present-republican); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="present"][data-party="neutral"] { fill: url(#vote-map-party-present-neutral); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="not-voting"][data-party="democrat"] { fill: url(#vote-map-party-nv-democrat); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="not-voting"][data-party="republican"] { fill: url(#vote-map-party-nv-republican); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="not-voting"][data-party="neutral"] { fill: url(#vote-map-party-nv-neutral); }
 @media (max-width: 719px) {
     .vote-map:not([data-view]) .vote-map-shapes { display: none; }
     .vote-map:not([data-view]) :is(.vote-map-tiles, .vote-map-tile-note) { display: block; }
