@@ -199,13 +199,18 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     public async Task APageThatEndsOnAnUndatedStatementContinuesWithTheOtherUndatedStatements()
     {
         await using var host = await StartAsync();
-        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
-            new SeededStatement('6', null, ["p0"], [], "Person", "Person"), new SeededStatement('7', null, ["p0"], [], "Person", "Person"));
+        await StatementsSeed.AddAsync(host.OperationalDatabase, [.. Enumerable.Range(0, 27)
+            .Select(number => new SeededStatement('0', null, ["p0"], [], "Person", "Person") { RecordId = Id(number) })]);
 
-        var page = await GetPageAsync(host, $"/web/officials/p0/record.html?kind=statements&cursor=r.1.00010102.{new string('6', 64)}");
+        var first = await GetPageAsync(host, "/web/officials/p0/record.html?kind=statements");
+        var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
+        var second = await GetPageAsync(host, next.Replace("https://civic-lens.test/", "/web/"));
 
-        Assert.Equal([BaseUrl.Join($"records/{new string('7', 64)}.html")],
-            page.QuerySelectorAll(".record-row > div > a").Select(link => link.GetAttribute("href")!).ToArray());
+        var firstLinks = first.QuerySelectorAll(".record-row > div > a").Select(link => link.GetAttribute("href")!).ToArray();
+        var secondLinks = second.QuerySelectorAll(".record-row > div > a").Select(link => link.GetAttribute("href")!).ToArray();
+        Assert.Equal(25, firstLinks.Length);
+        Assert.Equal(Enumerable.Range(0, 27).Select(number => BaseUrl.Join($"records/{Id(number)}.html")).ToArray(), firstLinks.Concat(secondLinks).ToArray());
+        Assert.All(second.QuerySelectorAll(".record-row"), row => Assert.Contains("Date not stated", row.TextContent));
     }
 
     [Fact]
