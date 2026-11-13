@@ -76,13 +76,11 @@ internal static class DetailPageFixture
 
     public static readonly string RelationshipId = new('7', 64);
 
-    public const string RelationshipLabel = "Drafted by an AI model from this source. A person checked it before publication.";
-
     /// <summary>A relationship between the sample statement and a bill. A model reason carries the label of the view. The bill fact is model text with its own label.</summary>
     public static RelationshipPageData Relationship(PublishedTextOrigin origin = PublishedTextOrigin.Model, DateOnly? statementDate = null, bool dated = true) => new(
         7, RelationshipId, 2, "Kelly announces a bill and Drain the Slush Fund Act", PublishedRelationshipType.DescribesOwnBill,
         dated ? statementDate ?? new DateOnly(2026, 10, 29) : null, "Kelly says he introduced this <b>bill</b>.", origin,
-        origin == PublishedTextOrigin.Model ? RelationshipLabel : null,
+        origin == PublishedTextOrigin.Model ? PublishedWording.ModelRelationship : null,
         new(PublishedRecordKind.Statement, StatementId, 2, "Kelly announces a bill", PublishedTextOrigin.Model, StatementLabel),
         new(PublishedRecordKind.Action, ActionId, 1, "Drain the Slush Fund Act", PublishedTextOrigin.Code, null),
         "\u201cI introduced the Drain the Slush Fund Act.\u201d", "Summary: The bill shuts down the fund.", "An AI summary of the official record",

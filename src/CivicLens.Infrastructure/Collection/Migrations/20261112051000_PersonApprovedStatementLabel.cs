@@ -9,7 +9,7 @@ public partial class PersonApprovedStatementLabel : Migration
 {
     private const string CodeLabel = "An AI summary of this release.";
 
-    internal const string PersonLabel = "Drafted by an AI model from this source. A person checked it before publication.";
+    private const string PersonLabel = "Drafted by an AI model from this source. A person checked it before publication.";
 
     protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql($$"""
         CREATE OR REPLACE VIEW public_api.statements WITH (security_barrier = true) AS

@@ -33,12 +33,12 @@ public partial class PublicApiRelationships : Migration
         CASE ar.text_origin WHEN 'Model' THEN 'An AI summary of the official record' WHEN 'Code' THEN 'Written automatically from Congress.gov data, with no AI' END
         """;
 
-    // People approve every relationship, so a reason that a model drafted gets the label of person-approved model text.
+    // People approve every relationship. The label of a reason that a model drafted repeats PublishedWording.ModelRelationship, and a test compares the two.
     private const string RelationshipsSql = $"""
         CREATE VIEW public_api.relationships WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, e.headline, e.link_type, e.event_date AS statement_date, r.reason,
                CASE r.author_kind WHEN 'Analysis' THEN 'Model' ELSE 'Person' END AS text_origin,
-               CASE WHEN r.author_kind = 'Analysis' THEN '{PersonApprovedStatementLabel.PersonLabel}' END AS label,
+               CASE WHEN r.author_kind = 'Analysis' THEN 'Drafted by an AI model from these two records. A person checked it before publication.' END AS label,
                e.approved_by AS approver,
                e.statement_record_id, r.statement_revision_number, sh.headline AS statement_headline, sh.text_origin AS statement_text_origin, sh.label AS statement_label,
                e.target_kind, e.target_record_id, coalesce(r.target_action_revision_number, r.target_vote_revision_number) AS target_revision_number,

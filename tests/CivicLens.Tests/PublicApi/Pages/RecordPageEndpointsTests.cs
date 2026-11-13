@@ -252,7 +252,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal("Doe on rent and Housing bill", page.QuerySelector("h1")!.TextContent);
         Assert.Equal(RelationshipSeed.Reason, page.QuerySelector(".ai-summary p")!.TextContent);
-        Assert.Equal(PublishedRecordLabels.StatementCheckedByPersonWording, page.QuerySelector(".ai-summary-ai .ai-summary-label")!.TextContent);
+        Assert.Equal(PublishedWording.ModelRelationship, page.QuerySelector(".ai-summary-ai .ai-summary-label")!.TextContent);
         Assert.Equal([RelationshipSeed.Quote, $"Summary: {RelationshipSeed.ActionSummary}"], page.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
         Assert.Equal("Said on 1 May 2026.", page.QuerySelector(".detail-lede")!.TextContent);
         Assert.Equal(["Doe on rent", "Housing bill", "Zed Zane", "Ann Able"], page.QuerySelectorAll(".detail-list a").Select(link => link.TextContent));

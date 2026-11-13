@@ -11,6 +11,9 @@ public static class PublishedWording
     /// <summary>The label of a document change that a model drafted from source versions. A person checked it before publication.</summary>
     public const string ModelDocumentChange = "Drafted by an AI model from these source versions. A person checked it before publication.";
 
+    /// <summary>The label of a relationship reason that a model drafted from the statement and the record. A person checked it before publication.</summary>
+    public const string ModelRelationship = "Drafted by an AI model from these two records. A person checked it before publication.";
+
     public const string IssueIncludesLabel = "Includes";
 
     public const string IssueExcludesLabel = "Does not include";

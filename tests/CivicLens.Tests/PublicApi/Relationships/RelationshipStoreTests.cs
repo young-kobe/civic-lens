@@ -58,12 +58,12 @@ public sealed class RelationshipStoreTests(PostgresCollection postgres) : IAsync
     }
 
     [Fact]
-    public async Task AModelReasonCarriesTheLabelOfPersonApprovedModelTextAndAPersonReasonCarriesNone()
+    public async Task AModelReasonCarriesTheRelationshipLabelAndAPersonReasonCarriesNone()
     {
         var model = (await FindAsync(BillLink)).Page;
         var person = (await FindAsync(VoteLink)).Page;
 
-        Assert.Equal((PublishedTextOrigin.Model, PublishedRecordLabels.StatementCheckedByPersonWording), (model.TextOrigin, model.Label));
+        Assert.Equal((PublishedTextOrigin.Model, PublishedWording.ModelRelationship), (model.TextOrigin, model.Label));
         Assert.Equal((PublishedTextOrigin.Person, (string?)null), (person.TextOrigin, person.Label));
         Assert.Null(person.StatementDate);
     }

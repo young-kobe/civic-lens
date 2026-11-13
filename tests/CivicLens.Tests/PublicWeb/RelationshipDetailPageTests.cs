@@ -25,7 +25,7 @@ public sealed class RelationshipDetailPageTests
         var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship());
 
         var summary = page.QuerySelector(".ai-summary-ai")!;
-        Assert.Equal(RelationshipLabel, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(PublishedWording.ModelRelationship, summary.QuerySelector(".ai-summary-label")!.TextContent);
         Assert.Contains(RelationshipPageView.Caveat, summary.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Equal("#source", summary.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
         Assert.Equal("An AI summary of the official record", page.QuerySelectorAll(".detail-quotes li")[1].QuerySelector(".row span")!.TextContent);
