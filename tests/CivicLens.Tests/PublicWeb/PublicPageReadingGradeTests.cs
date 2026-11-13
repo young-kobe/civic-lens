@@ -153,10 +153,10 @@ public sealed class PublicPageReadingGradeTests
             "The whole section can hide a difficult model passage behind unrelated easy text.");
     }
 
-    private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND"];
+    private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND", "TD", "TH"];
     private static readonly string[] HeadingTags = ["H1", "H2", "H3", "H4", "H5", "H6"];
-    private const string RecordDataSelector = "script, style, tbody, pre, blockquote, .ai-summary > p:not([class]), .doc-text, option";
-    private static readonly string[] ContainerTags = ["DIV", "SECTION", "ARTICLE", "ASIDE", "MAIN", "HEADER", "FOOTER", "NAV", "FORM", "FIELDSET", "DETAILS", "FIGURE", "UL", "OL", "DL", "TABLE", "THEAD", "TR"];
+    private const string RecordDataSelector = "script, style, pre, blockquote, .ai-summary > p:not([class]), .doc-text, option";
+    private static readonly string[] ContainerTags = ["DIV", "SECTION", "ARTICLE", "ASIDE", "MAIN", "HEADER", "FOOTER", "NAV", "FORM", "FIELDSET", "DETAILS", "FIGURE", "UL", "OL", "DL", "TABLE", "THEAD", "TBODY", "TR"];
     private const int MinimumPassageWords = 6;
 
     /// <summary>The fixed text of a page: each block of at least <see cref="MinimumPassageWords"/> words that holds no record data. The first block under a heading
@@ -204,7 +204,7 @@ public sealed class PublicPageReadingGradeTests
 
     private static void Wrap(IDocument page, IElement container, List<INode> run)
     {
-        if (run.Any(node => node is IText text && !string.IsNullOrWhiteSpace(text.Data)))
+        if (run.Any(node => !string.IsNullOrWhiteSpace(node.TextContent)))
         {
             var paragraph = page.CreateElement("p");
             container.InsertBefore(paragraph, run[0]);
@@ -272,6 +272,18 @@ public sealed class PublicPageReadingGradeTests
 
     [Fact(Skip = "The owner kept this label on 2026-11-13, because labels keep their texts: \"Written automatically from Congress.gov data, with no AI\" reads at grade 12.6 alone.")]
     public void TheCodeWordingLabelReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(CodeWordingLabel);
+
+    [Fact]
+    public async Task HardProseInATableCellOrAnInlineOnlyNoticeFailsTheGate()
+    {
+        var page = await new HtmlParser().ParseDocumentAsync(
+            $"<main><table><tbody><tr><td>{DifficultSummary}</td></tr></tbody></table><div class=\"notice\"><span>{DifficultSummary}</span></div></main>");
+
+        var passages = FixedPassages(page, []);
+
+        Assert.Equal(2, passages.Count);
+        Assert.All(passages, passage => Assert.True(ReadingGrade.RoundedPassage(passage) > ReadingGrade.MaximumGrade));
+    }
 
     [Fact(Skip = "Owner question: the About page note on the two summary labels reads at grade 12.6. It quotes the code wording label.")]
     public void TheAboutPageLabelsNoteReadsAtOrBelowTheSharedGradeLimit() => AssertReadable(AboutLabelsNote);
@@ -465,8 +477,8 @@ public sealed class PublicPageReadingGradeTests
             ("search empty", Page<SearchResultsPage>(With("Data", search with { Query = new("zzqxv", null, null, null, null, null), Officials = [], Bill = null, Hits = [], NextCursor = null })), ["zzqxv"]),
             ("search none", Page<SearchResultsPage>(With("Data", search with { Query = new(null, null, null, null, null, null), Officials = [], Bill = null, Hits = [], NextCursor = null })), []),
             ("glossary", Page<PublishedGlossaryPage>(new() { ["RootPath"] = Root }), []),
-            ("about", Page<AboutPage>(new() { ["RootPath"] = Root }), []),
-            ("method", Page<MethodPage>(new() { ["RootPath"] = Root }), []),
+            ("about", Page<AboutPage>(new() { ["RootPath"] = Root }), ["Congressional Roll-Call Votes Database"]),
+            ("method", Page<MethodPage>(new() { ["RootPath"] = Root }), ["Congressional Roll-Call Votes Database"]),
             ("briefs", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 1, [new(new string('b', 64), new(2026, 11, 2), "The week in Congress", "An AI draft from reviewed records.", new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero))]))), ["The week in Congress"]),
             ("briefs empty", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 0, []))), []),
             ("issues index", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, [new("firearms", "Firearms", 119, 3, 186)]))), ["Firearms"]),
@@ -493,7 +505,7 @@ public sealed class PublicPageReadingGradeTests
             ("executive action list refused", Page<ExecutiveActionListPage>(With("Data", actionList with { Actions = [], NextCursor = null, Filter = RecordListFilter.Refused("to", ("to", "soon")) })), ListRecordData),
             ("vote corrected", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, PublishedCorrectionBannerTests.Newest.Note!]),
             ("bill corrected without note", Page<BillDetailPage>(With("Data", bill with { Corrections = [PublishedCorrectionBannerTests.Newest with { Note = null }] })), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
-            ("server shell", Shell<AboutPage>(new() { ["RootPath"] = Root }), []),
+            ("server shell", Shell<AboutPage>(new() { ["RootPath"] = Root }), ["Congressional Roll-Call Votes Database"]),
             ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),
             ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
             ("zip compare", Page<ZipMemberCards>(With("Data", zipCompare, ("View", "compare"))), ZipRecordData),
