@@ -28,8 +28,13 @@ public sealed class BillListReader(BillStore bills, IssueStore issues)
             throw new ArgumentException("bill and type name two different bill types.", "type");
         return BillRequest.Parse(query) with
         {
-            Congress = null, Sponsor = null, SponsorName = OfficialRequest.NameOf(query, "sponsor"), Status = QueryValues.Choice<BillStatusStage>(query, "status"),
-            BillType = numberType ?? chosenType, BillNumber = billNumber, Limit = PageSize
+            Congress = null,
+            Sponsor = null,
+            SponsorName = OfficialRequest.NameOf(query, "sponsor"),
+            Status = QueryValues.Choice<BillStatusStage>(query, "status"),
+            BillType = numberType ?? chosenType,
+            BillNumber = billNumber,
+            Limit = PageSize
         };
     }
 

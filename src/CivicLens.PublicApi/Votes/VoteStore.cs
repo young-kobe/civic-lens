@@ -361,7 +361,7 @@ public sealed class VoteStore(NpgsqlDataSource views)
         (request.Cursor is null ? "" : " AND m.\"position\" > @after");
 
     private static string ListSql(VoteRequest request, bool withTotal) => $"""
-        SELECT a.release_number, {Columns}{(withTotal ? ViewColumns.TotalColumn("public_api.votes") : "")}
+        SELECT a.release_number, {Columns}{(withTotal ? ", (SELECT count(*) FROM public_api.votes) AS in_release" : "")}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.* FROM public_api.votes v

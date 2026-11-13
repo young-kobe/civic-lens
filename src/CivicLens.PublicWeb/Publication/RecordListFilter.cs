@@ -1,4 +1,5 @@
 using System.Globalization;
+using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
@@ -8,7 +9,7 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
 {
     /// <summary>Keeps the pairs that have a value, in the given order, and then the dates.</summary>
     public static RecordListFilter Of(DateOnly? from, DateOnly? to, params (string Name, string? Value)[] pairs) =>
-        new(pairs.Append(("from", DateText(from))).Append(("to", DateText(to))).Where(pair => pair.Value is not null)
+        new(pairs.Append((Name: "from", Value: DateText(from))).Append((Name: "to", Value: DateText(to))).Where(pair => pair.Value is not null)
             .ToDictionary(pair => pair.Name, pair => pair.Value!), from, to);
 
     public bool IsActive => Values.Count > 0;

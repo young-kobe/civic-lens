@@ -60,7 +60,7 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
 
     private static string ListSql(ExecutiveActionListRequest request) => $"""
         SELECT a.release_number, e.record_id, e.revision_number, e.headline, e.kind, e.document_number, e.signed_on, e.published_on,
-               e.federal_register_citation, e.document_url, e.official_id, e.president_name{ViewColumns.TotalColumn("public_api.executive_actions")}
+               e.federal_register_citation, e.document_url, e.official_id, e.president_name, (SELECT count(*) FROM public_api.executive_actions) AS in_release
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT e.* FROM public_api.executive_actions e

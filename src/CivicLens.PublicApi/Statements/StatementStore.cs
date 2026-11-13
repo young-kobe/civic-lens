@@ -91,7 +91,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
         SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
                ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
                       WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
-               s.issue_ids{(withTotal ? ViewColumns.TotalColumn("public_api.statements") : "")}
+               s.issue_ids{(withTotal ? ", (SELECT count(*) FROM public_api.statements) AS in_release" : "")}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT s.* FROM public_api.statements s

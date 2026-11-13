@@ -212,7 +212,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02"), new SeededBill('b', "2024-03-02") { Congress = 118, BillNumber = 8 });
-        const string Lede = "Bills and resolutions in the 119th Congress, with the latest official action on each. A bill moves up the list when a member signs on to it.";
+        const string BillsLede = "Bills and resolutions in the 119th Congress, with the latest official action on each. A bill moves up the list when a member signs on to it.";
 
         var unstored = await GetPageAsync(host, "/web/bills");
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
@@ -220,8 +220,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var stored = await GetPageAsync(host, "/web/bills?policyArea=nothing");
 
         Assert.Equal(["a"], Ids(unstored));
-        Assert.Equal(Lede, Lede(unstored));
-        Assert.Equal("41 bills and resolutions are in this release. " + Lede, Lede(stored));
+        Assert.Equal(BillsLede, Lede(unstored));
+        Assert.Equal("41 bills and resolutions are in this release. " + BillsLede, Lede(stored));
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await BillsSeed.AddBillsAsync(host.OperationalDatabase,
             new SeededBill('a', "2026-03-01") { Issues = ["health"], BillNumber = 4, Sponsorships = [new("p1", "Sponsor", "2026-03-01"), new("p2", "Cosponsor", "2026-03-01")] },
             new SeededBill('b', "2026-03-02") { BillType = "s", BillNumber = 4, PolicyAreaId = "tax", Sponsorships = [new("p2", "Sponsor", "2026-03-02"), new("p1", "Cosponsor", "2026-03-02")] },
-            new SeededBill('c', "2026-03-03") { BillNumber = 9 });
+            new SeededBill('c', "2026-03-03") { BillNumber = 9, Sponsorships = [new("p3", "Sponsor", "2026-03-03")] });
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
             + StoredStatus('a', "Received in the Senate.", "PassedHouse") + "\n" + StoredStatus('c', "Became Public Law No: 119-1.", null) + "\n"
             + "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");

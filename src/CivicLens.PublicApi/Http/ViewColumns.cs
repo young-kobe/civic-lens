@@ -20,10 +20,7 @@ internal static class ViewColumns
             ? value
             : throw new InvalidDataException($"The view holds an unknown {typeof(T).Name}.");
 
-    /// <summary>The last column of a list read that counts every row of the view in the same query, so the total and the page share one snapshot.
+    /// <summary>Reads the last column of a list read, which counts every row of its view in the same query, so the total and the page share one snapshot.
     /// The officials list is the precedent. A filter never changes the total.</summary>
-    public static string TotalColumn(string view) => $", (SELECT count(*) FROM {view}) AS in_release";
-
-    /// <summary>Reads the column of <see cref="TotalColumn"/>.</summary>
     public static int Total(DbDataReader reader) => checked((int)reader.GetInt64(reader.FieldCount - 1));
 }
