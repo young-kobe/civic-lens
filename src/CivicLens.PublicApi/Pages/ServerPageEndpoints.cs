@@ -34,7 +34,8 @@ public static class ServerPageEndpoints
                     {
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = await home.WithDetailAsync(answer, cancellationToken),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.RootPath)] = baseUrl.Join(string.Empty),
-                        [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot,
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.FeaturedMapHref)] = answer.FeaturedVote is { } featured ? VoteMapRoute(featured.RecordId) : null
                     }, cancellationToken)
                 : ApiResults.NoRelease()));
         routes.MapGet(Prefix + "/compare", (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -65,7 +66,7 @@ public static class ServerPageEndpoints
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
-        routes.MapGet(Prefix + "/" + PublicationProtocol.VoteMapPagePath("{recordId}"), VoteMapPageEndpoint.RespondAsync);
+        routes.MapGet(VoteMapRoute("{recordId}"), VoteMapPageEndpoint.RespondAsync);
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, WithdrawalStore withdrawals, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
@@ -131,6 +132,9 @@ public static class ServerPageEndpoints
 
     /// <summary>The route of the server-rendered record page. One route serves every kind, because a record ID does not name its kind. The vote page uses it as an origin-relative form action, so a filter stays on the origin that served the page. The public base URL can name another origin.</summary>
     private static string RecordRoute(string recordId) => $"{Prefix}/{PublicationProtocol.RecordPagePath(recordId)}";
+
+    /// <summary>The route of the server-rendered map page. Home links it origin-relative, as the vote page form uses <see cref="RecordRoute"/>, so the link stays on the origin that served Home. The static site has no map page until the cutover.</summary>
+    private static string VoteMapRoute(string recordId) => $"{Prefix}/{PublicationProtocol.VoteMapPagePath(recordId)}";
 
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,

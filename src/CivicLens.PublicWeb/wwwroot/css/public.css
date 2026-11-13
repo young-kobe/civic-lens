@@ -60,6 +60,8 @@ table[data-paged]:focus { outline: none; }
 .home-featured-map .vote-map-frame { max-width: 520px; }
 .home-featured-map-link { justify-self: start; display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; }
 .home-featured-parties { display: grid; gap: var(--s3); margin-block: var(--s4); }
+.home-featured-map + .home-featured-parties { margin-top: 0; }
+.home-votes .record-rows .party-bar { max-width: 28rem; }
 .home-breaker-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--s3); margin: 0 0 var(--s4); padding: 0; list-style: none; }
 .home-breaker-card { display: grid; align-content: start; gap: var(--s1); min-width: 0; padding: var(--s4); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .home-breaker-card p { margin: 0; }
@@ -793,18 +795,22 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-map-circle { flex: none; width: 24px; height: 24px; }
 .vote-map .vote-fold { margin-top: var(--s4); border: 1px solid var(--line); box-shadow: none; }
 .vote-map .vote-fold > :not(summary) { margin: var(--s4); }
-/* Party color mode. Red and blue mark the parties. Yes is solid, No is striped, and Not voting is dotted, so color is never the only cue. A neutral party is gray. */
+/* Party color mode. Red and blue mark the parties. Yes is solid, No is striped, Present is dotted, and Not voting is ringed, as in vote mode, so color is never the only cue. A neutral party is gray. */
 .vote-map:not([data-color="party"]) .vote-map-legend-party, .vote-map[data-color="party"] .vote-map-legend-vote { display: none; }
 .vote-map-swatches { display: inline-flex; flex: none; gap: 2px; }
 .vote-map-defs [data-party="democrat"], .vote-map-seat[data-party="democrat"] { --tone: var(--party-dem); }
 .vote-map-defs [data-party="republican"], .vote-map-seat[data-party="republican"] { --tone: var(--party-rep); }
 .vote-map-defs [data-party="neutral"], .vote-map-seat[data-party="neutral"] { --tone: var(--muted); }
 .vote-map-defs [data-party] .vote-map-ink { fill: var(--tone); }
-.vote-map[data-color="party"] .vote-map-seat:is([data-mark="yes"], [data-mark="no"], [data-mark="not-voting"]) { stroke: var(--tone); }
+.vote-map-defs [data-party] .vote-map-ring { stroke: var(--tone); }
+.vote-map[data-color="party"] .vote-map-seat:is([data-mark="yes"], [data-mark="no"], [data-mark="present"], [data-mark="not-voting"]) { stroke: var(--tone); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="yes"] { fill: var(--tone); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="no"][data-party="democrat"] { fill: url(#vote-map-party-no-democrat); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="no"][data-party="republican"] { fill: url(#vote-map-party-no-republican); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="no"][data-party="neutral"] { fill: url(#vote-map-party-no-neutral); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="present"][data-party="democrat"] { fill: url(#vote-map-party-present-democrat); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="present"][data-party="republican"] { fill: url(#vote-map-party-present-republican); }
+.vote-map[data-color="party"] .vote-map-seat[data-mark="present"][data-party="neutral"] { fill: url(#vote-map-party-present-neutral); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="not-voting"][data-party="democrat"] { fill: url(#vote-map-party-nv-democrat); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="not-voting"][data-party="republican"] { fill: url(#vote-map-party-nv-republican); }
 .vote-map[data-color="party"] .vote-map-seat[data-mark="not-voting"][data-party="neutral"] { fill: url(#vote-map-party-nv-neutral); }

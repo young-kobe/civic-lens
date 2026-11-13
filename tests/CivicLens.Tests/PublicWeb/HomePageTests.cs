@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -197,7 +198,11 @@ public sealed class HomePageTests
         Assert.Equal("Published vote", row.QuerySelector("a > span")!.TextContent);
         Assert.Contains("AI label", row.QuerySelector("a")!.TextContent);
         Assert.Contains("House, 2 Mar 2026", row.QuerySelector("a")!.TextContent);
-        Assert.Equal("216Yes214NoPassed", row.QuerySelector(".record-counts")!.TextContent.Replace(" ", ""));
+        Assert.Equal("Passed", row.QuerySelector(".record-counts")!.TextContent.Trim());
+        Assert.Equal("House members", row.QuerySelector(".party-bar figcaption")!.TextContent);
+        Assert.Equal(["216 Yes", "214 No", "5 Not voting"], row.QuerySelectorAll(".party-bar-legend li").Select(item => item.TextContent.Trim()));
+        Assert.Null(row.QuerySelector(".party-bar-mark"));
+        Assert.Equal(VoteWords.SplitBadge, row.QuerySelector(".badge")!.TextContent);
         Assert.Equal("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
         var billParagraph = row.QuerySelector(".bill-line")!.ParentElement!;
@@ -215,9 +220,35 @@ public sealed class HomePageTests
     private static readonly VoteMemberData[] SeatedMembers = [Seat("Ada", "Aye", "Democrat", "MA", 7), Seat("Ben", "Nay", "Republican", "TX", 1), Seat("Cy", "Not Voting", "Republican", "TX", 2)];
 
     [Fact]
+    public async Task EachBarSentenceShowsOnlyWhenEveryRecentVoteRowDrawsItsBar()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        var withBars = await RenderAsync(new(7, Featured, votes, null));
+        Assert.Equal(4, withBars.QuerySelectorAll(".record-rows .party-bar").Length);
+        Assert.Contains("Each bar counts the members", withBars.QuerySelector(".home-votes .home-section-lede")!.TextContent);
+
+        votes[3] = votes[3] with { Totals = null };
+        var oneWithout = await RenderAsync(new(7, Featured, votes, null));
+        Assert.Equal(3, oneWithout.QuerySelectorAll(".record-rows .party-bar").Length);
+        Assert.Null(oneWithout.QuerySelector(".home-votes .home-section-lede"));
+    }
+
+    [Fact]
+    public async Task ARecentVoteRowShowsTheBadgeOfItsAlignmentAndNoneForAMixedVote()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        votes[1] = votes[1] with { Alignment = PublishedVoteAlignment.PartiesAgree };
+        votes[2] = votes[2] with { Alignment = PublishedVoteAlignment.Mixed };
+        var rows = (await RenderAsync(new(7, Featured, votes, null))).QuerySelectorAll(".record-rows > li");
+
+        Assert.Equal([VoteWords.SplitBadge, VoteWords.PartiesAgreedBadge, null, VoteWords.SplitBadge], rows.Select(row => row.QuerySelector(".badge")?.TextContent));
+    }
+
+    [Fact]
     public async Task TheFeaturedVoteShowsTheCompactMapItsCountsAndTheLinkToTheFullMap()
     {
-        var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) });
+        const string mapHref = "/web/records/map.html";
+        var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) }, featuredMapHref: mapHref);
         var featured = page.QuerySelector(".home-featured")!;
 
         var map = featured.QuerySelector(".vote-map[data-compact]")!;
@@ -228,7 +259,8 @@ public sealed class HomePageTests
         Assert.Null(map.QuerySelector("h2, table, [data-vote-map-views], [data-vote-map-colors]"));
         var link = featured.QuerySelector(".home-featured-map-link")!;
         Assert.Equal(VoteMapWords.OpenFullMap, link.TextContent);
-        Assert.Equal(Root + PublicationProtocol.VoteMapPagePath(Featured.RecordId), link.GetAttribute("href"));
+        Assert.Equal(mapHref, link.GetAttribute("href"));
+        Assert.Null((await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) })).QuerySelector(".home-featured-map-link"));
     }
 
     [Fact]
@@ -239,6 +271,10 @@ public sealed class HomePageTests
         var bars = page.QuerySelectorAll(".home-featured-parties .party-bar").ToArray();
         Assert.Equal(["House Democrats", "House Republicans", "House Independents"], bars.Select(bar => bar.QuerySelector("figcaption")!.TextContent));
     }
+
+    [Fact]
+    public void ThePartyBarsUnderTheMapDropTheirTopMarginSoTheMapLinkDoesNotLeaveADoubleGap() =>
+        Assert.Contains(".home-featured-map + .home-featured-parties { margin-top: 0; }", WebStyleSheets.Read("public.css"));
 
     [Fact]
     public async Task WithoutTheFeaturedPageDataOrSeatsTheHeroShowsNoMapAndNoMapLink()
@@ -330,17 +366,24 @@ public sealed class HomePageTests
 
     private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>
         [.. Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('b' + index), 64), new(2026, 3, 2),
-            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed", 216, 214, null)
+            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed",
+            VotePageView.ChamberBar(index < 2 ? PublishedChamber.House : PublishedChamber.Senate, 216, 214, 0, 5, false), null)
         { Alignment = alignment })];
 
-    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
+    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null, string? featuredMapHref = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var output = await renderer.RenderComponentAsync<HomePage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(HomePage.Data)] = data, [nameof(HomePage.RootPath)] = Root, [nameof(HomePage.BrowserApiUrl)] = browserApiUrl }));
+                new Dictionary<string, object?>
+                {
+                    [nameof(HomePage.Data)] = data,
+                    [nameof(HomePage.RootPath)] = Root,
+                    [nameof(HomePage.BrowserApiUrl)] = browserApiUrl,
+                    [nameof(HomePage.FeaturedMapHref)] = featuredMapHref
+                }));
             return output.ToHtmlString();
         });
         return await new HtmlParser().ParseDocumentAsync(html);

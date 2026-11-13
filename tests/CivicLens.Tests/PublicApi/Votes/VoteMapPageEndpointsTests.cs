@@ -7,6 +7,7 @@ using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Officials;
+using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Tests.PublicApi.Votes;
 
@@ -20,14 +21,14 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
 
     private static SeededTerm Term(string state, int district) => new("Representative", "Representative", "2025-01-03") { State = state, District = district };
 
-    private async Task<ApiHost> StartAsync(bool withSeats = true)
+    private async Task<ApiHost> StartAsync(bool withSeats = true, ILoggerProvider? logs = null, bool everyMemberNamed = true)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl }, logProvider: logs);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, House);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
-            new SeededOfficial("p0", "Ann Able", withSeats ? [Term("CA", 12)] : []), new SeededOfficial("p1", "Ben Baker", withSeats ? [Term("TX", 1)] : []),
-            new SeededOfficial("p2", "Cy Cole", withSeats ? [Term("TX", 2)] : []), new SeededOfficial("p3", "Di Dole", withSeats ? [Term("AK", 0)] : []));
+            [.. new[] { new SeededOfficial("p0", "Ann Able", withSeats ? [Term("CA", 12)] : []), new SeededOfficial("p1", "Ben Baker", withSeats ? [Term("TX", 1)] : []),
+                new SeededOfficial("p2", "Cy Cole", withSeats ? [Term("TX", 2)] : []), new SeededOfficial("p3", "Di Dole", withSeats ? [Term("AK", 0)] : []) }.Take(everyMemberNamed ? 4 : 3)]);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
             UPDATE vote_member_list_entries SET party = CASE person_id WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Democrat' ELSE 'Republican' END WHERE list_id = '{House.RecordId}';
             """);
@@ -102,7 +103,9 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, ServerPageEndpoints.Prefix);
 
         Assert.Equal(1, page.QuerySelectorAll(".home-featured .vote-map[data-compact]").Length);
-        Assert.Equal(Root(PublicationProtocol.VoteMapPagePath(House.RecordId)), page.QuerySelector(".home-featured-map-link")!.GetAttribute("href"));
+        Assert.Equal(MapPath, page.QuerySelector(".home-featured-map-link")!.GetAttribute("href"));
+        using var map = await host.Client.GetAsync(page.QuerySelector(".home-featured-map-link")!.GetAttribute("href"));
+        Assert.Equal(HttpStatusCode.OK, map.StatusCode);
         Assert.Contains("1 Yes, 2 No, 1 Not voting, 431 No member in the record", page.QuerySelector(".home-featured .vote-map-shapes")!.GetAttribute("aria-label"));
         Assert.Null(page.QuerySelector(".home-breakers"));
     }
@@ -117,6 +120,19 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
         Assert.NotNull(page.QuerySelector(".home-featured h2"));
         Assert.Null(page.QuerySelector(".home-featured .vote-map"));
         Assert.Null(page.QuerySelector(".home-featured-map-link"));
+    }
+
+    [Fact]
+    public async Task TheHomeRouteLogsAWarningWithTheRecordIdWhenItLeavesOutTheFeaturedMap()
+    {
+        var logs = new CapturedLogs();
+        await using var host = await StartAsync(logs: logs, everyMemberNamed: false);
+
+        var page = await GetPageAsync(host, ServerPageEndpoints.Prefix);
+
+        Assert.NotNull(page.QuerySelector(".home-featured h2"));
+        Assert.Null(page.QuerySelector(".home-featured .vote-map"));
+        Assert.Contains(logs.Lines, line => line.Contains(House.RecordId, StringComparison.Ordinal) && line.Contains("has no official name", StringComparison.Ordinal));
     }
 
     private static string Root(string path) => "https://civic-lens.test/" + path;

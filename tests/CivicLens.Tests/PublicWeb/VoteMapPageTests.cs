@@ -96,21 +96,32 @@ public sealed class VoteMapPageTests
     }
 
     [Fact]
-    public async Task ThePartyModePaintsYesSolidNoStripedAndNotVotingDottedForEachPartyInCss()
+    public async Task ThePartyModePaintsYesSolidNoStripedPresentDottedAndNotVotingRingedForEachPartyInCss()
     {
         var css = WebStyleSheets.Read("public.css");
         foreach (var party in new[] { "democrat", "republican", "neutral" })
         {
             Assert.Contains($".vote-map[data-color=\"party\"] .vote-map-seat[data-mark=\"no\"][data-party=\"{party}\"] {{ fill: url(#vote-map-party-no-{party}); }}", css);
+            Assert.Contains($".vote-map[data-color=\"party\"] .vote-map-seat[data-mark=\"present\"][data-party=\"{party}\"] {{ fill: url(#vote-map-party-present-{party}); }}", css);
             Assert.Contains($".vote-map[data-color=\"party\"] .vote-map-seat[data-mark=\"not-voting\"][data-party=\"{party}\"] {{ fill: url(#vote-map-party-nv-{party}); }}", css);
         }
         Assert.Contains(".vote-map[data-color=\"party\"] .vote-map-seat[data-mark=\"yes\"] { fill: var(--tone); }", css);
+        Assert.Contains(".vote-map-defs [data-party] .vote-map-ring { stroke: var(--tone); }", css);
+    }
+
+    [Fact]
+    public async Task InThePartyModePresentAndNotVotingKeepTheTwoShapesOfTheVoteModeSoColorIsNeverTheOnlyCue()
+    {
         var page = await RenderPageAsync(House(Members));
+
+        string Shape(string id) => page.GetElementById(id)!.QuerySelector("circle")!.OuterHtml;
         foreach (var party in new[] { "democrat", "republican", "neutral" })
         {
             Assert.NotNull(page.GetElementById($"vote-map-party-no-{party}"));
-            Assert.NotNull(page.GetElementById($"vote-map-party-nv-{party}"));
+            Assert.Equal(Shape("vote-map-present"), Shape($"vote-map-party-present-{party}"));
+            Assert.Equal(Shape("vote-map-not-voting"), Shape($"vote-map-party-nv-{party}"));
         }
+        Assert.NotEqual(Shape("vote-map-present"), Shape("vote-map-not-voting"));
     }
 
     [Fact]
@@ -120,6 +131,8 @@ public sealed class VoteMapPageTests
 
         Assert.Null(page.QuerySelector(".vote-map"));
         Assert.Equal(VoteMapWords.NoMapTitle, page.QuerySelector(".empty h3")!.TextContent);
+        Assert.Equal(["H1", "H2", "H3"], page.QuerySelectorAll("main :is(h1, h2, h3, h4)").Select(heading => heading.TagName));
+        Assert.Equal(VoteMapWords.Heading, page.QuerySelector("main h2")!.TextContent);
         Assert.Contains(VoteMapWords.NoMap, page.QuerySelector(".empty")!.TextContent);
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(RecordId), page.QuerySelector(".empty a")!.GetAttribute("href"));
         Assert.Equal("How the House voted: roll call 308, H.R. 5334", page.QuerySelector("h1")!.TextContent);

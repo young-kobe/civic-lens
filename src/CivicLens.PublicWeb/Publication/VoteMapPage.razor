@@ -8,7 +8,10 @@
     </PageHeader>
     @if (map is null)
     {
-        <EmptyState Title="@VoteMapWords.NoMapTitle">@VoteMapWords.NoMap <a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId))">@VoteMapWords.BackToVote</a></EmptyState>
+        <section aria-labelledby="vote-map-title">
+            <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
+            <EmptyState Title="@VoteMapWords.NoMapTitle">@VoteMapWords.NoMap <a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId))">@VoteMapWords.BackToVote</a></EmptyState>
+        </section>
     }
     else
     {
