@@ -17,9 +17,7 @@ internal static class PublishedOfficialView
     {
         MemberRosterParser.Senate => "Senator",
         MemberRosterParser.House => "Representative",
-        ExecutiveRosterParser.President => "President",
-        ExecutiveRosterParser.VicePresident => "Vice President",
-        _ => term.Office
+        _ => OfficialSeat.ExecutiveRole(term.Office) ?? term.Office
     };
 
     private static string Place(PublishedOfficeTerm term, Func<string?, int?, string> place) => term.Office switch

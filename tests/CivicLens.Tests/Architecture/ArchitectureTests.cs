@@ -100,6 +100,7 @@ public sealed class ArchitectureTests
                 || path == Path.Combine(apiRoot, "Officials", "OfficialAttendanceReader.cs")
                 || path == Path.Combine(apiRoot, "Officials", "OfficialActivityReader.cs")
                 || path == Path.Combine(apiRoot, "Officials", "OfficialPageQueries.cs")
+                || path == Path.Combine(apiRoot, "Officials", "OfficialRecordQueries.cs")
                 || path == Path.Combine(apiRoot, "Ingest", "TypedReleaseRead.cs")
                 || path == Path.Combine(apiRoot, "Ingest", "TypedEntryReader.cs")
                 || path == Path.Combine(apiRoot, "Ingest", "TypedTextReader.cs");
