@@ -148,7 +148,9 @@ public sealed class PublishedExecutiveActionTests
         var record = WithSummary();
         var notices = Enumerable.Range(1, PublishedExecutiveAction.MaximumNotices).Select(number => new PublishedExecutiveActionNotice
         {
-            DocumentNumber = $"R1-2025-{number:D5}", PublishedOn = new DateOnly(2025, 2, number), Url = $"https://www.federalregister.gov/d/R1-2025-{number:D5}"
+            DocumentNumber = $"R1-2025-{number:D5}",
+            PublishedOn = new DateOnly(2025, 2, number),
+            Url = $"https://www.federalregister.gov/d/R1-2025-{number:D5}"
         }).ToArray();
         var texts = notices.Select(notice => $"{PublishedExecutiveAction.CorrectionNoticeLabel}: {notice.Value}").ToArray();
         var ids = notices.Select((_, index) => new string((char)('1' + index), 64)).ToArray();
