@@ -8,7 +8,7 @@
                 <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
                 @if (BrowserApiUrl is not null)
                 {
-                    <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="zip-code" />
+                    <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="@ZipInputId" />
                     <p class="home-browse"><a href="@(RootPath + "compare.html")">Compare your members</a></p>
                 }
                 <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
@@ -24,6 +24,25 @@
                     @if (featured.Yea is { } yea && featured.Nay is { } nay)
                     {
                         <p class="record-counts"><span><b>@yea</b> Yes</span><span><b>@nay</b> No</span></p>
+                    }
+                    @if (featuredMap is not null)
+                    {
+                        <div class="home-featured-map">
+                            <VoteMap Data="featuredMap" RollCall="Data.FeaturedVoteDetail!.RollCall" RootPath="@RootPath" Compact="true" />
+                            @if (FeaturedMapHref is not null)
+                            {
+                                <a class="home-featured-map-link" href="@FeaturedMapHref">@VoteMapWords.OpenFullMap</a>
+                            }
+                        </div>
+                    }
+                    @if (featuredParties.Count > 0)
+                    {
+                        <div class="home-featured-parties">
+                            @for (var index = 0; index < featuredParties.Count; index++)
+                            {
+                                <PartyBar Id="@($"home-party-{index}")" Data="featuredParties[index]" />
+                            }
+                        </div>
                     }
                     @if (featured.TextOrigin == PublishedTextOrigin.Model)
                     {
@@ -48,6 +67,11 @@
                                 <span>@(" " + featured.BillLineSource)</span>
                             }
                         </p>
+                    }
+                    <p class="small muted home-featured-rule">Civic Lens picks this vote by a fixed rule: the latest passage vote on a bill.</p>
+                    @if (BrowserApiUrl is not null)
+                    {
+                        <p class="small muted home-featured-zip"><a href="@("#" + ZipInputId)">Enter your ZIP code</a> to see how your members voted on this.</p>
                     }
                 </section>
             }
@@ -86,8 +110,13 @@
             @if (Data.Votes.Length > 0)
             {
                 <section class="home-preview-section home-votes" aria-labelledby="home-recent-title">
-                    <h2 id="home-recent-title">Latest votes in Congress</h2>
-                    @if (Data.Votes.Length == 4 && Data.Votes.All(vote => vote.Alignment == PublishedVoteAlignment.Split))
+                    <p class="home-eyebrow">Latest votes in Congress</p>
+                    <h2 id="home-recent-title">@(Data.Votes.Length == FourVotes ? "Four recent " : "Recent ")<Term Key="substantive-vote">substantive</Term> votes</h2>
+                    @if (Data.Votes.Length == FourVotes && Data.Votes.All(vote => vote.Totals is not null))
+                    {
+                        <p class="home-section-lede">Two House votes and two Senate votes, newest in this release. Each bar counts the members of that chamber who voted Yes, No or not at all.</p>
+                    }
+                    @if (Data.Votes.Length == FourVotes && Data.Votes.All(vote => vote.Alignment == PublishedVoteAlignment.Split))
                     {
                         <p class="muted small home-vote-caption">All four votes shown split the parties. Among members voting Yes or No, most Democrats and most Republicans chose opposite sides.</p>
                     }
@@ -95,7 +124,16 @@
                         @foreach (var vote in Data.Votes)
                         {
                             <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label"
-                                             Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@vote.ResultWords" BillLine="@vote.BillLine" />
+                                             Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" ResultWords="@vote.ResultWords" BillLine="@vote.BillLine">
+                                @if (vote.Totals is { } totals)
+                                {
+                                    <PartyBar Id="@($"home-vote-{vote.RecordId}")" Data="totals" />
+                                }
+                                @if (VoteWords.Badge(vote.Alignment) is { } badge)
+                                {
+                                    <StatusBadge Text="@badge.Text" />
+                                }
+                            </PublicRecordRow>
                         }
                     </ul>
                 </section>
@@ -117,6 +155,25 @@
                             </li>
                         }
                     </ul>
+                </section>
+            }
+            @if (breakers.Count > 0)
+            {
+                <section class="home-breakers" aria-labelledby="home-breakers-title">
+                    <h2 id="home-breakers-title">Who broke from their party most</h2>
+                    <p class="home-section-lede">Each name below is the member in one chamber and party who voted against most of their own party on <Term Key="split-vote">split vote</Term> most often@(sharedCongress is { } congress ? $" in the {CongressCalendar.Ordinal(congress)} Congress" : ""). A member needs at least @OfficialBoardPage.MinimumSplitVotes split votes cast to count.</p>
+                    <ul class="home-breaker-list" role="list">
+                        @foreach (var card in breakers)
+                        {
+                            <li class="home-breaker-card">
+                                <a class="home-breaker-name" href="@(RootPath + card.Row.PagePath)">@card.Row.Name</a>
+                                <p class="muted small">@PublishedPartyNames.PartyOf(card.Panel.Chamber, card.Panel.Party)@(card.Row.Seat is null ? "" : ", " + card.Row.Seat)</p>
+                                <span class="home-breaker-figure">@card.Row.Breaks of @card.Row.Cast</span>
+                                <p class="muted small">split votes cast against most @PublishedPartyNames.Members(card.Panel.Party)@(sharedCongress is null ? $", {CongressCalendar.Ordinal(card.Panel.Congress!.Value)} Congress" : "")</p>
+                            </li>
+                        }
+                    </ul>
+                    <p class="small home-breakers-more">A vote against the party is not a mistake. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we choose these members</a> | <a href="@(RootPath + PublicSections.StaticBoardsPath)">See all four party boards</a></p>
                 </section>
             }
             @if (Data.ExecutiveActions.Length > 0)
@@ -161,7 +218,26 @@
 </PublicPage>
 
 @code {
+    private const int FourVotes = 4;
+    private const string ZipInputId = "zip-code";
+    private VoteMapData? featuredMap;
+    private IReadOnlyList<PartyBarData> featuredParties = [];
+    private IReadOnlyList<(BoardPanelData Panel, BoardRowData Row)> breakers = [];
+    private int? sharedCongress;
+
     [Parameter, EditorRequired] public HomePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
     [Parameter] public string? BrowserApiUrl { get; set; }
+    /// <summary>The address of the full map page of the featured vote. The route that serves Home sets it, because the map page lives under the server-page prefix until the cutover.</summary>
+    [Parameter] public string? FeaturedMapHref { get; set; }
+
+    /// <summary>The map and the party bars come from the page data of the featured vote. Each card of the break board is the first member of one board.
+    /// The lede names the Congress when every shown board keeps the same one. Otherwise each card names its own.</summary>
+    protected override void OnParametersSet()
+    {
+        featuredMap = Data.FeaturedVoteDetail is { } detail ? VoteMapData.Of(detail) : null;
+        featuredParties = Data.FeaturedVoteDetail is { } vote ? VotePageView.PartyBars(vote) : [];
+        breakers = [.. Data.Boards.Where(panel => panel.Congress is not null && panel.Rows.Count > 0).Select(panel => (panel, panel.Rows[0]))];
+        sharedCongress = breakers.Select(card => card.Panel.Congress).Distinct().ToArray() is [var congress] ? congress : null;
+    }
 }

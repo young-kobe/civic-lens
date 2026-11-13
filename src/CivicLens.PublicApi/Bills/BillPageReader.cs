@@ -1,5 +1,4 @@
 using CivicLens.PublicApi.Votes;
-using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -100,8 +99,8 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes)
         PlainVoteWords.Kind(vote.Kind), PlainVoteWords.Result(vote.Result), [])
     {
         Alignment = vote.Alignment,
-        Totals = vote is { Yea: { } yes, Nay: { } no, Present: { } present, NotVoting: { } notVoting } && yes + no + present + notVoting > 0
-            ? VotePageView.CastBar($"{vote.Chamber} members", PartyTone.Neutral, yes, no, present, notVoting, 0, VoteThreshold.None)
+        Totals = vote is { Yea: { } yes, Nay: { } no, Present: { } present, NotVoting: { } notVoting }
+            ? VotePageView.ChamberBar(vote.Chamber, yes, no, present, notVoting, VoteThreshold.None)
             : null
     };
 

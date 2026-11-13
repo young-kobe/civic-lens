@@ -61,10 +61,13 @@ public static class VotePageView
     };
 
     /// <summary>The bar of all casts of the chamber. Null when the source gives no totals, as for a vote for a candidate.</summary>
-    public static PartyBarData? ChamberBar(VotePageData vote) =>
-        vote.Totals is { } totals && totals.Yea + totals.Nay + totals.Present + totals.NotVoting > 0
-            ? CastBar($"{vote.Chamber} members", PartyTone.Neutral, totals.Yea, totals.Nay, totals.Present, totals.NotVoting, 0, ThresholdOf(vote))
-            : null;
+    public static PartyBarData? ChamberBar(VotePageData vote) => vote.Totals is { } totals
+        ? ChamberBar(vote.Chamber, totals.Yea, totals.Nay, totals.Present, totals.NotVoting, ThresholdOf(vote))
+        : null;
+
+    /// <summary>The one owner of the chamber bar that vote pages and vote lists draw from the published counts. Null when no member has a cast.</summary>
+    public static PartyBarData? ChamberBar(PublishedChamber chamber, int yes, int no, int present, int notVoting, VoteThreshold threshold) =>
+        yes + no + present + notVoting > 0 ? CastBar($"{chamber} members", PartyTone.Neutral, yes, no, present, notVoting, 0, threshold) : null;
 
     public static string ChamberCaption(VotePageData vote, PartyBarData bar) =>
         $"The bar counts the {vote.Chamber} members by their vote on {Moment.Day(vote.VotedOn)}: {PlainVoteWords.Yes}, {PlainVoteWords.No}, {PlainVoteWords.Present}, or {PlainVoteWords.NotVoting}. {bar.Total} members have a recorded position, including {bar.Segments.Single(segment => segment.Label == PlainVoteWords.NotVoting).Count} who did not vote.";
