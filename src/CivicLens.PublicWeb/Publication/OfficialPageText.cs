@@ -20,11 +20,10 @@ public static class OfficialPageText
 
     public const string ExecutiveBox = "The President signs these documents. The Federal Register prints them, and Civic Lens copies each title and date from there. A title alone does not show what a document does, so each page links to the full text.";
 
-    /// <summary>The lede of the header: party, role, place, and the end of the current term. The rules are <see cref="OfficeLede"/>, and no current term end shows for a former member or when the release date is unknown.</summary>
+    /// <summary>The lede of the header: party, role and place, then the tenure, then the end of the current term. The rules are <see cref="OfficeLede"/> and
+    /// <see cref="OfficeTenure"/>. No tenure or term end shows when the release date is unknown, and no term end shows for a former member.</summary>
     public static string Lede(OfficialPageData data)
     {
-        var known = data.PublishedOn is not null;
-        var ended = data.PublishedOn is { } publishedOn && OfficeLede.HasEnded(data.TermEndsOn, publishedOn);
         var role = data.Kind switch
         {
             PublishedOfficeKind.Senator => "senator",
@@ -32,12 +31,16 @@ public static class OfficialPageText
             _ => "official"
         };
         var place = OfficeLede.LedePlace(data.State, data.District);
-        var text = OfficeLede.Of(ended, data.Party, role, place, data.Caucus) + ".";
-        return known && !ended && data.TermEndsOn is { } day ? $"{text} Current term ends {Moment.Day(day)}." : text;
+        if (data.PublishedOn is not { } publishedOn) return OfficeLede.Of(false, data.Party, role, place, data.Caucus) + ".";
+        var ended = OfficeLede.HasEnded(data.TermEndsOn, publishedOn);
+        string?[] sentences =
+        [
+            OfficeLede.Of(ended, data.Party, role, place, data.Caucus) + ".",
+            OfficeTenure.Of(data.Terms, publishedOn),
+            !ended && data.TermEndsOn is { } day ? $"Current term ends {Moment.Day(day)}." : null
+        ];
+        return string.Join(' ', sentences.OfType<string>());
     }
-
-    /// <summary>The tenure sentence, such as "In the House since January 2019." It is null when the release date is unknown or the terms hold no House or Senate term.</summary>
-    public static string? Tenure(OfficialPageData data) => data.PublishedOn is { } publishedOn ? OfficeTenure.Of(data.Terms, publishedOn) : null;
 
     /// <summary>The party figure of the page. One figure covers the page, so a member with two party lines shows the newest.</summary>
     public static OfficialPartyLineData? MainPartyLine(OfficialPageData data) =>
@@ -73,15 +76,6 @@ public static class OfficialPageText
         (PublishedExecutiveActionKind.Memorandum, 1) => "memorandum",
         (PublishedExecutiveActionKind.Memorandum, _) => "memorandums",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no plural.")
-    };
-
-    public static string ExecutiveMeaning(PublishedExecutiveActionKind kind) => kind switch
-    {
-        PublishedExecutiveActionKind.ExecutiveOrder => "An executive order is a signed direction from the President to federal agencies. It can change how agencies carry out laws.",
-        PublishedExecutiveActionKind.Proclamation => "A proclamation is a public statement from the President. Many name a day or month. Some, such as tariff changes, have legal effect.",
-        PublishedExecutiveActionKind.Notice => "A notice gives public information. One example is the yearly renewal of a national emergency.",
-        PublishedExecutiveActionKind.Memorandum => "A memorandum is a written direction to a federal agency or official. It often has less detail than an order.",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Executive action kind has no meaning text.")
     };
 
     public static string ExecutiveAnchor(PublishedExecutiveActionKind kind) => "type-" + kind.ToString().ToLowerInvariant();

@@ -48,6 +48,10 @@ public static class ExecutiveActionWords
         return char.ToUpperInvariant(article[0]) + article[1..];
     }
 
+    /// <summary>The whole explainer sentence as plain text, such as "An executive order is a signed direction ...". The President page shows it for each kind,
+    /// and the action page shows the same words with the kind name as a glossary term. So each kind has one meaning on every page.</summary>
+    public static string ExplainerText(PublishedExecutiveActionKind kind) => $"{ExplainerArticle(kind)} {KindName(kind)} is {ExplainerMeaning(kind)} {ExplainerWhy(kind)}";
+
     private static string Article(string word) => "aeiou".Contains(word[0]) ? "an" : "a";
 
     public const string ReadIt = "Read it in the Federal Register";

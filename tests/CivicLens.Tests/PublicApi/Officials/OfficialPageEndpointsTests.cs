@@ -109,14 +109,15 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheTenureSentenceFollowsTheLedeAndAnOfficialWithNoHouseOrSenateTermHasNone()
+    public async Task TheTenureSentenceFollowsTheRoleAndComesBeforeTheTermEndAndAnOfficialWithNoHouseOrSenateTermHasNone()
     {
         await using var host = await StartAsync();
 
         var member = await GetPageAsync(host, "/web/officials/p0");
         var justice = await GetPageAsync(host, "/web/officials/justice");
 
-        Assert.EndsWith(" In the House since January 2025.", member.QuerySelector(".official-lede")!.TextContent);
+        Assert.Equal("Democratic representative for Massachusetts, district 7. In the House since January 2025. Current term ends 3 Jan 2027.",
+            member.QuerySelector(".official-lede")!.TextContent);
         Assert.DoesNotContain("since", justice.QuerySelector(".official-lede")!.TextContent);
     }
 

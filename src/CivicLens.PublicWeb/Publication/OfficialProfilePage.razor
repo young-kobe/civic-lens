@@ -2,7 +2,6 @@
 @using CivicLens.Publication.Contracts
 @{
     var party = OfficialPageText.MainPartyLine(Data);
-    var tenure = OfficialPageText.Tenure(Data);
     var showVotes = Data.Votes.Length > 0 || Data.Marks.Length > 0;
     var showStatements = Data.Statements.Length > 0;
     var showBills = Data.Bills.Length > 0;
@@ -22,7 +21,7 @@
                 <div class="official-portrait"><OfficialPortrait Name="@Data.Name" PhotoPath="@Data.PhotoPath" RootPath="@RootPath" ShowCredit="false" /></div>
                 <div>
                     <h1>@Data.Name</h1>
-                    <p class="official-lede">@OfficialPageText.Lede(Data)@if (tenure is not null){<text>@(" ")@tenure</text>}</p>
+                    <p class="official-lede">@OfficialPageText.Lede(Data)</p>
                     @if (Data.Website is { } website)
                     {
                         <p class="small muted">Official site: <a href="@website" rel="noopener noreferrer">@PublishedWebsite.Host(website)</a>.</p>

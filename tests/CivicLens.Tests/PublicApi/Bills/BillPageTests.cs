@@ -200,13 +200,15 @@ public sealed class BillPageTests(PostgresCollection postgres)
     }
 
     [Theory]
-    [InlineData("Model", "An AI summary of the official record")]
-    [InlineData("Code", "Written automatically from Congress.gov data, with no AI")]
-    [InlineData("Person", null)]
-    public async Task TheSourceFoldStatesTheWordingOfTheSummaryByItsStoredOriginAndAPersonSummaryHasNoWordingRow(string origin, string? wording)
+    [InlineData("Model", "A summary.", "An AI summary of the official record")]
+    [InlineData("Code", "A summary.", "Written automatically from Congress.gov data, with no AI")]
+    [InlineData("Person", "A summary.", null)]
+    [InlineData("Model", " ", null)]
+    public async Task TheSourceFoldStatesTheWordingOfTheSummaryByItsStoredOriginAndAPersonSummaryOrNoSummaryHasNoWordingRow(string origin, string summary, string? wording)
     {
         await using var host = await StartAsync();
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"SET session_replication_role = replica; UPDATE action_revisions SET text_origin = '{origin}' WHERE record_id = '{BillId}';");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"SET session_replication_role = replica; UPDATE action_revisions SET text_origin = '{origin}', summary = '{summary}' WHERE record_id = '{BillId}';");
 
         var page = await ReadPageAsync(host, BillId);
 

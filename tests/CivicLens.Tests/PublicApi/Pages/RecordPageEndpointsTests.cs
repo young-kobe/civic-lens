@@ -93,6 +93,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, Path(ActionId));
 
         var section = page.QuerySelector("section.executive-explain")!;
+        Assert.Equal(["official-fixed", "executive-explain"], section.ClassList.ToArray());
         Assert.Equal(heading, section.QuerySelector("h2")!.TextContent);
         var lead = (IElement)section.QuerySelector("p")!.Clone(true);
         lead.QuerySelector(".term-popover")!.Remove();

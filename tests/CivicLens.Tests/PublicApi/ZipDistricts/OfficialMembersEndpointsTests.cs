@@ -1,6 +1,7 @@
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
@@ -60,6 +61,7 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Ross Two", "Sam Senator", "Sue Senator"], note.QuerySelectorAll("a").Take(3).Select(link => link.TextContent));
         Assert.Equal("Compare all 4", note.QuerySelectorAll("a").Last().TextContent);
         Assert.EndsWith("/compare.html", note.QuerySelectorAll("a").Last().GetAttribute("href"));
+        Assert.Equal("Your ZIP area lies in 2 districts. The district with the most land is first.", note.NextElementSibling!.TextContent);
         var votes = fragment.QuerySelector("section.shared-vote-rows[data-chamber='house']")!;
         Assert.Equal("Votes where your members differed", votes.QuerySelector("h3")!.TextContent);
         Assert.Single(votes.QuerySelectorAll(".shared-vote-row"));
@@ -77,6 +79,19 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
         Assert.StartsWith("Ann Large is one of your members. Your other members: Al First and Bea Second.", fragment.QuerySelector(".official-members-note")!.TextContent.Trim().ReplaceLineEndings(" ").Replace("  ", " "));
         Assert.Null(fragment.QuerySelector(".shared-vote-rows"));
         Assert.Null(fragment.QuerySelector("[data-member-votes-empty]"));
+        Assert.Null(fragment.QuerySelector(".zip-count"));
+    }
+
+    [Fact]
+    public async Task AChamberWithNoSharedVotesShowsTheSameEmptyLineOnTheOfficialPageAsOnCompare()
+    {
+        await using var host = await StartAsync();
+
+        var official = await GetFragmentAsync(host, "view=official&official=ak-a", "99501");
+        var compare = await GetFragmentAsync(host, "view=compare", "99501");
+
+        Assert.Equal(SharedVoteRows.NoDifferences, official.QuerySelector("[data-member-votes-empty]")!.TextContent);
+        Assert.Equal(SharedVoteRows.NoDifferences, compare.QuerySelector(".zip-member-chamber[data-chamber=senate] [data-member-votes-empty]")!.TextContent);
     }
 
     [Fact]

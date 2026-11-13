@@ -383,7 +383,8 @@
     };
 
     // Loads one member fragment into a slot and follows the remembered ZIP. A view supplies frame(nodes), nodeOf(fragment), and optional onShow and onClear hooks.
-    const followMemberSlot = (remembered, slot, { api, view, issue = null, official = null, sinceMarker = true, frame, nodeOf, accepts, onShow, onClear }) => {
+    // hideOnFailure clears the slot on a failed lookup instead of showing the retry message. The members strip already reports the lookup state.
+    const followMemberSlot = (remembered, slot, { api, view, issue = null, official = null, sinceMarker = true, hideOnFailure = false, frame, nodeOf, accepts, onShow, onClear }) => {
         const loader = memberLoader(remembered, {
             api,
             view,
@@ -400,7 +401,10 @@
                 if (accepts && !accepts(fragment)) { slot.replaceChildren(); onClear?.(); return true; }
                 slot.replaceChildren(nodeOf(fragment));
             },
-            onFailure: (call, status) => slot.replaceChildren(frame(memberFailureWithRetry(call.zip, status, slot.dataset.officialsPage, () => run(call.zip)))),
+            onFailure: (call, status) => {
+                if (hideOnFailure) { slot.replaceChildren(); onClear?.(); return; }
+                slot.replaceChildren(frame(memberFailureWithRetry(call.zip, status, slot.dataset.officialsPage, () => run(call.zip))));
+            },
             onSettled: () => slot.removeAttribute("aria-busy")
         });
         const clear = () => {
@@ -663,6 +667,8 @@
             view: "official",
             official,
             sinceMarker: false,
+            // A failed lookup says nothing about this official, so the section stays hidden.
+            hideOnFailure: true,
             frame: nodes => {
                 const content = document.createElement("div");
                 content.append(...nodes);

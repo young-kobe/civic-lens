@@ -14,16 +14,10 @@
                 }<text>. </text><a href="@(RootPath + "compare.html")">Compare all @(others.Length + 1)</a>
             }
         </p>
+        <ZipDistrictCountNote DistrictCount="Data.DistrictCount" />
         @if (chamberMembers > 1)
         {
-            @if (Data.SharedVotes.FirstOrDefault(votes => votes.Chamber == seat.Chamber) is { } votes)
-            {
-                <SharedVoteRows Data="votes" RootPath="@RootPath" DifferencesOnly="true" HeadingLevel="3" />
-            }
-            else
-            {
-                <p class="muted" data-member-votes-empty>No differing votes in this selection.</p>
-            }
+            <ChamberDifferences Data="Data" Chamber="seat.Chamber" RootPath="@RootPath" HeadingLevel="3" />
         }
     }
 </div>
