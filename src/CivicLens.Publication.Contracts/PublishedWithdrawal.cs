@@ -17,6 +17,6 @@ public sealed record PublishedWithdrawal
             throw new InvalidDataException("Published withdrawal identity or dates are invalid.");
         if (Note is null || !PublishedCorrection.IsNote(Note))
             throw new InvalidDataException($"A withdrawal note has 1 to {PublishedCorrection.MaximumNoteLength} characters and no NUL.");
-        PublishedCorrection.ValidateAll(Corrections, WithdrawnRevisionNumber);
+        PublishedCorrection.ValidateAll(Corrections, WithdrawnRevisionNumber, Kind);
     }
 }

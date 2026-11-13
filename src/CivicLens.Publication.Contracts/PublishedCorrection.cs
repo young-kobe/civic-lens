@@ -27,7 +27,8 @@ public sealed record PublishedCorrection
         return [entry, .. kept[..run].Where(item => item.FactsUnchanged != entry.FactsUnchanged), .. kept[run..]];
     }
 
-    public static void ValidateAll(PublishedCorrection[]? corrections, int revisionNumber)
+    /// <summary>Checks the correction list of a record of the given kind. Only a vote can say that its facts did not change, because the page words name the vote facts.</summary>
+    public static void ValidateAll(PublishedCorrection[]? corrections, int revisionNumber, PublishedRecordKind kind)
     {
         if (corrections is null || corrections.Any(item => item is null) || NotedCount(corrections) > MaximumNotedEntries)
             throw new InvalidDataException($"A published record lists at most {MaximumNotedEntries} corrections with a note.");
@@ -41,6 +42,8 @@ public sealed record PublishedCorrection
                 throw new InvalidDataException($"A correction note has 1 to {MaximumNoteLength} characters and no NUL.");
             if (correction.Note is not null && correction.FactsUnchanged)
                 throw new InvalidDataException("Only a code update can say that the facts did not change.");
+            if (correction.FactsUnchanged && kind != PublishedRecordKind.Vote)
+                throw new InvalidDataException("Only a vote correction can say that the facts did not change.");
             if (correction.Note is not null) kindsInRun.Clear();
             else if (!kindsInRun.Add(correction.FactsUnchanged))
                 throw new InvalidDataException("Between two person corrections the list holds at most one code update of each kind.");

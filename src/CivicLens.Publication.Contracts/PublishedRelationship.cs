@@ -53,7 +53,7 @@ public sealed record PublishedRelationship
 
     public void Validate()
     {
-        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber, PublishedRecordKind.Relationship);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Relationship, RecordId) || RevisionNumber < 1)
             throw new InvalidDataException("Published relationship identity is invalid.");
         RequireText(Headline, MaximumHeadlineLength);

@@ -42,7 +42,7 @@ public sealed record PublishedStatement
 
     public void Validate()
     {
-        PublishedCorrection.ValidateAll(Corrections, RevisionNumber);
+        PublishedCorrection.ValidateAll(Corrections, RevisionNumber, PublishedRecordKind.Statement);
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Statement, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
