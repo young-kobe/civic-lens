@@ -47,6 +47,9 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         TextOrigin = "Code",
         Sponsorships = [new("p1", "Sponsor", "2026-03-02")]
     };
+    // A quote keeps the curly quote marks and the section sign of the bill text, while the definition of a key term has plain quote marks.
+    private const string GrantQuote = "The term \u201Cgrant\u201D means a payment under \u00A7 3.";
+
     private static readonly SeededBill F = new('f', "2026-02-20") { BillNumber = 1 };
     private static readonly SeededBill[] All = [F, C, B, A, E];
     private static readonly char[] ExpectedOrder = ['e', 'a', 'b', 'c', 'f'];
@@ -177,7 +180,11 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     {
         var terms = new SeededBill('d', "2026-03-01")
         {
-            Text = new SeededBillText(59_987, 85_000, [("Secretary", "The term Secretary means the Secretary of Energy.", false), ("grant", "The term grant means a payment under section 3.", true)])
+            Text = new SeededBillText(59_987, 85_000,
+            [
+                ("Secretary", "The term Secretary means the Secretary of Energy.", false, "The term Secretary means the Secretary of Energy."),
+                ("grant", "The term \"grant\" means a payment under § 3.", true, GrantQuote)
+            ])
         };
         await using var host = await StartWithBillsAsync(terms, B);
 
@@ -186,14 +193,40 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
         var listed = withTerms.RootElement.GetProperty("keyTerms").EnumerateArray().ToArray();
         Assert.Equal(["Secretary", "grant"], listed.Select(item => item.GetProperty("term").GetString()));
-        Assert.Equal(["The term Secretary means the Secretary of Energy.", "The term grant means a payment under section 3."],
+        Assert.Equal(["The term Secretary means the Secretary of Energy.", "The term \"grant\" means a payment under § 3."],
             listed.Select(item => item.GetProperty("definition").GetString()));
+        Assert.Equal(["The term Secretary means the Secretary of Energy.", GrantQuote], listed.Select(item => item.GetProperty("quote").GetString()));
         Assert.Equal([false, true], listed.Select(item => item.GetProperty("cut").GetBoolean()));
         Assert.Equal(BillTextWords.Label, withTerms.RootElement.GetProperty("bill").GetProperty("label").GetString());
         Assert.Equal("Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.",
             withTerms.RootElement.GetProperty("keyTermsLabel").GetString());
         Assert.Empty(without.RootElement.GetProperty("keyTerms").EnumerateArray());
         Assert.Equal(System.Text.Json.JsonValueKind.Null, without.RootElement.GetProperty("keyTermsLabel").ValueKind);
+    }
+
+    [Fact]
+    public async Task ABillDetailListsItsTextSentencesInOrderWithTheirPartAndExactQuoteAndAnEmptyListWhenTheBillHasNone()
+    {
+        var text = new SeededBill('d', "2026-03-01")
+        {
+            Text = new SeededBillText(59_987, 85_000, Sentences:
+            [
+                ("Summary", "The bill defines a grant.", GrantQuote),
+                ("Summary", "The Secretary pays landlords.", "The Secretary shall pay landlords under \u00A7 3(a)."),
+                ("WhyItMatters", "It pays landlords.", "The Secretary shall pay each landlord within 30 days.")
+            ])
+        };
+        await using var host = await StartWithBillsAsync(text, B);
+
+        using var withText = await GetAsync(host, $"/v1/bills/{text.RecordId}");
+        using var without = await GetAsync(host, $"/v1/bills/{B.RecordId}");
+
+        var listed = withText.RootElement.GetProperty("textSentences").EnumerateArray().ToArray();
+        Assert.Equal(["summary", "summary", "whyItMatters"], listed.Select(item => item.GetProperty("part").GetString()));
+        Assert.Equal(["The bill defines a grant.", "The Secretary pays landlords.", "It pays landlords."], listed.Select(item => item.GetProperty("sentence").GetString()));
+        Assert.Equal([GrantQuote, "The Secretary shall pay landlords under \u00A7 3(a).", "The Secretary shall pay each landlord within 30 days."],
+            listed.Select(item => item.GetProperty("quote").GetString()));
+        Assert.Empty(without.RootElement.GetProperty("textSentences").EnumerateArray());
     }
 
     [Fact]

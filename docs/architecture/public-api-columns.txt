@@ -27,6 +27,7 @@ bill_key_terms cut
 bill_key_terms definition
 bill_key_terms label
 bill_key_terms position
+bill_key_terms quote
 bill_key_terms record_id
 bill_key_terms revision_number
 bill_key_terms term
@@ -238,6 +239,12 @@ bill_status latest_action_text
 bill_status latest_action_date
 bill_status read_at_utc_ticks
 bill_status status
+bill_text_sentences part
+bill_text_sentences position
+bill_text_sentences quote
+bill_text_sentences record_id
+bill_text_sentences revision_number
+bill_text_sentences sentence
 record_headlines kind
 record_headlines record_id
 record_headlines headline
