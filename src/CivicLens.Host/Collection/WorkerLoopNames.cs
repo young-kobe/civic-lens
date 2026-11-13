@@ -7,6 +7,7 @@ internal static class WorkerLoopNames
     public const string Gate = "gate";
     public const string StatementDrafting = "statementDrafting";
     public const string ActionDrafting = "actionDrafting";
+    public const string ExecutiveSummary = "executiveSummary";
     public const string VoteDrafting = "voteDrafting";
     public const string RelationshipDrafting = "relationshipDrafting";
     public const string BriefDrafting = "briefDrafting";
