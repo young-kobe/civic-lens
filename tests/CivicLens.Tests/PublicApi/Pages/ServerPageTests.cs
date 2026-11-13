@@ -477,7 +477,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
     /// <summary>The served page without the three things that only a server page adds: the members strip, the freshness line, and the preview Issues link.</summary>
     private static string ServerShellOnly(string served) => System.Text.RegularExpressions.Regex.Replace(
-        served.Replace(MembersStripHtml, string.Empty).Replace(BaseUrl.Join(PublicSections.PreviewIssuesPath), BaseUrl.Join(PublicationProtocol.FacetsPath)),
+        served.Replace(MembersStripHtml, string.Empty).Replace(PublicSections.PreviewIssuesPath, BaseUrl.Join(PublicationProtocol.FacetsPath)),
         "<p class=\"public-freshness\">.*?</p>", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);

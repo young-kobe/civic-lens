@@ -21,7 +21,7 @@ public static class SearchPageEndpoint
         {
             [nameof(SearchResultsPage.Data)] = data,
             [nameof(SearchResultsPage.RootPath)] = baseUrl.Join(string.Empty)
-        }, freshness.PageContext);
+        }, freshness.PageContextFor(data.Release));
         context.Response.Headers.CacheControl = CacheControl;
         return Results.Content(html, "text/html; charset=utf-8");
     });

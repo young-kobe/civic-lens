@@ -118,7 +118,7 @@
     private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>
         @foreach (var link in links)
         {
-            <a href="@(RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text@if (link.HiddenText is not null){<span class="visually-hidden">: @link.HiddenText</span>}</a>
+            <a href="@(link.Path.StartsWith('/') ? link.Path : RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text@if (link.HiddenText is not null){<span class="visually-hidden">: @link.HiddenText</span>}</a>
         }
     </text>;
 

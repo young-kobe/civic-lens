@@ -239,7 +239,7 @@ public sealed class PublicNavigationTests
         Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(staticPage).GetAttribute("href"));
         Assert.Equal(["Newest published House roll call: 31 May 2026", "Newest published Senate roll call: 29 May 2026"],
             serverPage.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
-        Assert.Equal(PublicSections.Header.Select(link => Root + (link.Text == "Issues" ? PublicSections.PreviewIssuesPath : link.Path)),
+        Assert.Equal(PublicSections.Header.Select(link => link.Text == "Issues" ? PublicSections.PreviewIssuesPath : Root + link.Path),
             serverPage.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")));
     }
 

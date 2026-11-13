@@ -23,8 +23,8 @@ public static class PublicSections
         new(PublicSection.Boards, "Compare parties", StaticBoardsPath)
     ];
 
-    /// <summary>The path of the server issues index on the gated preview. Only a server page links it, until the cutover PR maps <see cref="PublicationProtocol.FacetsPath"/>.</summary>
-    public const string PreviewIssuesPath = "web/" + PublicationProtocol.FacetsPath;
+    /// <summary>The origin-relative path of the server issues index on the gated preview. It stays on the origin that serves the preview, because the public origin does not route it. Only a server page links it, until the cutover PR maps <see cref="PublicationProtocol.FacetsPath"/>.</summary>
+    public const string PreviewIssuesPath = "/web/" + PublicationProtocol.FacetsPath;
 
     /// <summary>The header of a server page. It is the header with the Issues link on the server issues index.</summary>
     public static readonly IReadOnlyList<NavLink> PreviewHeader =

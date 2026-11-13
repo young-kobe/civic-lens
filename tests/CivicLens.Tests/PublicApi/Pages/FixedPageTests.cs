@@ -158,7 +158,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Contains("119th Congress", tiles[1].TextContent);
         Assert.Equal("Air", tiles[0].TextContent.Trim());
         Assert.Null(page.QuerySelector(".home-issue-list")!.Closest(".panel"));
-        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href")!.Substring(Root.Length));
+        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
     }
 
     [Fact]
