@@ -1,8 +1,9 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" RowCount="Data.Bills.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
-                 Lede="@Lede" FilterSummary="Filter by status, sponsor or date" Singular="bill or resolution" Plural="bills and resolutions" EmptyTitle="No bill matches these filters.">
+<RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" Total="Data.Total" TotalScope="@TotalScope" RowCount="Data.Bills.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+                 Lede="@Lede" FilterSummary="Filter by status, sponsor or date" Singular="bill or resolution" Plural="bills and resolutions" EmptyTitle="No bill matches these filters."
+                 EmptyReleaseTitle="No bills or resolutions are published yet.">
     <Fields>
         <RecordListSelect Id="bills-type" Name="type" Label="Bill type" Choices="BillTypes" Filter="Data.Filter" />
         <RecordListSelect Id="bills-status" Name="status" Label="Status" Choices="Data.Statuses" Filter="Data.Filter" />
@@ -48,6 +49,9 @@
     ];
 
     private static SearchChoiceData Type(string billType, string words) => new(billType, $"{BillNumbers.TypeLabel(billType)} ({words})");
+
+    /// <summary>The total covers the newest Congress only, as the page does.</summary>
+    private string TotalScope => Data.Congress is { } congress ? $" of the {CongressCalendar.Ordinal(congress)} Congress" : string.Empty;
 
     /// <summary>A release with no bill has no Congress, so the lede names none.</summary>
     private string Lede => (Data.Congress is { } congress ? $"Bills and resolutions in the {CongressCalendar.Ordinal(congress)} Congress" : "Bills and resolutions")

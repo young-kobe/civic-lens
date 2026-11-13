@@ -3,7 +3,8 @@
 
 <RecordListFrame Kind="PublishedRecordKind.ExecutiveAction" RootPath="@RootPath" Total="Data.ActionsInRelease" RowCount="Data.Actions.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="Documents that the President signed and the Federal Register printed, newest first. Civic Lens copies each title and date from the Federal Register."
-                 FilterSummary="Filter by type of document or date" Singular="executive action" Plural="executive actions" EmptyTitle="No executive action matches these filters.">
+                 FilterSummary="Filter by type of document or date" Singular="executive action" Plural="executive actions" EmptyTitle="No executive action matches these filters."
+                 EmptyReleaseTitle="No executive actions are published yet.">
     <Fields>
         <RecordListSelect Id="executive-type" Name="type" Label="Type of document" Choices="Data.Kinds" Filter="Data.Filter" />
         <RecordListDates IdPrefix="executive" Filter="Data.Filter" />

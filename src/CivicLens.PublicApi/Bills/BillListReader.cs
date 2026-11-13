@@ -58,7 +58,7 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
         }).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("type", request.BillType), ("status", request.Status is { } status ? QueryValues.ChoiceText(status) : null),
             ("issue", request.Issue), ("policyArea", request.PolicyArea), ("sponsor", request.SponsorName), ("bill", QueryValues.BillNumberText(request.BillType, request.BillNumber)));
-        return new(page.Release, list.Congress, rows, filter, page.NextCursor, Statuses, policyAreas, issueChoices);
+        return new(page.Release, list.Congress, list.BillsInCongress, rows, filter, page.NextCursor, Statuses, policyAreas, issueChoices);
     }
 
     /// <summary>The page of a refused request: the choices of the first page, the typed text of each field, and no rows.</summary>

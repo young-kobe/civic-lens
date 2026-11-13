@@ -3,7 +3,8 @@
 
 <RecordListFrame Kind="PublishedRecordKind.Statement" RootPath="@RootPath" Total="Data.StatementsInRelease" RowCount="Data.Statements.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="What members of Congress and the President said in their own press releases, newest first. Each statement links to its source."
-                 FilterSummary="Filter by official, issue or date" Singular="statement" Plural="statements" EmptyTitle="No statement matches these filters.">
+                 FilterSummary="Filter by official, issue or date" Singular="statement" Plural="statements" EmptyTitle="No statement matches these filters."
+                 EmptyReleaseTitle="No statements are published yet.">
     <Fields>
         <RecordListText Id="statements-official" Name="official" Label="Official" Placeholder="Type a name" Filter="Data.Filter" />
         <RecordListSelect Id="statements-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Data.Filter" />

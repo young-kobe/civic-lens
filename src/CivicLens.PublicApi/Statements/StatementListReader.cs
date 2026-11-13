@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Statements;
 
-/// <summary>Maps one page of the statement list to the presentation record of the server page. One snapshot holds the page, the total, the speakers with seat and party,
-/// the source site and vote link of each row, and the issue choices,
+/// <summary>Maps one page of the statement list to the presentation record of the server page. One snapshot holds the page, the total, the speaker names,
+/// the source site, the vote link and the speaker terms of each row, and the issue choices,
 /// so the page comes from one release. The page takes the official as a typed name, so it ignores the JSON official ID parameter.</summary>
 public sealed class StatementListReader(StatementStore statements, RecordSnapshot snapshot)
 {
@@ -25,10 +25,11 @@ public sealed class StatementListReader(StatementStore statements, RecordSnapsho
         await using var _ = connection;
         await using var __ = transaction;
         if (await statements.ListWithTotalAsync(transaction, request, cancellationToken) is not var (page, total)) return null;
-        var speakers = await OfficialStore.ReadRowsAsync(transaction, [.. page.Statements.SelectMany(statement => statement.SpeakerIds).Distinct()], cancellationToken);
-        var facts = await statements.ReadListFactsAsync(transaction, [.. page.Statements.Select(statement => statement.RecordId)], cancellationToken);
+        var (officials, _) = await snapshot.ReadNamesAsync(transaction, [.. page.Statements.SelectMany(statement => statement.SpeakerIds).Distinct()], [], cancellationToken);
+        var names = officials.ToDictionary(official => official.OfficialId, official => official.Name, StringComparer.Ordinal);
+        var facts = await statements.ReadListFactsAsync(transaction, page.Statements, cancellationToken);
         var issues = (await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken)).Select(issue => issue.ToChoice()).ToArray();
-        var rows = page.Statements.Select(statement => Row(statement, speakers, facts[statement.RecordId])).ToArray();
+        var rows = page.Statements.Select(statement => Row(statement, names, facts[statement.RecordId])).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("official", request.SpeakerName), ("issue", request.Issue));
         return new(page.Release, total, rows, filter, page.NextCursor, issues);
     }
@@ -39,11 +40,10 @@ public sealed class StatementListReader(StatementStore statements, RecordSnapsho
             ? data with { Statements = [], NextCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "official", "issue", "from", "to")) }
             : null;
 
-    // One snapshot read the page and its facts, so every statement and speaker of the page is in them.
-    private static StatementListRowData Row(StatementRow statement, Dictionary<string, OfficialRow> speakers, StatementListFacts facts) =>
+    // One snapshot read the page and its facts, so every statement of the page has facts and every speaker has a name.
+    // The party and seat are the term of the speaker on the statement date, the rule of the statement page.
+    private static StatementListRowData Row(StatementRow statement, Dictionary<string, string> names, StatementListFacts facts) =>
         new(statement.RecordId, statement.Headline, statement.Label, statement.TextOrigin, statement.StatementDate,
-            [.. statement.SpeakerIds.Select(id => speakers.TryGetValue(id, out var speaker) ? Speaker(speaker) : throw new InvalidDataException("A speaker of a published statement has no official."))],
+            [.. statement.SpeakerIds.Zip(facts.SpeakerTerms, (id, term) => new StatementSpeakerData(names[id], term.Kind, term.Office, term.State, term.District, term.Party))],
             PublishedWebsite.Host(facts.SourceUrl), facts.LinkedToVote);
-
-    private static StatementSpeakerData Speaker(OfficialRow official) => new(official.Name, official.Kind, official.Office, official.State, official.District, official.Party);
 }

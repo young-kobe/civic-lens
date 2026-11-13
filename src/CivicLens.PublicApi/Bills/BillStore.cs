@@ -81,17 +81,19 @@ public sealed class BillStore(NpgsqlDataSource views)
         AddParameters(command, request);
         var rows = new List<BillRow>();
         int? release = null, congress = null;
+        var total = 0;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                congress = ViewColumns.Number(reader, reader.FieldCount - 1);
+                congress = ViewColumns.Number(reader, reader.FieldCount - 2);
+                total = ViewColumns.Total(reader);
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
         var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
-        return new(new BillPage(active, page, next), congress);
+        return new(new BillPage(active, page, next), congress, total);
     }
 
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
@@ -286,7 +288,8 @@ public sealed class BillStore(NpgsqlDataSource views)
 
     private static string NewestCongressSql(BillRequest request) => $"""
         WITH newest AS MATERIALIZED (SELECT max(b.congress) AS congress FROM public_api.bills b)
-        SELECT a.release_number, {Columns}, n.congress
+        SELECT a.release_number, {Columns}, n.congress,
+               (SELECT count(*) FROM public_api.bills c WHERE c.congress = n.congress) AS in_congress
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
          CROSS JOIN newest n
           LEFT JOIN LATERAL (

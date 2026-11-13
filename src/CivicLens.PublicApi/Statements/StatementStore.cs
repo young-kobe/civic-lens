@@ -10,7 +10,14 @@ namespace CivicLens.PublicApi.Statements;
 
 public sealed class StatementStore(NpgsqlDataSource views)
 {
-    private const string DetailSql = """
+    // The term of each speaker on the statement date, as one JSON array in speaker order. The detail and the list read it through ReadSpeakerTerms.
+    private const string SpeakerTermsSql = """
+        (SELECT json_agg(json_build_object('party', t.party, 'kind', t.kind, 'office', t.office, 'state', t.state, 'district', t.district)
+             ORDER BY t."position")
+           FROM public_api.statement_speaker_terms t WHERE t.record_id = s.record_id AND t.revision_number = s.revision_number)
+        """;
+
+    private const string DetailSql = $"""
         SELECT a.release_number, s.record_id, s.revision_number, s.statement_date, s.headline, s.summary, s.text_origin, s.label,
                ARRAY(SELECT p.official_id FROM public_api.statement_speakers p
                       WHERE p.record_id = s.record_id AND p.revision_number = s.revision_number ORDER BY p."position"),
@@ -22,9 +29,7 @@ public sealed class StatementStore(NpgsqlDataSource views)
                           FROM public_api.statement_quotations
                          WHERE record_id = s.record_id AND revision_number = s.revision_number ORDER BY position LIMIT @quotation_limit) q),
                ap.approved_by,
-               (SELECT json_agg(json_build_object('party', t.party, 'kind', t.kind, 'office', t.office, 'state', t.state, 'district', t.district)
-                    ORDER BY t."position")
-                  FROM public_api.statement_speaker_terms t WHERE t.record_id = s.record_id AND t.revision_number = s.revision_number),
+               {SpeakerTermsSql},
                e.approved_at_utc_ticks, f.first_published_at_utc_ticks
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.statements s ON s.record_id = @id
@@ -81,16 +86,16 @@ public sealed class StatementStore(NpgsqlDataSource views)
         PublishedStatement.ValidateContent(source, quotations, dateEvidence, articleUrl);
         return (reader.GetInt32(0), new(reader.GetInt32(0), statement, ViewColumns.Enum<PublishedApprover>(reader, 19), source, articleUrl, dateEvidence, quotations)
         {
-            SpeakerTerms = ReadSpeakerTerms(reader, statement.SpeakerIds.Length),
+            SpeakerTerms = ReadSpeakerTerms(reader, 20, statement.SpeakerIds.Length),
             ApprovedAtUtc = ViewColumns.Utc(reader, 21),
             FirstPublishedAtUtc = ViewColumns.Utc(reader, 22)
         });
     }
 
     /// <summary>One term row for each speaker, in the order of the speakers. The view gives the party and the seat on the statement date.</summary>
-    private static StatementSpeakerTerm[] ReadSpeakerTerms(DbDataReader reader, int speakerCount)
+    private static StatementSpeakerTerm[] ReadSpeakerTerms(DbDataReader reader, int ordinal, int speakerCount)
     {
-        var rows = reader.IsDBNull(20) ? [] : JsonSerializer.Deserialize<StatementSpeakerTermRow[]>(reader.GetString(20), PublicationProtocol.JsonOptions)
+        var rows = reader.IsDBNull(ordinal) ? [] : JsonSerializer.Deserialize<StatementSpeakerTermRow[]>(reader.GetString(ordinal), PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("The statement speaker terms view returned invalid content.");
         if (rows.Length != speakerCount) throw new InvalidDataException("The statement speaker terms view holds one row for each speaker.");
         return [.. rows.Select(row => new StatementSpeakerTerm(row.Party, row.Kind is null ? null : OfficeKind(row.Kind), row.Office, row.State, row.District))];
@@ -112,25 +117,28 @@ public sealed class StatementStore(NpgsqlDataSource views)
             : null;
 
     // OFFSET 0 keeps the link lookup correlated through the security barrier view.
-    private const string ListFactsSql = """
+    private const string ListFactsSql = $"""
         SELECT s.record_id, src.url,
                EXISTS (SELECT 1 FROM public_api.record_links l
-                        WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote' OFFSET 0)
+                        WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote' OFFSET 0),
+               {SpeakerTermsSql}
           FROM public_api.statements s
           JOIN public_api.statement_sources src ON src.record_id = s.record_id AND src.revision_number = s.revision_number
          WHERE s.record_id = ANY(@ids)
         """;
 
-    /// <summary>Reads the source site and the vote link of a bounded set of statements in one query, inside the transaction of the caller.
+    /// <summary>Reads the source site, the vote link, and the term of each speaker on the statement date of a bounded set of statements in one query, inside the transaction of the caller.
     /// A statement that left the release has no entry.</summary>
-    public async Task<Dictionary<string, StatementListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, string[] recordIds, CancellationToken cancellationToken)
+    public async Task<Dictionary<string, StatementListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, IReadOnlyList<StatementRow> statements,
+        CancellationToken cancellationToken)
     {
+        var speakerCounts = statements.ToDictionary(statement => statement.RecordId, statement => statement.SpeakerIds.Length, StringComparer.Ordinal);
         await using var command = new NpgsqlCommand(ListFactsSql, transaction.Connection, transaction);
-        command.Parameters.AddWithValue("ids", recordIds);
+        command.Parameters.AddWithValue("ids", speakerCounts.Keys.ToArray());
         var facts = new Dictionary<string, StatementListFacts>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            facts[reader.GetString(0)] = new(reader.GetString(1), reader.GetBoolean(2));
+            facts[reader.GetString(0)] = new(reader.GetString(1), reader.GetBoolean(2), ReadSpeakerTerms(reader, 3, speakerCounts[reader.GetString(0)]));
         return facts;
     }
 

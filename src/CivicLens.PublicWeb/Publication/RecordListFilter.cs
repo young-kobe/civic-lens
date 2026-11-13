@@ -1,5 +1,6 @@
 using System.Globalization;
 using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicWeb.Publication;
 
@@ -10,6 +11,15 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
 {
     /// <summary>The approved error of a date field whose text is no date (#518).</summary>
     public const string DateError = "Enter the date as year, month and day, for example 2026-09-01.";
+
+    /// <summary>The approved error of a From date after the To date (#525). The request refuses the From field.</summary>
+    public const string DateOrderError = "The To date must be on or after the From date.";
+
+    /// <summary>The approved error of a bill number field whose text is no bill number (#525).</summary>
+    public const string BillNumberError = "Enter a bill number, such as 5334 or H.R. 5334.";
+
+    /// <summary>The approved error of a bill type choice that differs from the type of the typed bill number (#525).</summary>
+    public const string BillTypeError = "The bill number and the bill type name two different types.";
 
     private const string DateFormat = "yyyy-MM-dd";
 
@@ -26,8 +36,17 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
 
     public bool IsInvalid(string name) => Invalid == name;
 
-    /// <summary>The error text of a field, or null. Only a date field whose text is no date has approved text. Any other refused field is marked invalid with no text.</summary>
-    public string? ErrorOf(string name) => IsInvalid(name) && name is ("from" or "to") && !IsDate(Value(name)) ? DateError : null;
+    /// <summary>The error text of a refused field, or null. A date that is no date, a From date after the To date, a text that is no bill number,
+    /// and a bill type that differs from the typed bill number have approved text. Any other refused field is marked invalid with no text.</summary>
+    public string? ErrorOf(string name) => !IsInvalid(name) ? null : name switch
+    {
+        "from" or "to" when !IsDate(Value(name)) => DateError,
+        "from" when IsDate(Value("to")) => DateOrderError,
+        "bill" => BillNumberError,
+        // A known bill type is refused only when it differs from the type of the typed bill number.
+        "type" when Value("type") is { } type && BillNumbers.IsType(type) => BillTypeError,
+        _ => null
+    };
 
     /// <summary>The attributes that tie an input to its error: <c>aria-invalid</c> on the refused field, and <c>aria-describedby</c> when the field has error text.</summary>
     public IReadOnlyDictionary<string, object> InputAttributes(string name, string inputId) => !IsInvalid(name)

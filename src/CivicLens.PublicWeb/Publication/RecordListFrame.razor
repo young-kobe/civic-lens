@@ -4,8 +4,12 @@
 <PublicPage Section="PublicSections.OfRecord(Kind)" CanonicalPath="@List.Path" Title="@List.Label" Description="@Lede" RootPath="@RootPath">
     <PageHeader Title="@List.Label"><LedeContent>@TotalSentence@if (LedeContent is not null) {@LedeContent} else {@Lede}</LedeContent></PageHeader>
     <FilterTabs Label="Lists of records" Tabs="Tabs" />
-    @* An empty release has no approved text yet, so the page then shows the header and the tabs only. *@
-    @if (!IsEmptyRelease)
+    @* An empty release shows its one line under the tabs, with no filters and no no match tips. *@
+    @if (IsEmptyRelease)
+    {
+        <EmptyState Title="@EmptyReleaseTitle" Level="2" />
+    }
+    else
     {
         <details class="list-fold" open="@Filter.IsActive" data-wide-open>
             <summary>@FilterSummary</summary>
@@ -69,13 +73,17 @@
     /// <summary>The approved lede with links in its text, such as the page that the lede names. Its text must be <see cref="Lede"/>.</summary>
     [Parameter] public RenderFragment? LedeContent { get; set; }
     [Parameter, EditorRequired] public string EmptyTitle { get; set; } = default!;
+    /// <summary>The line of a release that holds no record of this kind, such as "No votes are published yet."</summary>
+    [Parameter, EditorRequired] public string EmptyReleaseTitle { get; set; } = default!;
+    /// <summary>The words after the noun of the total sentence that name what the total covers, such as " of the 119th Congress". Empty when it covers the release.</summary>
+    [Parameter] public string TotalScope { get; set; } = string.Empty;
     [Parameter, EditorRequired] public RenderFragment EmptyTips { get; set; } = default!;
     [Parameter, EditorRequired] public RenderFragment Fields { get; set; } = default!;
     [Parameter, EditorRequired] public RenderFragment Rows { get; set; } = default!;
 
     private PublicSections.RecordList List => PublicSections.ListOf(Kind);
 
-    private string? TotalSentence => Total is > 0 and var total ? $"{total} {(total == 1 ? Singular + " is" : Plural + " are")} in this release. " : null;
+    private string? TotalSentence => Total is > 0 and var total ? $"{total} {(total == 1 ? Singular : Plural)}{TotalScope} {(total == 1 ? "is" : "are")} in this release. " : null;
 
     /// <summary>No row and no filter: the release holds no record of this kind, so the filters and the no match tips do not apply.</summary>
     private bool IsEmptyRelease => RowCount == 0 && !Filter.IsActive;

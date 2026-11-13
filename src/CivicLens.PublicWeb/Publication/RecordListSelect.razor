@@ -1,6 +1,6 @@
 @using CivicLens.PublicWeb.Components.Ui
 
-<Field Label="@Label" For="@Id">
+<Field Label="@Label" For="@Id" Error="@Filter.ErrorOf(Name)">
     <select id="@Id" name="@Name" @attributes="Filter.InputAttributes(Name, Id)">
         <option value="">@AnyText</option>
         @foreach (var choice in Choices)

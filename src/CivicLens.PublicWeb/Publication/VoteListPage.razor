@@ -3,7 +3,8 @@
 
 <RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Total="Data.VotesInRelease" RowCount="Data.Votes.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
                  Lede="@Lede"
-                 FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters.">
+                 FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters."
+                 EmptyReleaseTitle="No votes are published yet.">
     <LedeContent>@LedeLead<a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>.</LedeContent>
     <Fields>
         <RecordListSelect Id="votes-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Filter="Data.Filter" AnyText="All" />
