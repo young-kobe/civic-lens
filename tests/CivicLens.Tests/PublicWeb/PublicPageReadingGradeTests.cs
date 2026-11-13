@@ -155,14 +155,16 @@ public sealed class PublicPageReadingGradeTests
 
     private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND"];
     private static readonly string[] HeadingTags = ["H1", "H2", "H3", "H4", "H5", "H6"];
-    private const string RecordDataSelector = "script, style, tbody, pre, blockquote, .ai-summary > p:not([class]), .document-text, .source-text, option";
+    private const string RecordDataSelector = "script, style, tbody, pre, blockquote, .ai-summary > p:not([class]), .doc-text, option";
+    private static readonly string[] ContainerTags = ["DIV", "SECTION", "ARTICLE", "ASIDE", "MAIN", "HEADER", "FOOTER", "NAV", "FORM", "FIELDSET", "DETAILS", "FIGURE", "UL", "OL", "DL", "TABLE", "THEAD", "TR"];
     private const int MinimumPassageWords = 6;
 
     /// <summary>The fixed text of a page: each block of at least <see cref="MinimumPassageWords"/> words that holds no record data. The first block under a heading
-    /// reads together with that heading, as an intro does. A shorter block is a label, not a passage.</summary>
+    /// reads together with that heading, as an intro does. A shorter block is a label, not a passage. Text that sits loose in a container, such as an empty state with a link, is a block too.</summary>
     private static List<string[]> FixedPassages(IDocument page, string[] recordData)
     {
         foreach (var data in page.QuerySelectorAll(RecordDataSelector).ToArray()) data.Remove();
+        WrapLooseText(page);
         var passages = new List<string[]>();
         string? heading = null;
         foreach (var block in page.QuerySelectorAll(string.Join(',', BlockTags)).Where(block => !block.QuerySelectorAll(string.Join(',', BlockTags)).Any()))
@@ -181,18 +183,53 @@ public sealed class PublicPageReadingGradeTests
         return passages;
     }
 
+    /// <summary>Wraps each run of loose text and inline elements in a container into a paragraph, so the run is graded as one block.</summary>
+    private static void WrapLooseText(IDocument page)
+    {
+        foreach (var container in page.QuerySelectorAll(string.Join(',', ContainerTags)).ToArray())
+        {
+            var run = new List<INode>();
+            foreach (var node in container.ChildNodes.ToArray())
+            {
+                if (node is IElement element && (BlockTags.Contains(element.TagName) || ContainerTags.Contains(element.TagName)))
+                {
+                    Wrap(page, container, run);
+                    continue;
+                }
+                run.Add(node);
+            }
+            Wrap(page, container, run);
+        }
+    }
+
+    private static void Wrap(IDocument page, IElement container, List<INode> run)
+    {
+        if (run.Any(node => node is IText text && !string.IsNullOrWhiteSpace(text.Data)))
+        {
+            var paragraph = page.CreateElement("p");
+            container.InsertBefore(paragraph, run[0]);
+            foreach (var node in run) paragraph.AppendChild(node);
+        }
+        run.Clear();
+    }
+
     private const string PresidentialNoticeMeaning = "Presidential notice | A document from the President that gives public information, such as the continuation of a national emergency.";
     private const string BillCrsSource = "From the Congressional Research Service summary.";
     private const string AboutLabelsNote = "On a bill or resolution page or a vote page, a summary that a model wrote has the label \"An AI summary of the official record\". Wording that code wrote from the bill title, the sponsor, and the introduction date has the label \"Written automatically from Congress.gov data, with no AI\".";
     private const string CodeWordingLabel = "Written automatically from Congress.gov data, with no AI";
 
-    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below. The all-pages test expects exactly these
-    /// and no others, so a new hard passage fails it and a fixed one prompts removal here.</summary>
+    /// <summary>Fixed passages that read above the limit. The owner kept their words on 2026-11-13, so each has a skipped test below.</summary>
     private static readonly Dictionary<string, double> OwnerKeptPassages = new()
     {
         [PresidentialNoticeMeaning] = 12.3,
         [BillCrsSource] = 12.3,
-        [CodeWordingLabel] = 12.6,
+        [CodeWordingLabel] = 12.6
+    };
+
+    /// <summary>Fixed passages that read above the limit and wait for the owner. Their words stay until the owner decides, and each has a skipped test below.
+    /// The all-pages test expects exactly this list and <see cref="OwnerKeptPassages"/>, so a new hard passage fails it and a fixed one prompts removal here.</summary>
+    private static readonly Dictionary<string, double> OpenQuestionPassages = new()
+    {
         [AboutLabelsNote] = 12.6
     };
 
@@ -211,7 +248,7 @@ public sealed class PublicPageReadingGradeTests
             }
         }
 
-        Assert.Equal(OwnerKeptPassages.OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
+        Assert.Equal(OwnerKeptPassages.Concat(OpenQuestionPassages).OrderBy(pair => pair.Key), failures.OrderBy(pair => pair.Key));
     }
 
     [Fact]
@@ -353,12 +390,32 @@ public sealed class PublicPageReadingGradeTests
             new("Sam Member", PublishedChamber.House, BillMemberRelation.Cosponsor, new(2025, 10, 2), []),
             new("Sue Senator", PublishedChamber.Senate, BillMemberRelation.None, null, [])
         ], [PublishedChamber.House]);
+        var voteList = new VoteListPageData(7, 1250,
+            [new(new string('a', 64), "House passes H.R. 5334", "AI vote label", PublishedTextOrigin.Model, PublishedChamber.House, 314, new(2026, 9, 16), PublishedVoteKind.Passage, "H.R. 5334", "Passed", PublishedVoteAlignment.Split, 216, 214)],
+            RecordListFilter.Of(null, null), "next", [new("passage", "Vote to pass")], [new("health", "Health")]);
+        var billList = new BillListPageData(7, 119, 9000,
+            [new(new string('b', 64), "H.R. 5334 would impose sanctions", "AI bill label", PublishedTextOrigin.Model, "hr", "Jimmy Panetta", new(2026, 2, 23), "Became Public Law No: 119-111.", new(2026, 9, 18), BillStatusStage.BecameLaw)],
+            RecordListFilter.Of(null, null), "next", [new("law", "Became law")], [new("international-affairs", "International Affairs")], [new("health", "Health")]);
+        var statementList = new StatementListPageData(7, 300,
+            [new(new string('d', 64), "Kelly announces a bill", "AI statement label", PublishedTextOrigin.Model, new(2026, 9, 12), [new("Mark Kelly", PublishedOfficeKind.Senator, "Senator", "AZ", null, "Democrat")], "kelly.senate.gov", true)],
+            RecordListFilter.Of(null, null), "next", [new("health", "Health")]);
+        var actionList = new ExecutiveActionListPageData(7, 40,
+            [new(new string('3', 64), "Seafood Month", PublishedExecutiveActionKind.Proclamation, new(2026, 10, 22))],
+            RecordListFilter.Of(null, null), null, "next", [new("notice", "Notice")]);
+        string[] ListRecordData = ["H.R. 5334", "AI vote label", "AI bill label", "Jimmy Panetta", "Public Law", "Kelly announces", "AI statement label", "Mark Kelly", "kelly.senate.gov", "Seafood Month",
+            "2026-13-40", "abc", "zzq", "soon"];
         string[] ZipRecordData = ["Pat Member", "Sam Member", "Sue Senator", "House members differ", "Health"];
 
         string[] VoteRecordData = ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton", "Dee Cee", "Pat Rico", "Sam Solo", "Ed Ward", "Cal Ray"];
         static VoteMemberData MapMember(string name, string cast, string party, string? state, int? district) =>
             new("o-" + name, name, cast, party, VoteDetailPageFixture.Cite(VoteDetailPageFixture.Lines[4]), state, district);
         static Func<Task<IDocument>> Page<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<TComponent>(parameters.Where(pair => typeof(TComponent).GetProperty(pair.Key) is not null).ToDictionary());
+        static Func<Task<IDocument>> Shell<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<ServerPageFrame>(new()
+        {
+            [nameof(ServerPageFrame.Context)] = new ServerPageContext(new(2026, 5, 31), new(2026, 5, 29)),
+            [nameof(ServerPageFrame.Page)] = typeof(TComponent),
+            [nameof(ServerPageFrame.Parameters)] = parameters.ToDictionary(pair => pair.Key, pair => pair.Value!)
+        });
         static Dictionary<string, object?> With(string name, object? data, params (string Name, object? Value)[] more) =>
             new Dictionary<string, object?> { [name] = data, ["RootPath"] = Root }.Concat(more.Select(pair => KeyValuePair.Create(pair.Name, pair.Value))).ToDictionary();
 
@@ -416,6 +473,27 @@ public sealed class PublicPageReadingGradeTests
             ("issues index empty", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, []))), []),
             ("official votes", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 0)], OfficialRecordKind.Votes) { Votes = [new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, "Vote to pass or agree to", "Passed", [])], NextCursor = "next" })), ["Ann Able", "House agrees"]),
             ("official executive", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p4", "Eve East", PublishedOfficeKind.Executive, [new(OfficialRecordKind.ExecutiveActions, 1)], OfficialRecordKind.ExecutiveActions) { ExecutiveActions = [new(new string('3', 64), "Seafood Month", PublishedExecutiveActionKind.Proclamation, new(2026, 10, 22))], Offices = [new("President", "Republican", new(2025, 1, 20), null)] })), ["Eve East", "Seafood Month"]),
+            ("official bills", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 1), new(OfficialRecordKind.Statements, 1)], OfficialRecordKind.Bills) { Bills = [new(new string('e', 64), "hr", "H.R. 40 would study reparations.", "Commission to Study Reparation Proposals Act", new(2025, 1, 3), "Referred to the House Committee on the Judiciary.", new(2025, 1, 3))] })), ["H.R. 40", "Reparation", "Referred to"]),
+            ("official statements", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Statements, 1)], OfficialRecordKind.Statements) { Statements = [new(new string('d', 64), new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label")], LaterPage = true })), ["statement about", "AI statement label"]),
+            ("vote list", Page<VoteListPage>(With("Data", voteList)), ListRecordData),
+            ("vote list filtered empty", Page<VoteListPage>(With("Data", voteList with { Votes = [], NextCursor = null, Filter = RecordListFilter.Of(new(2026, 1, 1), null, ("chamber", "house")) })), ListRecordData),
+            ("vote list release empty", Page<VoteListPage>(With("Data", voteList with { VotesInRelease = 0, Votes = [], NextCursor = null })), ListRecordData),
+            ("vote list refused", Page<VoteListPage>(With("Data", voteList with { Votes = [], NextCursor = null, Filter = RecordListFilter.Refused("from", ("from", "2026-13-40")) })), ListRecordData),
+            ("bill list", Page<BillListPage>(With("Data", billList)), ListRecordData),
+            ("bill list filtered empty", Page<BillListPage>(With("Data", billList with { Bills = [], NextCursor = null, Filter = RecordListFilter.Of(null, null, ("sponsor", "zzq")) })), ListRecordData),
+            ("bill list release empty", Page<BillListPage>(With("Data", billList with { Congress = null, Total = 0, Bills = [], NextCursor = null })), ListRecordData),
+            ("bill list refused", Page<BillListPage>(With("Data", billList with { Bills = [], NextCursor = null, Filter = RecordListFilter.Refused("bill", ("bill", "abc")) })), ListRecordData),
+            ("statement list", Page<StatementListPage>(With("Data", statementList)), ListRecordData),
+            ("statement list filtered empty", Page<StatementListPage>(With("Data", statementList with { Statements = [], NextCursor = null, Filter = RecordListFilter.Of(null, null, ("official", "zzq")) })), ListRecordData),
+            ("statement list release empty", Page<StatementListPage>(With("Data", statementList with { StatementsInRelease = 0, Statements = [], NextCursor = null })), ListRecordData),
+            ("statement list refused", Page<StatementListPage>(With("Data", statementList with { Statements = [], NextCursor = null, Filter = RecordListFilter.Refused("from", ("from", "2026-10-01"), ("to", "2026-09-01")) })), ListRecordData),
+            ("executive action list", Page<ExecutiveActionListPage>(With("Data", actionList)), ListRecordData),
+            ("executive action list filtered empty", Page<ExecutiveActionListPage>(With("Data", actionList with { Actions = [], NextCursor = null, Type = PublishedExecutiveActionKind.Notice, Filter = RecordListFilter.Of(null, null, ("type", "notice")) })), ListRecordData),
+            ("executive action list release empty", Page<ExecutiveActionListPage>(With("Data", actionList with { ActionsInRelease = 0, Actions = [], NextCursor = null })), ListRecordData),
+            ("executive action list refused", Page<ExecutiveActionListPage>(With("Data", actionList with { Actions = [], NextCursor = null, Filter = RecordListFilter.Refused("to", ("to", "soon")) })), ListRecordData),
+            ("vote corrected", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, PublishedCorrectionBannerTests.Newest.Note!]),
+            ("bill corrected without note", Page<BillDetailPage>(With("Data", bill with { Corrections = [PublishedCorrectionBannerTests.Newest with { Note = null }] })), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
+            ("server shell", Shell<AboutPage>(new() { ["RootPath"] = Root }), []),
             ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),
             ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
             ("zip compare", Page<ZipMemberCards>(With("Data", zipCompare, ("View", "compare"))), ZipRecordData),
