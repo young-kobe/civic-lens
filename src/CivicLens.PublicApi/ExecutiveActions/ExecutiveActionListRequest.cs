@@ -16,14 +16,14 @@ public sealed record ExecutiveActionListRequest
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static ExecutiveActionListRequest Parse(IQueryCollection query, int limit)
     {
-        var request = new ExecutiveActionListRequest
+        var (from, to) = QueryValues.DateRange(query);
+        return new ExecutiveActionListRequest
         {
             Kind = QueryValues.Choice<PublishedExecutiveActionKind>(query, "type"),
-            From = QueryValues.Date(query, "from"),
-            To = QueryValues.Date(query, "to"),
+            From = from,
+            To = to,
             Cursor = ExecutiveActionCursor.Parse(QueryValues.Value(query, "cursor")),
             Limit = limit
         };
-        return request.From > request.To ? throw new ArgumentException("from must not be after to.", "from") : request;
     }
 }

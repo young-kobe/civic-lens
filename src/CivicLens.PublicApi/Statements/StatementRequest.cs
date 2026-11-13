@@ -17,15 +17,15 @@ public sealed record StatementRequest
 
     public static StatementRequest Parse(IQueryCollection query)
     {
-        var request = new StatementRequest
+        var (from, to) = QueryValues.DateRange(query);
+        return new StatementRequest
         {
             Official = QueryValues.Filter(query, "official"),
             Issue = QueryValues.Filter(query, "issue"),
-            From = QueryValues.Date(query, "from"),
-            To = QueryValues.Date(query, "to"),
+            From = from,
+            To = to,
             Cursor = StatementCursor.Parse(QueryValues.Value(query, "cursor")),
             Limit = QueryValues.Number(query, "limit", 1, SearchRequest.MaximumLimit) ?? SearchRequest.DefaultLimit
         };
-        return request.From > request.To ? throw new ArgumentException("from must not be after to.", "from") : request;
     }
 }

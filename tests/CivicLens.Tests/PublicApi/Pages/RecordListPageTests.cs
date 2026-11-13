@@ -102,6 +102,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var conflict = await GetPageAsync(host, "/web/bills?type=s&bill=H.R.%201002", HttpStatusCode.BadRequest);
         var date = await GetPageAsync(host, "/web/votes?from=2026-13-45&chamber=house", HttpStatusCode.BadRequest);
         var order = await GetPageAsync(host, "/web/statements?from=2026-02-01&to=2026-01-01", HttpStatusCode.BadRequest);
+        var voteOrder = await GetPageAsync(host, "/web/votes?from=2026-03-03&to=2026-03-01", HttpStatusCode.BadRequest);
         var choice = await GetPageAsync(host, "/web/executive-actions?type=law", HttpStatusCode.BadRequest);
 
         var number = bill.QuerySelector("input[name=bill]")!;
@@ -119,9 +120,10 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var orderFrom = order.QuerySelector("input[name=from]")!;
         Assert.Equal("true", orderFrom.GetAttribute("aria-invalid"));
         Assert.Equal("The To date must be on or after the From date.", ErrorOf(order, orderFrom));
+        Assert.Equal("The To date must be on or after the From date.", ErrorOf(voteOrder, voteOrder.QuerySelector("input[name=from]")!));
         var choiceType = choice.QuerySelector("select[name=type]")!;
         Assert.Equal(("true", null), (choiceType.GetAttribute("aria-invalid"), choiceType.GetAttribute("aria-describedby")));
-        foreach (var page in new[] { bill, conflict, date, order, choice })
+        foreach (var page in new[] { bill, conflict, date, order, voteOrder, choice })
         {
             Assert.NotNull(page.QuerySelector(".list-fold[open] form"));
             Assert.Empty(Rows(page));

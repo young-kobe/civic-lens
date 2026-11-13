@@ -68,6 +68,14 @@ internal static class QueryValues
             : throw new ArgumentException($"{name} must be a date as yyyy-MM-dd.", name);
     }
 
+    /// <summary>The one owner of the date range of a list: the from and to dates, where a from date after the to date throws <see cref="ArgumentException"/> that names from.</summary>
+    public static (DateOnly? From, DateOnly? To) DateRange(IQueryCollection query)
+    {
+        var from = Date(query, "from");
+        var to = Date(query, "to");
+        return from > to ? throw new ArgumentException("from must not be after to.", "from") : (from, to);
+    }
+
     /// <summary>Reads an enum in the text form of the release files, such as <c>previousQuestion</c>.</summary>
     public static T? Choice<T>(IQueryCollection query, string name) where T : struct, Enum
     {
