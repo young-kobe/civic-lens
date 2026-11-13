@@ -10,7 +10,8 @@ namespace CivicLens.Infrastructure.ExecutiveActions;
 
 internal static class ExecutiveActionRevisionRows
 {
-    public static ExecutiveActionRevisionRow Create(ExecutiveActionRevision revision, CodeVersion codeVersion)
+    /// <summary>The run ID is the run of the model call that wrote the summary. It is set for a revision of the analysis author and for no other.</summary>
+    public static ExecutiveActionRevisionRow Create(ExecutiveActionRevision revision, CodeVersion codeVersion, string? runId = null)
     {
         var row = new ExecutiveActionRevisionRow
         {
@@ -19,6 +20,7 @@ internal static class ExecutiveActionRevisionRows
             AuthorSubject = revision.AuthorSubject,
             AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
             CodeVersion = codeVersion.Sha,
+            RunId = runId,
             RevisionJson = ReviewJson.Serialize(revision),
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         };
@@ -43,6 +45,9 @@ internal static class ExecutiveActionRevisionRows
         row.DispositionNotesExtractionId = revision.DispositionNotes?.Citation.ExtractionId;
         row.DispositionNotesStart = revision.DispositionNotes?.Citation.Start;
         row.DispositionNotesLength = revision.DispositionNotes?.Citation.Length;
+        row.SummaryTextOrigin = revision.Summary?.TextOrigin;
+        row.SummaryCut = revision.Summary?.Cut;
+        row.SummarySentences = [.. (revision.Summary?.Sentences ?? []).Select((sentence, position) => SentenceRow(revision, sentence, position))];
         row.Facts = [.. revision.Facts.Select((fact, position) => FactRow(revision, fact, position))];
         row.Notices = [.. revision.Notices.Select((notice, position) => NoticeRow(revision, notice, position))];
         row.DispositionTargets = [.. TargetRows(revision)];
@@ -64,7 +69,10 @@ internal static class ExecutiveActionRevisionRows
                 ON d.source_id = k.source_id AND d.document_number = k.document_number
                 """, named.Select(notice => notice.SourceId).ToArray(), named.Select(notice => notice.DocumentNumber).ToArray())
             .AsNoTracking().ToDictionaryAsync(document => (document.SourceId, document.DocumentNumber), cancellationToken);
-        return new(rows, facts, notices, documents);
+        var sentences = (await db.Set<ExecutiveActionRevisionSummarySentenceRow>()
+            .FromSqlRaw(ReviewQueries.RevisionChildren("executive_action_revision_summary_sentences"), recordIds, numbers)
+            .AsNoTracking().ToListAsync(cancellationToken)).ToLookup(sentence => (sentence.RecordId, sentence.RevisionNumber));
+        return new(rows, facts, notices, documents, sentences);
     }
 
     public static ExecutiveActionNotice NoticeOf(ExecutiveActionDocumentRow document) => new(document.DocumentNumber, document.PublishedOn, document.NoticeUrl!,
@@ -111,6 +119,17 @@ internal static class ExecutiveActionRevisionRows
             ReferenceStart = target.Start,
             ReferenceLength = target.Length
         });
+
+    private static ExecutiveActionRevisionSummarySentenceRow SentenceRow(ExecutiveActionRevision revision, ExecutiveActionSummarySentence sentence, int position) => new()
+    {
+        RecordId = revision.RecordId,
+        RevisionNumber = revision.RevisionNumber,
+        Position = (short)position,
+        Sentence = sentence.Sentence,
+        QuoteExtractionId = sentence.Quote.ExtractionId,
+        QuoteStart = sentence.Quote.Start,
+        QuoteLength = sentence.Quote.Length
+    };
 
     private static ExecutiveActionRevisionNoticeRow NoticeRow(ExecutiveActionRevision revision, ExecutiveActionNotice notice, int position) => new()
     {

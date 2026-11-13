@@ -50,6 +50,18 @@ public static class AnalysisSchema
         return schema.ToJsonString(AnalysisPromptText.CompactJson);
     }
 
+    public static string ExecutiveSummary()
+    {
+        var schema = new JsonObject
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["required"] = new JsonArray("summary"),
+            ["properties"] = new JsonObject { ["summary"] = SentencesWithConfidence() }
+        };
+        return schema.ToJsonString(AnalysisPromptText.CompactJson);
+    }
+
     public static string IssueChoice(JsonObject issueIds)
     {
         var properties = new JsonObject { ["issueIds"] = issueIds, ["confidence"] = Number() };
