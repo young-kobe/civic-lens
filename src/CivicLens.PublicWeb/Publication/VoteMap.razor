@@ -40,7 +40,7 @@
         @if (ColorModes)
         {
             <div class="vote-map-legend-party">
-                <p class="muted small">@VoteMapWords.PartyLegendNote(legend.Sum(entry => entry.Count))</p>
+                <p class="muted small">@VoteMapWords.PartyLegendNote(legend.Sum(entry => entry.Count), Data.Delegates.Count > 0)</p>
                 <ul class="vote-map-legend" role="list">
                     @foreach (var group in Data.PartyLegend)
                     {

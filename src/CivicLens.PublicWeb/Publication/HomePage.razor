@@ -8,7 +8,7 @@
                 <p class="home-lead">See how your representative and senators voted and which bills they introduced. Each fact links to its official source.</p>
                 @if (BrowserApiUrl is not null)
                 {
-                    <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="zip-code" />
+                    <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="@ZipInputId" />
                     <p class="home-browse"><a href="@(RootPath + "compare.html")">Compare your members</a></p>
                 }
                 <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
@@ -67,6 +67,11 @@
                                 <span>@(" " + featured.BillLineSource)</span>
                             }
                         </p>
+                    }
+                    <p class="small muted home-featured-rule">Civic Lens picks this vote by a fixed rule: the latest passage vote on a bill.</p>
+                    @if (BrowserApiUrl is not null)
+                    {
+                        <p class="small muted home-featured-zip"><a href="@("#" + ZipInputId)">Enter your ZIP code</a> to see how your members voted on this.</p>
                     }
                 </section>
             }
@@ -214,6 +219,7 @@
 
 @code {
     private const int FourVotes = 4;
+    private const string ZipInputId = "zip-code";
     private VoteMapData? featuredMap;
     private IReadOnlyList<PartyBarData> featuredParties = [];
     private IReadOnlyList<(BoardPanelData Panel, BoardRowData Row)> breakers = [];

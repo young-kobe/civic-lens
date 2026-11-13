@@ -35,7 +35,7 @@ Status note: the owner accepted the design below on 2026-11-06. The Mosaic v2 pa
 
 ### Home
 
-- The hero side tile is a featured vote. A fixed rule in code picks it: the latest passage vote on a bill. The preview shows the result, labeled summary, published counts when available, and a ZIP prompt. The tile also holds a compact map and one party bar for each party count. The link "Open the full map" follows the map.
+- The hero side tile is a featured vote. A fixed rule in code picks it: the latest passage vote on a bill. The preview shows the result, labeled summary, published counts when available, and a note that names the fixed rule. When the page has the ZIP lookup, a ZIP prompt links its field. The tile also holds a compact map and one party bar for each party count. The link "Open the full map" follows the map. The link "See all recent votes" comes with the votes list page.
 - The featured vote does not repeat in the recent votes list. It includes the bill line and what a Yes vote meant.
 - Recent votes show up to two House votes and two Senate votes. When all four shown votes have stored split alignment, the server home shows one caption that names those four votes and the opposing party majorities. Missing alignment, mixed majorities, or fewer votes never produce that caption.
 - The Home map is the vote map component in its compact mode. It draws the shapes alone at every width, with the counts of each mark in its label. The map and the party bars read the page data of the featured vote, as the vote page does.
@@ -208,7 +208,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - The view buttons carry the visible label "View", and the group points `aria-labelledby` at it. Enforcer: `VoteMap`. Test: `VoteMapTests.TheViewButtonsHaveAVisibleLabelThatNamesTheGroup`.
 - Home, the vote page, and the map page use one map component. Home draws it in the compact mode. Only the map page adds the color modes. Enforcer: `VoteMap`. Tests: `HomePageTests.TheFeaturedVoteShowsTheCompactMapItsCountsAndTheLinkToTheFullMap`, `VoteMapPageTests.BothColorModesHaveTheirOwnLegendAndTheMapKeepsTheTableFallback`.
 - The party legend groups the members of the map by their party. Its counts and the seats with no member add up to the total of the vote legend. Enforcer: `VoteMapData.PartyLegend`. Test: `VoteMapPageTests.EverySeatCarriesItsPartyAndTheLegendOfEachModeAddsUpToTheSameTotal`.
-- The party mode paints Yes solid and No striped in the party color. Present and Not voting keep the dot and ring shapes of the vote mode. So color is never the only cue. Enforcer: `public.css` and `VoteMap`. Tests: `VoteMapPageTests.ThePartyModePaintsYesSolidNoStripedPresentDottedAndNotVotingRingedForEachPartyInCss` and `VoteMapPageTests.InThePartyModePresentAndNotVotingKeepTheTwoShapesOfTheVoteModeSoColorIsNeverTheOnlyCue`.
+- The party mode paints Yes solid and No striped in the party color. Present and Not voting keep the dot and ring shapes of the vote mode. So color is never the only cue. The party legend note names the four shapes. Its total names delegate circles when the map draws one. Enforcer: `public.css` and `VoteMap`. Tests: `VoteMapPageTests.ThePartyModePaintsYesSolidNoStripedPresentDottedAndNotVotingRingedForEachPartyInCss`, `VoteMapPageTests.InThePartyModePresentAndNotVotingKeepTheTwoShapesOfTheVoteModeSoColorIsNeverTheOnlyCue`, and `VoteMapPageTests.BothColorModesHaveTheirOwnLegendAndTheMapKeepsTheTableFallback`.
 - A vote that the map cannot show truly has no map page content. The page shows an empty state under the h2 "Map of the vote", so the headings do not skip a level. Enforcer: `VoteMapPage`. Test: `VoteMapPageTests.AVoteThatCannotBeMappedShowsTheEmptyStateAndNoMap`.
 - The Home map, party bars, and break board join the page only when their read has the release of the home answer. A featured vote with a member that has no official name leaves out the map and party bars. It logs a warning with the record ID. Enforcer: `HomePageReader.WithDetailAsync`. Test: `VoteMapPageEndpointsTests.TheHomeRouteLogsAWarningWithTheRecordIdWhenItLeavesOutTheFeaturedMap` covers the missing name. No test covers a release mismatch.
 - "Open the full map" on Home links the gated map route, origin-relative, until the cutover. The static site has no map page. Enforcer: `ServerPageEndpoints.VoteMapRoute`. Tests: `VoteMapPageEndpointsTests.TheHomeRouteDrawsTheFeaturedMapFromTheSameReleaseAndLinksToTheMapPage` and `HomePageTests.TheFeaturedVoteShowsTheCompactMapItsCountsAndTheLinkToTheFullMap`.
@@ -371,8 +371,9 @@ Limits:
 
 - The search page reads the index release and then the views, with no shared snapshot. For a short time after a release, a card can come from a newer release than the results.
 - The bill pin reads at most five bills with the number. Another bill with the number past those five gets no line, even when it is a result.
+- The map page source note holds only the Shapes entry. The Votes, Seats, and Delegates entries stay out until the owner approves generic text for them. The mockup text holds example counts.
 
 Open choices:
 
-- Approved by the owner: every `VoteMapWords` string except the strings listed in the open questions of the map pull request.
+- Approved by the owner: every `VoteMapWords` string.
 - The approved text for each glossary term that still shows example wording.

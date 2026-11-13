@@ -80,7 +80,7 @@ function legend(d){
  var sum=C.Y+C.N+C.NV+C.V;
  document.getElementById('legsum').textContent=color==='vote'
   ?'Each color or mark counts House seats by how the member voted. The counts add up to '+sum+' seats.'
-  :'Color shows the member\'s party. A solid fill means Yes, stripes mean No, and dots mean the member did not vote. The counts add up to '+sum+' seats.';
+  :'Color shows the member\'s party. A solid fill means Yes, stripes mean No, small dots mean Present, and rings mean the member did not vote. The counts add up to '+sum+' seats.';
  var S=function(c,p){return {c:c,p:p||'R'}};
  if(color==='vote'){
   li(k,'<b>'+C.Y+'</b> members voted Yes',[CLMap.swatch(S('Y'),'vote')]);

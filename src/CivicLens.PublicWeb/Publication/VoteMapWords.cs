@@ -41,9 +41,9 @@ public static class VoteMapWords
     public static string CompactDescription(PublishedChamber chamber, IEnumerable<(VoteMapMark Mark, int Count)> legend) =>
         $"{Heading}. {Intro(chamber).TrimEnd('.')}: {string.Join(", ", legend.Select(entry => $"{entry.Count} {VoteMapMarks.Label(entry.Mark)}"))}.";
 
-    /// <summary>The note under the legend heading in the party color mode.</summary>
-    public static string PartyLegendNote(int total) =>
-        $"Color shows the member's party. A solid fill means Yes, stripes mean No, and dots mean the member did not vote. The counts add up to {total} seats.";
+    /// <summary>The note under the legend heading in the party color mode. The total names delegate circles when the map draws one, as the vote legend note does.</summary>
+    public static string PartyLegendNote(int total, bool withDelegates) =>
+        $"Color shows the member's party. A solid fill means Yes, stripes mean No, small dots mean Present, and rings mean the member did not vote. The counts add up to {total} seats{(withDelegates ? " and delegate circles" : "")}.";
 
     public static string Description(PublishedChamber chamber) =>
         $"{Heading} of the {chamber} seats. The legend and the table below hold the same facts.";

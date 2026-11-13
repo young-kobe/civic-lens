@@ -264,6 +264,22 @@ public sealed class HomePageTests
     }
 
     [Fact]
+    public async Task TheFeaturedVoteNamesItsFixedRuleAndPointsToTheZipLookupOnlyWhenTheLookupIsOnThePage()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
+        var featured = page.QuerySelector(".home-featured")!;
+
+        Assert.Equal("Civic Lens picks this vote by a fixed rule: the latest passage vote on a bill.", featured.QuerySelector(".home-featured-rule")!.TextContent);
+        var prompt = featured.QuerySelector(".home-featured-zip")!;
+        Assert.Equal("Enter your ZIP code to see how your members voted on this.", prompt.TextContent);
+        Assert.Equal("#" + page.QuerySelector("input[name=zip]")!.Id, prompt.QuerySelector("a")!.GetAttribute("href"));
+
+        var noLookup = await RenderAsync(new(7, Featured, [], null));
+        Assert.NotNull(noLookup.QuerySelector(".home-featured .home-featured-rule"));
+        Assert.Null(noLookup.QuerySelector(".home-featured-zip"));
+    }
+
+    [Fact]
     public async Task TheFeaturedVoteShowsOnePartyBarForEachPartyCountOfItsRelease()
     {
         var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) });
@@ -345,7 +361,10 @@ public sealed class HomePageTests
     {
         var page = await RenderAsync(new(7, null, [], null) { Boards = FourPanels(118) });
 
-        Assert.DoesNotContain("Congress. A member", page.QuerySelector(".home-breakers .home-section-lede")!.TextContent);
+        var lede = page.QuerySelector(".home-breakers .home-section-lede")!;
+        lede.QuerySelector(".term-popover")!.Remove();
+        Assert.Equal("Each name below is the member in one chamber and party who voted against most of their own party on split vote most often. A member needs at least 25 split votes cast to count.",
+            lede.TextContent);
         Assert.Equal(["split votes cast against most Democrats, 119th Congress", "split votes cast against most Republicans, 119th Congress",
             "split votes cast against most Democrats, 118th Congress", "split votes cast against most Republicans, 118th Congress"],
             page.QuerySelectorAll(".home-breaker-card").Select(card => card.QuerySelectorAll("p")[1].TextContent));

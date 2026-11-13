@@ -76,7 +76,11 @@ public sealed class VoteMapPageTests
             page.QuerySelectorAll(".vote-map-legend-vote li").Select(item => item.TextContent.Trim()));
         Assert.Equal(["Democrats: 1 Yes, 1 No, 1 Present", "Republicans: 1 Yes, 1 Not voting", "Independents: 1 No", "430 No member in the record"],
             page.QuerySelectorAll(".vote-map-legend-party li").Select(item => item.TextContent.Trim()));
-        Assert.Equal(VoteMapWords.PartyLegendNote(436), page.QuerySelector(".vote-map-legend-party p")!.TextContent);
+        Assert.Equal("Color shows the member's party. A solid fill means Yes, stripes mean No, small dots mean Present, and rings mean the member did not vote. The counts add up to 436 seats and delegate circles.",
+            page.QuerySelector(".vote-map-legend-party p")!.TextContent);
+        var noDelegate = await RenderPageAsync(House(Members[..^1]));
+        Assert.Equal("Color shows the member's party. A solid fill means Yes, stripes mean No, small dots mean Present, and rings mean the member did not vote. The counts add up to 435 seats.",
+            noDelegate.QuerySelector(".vote-map-legend-party p")!.TextContent);
 
         var table = page.QuerySelector(".vote-map details.vote-fold table")!;
         Assert.Equal(436, table.QuerySelectorAll("tbody tr").Length);
