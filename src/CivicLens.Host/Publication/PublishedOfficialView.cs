@@ -181,8 +181,6 @@ internal static class PublishedOfficialView
 
     public static string StatementDay(LinkedPair pair) => pair.StatementDay is { } day ? Moment.Day(day) : NoStatementDate;
 
-    public const string MissedVoteMeaning = "A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.";
-
     public static string MissedVotes(MissedVotes missed, int congress)
     {
         var share = missed.Share is not null ? $" ({Percent(missed.Missed, missed.Held)})" : "";

@@ -48,9 +48,7 @@ internal static class PublishedBoardView
 
     public const string AgreementLinkText = "How this count works";
 
-    public const string AgreementId = "parties-agreed";
-
-    public const string AgreementAnchor = "#" + AgreementId;
+    public const string AgreementAnchor = "#" + BoardWords.AgreementId;
 
     public static string AgreementTitle(ChamberAgreement agreement) =>
         $"When both parties agreed ({CongressCalendar.Ordinal(agreement.Congress)} Congress, {agreement.Chamber})";

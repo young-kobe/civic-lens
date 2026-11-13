@@ -8,6 +8,4 @@ public sealed record HomePageData(int Release, HomeFeaturedVoteData? FeaturedVot
     public VotePageData? FeaturedVoteDetail { get; init; }
     /// <summary>The four party boards of the release of this home answer. Empty when no such read exists.</summary>
     public IReadOnlyList<BoardPanelData> Boards { get; init; } = [];
-    public DateOnly? NewestHouseRollCall { get; init; }
-    public DateOnly? NewestSenateRollCall { get; init; }
 }

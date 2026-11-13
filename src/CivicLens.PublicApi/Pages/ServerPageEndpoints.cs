@@ -28,14 +28,14 @@ public static class ServerPageEndpoints
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } answer
-                ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, answer.Release,
+            ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } read
+                ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, read.Freshness,
                     async () => new Dictionary<string, object?>
                     {
-                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = await home.WithDetailAsync(answer, cancellationToken),
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = await home.WithDetailAsync(read.Data, cancellationToken),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.RootPath)] = baseUrl.Join(string.Empty),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot,
-                        [nameof(CivicLens.PublicWeb.Publication.HomePage.FeaturedMapHref)] = answer.FeaturedVote is { } featured ? VoteMapRoute(featured.RecordId) : null
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.FeaturedMapHref)] = read.Data.FeaturedVote is { } featured ? VoteMapRoute(featured.RecordId) : null
                     }, cancellationToken)
                 : ApiResults.NoRelease()));
         routes.MapGet(Prefix + "/compare", (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -45,6 +45,7 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
+        routes.MapFixedPages(baseUrl);
         routes.MapGet(Prefix + "/officials", OfficialsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/boards", BoardsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
@@ -154,8 +155,11 @@ public static class ServerPageEndpoints
     private static string VoteMapRoute(string recordId) => $"{Prefix}/{PublicationProtocol.VoteMapPagePath(recordId)}";
 
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
+        NotFoundAsync(context, responder, baseUrl.Join(string.Empty), cancellationToken);
+
+    internal static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, string rootPath, CancellationToken cancellationToken) =>
         responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
-            new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken);
+            new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = rootPath }, cancellationToken);
 
     /// <summary>An official with executive actions gets the President layout. Every other official gets the member layout.</summary>
     private static Task<IResult> RespondOfficialAsync(HttpContext context, ServerPageResponder responder, OfficialPageData page, PublicBaseUrl baseUrl,

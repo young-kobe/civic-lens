@@ -4,6 +4,7 @@ using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Boards;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.PartyAgreement;
@@ -67,10 +68,36 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(substantive.RecordId, answer.GetProperty("votes")[0].GetProperty("recordId").GetString());
 
         await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
-        var page = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
-        Assert.NotNull(page);
-        Assert.Equal(new DateOnly(2026, 5, 31), page.NewestHouseRollCall);
-        Assert.Null(page.NewestSenateRollCall);
+        var read = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
+        Assert.NotNull(read);
+        Assert.Equal(new DateOnly(2026, 5, 31), read.Freshness.NewestHouseRollCall);
+        Assert.Null(read.Freshness.NewestSenateRollCall);
+    }
+
+    [Fact]
+    public async Task TheHomePageReadCarriesTheFreshnessOfItsOwnAnswerSoTheShellNeedsNoSecondRead()
+    {
+        await using var host = await StartAsync([House('a', "2026-05-01", 1), Senate('b', "2026-04-02", 2)]);
+        await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
+
+        var read = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
+
+        Assert.NotNull(read);
+        Assert.Equal(new ReleaseFreshness(1, new DateOnly(2026, 5, 1), new DateOnly(2026, 4, 2)), read.Freshness);
+        Assert.Equal(1, read.Data.Release);
+    }
+
+    [Fact]
+    public async Task EachChamberGivesTheSharedNumberOfRecentVotes()
+    {
+        var votes = Enumerable.Range(1, PublishedCountRules.HomeVotesPerChamber + 2)
+            .Select(day => House((char)('a' + day), $"2026-05-{day:00}", day)).ToArray();
+        await using var host = await StartAsync(votes);
+
+        var answer = await GetAsync(host);
+
+        Assert.Equal(votes[^1].RecordId, FeaturedId(answer));
+        Assert.Equal(PublishedCountRules.HomeVotesPerChamber, Ids(answer).Length);
     }
 
     [Fact]
@@ -114,7 +141,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(new SeededBrief('x', "2026-05-25").RecordId, answer.GetProperty("brief").GetProperty("recordId").GetString()!);
 
         await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
-        var page = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
+        var page = (await HomeReader(dataSource).ReadAsync(CancellationToken.None))?.Data;
         Assert.NotNull(page);
         Assert.Equal(2, page.ExecutiveActions.Length);
         var pageOrder = Assert.Single(page.ExecutiveActions, group => group.Kind == PublishedExecutiveActionKind.ExecutiveOrder);
@@ -193,7 +220,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(0, empty.GetProperty("bills").GetInt32());
 
         await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
-        var page = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
+        var page = (await HomeReader(dataSource).ReadAsync(CancellationToken.None))?.Data;
         Assert.NotNull(page);
         Assert.Equal(1, page.Release);
         Assert.Equal(3, page.Issues.Length);
@@ -464,7 +491,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(votes[4].RecordId, FeaturedId(answer));
 
         await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
-        var page = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
+        var page = (await HomeReader(dataSource).ReadAsync(CancellationToken.None))?.Data;
 
         Assert.NotNull(page);
         Assert.Equal(PublishedVoteAlignment.Split, page.Votes.Single(vote => vote.RecordId == votes[0].RecordId).Alignment);
@@ -555,7 +582,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal((2, 1), (house.GetProperty("yea").GetInt32(), house.GetProperty("nay").GetInt32()));
 
         await using var dataSource = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase!);
-        var page = await HomeReader(dataSource).ReadAsync(CancellationToken.None);
+        var page = (await HomeReader(dataSource).ReadAsync(CancellationToken.None))?.Data;
         var bar = Assert.Single(page!.Votes).Totals!;
         Assert.Equal("Senate members", bar.Name);
         Assert.Equal([(PlainVoteWords.Yes, 2), (PlainVoteWords.No, 1), (PlainVoteWords.Present, 1), (PlainVoteWords.NotVoting, 2)], bar.Segments.Select(segment => (segment.Label, segment.Count)));

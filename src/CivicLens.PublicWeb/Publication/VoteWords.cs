@@ -5,6 +5,8 @@ namespace CivicLens.PublicWeb.Publication;
 /// <summary>The one owner of the fixed words that vote pages and vote lists share: the split and agreed badges, the party count note, and the break rule.</summary>
 public static class VoteWords
 {
+    public const string MissedVoteMeaning = "A missed vote means the official did not vote on it. The count includes procedural votes. It counts only the roll calls on this site, which can be fewer than the chamber held.";
+
     public const string SplitBadge = "Split vote";
     public const string PartiesAgreedBadge = "Both parties agreed";
 

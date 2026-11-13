@@ -120,6 +120,49 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AHeldFreshnessAnswers304WithoutReadingTheLazyParameters()
+    {
+        await using var views = NpgsqlDataSource.Create("Host=unused.invalid");
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache, new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
+        var context = new DefaultHttpContext();
+        context.Request.Headers.IfNoneMatch = cache.ETag(9).ToString();
+        var reads = 0;
+
+        var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, new ReleaseFreshness(9, null, null), () =>
+        {
+            reads++;
+            return Task.FromResult<IReadOnlyDictionary<string, object?>>(new Dictionary<string, object?>());
+        }, default);
+
+        Assert.Equal(StatusCodes.Status304NotModified, Assert.IsAssignableFrom<IStatusCodeHttpResult>(response).StatusCode);
+        Assert.Equal(0, reads);
+    }
+
+    [Fact]
+    public async Task APageOfAnEarlierReleaseShowsNoFreshnessLineInsteadOfTheDaysOfTheActiveRelease()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache,
+            new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
+        var parameters = new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = "https://civic-lens.test/" };
+        var earlierContext = new DefaultHttpContext();
+
+        var same = await responder.RespondAsync<PublishedNotFoundPage>(new DefaultHttpContext(), StatusCodes.Status404NotFound, 4, parameters, default);
+        var earlier = await responder.RespondAsync<PublishedNotFoundPage>(earlierContext, StatusCodes.Status404NotFound, 3, parameters, default);
+
+        Assert.Contains("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(same).ResponseContent);
+        Assert.DoesNotContain("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(earlier).ResponseContent);
+        Assert.Equal(cache.ETag(3).ToString(), earlierContext.Response.Headers.ETag);
+    }
+
+    [Fact]
     public async Task AFailedRenderWithAStaleValidatorLeavesNoCacheHeaders()
     {
         await using var host = await StartAsync();
@@ -307,7 +350,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartWithBrowserApiAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.votes FROM civic_lens_public");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.bills FROM civic_lens_public");
 
         using var response = await host.Client.GetAsync("/web/compare");
 
@@ -328,6 +371,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal("Compare your members", page.QuerySelector("h1")!.TextContent);
         Assert.Null(page.QuerySelector("[data-zip-api]"));
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.FacetsPath), page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
         Assert.Equal("https://civic-lens.test/officials.html", page.QuerySelector(".home-browse a")!.GetAttribute("href"));
     }
 
@@ -360,7 +404,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.DoesNotContain(MembersStripSlot.ElementId, staticHtml);
         Assert.Contains($"id=\"{MembersStripSlot.ElementId}\"", served);
-        Assert.Equal(staticHtml, served.Replace(MembersStripHtml, string.Empty));
+        Assert.Equal(staticHtml, ServerShellOnly(served));
         Assert.Contains("id=\"site-search\"", served);
     }
 
@@ -430,6 +474,11 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag);
+
+    /// <summary>The served page without the three things that only a server page adds: the members strip, the freshness line, and the preview Issues link.</summary>
+    private static string ServerShellOnly(string served) => System.Text.RegularExpressions.Regex.Replace(
+        served.Replace(MembersStripHtml, string.Empty).Replace(BaseUrl.Join(PublicSections.PreviewIssuesPath), BaseUrl.Join(PublicationProtocol.FacetsPath)),
+        "<p class=\"public-freshness\">.*?</p>", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 

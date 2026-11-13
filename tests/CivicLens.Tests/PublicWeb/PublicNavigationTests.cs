@@ -229,6 +229,55 @@ public sealed class PublicNavigationTests
         Assert.Equal(Root + PublicationProtocol.AboutPagePath, current.GetAttribute("href"));
     }
 
+    [Fact]
+    public async Task OnlyAServerPageShowsTheFreshnessLineAndTheIssuesLinkOfThePreview()
+    {
+        var staticPage = await RenderAsync();
+        var serverPage = await RenderFramedAsync(new(new(2026, 5, 31), new(2026, 5, 29)));
+
+        Assert.Null(staticPage.QuerySelector(".public-freshness"));
+        Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(staticPage).GetAttribute("href"));
+        Assert.Equal(["Newest published House roll call: 31 May 2026", "Newest published Senate roll call: 29 May 2026"],
+            serverPage.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
+        Assert.Equal(PublicSections.Header.Select(link => Root + (link.Text == "Issues" ? PublicSections.PreviewIssuesPath : link.Path)),
+            serverPage.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")));
+    }
+
+    [Fact]
+    public async Task TheFreshnessLineOmitsAChamberWithNoPublishedRollCallAndShowsNothingWhenBothAreEmpty()
+    {
+        var onlyHouse = await RenderFramedAsync(new(new(2026, 5, 31), null));
+        var neither = await RenderFramedAsync(new(null, null));
+
+        Assert.Equal("Newest published House roll call: 31 May 2026", Assert.Single(onlyHouse.QuerySelectorAll(".public-freshness span")).TextContent);
+        Assert.Null(neither.QuerySelector(".public-freshness"));
+    }
+
+    [Fact]
+    public async Task APageOnAPublicRouteKeepsTheStaticIssuesLink()
+    {
+        var page = await RenderFramedAsync(new(null, null), onPublicRoute: true);
+
+        Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(page).GetAttribute("href"));
+    }
+
+    private static IElement IssuesLink(IDocument page) => page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues");
+
+    private static Task<IDocument> RenderFramedAsync(ServerPageContext context, bool onPublicRoute = false) => RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
+    {
+        [nameof(ServerPageFrame.Context)] = context,
+        [nameof(ServerPageFrame.Page)] = typeof(PublicPage),
+        [nameof(ServerPageFrame.Parameters)] = new Dictionary<string, object>
+        {
+            [nameof(PublicPage.Title)] = "Test",
+            [nameof(PublicPage.Description)] = "Test page",
+            [nameof(PublicPage.CanonicalPath)] = "x.html",
+            [nameof(PublicPage.RootPath)] = Root,
+            [nameof(PublicPage.Section)] = PublicSection.Officials!,
+            [nameof(PublicPage.OnPublicRoute)] = onPublicRoute
+        }
+    });
+
     private static Task<IDocument> RenderAsync(PublicSection? section = PublicSection.Officials, string title = "Test", string? canonicalPath = null, ReportedRecord? record = null) => RenderAsync<PublicPage>(new Dictionary<string, object?>
     {
         [nameof(PublicPage.Title)] = title,

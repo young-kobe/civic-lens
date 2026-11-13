@@ -1,0 +1,20 @@
+@using CivicLens.Publication.Contracts
+
+<a class="home-issue-tile" href="@Href">
+    <span class="home-issue-name">@Name</span>
+    @if (Congress is { } congress && SubstantiveVotes is { } votes && Bills is { } bills)
+    {
+        <span class="home-issue-counts">@votes substantive vote@(votes == 1 ? "" : "s")</span>
+        <span class="home-issue-counts">@bills bill@(bills == 1 ? "" : "s")</span>
+        <span class="home-issue-congress muted small">@CongressCalendar.Ordinal(congress) Congress</span>
+    }
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+    /// <summary>The Congress of the counts. The counts show only when the release counted the issue.</summary>
+    [Parameter] public int? Congress { get; set; }
+    [Parameter] public int? SubstantiveVotes { get; set; }
+    [Parameter] public int? Bills { get; set; }
+}
