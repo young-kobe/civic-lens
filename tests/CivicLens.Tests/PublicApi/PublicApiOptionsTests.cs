@@ -1,3 +1,4 @@
+using CivicLens.Host.Publication;
 using CivicLens.PublicApi;
 using Npgsql;
 
@@ -34,6 +35,23 @@ public sealed class PublicApiOptionsTests
     {
         Assert.Null(PublicApiOptions.ParsePullToken(null));
         Assert.Equal(new string('t', 32), PublicApiOptions.ParsePullToken(new string('t', 32)));
+    }
+
+    [Fact]
+    public void TheReportPageSettingsAreTheSameVariablesThatPublishReads()
+    {
+        Assert.Equal(ReleaseRenderer.PublicApiUrlVariable, PublicApiOptions.BrowserApiUrlVariable);
+        Assert.Equal(ReleaseRenderer.TurnstileSiteKeyVariable, PublicApiOptions.TurnstileSiteKeyVariable);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData(" site-key ", "site-key")]
+    public void ABlankSiteKeyCountsAsUnsetAndAKeyIsTrimmedAsPublishReadsIt(string? value, string? expected)
+    {
+        Assert.Equal(expected, PublicApiOptions.ParseSiteKey(value));
     }
 
     [Fact]
