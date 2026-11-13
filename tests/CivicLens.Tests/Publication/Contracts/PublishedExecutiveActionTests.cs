@@ -93,6 +93,109 @@ public sealed class PublishedExecutiveActionTests
         Assert.Throws<InvalidDataException>((entry with { Kind = PublishedRecordKind.Vote }).Validate);
     }
 
+    private const string BodyText = "Header\nBy the authority vested in me, I order each agency head to act within 30 days.\nEach agency shall report the results to the President.";
+    private static readonly string BodyId = new('b', 64);
+
+    [Fact]
+    public void ASummaryThatQuotesItsOwnSourceOfTheRecordPasses()
+    {
+        WithSummary().Validate();
+    }
+
+    [Fact]
+    public void ASummaryThatQuotesAnExtractionThatIsNoSourceOfTheRecordIsRefusedSoAForeignSpanNeverPublishes()
+    {
+        var foreign = WithSummary();
+        var summary = foreign.Summary! with { Sentences = [.. foreign.Summary.Sentences.Select(sentence => sentence with { Citation = sentence.Citation with { ExtractionId = new string('f', 64) } })] };
+
+        Assert.Throws<InvalidDataException>((foreign with { Summary = summary }).Validate);
+    }
+
+    [Fact]
+    public void ASummaryWithOneSentenceOrWithQuotesOfTwoExtractionsIsRefused()
+    {
+        var record = WithSummary();
+        var sentences = record.Summary!.Sentences;
+
+        Assert.Throws<InvalidDataException>((record with { Summary = record.Summary with { Sentences = sentences[..1] } }).Validate);
+        var mixed = new[] { sentences[0], sentences[1] with { Citation = sentences[1].Citation with { ExtractionId = ExtractionId } } };
+        Assert.Throws<InvalidDataException>((record with { Summary = record.Summary with { Sentences = mixed } }).Validate);
+    }
+
+    [Fact]
+    public void ASummaryQuoteThatIsNotTheTextAtItsOffsetsIsRefused()
+    {
+        var record = WithSummary();
+        var sentences = record.Summary!.Sentences;
+        sentences[0] = sentences[0] with { Citation = sentences[0].Citation with { Start = sentences[0].Citation.Start + 1 } };
+
+        Assert.Throws<InvalidDataException>(record.Validate);
+    }
+
+    [Fact]
+    public void ASummaryThatIsNotModelTextIsRefusedAndAnAbsentSummaryWritesNoField()
+    {
+        var record = WithSummary();
+
+        Assert.Throws<InvalidDataException>((record with { Summary = record.Summary! with { TextOrigin = PublishedTextOrigin.Person } }).Validate);
+        Assert.DoesNotContain("summary", JsonSerializer.Serialize(Record(), PublicationProtocol.JsonOptions));
+        Assert.Contains("\"summary\":{\"textOrigin\":\"model\",\"cut\":true", JsonSerializer.Serialize(record, PublicationProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public void ASummaryFitsBesideTheMostCorrectionNoticesBecauseTheBodyTextIsOneMoreSource()
+    {
+        var record = WithSummary();
+        var notices = Enumerable.Range(1, PublishedExecutiveAction.MaximumNotices).Select(number => new PublishedExecutiveActionNotice
+        {
+            DocumentNumber = $"R1-2025-{number:D5}",
+            PublishedOn = new DateOnly(2025, 2, number),
+            Url = $"https://www.federalregister.gov/d/R1-2025-{number:D5}"
+        }).ToArray();
+        var texts = notices.Select(notice => $"{PublishedExecutiveAction.CorrectionNoticeLabel}: {notice.Value}").ToArray();
+        var ids = notices.Select((_, index) => new string((char)('1' + index), 64)).ToArray();
+        var full = record with
+        {
+            CorrectionNotices = notices,
+            Facts = [.. record.Facts, .. notices.Select((notice, index) => new PublishedExecutiveActionFact
+            {
+                Label = PublishedExecutiveAction.CorrectionNoticeLabel, Value = notice.Value,
+                Citation = new() { ExtractionId = ids[index], Start = 0, Length = texts[index].Length, Quote = texts[index] }
+            })],
+            Sources = [.. record.Sources, .. texts.Select((text, index) => new PublishedDocumentVersion
+            {
+                ExtractionId = ids[index], Url = notices[index].Url, ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = text
+            })]
+        };
+
+        full.Validate();
+        Assert.Equal(PublishedExecutiveAction.MaximumSources, full.Sources.Length);
+    }
+
+    private static PublishedExecutiveAction WithSummary()
+    {
+        PublishedExecutiveSentence Sentence(string sentence, string quote) => new()
+        {
+            Sentence = sentence,
+            Citation = new() { ExtractionId = BodyId, Start = BodyText.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote }
+        };
+        var record = Record();
+        return record with
+        {
+            Sources = [.. record.Sources, new() { ExtractionId = BodyId, Url = "https://www.federalregister.gov/documents/full_text/html/2025/01/28/2025-01900.html", ObservedAtUtc = DateTimeOffset.UnixEpoch, Text = BodyText }],
+            Summary = new()
+            {
+                TextOrigin = PublishedTextOrigin.Model,
+                Cut = true,
+                Sentences =
+                [
+                    Sentence("The order tells each agency head to act within 30 days.", "I order each agency head to act within 30 days"),
+                    Sentence("Each agency reports the results to the President.", "Each agency shall report the results to the President")
+                ]
+            }
+        };
+    }
+
     private static readonly string ExtractionId = new('e', 64);
 
     private static PublishedExecutiveActionFact Fact(string label, string value)

@@ -16,9 +16,33 @@
         </header>
         <div class="detail-layout">
             <div class="detail-main">
-                <AiSummary TextOrigin="PublishedTextOrigin.Code">
-                    <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
-                </AiSummary>
+                <section class="official-fixed executive-explain" aria-labelledby="executive-explain-title">
+                    <h2 id="executive-explain-title">@ExecutiveActionWords.ExplainerHeading(Data.Kind)</h2>
+                    <p>@ExecutiveActionWords.ExplainerArticle(Data.Kind) <Term Key="@PublishedRecordLabels.ExecutiveActionTermKey(Data.Kind)">@ExecutiveActionWords.KindName(Data.Kind)</Term> is @ExecutiveActionWords.ExplainerMeaning(Data.Kind) @ExecutiveActionWords.ExplainerWhy(Data.Kind)</p>
+                    <p class="small muted">@ExecutiveActionWords.ReadHint(Data.Kind)</p>
+                </section>
+                @if (Data.Summary is { } summary)
+                {
+                    <AiSummary TextOrigin="@summary.TextOrigin" Label="@summary.Label">
+                        <ChildContent>
+                            @foreach (var sentence in summary.Sentences)
+                            {
+                                <p>@sentence</p>
+                            }
+                            @if (summary.Cut)
+                            {
+                                <p class="small muted">@ExecutiveSummaryWords.CutNote</p>
+                            }
+                        </ChildContent>
+                        <Check>@ExecutiveActionWords.SummaryCheck <a href="#source">@SourceFold.Title</a></Check>
+                    </AiSummary>
+                }
+                else
+                {
+                    <AiSummary TextOrigin="PublishedTextOrigin.Code">
+                        <Check>@ExecutiveActionWords.Caveat <a href="#source">@SourceFold.Title</a></Check>
+                    </AiSummary>
+                }
                 @if (Data.Targets.Length > 0)
                 {
                     <section class="detail-section" aria-labelledby="executive-links-title">

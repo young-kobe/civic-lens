@@ -39,8 +39,13 @@ public static class ZipDistrictEndpoints
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
             var issue = QueryValues.Filter(http.Request.Query, "issue");
             var view = QueryValues.Value(http.Request.Query, "view") ?? string.Empty;
-            if (view is not "" and not "compare" and not "strip" and not "issue")
-                throw new ArgumentException("view must be empty, compare, strip, or issue.", "view");
+            if (view is not "" and not "compare" and not "strip" and not "issue" and not "official")
+                throw new ArgumentException("view must be empty, compare, strip, issue, or official.", "view");
+            var official = QueryValues.Filter(http.Request.Query, "official");
+            if (view == "official" && (official is null || issue is not null || http.Request.Query.ContainsKey("sinceRelease")))
+                throw new ArgumentException("The official view needs an official and takes no issue or release marker.", "official");
+            if (view != "official" && official is not null)
+                throw new ArgumentException("Only the official view takes an official.", "official");
             if (view == "issue" && issue is null)
                 throw new ArgumentException("The issue view needs an issue.", "issue");
             if (view == "strip" && issue is not null)
@@ -57,6 +62,13 @@ public static class ZipDistrictEndpoints
             if (lookup.Answer is not { } answer) return Miss(lookup.Miss!.Value);
             var data = ZipMemberCardsMapper.Map(answer, lookup.SharedVotes, lookup.IssueOptions, issue);
             var rootPath = options.PublicBaseUrl?.Join(string.Empty) ?? "/";
+            if (view == "official")
+                return Results.Content(await renderer.RenderAsync<OfficialMembersFragment>(new Dictionary<string, object?>
+                {
+                    [nameof(OfficialMembersFragment.Data)] = data,
+                    [nameof(OfficialMembersFragment.OfficialId)] = official!,
+                    [nameof(OfficialMembersFragment.RootPath)] = rootPath
+                }), "text/html; charset=utf-8");
             if (view == "issue")
                 return Results.Content(await renderer.RenderAsync<IssueMemberVotes>(new Dictionary<string, object?>
                 {

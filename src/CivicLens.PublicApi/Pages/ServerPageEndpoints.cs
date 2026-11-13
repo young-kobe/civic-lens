@@ -62,9 +62,10 @@ public static class ServerPageEndpoints
         routes.MapGet(Prefix + "/" + PublicationProtocol.VoteKindsPagePath, (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(() => responder.RespondAsync<VoteKindsPage>(context, StatusCodes.Status200OK,
                 new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken)));
-        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, ServerPageResponder responder, CancellationToken cancellationToken) =>
+        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, HomePageReader home, ServerPageResponder responder,
+            CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
-                ? await RespondOfficialAsync(context, responder, page, baseUrl, cancellationToken)
+                ? await RespondOfficialAsync(context, responder, page, baseUrl, home.BrowserApiRoot, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, WithdrawalStore withdrawals, ServerPageResponder responder,
@@ -141,8 +142,9 @@ public static class ServerPageEndpoints
 
     /// <summary>An official with executive actions gets the President layout. Every other official gets the member layout.</summary>
     private static Task<IResult> RespondOfficialAsync(HttpContext context, ServerPageResponder responder, OfficialPageData page, PublicBaseUrl baseUrl,
-        CancellationToken cancellationToken) => page.Executive is null
-        ? responder.RespondAsync<OfficialProfilePage>(context, StatusCodes.Status200OK, page.Release, OfficialParameters(page, baseUrl), cancellationToken)
+        string? browserApiUrl, CancellationToken cancellationToken) => page.Executive is null
+        ? responder.RespondAsync<OfficialProfilePage>(context, StatusCodes.Status200OK, page.Release,
+            new Dictionary<string, object?>(OfficialParameters(page, baseUrl)) { [nameof(OfficialProfilePage.BrowserApiUrl)] = browserApiUrl }, cancellationToken)
         : responder.RespondAsync<PresidentPage>(context, StatusCodes.Status200OK, page.Release, OfficialParameters(page, baseUrl), cancellationToken);
 
     private static Dictionary<string, object?> OfficialParameters(OfficialPageData page, PublicBaseUrl baseUrl) => new()

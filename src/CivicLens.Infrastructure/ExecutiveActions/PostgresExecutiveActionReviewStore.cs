@@ -75,6 +75,7 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
         var histories = await Records.ReadHistoriesAsync(db, drafts, cancellationToken);
         var currents = histories.Values.Select(history => history.CurrentRevision!).ToArray();
         var extractions = (await ReadExtractionsAsync(db, currents, cancellationToken)).ToImmutableDictionary(StringComparer.Ordinal);
+        await ExecutiveSummaryTexts.RequireBoundAsync(db, currents, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         foreach (var current in currents) current.ValidateAgainst(extractions);
         return drafts.ToDictionary(draft => draft.RecordId,
@@ -89,7 +90,7 @@ public sealed class PostgresExecutiveActionReviewStore(IDbContextFactory<Collect
         CancellationToken cancellationToken)
     {
         ExecutiveSummaryApproval.Validate(revision, await ReadExtractionsAsync(db, [revision], cancellationToken));
-        await ExecutiveSummaryTexts.RequireBoundAsync(db, revision, cancellationToken);
+        await ExecutiveSummaryTexts.RequireBoundAsync(db, [revision], cancellationToken);
     }
 
     private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,

@@ -35,7 +35,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     private static string Freshness(IDocument page) => string.Join(" | ", page.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
 
     [Fact]
-    public async Task AboutShowsItsApprovedTextTheBillTextSentenceAndRootedLinks()
+    public async Task AboutShowsItsApprovedTextWithoutTheBillTextSentenceAndRootedLinks()
     {
         await using var host = await StartAsync();
 
@@ -45,7 +45,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal(Root + PublicationProtocol.AboutPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
         Assert.Equal("About Civic Lens", page.QuerySelector("h1")!.TextContent);
-        Assert.Contains("When a bill has no Congressional Research Service summary, an AI model summarizes the official bill text. Code checks each quote.", text);
+        Assert.DoesNotContain("bill text", text, StringComparison.Ordinal);
         Assert.Contains("Civic Lens is not part of any government office, party, campaign or company.", text);
         Assert.Contains($"within {PublishedCountRules.StatementDateWindowDays} days before Civic Lens saved the page", text);
         Assert.Contains(PublishedRecordLabels.ContactEmail, text);
@@ -54,7 +54,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task MethodReadsTheLinkSentenceFromItsOneOwnerAndTheCountsFromTheSharedRules()
+    public async Task MethodReadsTheLinkSentenceFromItsOneOwnerAndTheCountsFromTheSharedRulesAndHasNoClosestVoteText()
     {
         await using var host = await StartAsync();
 
@@ -66,7 +66,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Contains(OfficialPageText.LinkMeaning, page.QuerySelector("#panel-what-a-link-is")!.Closest("section")!.TextContent);
         Assert.Contains(VoteWords.MissedVoteMeaning, text);
         Assert.Contains($"on at least {PublishedCountRules.MinimumRecordsForShare} split votes", text);
-        Assert.Contains($"in the {PublishedCountRules.ClosestVoteWindowDays} days that end", text);
+        Assert.Contains("Code picks the items on the home page from the published records. No model picks them.", text);
+        Assert.DoesNotContain("closest vote", text, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(page.QuerySelector("#" + BoardWords.AgreementId));
         Assert.Contains(page.QuerySelectorAll("main a"), link => link.GetAttribute("href") == Root + PublicationProtocol.OfficialsPagePath);
     }
@@ -148,6 +149,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
+        Assert.Equal("Issues", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal("Each page lists the published records that name the issue.", page.QuerySelector(".page-header-lede")!.TextContent.Trim());
         Assert.Equal(["Air", "Taxes <b>"], tiles.Select(tile => tile.QuerySelector(".home-issue-name")!.TextContent));
         Assert.Equal(Root + PublicationProtocol.IssuePagePath("tax", 1), tiles[1].GetAttribute("href"));
         Assert.Contains("1 substantive vote", tiles[1].TextContent);
