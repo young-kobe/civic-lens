@@ -16,7 +16,7 @@ public sealed class PublicNavigationTests
     [Fact]
     public async Task DesktopAndMobileNavigationShareRootedLinksAndCurrentSection()
     {
-        var page = await RenderAsync();
+        var page = await RenderAsync(server: true);
         var navs = page.QuerySelectorAll(".public-nav, .public-menu-nav");
 
         Assert.Equal(2, navs.Length);
@@ -37,7 +37,7 @@ public sealed class PublicNavigationTests
     [Fact]
     public async Task TheHeaderHasOneLinkForEachKindAndTheStaticPartyBoardUntilTheCutoverAndNoLinkForTheOldAllRecordsList()
     {
-        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.StaticBoardsPath);
+        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.StaticBoardsPath, server: true);
         var nav = page.QuerySelector(".public-nav")!;
 
         Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Compare parties"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
@@ -71,7 +71,7 @@ public sealed class PublicNavigationTests
     [Fact]
     public async Task APreviewListPageIsTheOwnPageOfItsSectionLinkSoItsTrailHasNoSectionCrumb()
     {
-        var page = await RenderAsync(section: PublicSection.Votes, title: "Votes", canonicalPath: PublicSections.ListOf(PublishedRecordKind.Vote).Path);
+        var page = await RenderAsync(section: PublicSection.Votes, title: "Votes", canonicalPath: PublicSections.ListOf(PublishedRecordKind.Vote).Path, server: true);
 
         Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
         Assert.Equal("Votes", Assert.Single(page.QuerySelectorAll(".public-nav [aria-current=page]")).TextContent);
@@ -265,7 +265,7 @@ public sealed class PublicNavigationTests
         Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(staticPage).GetAttribute("href"));
         Assert.Equal(["Newest published House roll call: 31 May 2026", "Newest published Senate roll call: 29 May 2026"],
             serverPage.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
-        Assert.Equal(PublicSections.Header.Select(link => link.Text == "Issues" ? PublicSections.PreviewIssuesPath : Root + link.Path),
+        Assert.Equal(PublicSections.PreviewHeader.Select(link => link.Path.StartsWith('/') ? link.Path : Root + link.Path),
             serverPage.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")));
     }
 
@@ -304,21 +304,28 @@ public sealed class PublicNavigationTests
         }
     });
 
-    /// <summary>A server page: the frame gives it the server page context, as the server page responder does.</summary>
-    private static Task<IDocument> RenderAsync(PublicSection? section = PublicSection.Officials, string title = "Test", string? canonicalPath = null, ReportedRecord? record = null) => RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
+    /// <summary>A static page, or with <paramref name="server"/> a server page: the frame then gives it the server page context, as the server page responder does.</summary>
+    private static Task<IDocument> RenderAsync(PublicSection? section = PublicSection.Officials, string title = "Test", string? canonicalPath = null, ReportedRecord? record = null,
+        bool server = false)
     {
-        [nameof(ServerPageFrame.Context)] = new ServerPageContext(null, null),
-        [nameof(ServerPageFrame.Page)] = typeof(PublicPage),
-        [nameof(ServerPageFrame.Parameters)] = new Dictionary<string, object>
+        var parameters = new Dictionary<string, object?>
         {
             [nameof(PublicPage.Title)] = title,
             [nameof(PublicPage.Description)] = "Test page",
-            [nameof(PublicPage.CanonicalPath)] = canonicalPath!,
+            [nameof(PublicPage.CanonicalPath)] = canonicalPath,
             [nameof(PublicPage.RootPath)] = Root,
-            [nameof(PublicPage.Section)] = section!,
-            [nameof(PublicPage.Record)] = record!
-        }
-    });
+            [nameof(PublicPage.Section)] = section,
+            [nameof(PublicPage.Record)] = record
+        };
+        return server
+            ? RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
+            {
+                [nameof(ServerPageFrame.Context)] = new ServerPageContext(null, null),
+                [nameof(ServerPageFrame.Page)] = typeof(PublicPage),
+                [nameof(ServerPageFrame.Parameters)] = parameters.ToDictionary(pair => pair.Key, pair => pair.Value!)
+            })
+            : RenderAsync<PublicPage>(parameters);
+    }
 
     private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent
     {
