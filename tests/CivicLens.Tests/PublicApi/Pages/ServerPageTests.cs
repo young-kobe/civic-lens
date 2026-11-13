@@ -148,15 +148,18 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
         await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
-        var responder = new ServerPageResponder(new ActiveReleaseReader(views), new PageCache(TestCodeVersion.Sha, BaseUrl),
+        var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
+        var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache,
             new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
         var parameters = new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = "https://civic-lens.test/" };
+        var earlierContext = new DefaultHttpContext();
 
         var same = await responder.RespondAsync<PublishedNotFoundPage>(new DefaultHttpContext(), StatusCodes.Status404NotFound, 4, parameters, default);
-        var earlier = await responder.RespondAsync<PublishedNotFoundPage>(new DefaultHttpContext(), StatusCodes.Status404NotFound, 3, parameters, default);
+        var earlier = await responder.RespondAsync<PublishedNotFoundPage>(earlierContext, StatusCodes.Status404NotFound, 3, parameters, default);
 
         Assert.Contains("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(same).ResponseContent);
         Assert.DoesNotContain("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(earlier).ResponseContent);
+        Assert.Equal(cache.ETag(3).ToString(), earlierContext.Response.Headers.ETag);
     }
 
     [Fact]
