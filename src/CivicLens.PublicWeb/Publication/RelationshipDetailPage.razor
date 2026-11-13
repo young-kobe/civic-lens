@@ -36,6 +36,7 @@
             <aside class="detail-rail" aria-label="Linked records, speakers, and issues">
                 <section class="detail-card detail-card-raised" aria-labelledby="relationship-linked-title">
                     <h2 id="relationship-linked-title">@RelationshipPageView.LinkedHeading</h2>
+                    <p class="muted small">@RelationshipPageView.LinkedNote</p>
                     <ul class="detail-list" role="list">
                         @foreach (var end in new[] { Data.Statement, Data.Target })
                         {
@@ -49,7 +50,6 @@
                             </li>
                         }
                     </ul>
-                    <p class="muted small">@RelationshipPageView.LinkedNote</p>
                 </section>
                 @if (Data.Speakers.Length > 0)
                 {
