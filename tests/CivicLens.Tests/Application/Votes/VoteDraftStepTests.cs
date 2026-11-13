@@ -337,6 +337,19 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task AVoteDraftAtThirteenPointFiveIsAcceptedAndOneAtFourteenPointOneGoesBackWithTheOneRepairMessage()
+    {
+        var passing = Output(headline: GradePassages.PassingHeadline, summary: GradePassages.Summary);
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: GradePassages.FailingHeadline, summary: GradePassages.Summary)).Draft(passing);
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Contains(GradePassages.RepairMessageStart, model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
+        Assert.Equal(GradePassages.PassingHeadline, Assert.Single(store.Revisions).Headline);
+    }
+
+    [Fact]
     public async Task ANameInTheSummaryIsRejectedToo()
     {
         var model = new FakeHeadlineSummaryModel().Draft(Output(headline: HeadlineText, summary: "Nancy Pelosi presided.")).Draft(Drafted);

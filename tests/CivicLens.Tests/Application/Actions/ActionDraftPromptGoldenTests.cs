@@ -3,6 +3,7 @@ using System.Text;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
+using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.ActionBillWorld;
 
@@ -10,10 +11,19 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "d62af2685dd1ec265f8063e01350821831907d6708999c0ec481cf9407d94235";
-    private const string NoCandidateSystemSha256 = "7ea8500a184d016db4ec9580b928c7c6c7232929a3a43907be8a61b03c327c05";
+    private const string SystemSha256 = "3192dcc0b23e5f26e97f18eb89d824a95108eeb0c849d29c688827fc0c3c57ed";
+    private const string NoCandidateSystemSha256 = "7a0707c25bc6a39b7eeabdcf485f9cd6e4a92320b77bc9a47d92203858220515";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "7992facd4a0362511431945582fe13d5ffecd2df0e60d726baed061ee8dd23ee";
+    private const string InputHash = "869e1469552eb5d2079fb6d97d3b9a9ce25829d3a71c1a3f5cd4ca38c6195844";
+
+    [Fact]
+    public async Task ThePromptHoldsTheSharedAiTextSentencesAndStatesTheCodeGradeLimit()
+    {
+        var world = Create();
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
+
+        AiTextPromptRules.AssertHoldsSharedSentences(ActionDraftPrompt.Build(snapshot, NoChoice(), ActionDraftTask.MaximumPromptBytes)!.SystemPrompt, codeApproves: true);
+    }
 
     [Fact]
     public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
@@ -26,7 +36,7 @@ public sealed class ActionDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.PromptVersion)} ({ActionDraftTask.PromptVersion}) or " +
             $"{nameof(ActionDraftTask.SchemaVersion)} ({ActionDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v5", "action-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("action-draft", "action-draft-v1", "action-draft-prompt-v6", "action-draft-schema-v2", "claude-haiku-5-5"),
             (ActionDraftTask.Task, ActionDraftTask.TaskVersion, ActionDraftTask.PromptVersion, ActionDraftTask.SchemaVersion, ActionDraftTask.Model));
         Assert.NotEqual(StatementDraftTaskName, ActionDraftTask.Task);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");

@@ -190,6 +190,8 @@ The first release number of the window is the previous release plus one. The cut
 
 The request uses model `claude-sonnet-5-5`, effort `medium`, and at most 8,000 output tokens. The user message holds the week dates and the records sent. Each record has its ID, its kind, its headline, its summary, an optional date, an optional bill, and the names of its officials. The system prompt tells the model to write plain neutral language and to cite only listed IDs. It must name only listed officials and never state the status of a bill.
 
+The system prompt holds the shared sentences of the [AI text rules](analysis.md#ai-text-rules). It asks for grade 12, and code makes no hard grade check, because a person approves every brief.
+
 Structured outputs fix a `headline`, a list of `paragraphs`, and a `confidence`. Each paragraph has a `text` and its `citationIds`. The schema allows only the IDs that were sent. The confidence stays in the run output and is never in the revision.
 
 The byte cap is the smaller of 100,000 UTF-8 bytes and the [call cap](analysis.md#budget) minus the output allowance. Filling the prompt keeps `BriefDraftTask.RetryReasonReserveBytes` (4,096 bytes) free for the rejection reasons of a retry. A first group that does not fit within the cap minus the reserve blocks the week as `overByteCap`.

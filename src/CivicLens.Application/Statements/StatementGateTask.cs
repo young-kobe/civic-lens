@@ -12,7 +12,6 @@ public static class StatementGateTask
     public const string Model = "claude-haiku-5-5";
     public const int MaximumOutputTokens = 4_000;
     public const int MaximumPromptBytes = AnalysisRunInput.MaximumPromptBytes;
-    public const int MaximumValidationPasses = 2;
     public const int MaximumQuoteLength = 2_000;
 
     public static readonly AnalysisTaskIdentity Identity = new(Task, TaskVersion, Model, PromptVersion, SchemaVersion);
