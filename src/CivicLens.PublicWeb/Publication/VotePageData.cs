@@ -32,6 +32,10 @@ public sealed record VotePageData(
     string? BillType,
     int? BillNumber)
 {
+    /// <summary>The newest linked statements, at most <see cref="VotePageView.StatementLimit"/>. <c>StatementTotal</c> counts every linked statement.</summary>
+    public VoteStatementData[] Statements { get; init; } = [];
+    public int StatementTotal { get; init; }
+
     public VoteFactsSource FactsSource => new(Chamber, Kind, VotedOn, VotedOnCitation, KindCitation, Result, Totals, Facts);
 
     public VoteWordingSource WordingSource => new(Kind, Chamber, Source, Result, KindCitation, Facts, BillType, BillNumber);

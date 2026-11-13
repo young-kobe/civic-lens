@@ -175,30 +175,38 @@ internal static class PublishedEntries
 
     private static readonly string InsertEntries = BuildInsertEntries();
 
-    private const string ReadCandidates = """
-        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", s.first_release AS "FirstRelease",
-            s.last_release AS "LastRelease", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.kind = 'action' AND e.bill_line IS NULL) AS "LacksBillLine", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.kind = 'statement' AND e.approved_by IS NULL) AS "LacksStatementApprover", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.approved_at_utc_ticks IS NULL) AS "LacksApprovalTime"
-        FROM publication_record_states s
-        ORDER BY s.kind, s.record_id, s.revision_number
-        """;
+    private static readonly string ReadCandidates = BuildReadCandidates();
+
+    /// <summary>The candidate query. The kinds that lack an approver come from <see cref="PublishedRecordEntry.NamesApprover"/>, so that rule has one owner.</summary>
+    private static string BuildReadCandidates()
+    {
+        var approverKinds = string.Join(", ", Enum.GetValues<PublishedRecordKind>().Where(PublishedRecordEntry.NamesApprover)
+            .Select(kind => $"'{PublishedRecordReference.NameOf(kind)}'"));
+        return $$"""
+            SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", s.first_release AS "FirstRelease",
+                s.last_release AS "LastRelease", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                        AND e.kind = 'action' AND e.bill_line IS NULL) AS "LacksBillLine", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                        AND e.kind IN ({{approverKinds}}) AND e.approved_by IS NULL) AS "LacksApprover", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                        AND e.approved_at_utc_ticks IS NULL) AS "LacksApprovalTime"
+            FROM publication_record_states s
+            ORDER BY s.kind, s.record_id, s.revision_number
+            """;
+    }
 
     public static async Task<IReadOnlyList<PublishedEntryCandidate>> ReadCandidatesAsync(CollectionAttemptDbContext db,
         CancellationToken cancellationToken)
     {
         var rows = await db.Database.SqlQueryRaw<CandidateRow>(ReadCandidates).ToArrayAsync(cancellationToken);
         return [.. rows.Select(row => new PublishedEntryCandidate(KindOf(row.Kind), row.RecordId,
-            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry, row.LacksBillLine, row.LacksStatementApprover, row.LacksApprovalTime))];
+            row.RevisionNumber, row.FirstRelease, row.LastRelease, row.HasEntry, row.LacksBillLine, row.LacksApprover, row.LacksApprovalTime))];
     }
 
     public static async Task<IReadOnlyList<StoredReleaseRecord>> ReadReleaseAsync(CollectionAttemptDbContext db, int releaseNumber,
@@ -213,21 +221,21 @@ internal static class PublishedEntries
             facts.GetValueOrDefault((state.Kind, state.RecordId, state.RevisionNumber))))];
     }
 
-    public static async Task RequireHistoricalStatementApproversAsync(CollectionAttemptDbContext db,
+    public static async Task RequireHistoricalApproversAsync(CollectionAttemptDbContext db,
         IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken)
     {
-        var statements = entries.Where(entry => entry.Kind == PublishedRecordKind.Statement).ToArray();
-        if (statements.Length == 0) return;
+        var approved = entries.Where(entry => PublishedRecordEntry.NamesApprover(entry.Kind)).ToArray();
+        if (approved.Length == 0) return;
         var missing = await db.Database.SqlQueryRaw<string>("""
             SELECT DISTINCT s.record_id AS "Value"
-              FROM unnest({0}::text[], {1}::int[]) AS k(record_id, revision_number)
-              JOIN publication_record_states s ON s.kind = 'statement' AND s.record_id = k.record_id AND s.revision_number = k.revision_number
+              FROM unnest({0}::text[], {1}::text[], {2}::int[]) AS k(kind, record_id, revision_number)
+              JOIN publication_record_states s ON s.kind = k.kind AND s.record_id = k.record_id AND s.revision_number = k.revision_number
               LEFT JOIN published_entries e ON e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
              WHERE e.approved_by IS NULL
-            """, statements.Select(entry => entry.RecordId).ToArray(), statements.Select(entry => entry.RevisionNumber).ToArray())
+            """, [.. KeyArrays(approved.Select(KeyOf))])
             .FirstOrDefaultAsync(cancellationToken);
         if (missing is not null)
-            throw new PublicationConflictException($"Statement {missing} needs releases entries backfill before it can be published again.");
+            throw new PublicationConflictException($"Record {missing} needs releases entries backfill before it can be published again.");
     }
 
     public static async Task<int> InsertAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
@@ -245,7 +253,7 @@ internal static class PublishedEntries
     }
 
     /// <summary>
-    /// Writes a missing bill line. Congress and statement approver fills have separate operations. A row that holds a line stays as it is, and
+    /// Writes a missing bill line. Congress and approver fills have separate operations. A row that holds a line stays as it is, and
     /// <see cref="RequireSameAsync"/> then refuses a line that differs. The insert calls it for the rows that already exist.
     /// </summary>
     public static async Task<int> FillBillLinesAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
@@ -278,11 +286,11 @@ internal static class PublishedEntries
             dated.Select(entry => entry.Congress!.Value).ToArray()], cancellationToken);
     }
 
-    public static async Task<int> FillStatementApproversAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
+    public static async Task<int> FillApproversAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PublishedRecordEntry> entries,
         string conflictAdvice, CancellationToken cancellationToken)
     {
-        var statements = entries.Where(entry => entry.Kind == PublishedRecordKind.Statement && entry.ApprovedBy is not null).ToArray();
-        if (statements.Length == 0) return 0;
+        var approved = entries.Where(entry => PublishedRecordEntry.NamesApprover(entry.Kind) && entry.ApprovedBy is not null).ToArray();
+        if (approved.Length == 0) return 0;
         var filled = await db.Database.ExecuteSqlRawAsync("""
             WITH locked AS (
                 SELECT e.kind, e.record_id, e.revision_number, k.approved_by
@@ -294,8 +302,8 @@ internal static class PublishedEntries
             UPDATE published_entries e SET approved_by = locked.approved_by
               FROM locked
              WHERE e.kind = locked.kind AND e.record_id = locked.record_id AND e.revision_number = locked.revision_number
-            """, [.. KeyArrays(statements.Select(KeyOf)), statements.Select(entry => entry.ApprovedBy!.Value.ToString()).ToArray()], cancellationToken);
-        await RequireSameAsync(db, [.. statements], conflictAdvice, cancellationToken);
+            """, [.. KeyArrays(approved.Select(KeyOf)), approved.Select(entry => entry.ApprovedBy!.Value.ToString()).ToArray()], cancellationToken);
+        await RequireSameAsync(db, [.. approved], conflictAdvice, cancellationToken);
         return filled;
     }
 
@@ -482,7 +490,7 @@ internal static class PublishedEntries
         public int? LastRelease { get; set; }
         public bool HasEntry { get; set; }
         public bool LacksBillLine { get; set; }
-        public bool LacksStatementApprover { get; set; }
+        public bool LacksApprover { get; set; }
         public bool LacksApprovalTime { get; set; }
     }
 

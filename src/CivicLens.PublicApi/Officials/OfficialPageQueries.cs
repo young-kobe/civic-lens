@@ -28,10 +28,10 @@ internal static class OfficialPageQueries
     // OFFSET 0 keeps the speaker lookup and the vote link correlated through the security barrier views.
     private const string StatementsSql = """
         SELECT s.record_id, s.statement_date, s.headline, s.label, v.record_id, v.headline, v.label, v.voted_on, v.chamber, v.roll_call_number, m.vote_cast,
-               s.text_origin, v.text_origin
+               s.text_origin, v.text_origin, v.approver
           FROM public_api.statements s
          CROSS JOIN LATERAL (
-              SELECT v.record_id, v.headline, v.label, v.voted_on, v.chamber, v.roll_call_number, v.text_origin
+              SELECT v.record_id, v.headline, v.label, v.voted_on, v.chamber, v.roll_call_number, v.text_origin, l.approver
                 FROM public_api.record_links l
                 JOIN public_api.votes v ON v.record_id = l.related_record_id
                WHERE l.kind = 'statement' AND l.record_id = s.record_id AND l.related_kind = 'vote'
@@ -108,7 +108,8 @@ internal static class OfficialPageQueries
                 reader.GetInt32(9), ViewColumns.Text(reader, 10))
             {
                 TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 11),
-                VoteTextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 12)
+                VoteTextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 12),
+                LinkApprover = ViewColumns.NullableEnum<PublishedApprover>(reader, 13)
             });
         return [.. statements];
     }

@@ -18,9 +18,20 @@ public sealed class PublishedRelationshipTests
         var json = JsonSerializer.Serialize(Link(), PublicationProtocol.JsonOptions);
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.True(json == $$"""{"recordId":"{{LinkId}}","revisionNumber":1,"headline":"Doe on rent and A housing bill","statement":{"kind":"statement","recordId":"{{StatementId}}","revisionNumber":2,"headline":"Doe on rent"},"target":{"kind":"action","recordId":"{{ActionId}}","revisionNumber":3,"headline":"A housing bill"},"type":"describesOwnBill","reason":"Doe says the bill is hers.","quote":"I introduced the bill.","targetFact":"Title: A housing bill","statementDate":"2026-05-01","matchedOfficialId":"o1","officials":[{"id":"o1","name":"Jane Doe"}],"issueIds":["housing"],"policyAreaIds":["land-use"],"approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
+        Assert.True(json == $$"""{"recordId":"{{LinkId}}","revisionNumber":1,"headline":"Doe on rent and A housing bill","statement":{"kind":"statement","recordId":"{{StatementId}}","revisionNumber":2,"headline":"Doe on rent"},"target":{"kind":"action","recordId":"{{ActionId}}","revisionNumber":3,"headline":"A housing bill"},"type":"describesOwnBill","reason":"Doe says the bill is hers.","quote":"I introduced the bill.","targetFact":"Title: A housing bill","statementDate":"2026-05-01","matchedOfficialId":"o1","officials":[{"id":"o1","name":"Jane Doe"}],"issueIds":["housing"],"policyAreaIds":["land-use"],"approvedBy":"person","approvedAtUtc":"1970-01-01T00:00:00+00:00","firstPublishedAtUtc":"1970-01-01T00:00:00+00:00","corrections":[]}""",
             "The published relationship JSON changed. Bump PublicationProtocol.SchemaVersion if a reader would break, update the version table " +
-            "in docs/architecture.md, then update this test. Actual: " + json);
+            "in docs/architecture.md, then update this test. approvedBy was added without a bump, because old files omit it and it reads as person. Actual: " + json);
+    }
+
+    [Fact]
+    public void AFileWithoutApprovedByReadsAsPersonBecauseEarlierFilesOmitIt()
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(Link() with { ApprovedBy = PublishedApprover.Code }, PublicationProtocol.JsonOptions))!.AsObject();
+        node.Remove("approvedBy");
+
+        var read = JsonSerializer.Deserialize<PublishedRelationship>(node.ToJsonString(), PublicationProtocol.JsonOptions)!;
+
+        Assert.Equal(PublishedApprover.Person, read.ApprovedBy);
     }
 
     [Fact]

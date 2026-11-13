@@ -6,7 +6,7 @@ namespace CivicLens.PublicWeb.Publication;
 /// <summary>The one owner of the words and plain rules of the server-rendered official and President pages. Fixed text comes from the Mosaic v2 official and President pages.</summary>
 public static class OfficialPageText
 {
-    public const string LinkMeaning = "A reviewer approved each link. A link does not mean the vote or bill matches the statement.";
+    public const string LinkMeaning = "A link does not mean the vote or bill matches the statement.";
 
     public const string NoLinks = "No reviewed links between their statements and their bills or votes yet.";
 
