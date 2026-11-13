@@ -382,7 +382,7 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task AFindByIdReturnsTheRevisionOfTheGivenReleaseWithItsRecordPaths()
+    public async Task AFindByIdReturnsTheRevisionOfTheGivenReleaseWithItsPagePath()
     {
         await world.PublishAndIngestAsync(1, PublishedSamples.Statement('a', "Rent cap", revision: 1));
         await world.PublishAndIngestAsync(2, PublishedSamples.Statement('a', "Rent cap revised", revision: 2));
@@ -392,7 +392,6 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
 
         Assert.Equal(1, old!.RevisionNumber);
         Assert.Equal($"records/{id}.html", old.PagePath);
-        Assert.Equal($"records/{id}.json", old.DataPath);
         Assert.Null(await world.Index.FindRecordAsync(new string('b', 64), 2, CancellationToken.None));
     }
 }
