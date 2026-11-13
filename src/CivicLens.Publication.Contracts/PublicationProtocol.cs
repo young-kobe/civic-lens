@@ -41,6 +41,8 @@ public static class PublicationProtocol
     public static string KindText(PublishedRecordKind kind) => JsonSerializer.Serialize(kind, JsonOptions).Trim('"');
     public static string SearchByKindPath(PublishedRecordKind kind) => $"{SearchPagePath}?kind={KindText(kind)}";
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
+    /// <summary>One file of a sitemap index. A site with more addresses than one sitemap holds splits them over these files.</summary>
+    public static string SitemapPagePath(int page) => $"sitemap-{page}.xml";
     public static string BriefsPagePath(int page) => page == 1 ? "briefs.html" : $"briefs-{page}.html";
     public static string IssuePagePath(string issueId, int page) => FacetPagePath("issues", issueId, page);
     public static string PolicyAreaPagePath(string policyAreaId, int page) => FacetPagePath("policy-areas", policyAreaId, page);

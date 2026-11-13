@@ -13,8 +13,9 @@ public static class PublicSections
     /// <summary>The static board that the header and the officials page link to, until the cutover PR maps <see cref="BoardsPath"/>.</summary>
     public static readonly string StaticBoardsPath = PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat);
 
-    /// <summary>One gated per-kind list page of the server preview. The label is the tab text of the list.</summary>
-    public sealed record RecordList(PublishedRecordKind Kind, string Label, string Path)
+    /// <summary>One gated per-kind list page of the server preview. The label is the tab text of the list.
+    /// The public path is the address of the list after the cutover. The sitemap lists it, and the cutover PR maps the list there.</summary>
+    public sealed record RecordList(PublishedRecordKind Kind, string Label, string Path, string PublicPath)
     {
         /// <summary>The origin-relative link of the list. The preview route and every link to it use this, so a link stays on the origin that serves the preview, as the public origin does not route it.</summary>
         public string Href => "/" + Path;
@@ -26,10 +27,10 @@ public static class PublicSections
     /// <summary>The four per-kind list pages, in tab order. The one owner of their labels and paths.</summary>
     public static readonly IReadOnlyList<RecordList> RecordLists =
     [
-        new(PublishedRecordKind.Vote, "Votes", PreviewFolder + "/votes"),
-        new(PublishedRecordKind.Action, "Bills", PreviewFolder + "/bills"),
-        new(PublishedRecordKind.Statement, "Statements", PreviewFolder + "/statements"),
-        new(PublishedRecordKind.ExecutiveAction, "Executive actions", PreviewFolder + "/executive-actions")
+        new(PublishedRecordKind.Vote, "Votes", PreviewFolder + "/votes", "votes.html"),
+        new(PublishedRecordKind.Action, "Bills", PreviewFolder + "/bills", "bills.html"),
+        new(PublishedRecordKind.Statement, "Statements", PreviewFolder + "/statements", "statements.html"),
+        new(PublishedRecordKind.ExecutiveAction, "Executive actions", PreviewFolder + "/executive-actions", "executive-actions.html")
     ];
 
     public static RecordList ListOf(PublishedRecordKind kind) => RecordLists.Single(list => list.Kind == kind);
