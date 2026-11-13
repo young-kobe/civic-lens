@@ -298,6 +298,11 @@ table[data-paged]:focus { outline: none; }
 .official-card .cell-sub, .search-results .cell-sub { max-width: none; white-space: normal; }
 
 .caveat { padding-left: var(--s3); border-left: 2px solid var(--line-strong); color: var(--muted); font-size: var(--t-sm); }
+/* The correction banner keeps the neutral notice surface of the withdrawal notice. It stacks the title, the line, and the stored note. */
+body.public .correction-banner { display: grid; gap: var(--s1); padding: var(--s3) var(--s4) var(--s3) calc(var(--s4) + 6px); font-size: var(--t-base); }
+body.public .correction-banner h2 { margin: 0; font: 650 .8rem/1.3 var(--ui); letter-spacing: .06em; text-transform: uppercase; }
+.correction-banner p { margin: 0; max-width: var(--measure); }
+.correction-banner .facts { margin-top: var(--s1); padding: 0; border: 0; }
 
 .public-header { --ink: var(--bar-ink); --muted: var(--bar-muted); --line: var(--bar-line); --control-line: var(--bar-control); --raised: var(--bar-field); --surface: var(--bar-thumb); --focus: var(--marigold); position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) 28px; padding: 14px var(--frame-pad); border-bottom: 1px solid var(--bar-edge); background: var(--bar); color: var(--ink); }
 .public-header:has(+ main > .public-hero) { border-bottom-color: transparent; }

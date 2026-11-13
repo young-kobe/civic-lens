@@ -13,6 +13,9 @@ public sealed record BillPageData(
     int Release, string RecordId, int RevisionNumber, int Congress, string Number, string Title, string Headline, PublishedChamber Chamber,
     string Summary, PublishedTextOrigin TextOrigin, string? Label, DateOnly Introduced)
 {
+    /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
+    public PublishedCorrection[] Corrections { get; init; } = [];
+
     public string? BillLine { get; init; }
     public string? PolicyArea { get; init; }
     public string? PublicLaw { get; init; }

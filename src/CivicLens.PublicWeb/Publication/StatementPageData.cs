@@ -23,6 +23,9 @@ public sealed record StatementPageData(
     DateTimeOffset? ApprovedAtUtc,
     DateTimeOffset? FirstPublishedAtUtc)
 {
+    /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
+    public PublishedCorrection[] Corrections { get; init; } = [];
+
     public string ShortName => string.Join(", ", Speakers.Select(speaker => speaker.Name));
 
     /// <summary>The page the statement came from. A feed source lists an article, and the article is the original page.</summary>

@@ -8,9 +8,11 @@ using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Briefs;
 using CivicLens.Tests.PublicApi.DocumentChanges;
 using CivicLens.Tests.PublicApi.Officials;
+using CivicLens.Tests.PublicApi.Records;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
 
@@ -30,6 +32,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
 
     private static async Task<IDocument> GetPageAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
     {
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
         using var response = await host.Client.GetAsync(path);
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == expected, $"{path} gave {(int)response.StatusCode}: {body}");
@@ -304,6 +307,8 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains("A person fixed the date", history[0]);
         Assert.Contains("Replaces revision 2.", history[1]);
         Assert.StartsWith(BaseUrl.Join(string.Empty), page.QuerySelector(".public-breadcrumbs a")!.GetAttribute("href"));
+        // The notice keeps its own correction list and its withdrawal words, so a withdrawn record gets no correction banner.
+        Assert.Null(page.QuerySelector(".correction-banner"));
     }
 
     [Fact]
@@ -330,5 +335,108 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.DoesNotContain("Statement", page.QuerySelector("main")!.TextContent.Replace(PublishedRecordLabels.Kind(PublishedRecordKind.Statement), string.Empty));
         Assert.Single(page.QuerySelectorAll(".corrections li"));
         Assert.Contains("Action fix", page.QuerySelector(".corrections li")!.TextContent);
+    }
+
+    private static readonly DateTimeOffset CorrectedAt = new(2026, 6, 1, 12, 30, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task ACorrectedVoteShowsTheBannerOfItsNewestCorrectionWithTheStoredNoteUnderWhatChanged()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        var vote = new SeededVote('d', "2026-03-03") { ActiveRevision = 3 };
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, vote);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("p0", "Ann Able"), new SeededOfficial("p1", "Ben Baker"), new SeededOfficial("p2", "Cy Cole"));
+        await CorrectionHistorySeed.BindAsync(host.OperationalDatabase, 1, PublishedRecordKind.Vote, vote.RecordId,
+            new PublishedCorrection { ReplacedRevisionNumber = 2, PublishedAtUtc = CorrectedAt, Note = "The House Clerk changed one cast." },
+            new PublishedCorrection { ReplacedRevisionNumber = 1, PublishedAtUtc = CorrectedAt.AddDays(-1), Note = "An older note." });
+
+        var banner = (await GetPageAsync(host, Path(vote.RecordId))).QuerySelector(".correction-banner")!;
+
+        Assert.Equal("Civic Lens corrected this vote on 1 Jun 2026, 12:30 UTC.", banner.QuerySelector("p")!.TextContent);
+        Assert.Equal([PublishedCorrectionBanner.WhatChanged], banner.QuerySelectorAll("dt").Select(term => term.TextContent));
+        Assert.Equal(["The House Clerk changed one cast."], banner.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
+    }
+
+    [Fact]
+    public async Task ACodeUpdateOfAnExecutiveActionShowsTheBannerWithNoWhatChangedText()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
+        await CorrectionHistorySeed.BindAsync(host.OperationalDatabase, 1, PublishedRecordKind.ExecutiveAction, ActionId,
+            new PublishedCorrection { ReplacedRevisionNumber = 1, PublishedAtUtc = CorrectedAt });
+
+        var banner = (await GetPageAsync(host, Path(ActionId))).QuerySelector(".correction-banner")!;
+
+        Assert.Equal("Civic Lens corrected this executive action on 1 Jun 2026, 12:30 UTC.", banner.QuerySelector("p")!.TextContent);
+        Assert.Null(banner.QuerySelector("dl"));
+        Assert.DoesNotContain(PublishedCorrectionBanner.WhatChanged, banner.TextContent);
+    }
+
+    public static TheoryData<PublishedRecordKind> PageKinds => new()
+    {
+        PublishedRecordKind.Vote,
+        PublishedRecordKind.Action,
+        PublishedRecordKind.Statement,
+        PublishedRecordKind.ExecutiveAction,
+        PublishedRecordKind.DocumentChange,
+        PublishedRecordKind.Brief
+    };
+
+    [Theory]
+    [MemberData(nameof(PageKinds))]
+    public async Task EachRecordPageReadsTheHistoryOfItsShownRevisionSoAnEmptyHistoryShowsNoBannerAndAMissingOneFailsThePage(PublishedRecordKind kind)
+    {
+        await using var host = await StartAsync();
+        var id = await SeedPageAsync(host, kind);
+
+        var page = await GetPageAsync(host, Path(id));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"DELETE FROM release_correction_histories WHERE record_id = '{id}';");
+        using var missing = await host.Client.GetAsync(Path(id));
+
+        Assert.NotNull(page.QuerySelector("h1"));
+        Assert.Null(page.QuerySelector(".correction-banner"));
+        Assert.Equal(HttpStatusCode.InternalServerError, missing.StatusCode);
+    }
+
+    /// <summary>Seeds one record of the kind with all that its page needs, and returns its ID.</summary>
+    private static async Task<string> SeedPageAsync(ApiHost host, PublishedRecordKind kind)
+    {
+        var database = host.OperationalDatabase;
+        if (kind == PublishedRecordKind.Brief)
+        {
+            await PublishedBriefContentSeed.SeedAsync(database);
+            return BriefFixtures.RecordId;
+        }
+        if (kind == PublishedRecordKind.DocumentChange)
+        {
+            var created = await DocumentChangeEndpointsTests.CreateDraftAsync(host, "page", "Book a tour seven days before.", "Book a tour three days before.");
+            var saved = await DocumentChangeEndpointsTests.SaveAsync(host, created, "Headline", created.Citations);
+            await DocumentChangeEndpointsTests.ApproveAsync(host, saved);
+            await DocumentChangeEndpointsTests.CommitAsync(host, 1, null, saved);
+            return saved.DraftId;
+        }
+        await ViewsSeed.ActivateReleaseAsync(database, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await OfficialsSeed.AddOfficialsAsync(database, new SeededOfficial("p0", "Ann Able"), new SeededOfficial("p1", "Ben Baker"), new SeededOfficial("p2", "Cy Cole"),
+            new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
+        switch (kind)
+        {
+            case PublishedRecordKind.Vote:
+                var vote = new SeededVote('d', "2026-03-03");
+                await ViewsSeed.AddVotesAsync(database, vote);
+                return vote.RecordId;
+            case PublishedRecordKind.Action:
+                var bill = new SeededBill('b', "2026-03-02") { BillType = "s", BillNumber = 9, Sponsorships = [new("p1", "Sponsor", "2026-03-02")] };
+                await BillsSeed.AddBillsAsync(database, bill);
+                return bill.RecordId;
+            case PublishedRecordKind.Statement:
+                await StatementsSeed.AddAsync(database, Statement);
+                await StatementEndpointsTests.AddDetailEvidenceAsync(database, Statement.RecordId, ExtractionId, Source,
+                    Source.IndexOf("exact quote", StringComparison.Ordinal), "exact quote".Length, Source.IndexOf("Friday", StringComparison.Ordinal), 6);
+                return Statement.RecordId;
+            default:
+                await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
+                return ActionId;
+        }
     }
 }

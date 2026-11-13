@@ -77,7 +77,7 @@ public static class ServerPageEndpoints
             var kind = PublicationProtocol.IsAnyRecordId(recordId) ? await kinds.FindAsync(recordId, cancellationToken) : null;
             switch (kind)
             {
-                case PublishedRecordKind.Vote when await votes.ReadAsync(recordId, cancellationToken) is { } vote:
+                case PublishedRecordKind.Vote when await votes.ReadRecordPageAsync(recordId, cancellationToken) is { } vote:
                     var filter = new VoteMemberFilter(QueryValues.FilterValue(QueryValues.Value(context.Request.Query, "q")?.Trim(), "q"), QueryValues.Filter(context.Request.Query, "cast"),
                         QueryValues.Filter(context.Request.Query, "party"));
                     return await responder.RespondAsync<VoteDetailPage>(context, StatusCodes.Status200OK, vote.Release, new Dictionary<string, object?>

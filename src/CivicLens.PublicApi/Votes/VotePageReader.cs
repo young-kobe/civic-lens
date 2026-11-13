@@ -1,5 +1,6 @@
 using System.Data;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Records;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Publication;
 using Npgsql;
@@ -10,8 +11,9 @@ namespace CivicLens.PublicApi.Votes;
 /// Reads everything that the server-rendered vote page shows: the vote detail, all tracked members, and the names of the officials, the bill, and the issues.
 /// One read-only REPEATABLE READ transaction on one connection holds every read, so the page comes from one snapshot and one release.
 /// The detail already reads the source texts, so the member read does not read them again. The three name reads go out as one batch.
+/// Only the record page shows the correction banner, so only <see cref="ReadRecordPageAsync"/> reads the corrections. Home and the map page do not.
 /// </summary>
-public sealed class VotePageReader(VoteStore votes, NpgsqlDataSource views)
+public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corrections, NpgsqlDataSource views)
 {
     // One row for each statement that a relationship links to the vote, with the approver of its link. The window count is the number of linked statements before the limit.
     // OFFSET 0 keeps the correlated lookups through the security barrier views, as on the official page.
@@ -31,7 +33,12 @@ public sealed class VotePageReader(VoteStore votes, NpgsqlDataSource views)
         """;
 
     /// <summary>Reads the page of one vote. Null means the active release holds no such vote.</summary>
-    public async Task<VotePageData?> ReadAsync(string recordId, CancellationToken cancellationToken)
+    public Task<VotePageData?> ReadAsync(string recordId, CancellationToken cancellationToken) => ReadAsync(recordId, false, cancellationToken);
+
+    /// <summary>Reads the record page of one vote with its corrections, in the same snapshot. Null means the active release holds no such vote.</summary>
+    public Task<VotePageData?> ReadRecordPageAsync(string recordId, CancellationToken cancellationToken) => ReadAsync(recordId, true, cancellationToken);
+
+    private async Task<VotePageData?> ReadAsync(string recordId, bool withCorrections, CancellationToken cancellationToken)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
@@ -41,7 +48,10 @@ public sealed class VotePageReader(VoteStore votes, NpgsqlDataSource views)
         var request = new VoteMemberRequest { Limit = PublishedVote.MaximumMembers };
         if (await votes.ListMembersAsync(transaction, recordId, request, detail.Sources, cancellationToken) is not { } members) return null;
         var names = await ReadNamesAsync(connection, transaction, detail, members.Members, cancellationToken);
-        return Map(detail, members.Members, names);
+        var page = Map(detail, members.Members, names);
+        return withCorrections
+            ? page with { Corrections = await corrections.ListAsync(transaction, PublishedRecordKind.Vote, recordId, detail.Vote.RevisionNumber, cancellationToken) }
+            : page;
     }
 
     private static async Task<PageNames> ReadNamesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, VoteDetail detail,

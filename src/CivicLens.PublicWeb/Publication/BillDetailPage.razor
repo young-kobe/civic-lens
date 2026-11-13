@@ -19,6 +19,7 @@
             }
             <p class="bill-lede">@Lede()</p>
         </header>
+        <PublishedCorrectionBanner Kind="PublishedRecordKind.Action" Corrections="Data.Corrections" />
         @if (Data.Steps.Length > 0)
         {
             <BillStepper Steps="Data.Steps" />

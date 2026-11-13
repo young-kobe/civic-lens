@@ -34,9 +34,16 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
         """;
 
     /// <summary>Reads one executive action. Null means that the active release holds no such record.</summary>
-    public async Task<ExecutiveActionDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
+    public Task<ExecutiveActionDetail?> FindAsync(string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(views.CreateCommand(Sql), recordId, cancellationToken);
+
+    /// <summary>Reads the detail inside the transaction of the caller, so that it shares a snapshot with the other reads of that transaction.</summary>
+    public Task<ExecutiveActionDetail?> FindAsync(NpgsqlTransaction transaction, string recordId, CancellationToken cancellationToken) =>
+        ReadDetailAsync(new NpgsqlCommand(Sql, transaction.Connection, transaction), recordId, cancellationToken);
+
+    private static async Task<ExecutiveActionDetail?> ReadDetailAsync(NpgsqlCommand command, string recordId, CancellationToken cancellationToken)
     {
-        await using var command = views.CreateCommand(Sql);
+        await using var _ = command;
         command.Parameters.AddWithValue("id", recordId);
         command.Parameters.AddWithValue("notice_limit", PublishedExecutiveAction.MaximumNotices + 1);
         command.Parameters.AddWithValue("target_limit", MaximumTargets + 1);

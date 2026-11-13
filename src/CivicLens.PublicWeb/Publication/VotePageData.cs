@@ -32,6 +32,9 @@ public sealed record VotePageData(
     string? BillType,
     int? BillNumber)
 {
+    /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
+    public PublishedCorrection[] Corrections { get; init; } = [];
+
     /// <summary>The newest linked statements, at most <see cref="VotePageView.StatementLimit"/>. <c>StatementTotal</c> counts every linked statement.</summary>
     public VoteStatementData[] Statements { get; init; } = [];
     public int StatementTotal { get; init; }

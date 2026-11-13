@@ -18,6 +18,9 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no label.")
     };
 
+    /// <summary>The kind word inside a sentence, such as "this vote". The withdrawal notice, the correction banner, and the report link use it.</summary>
+    public static string KindInSentence(PublishedRecordKind kind) => Kind(kind).ToLowerInvariant();
+
     public static IconName Icon(PublishedRecordKind kind) => kind switch
     {
         PublishedRecordKind.DocumentChange => IconName.DocumentChange,
@@ -154,7 +157,7 @@ public static class PublishedRecordLabels
 
     public const string ReportLinkStart = "Report a problem with this";
 
-    public static string ReportKindLink(PublishedRecordKind kind) => $"{ReportLinkStart} {Kind(kind).ToLowerInvariant()}";
+    public static string ReportKindLink(PublishedRecordKind kind) => $"{ReportLinkStart} {KindInSentence(kind)}";
 
     public const string ContactEmail = "contact@civic-lens.info";
 

@@ -1,0 +1,31 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+@if (Corrections.Length > 0)
+{
+    var newest = Corrections[0];
+    <div class="notice notice-neutral correction-banner" role="status" aria-labelledby="correction-banner-title">
+        <h2 id="correction-banner-title">@Title</h2>
+        <p>@Line(Kind, newest)</p>
+        @if (newest.Note is { } note)
+        {
+            <Facts Items="@(new Fact[] { new(WhatChanged, note) })" />
+        }
+    </div>
+}
+
+@code {
+    // The owner approves this wording. Change it here only.
+    public const string Title = "Corrected record";
+    public const string WhatChanged = "What changed";
+
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
+
+    /// <summary>The correction history of the shown revision, newest first. The banner shows the newest correction. An empty history shows no banner.</summary>
+    [Parameter, EditorRequired] public PublishedCorrection[] Corrections { get; set; } = [];
+
+    /// <summary>The one sentence that says what happened. The stored correction names no decider, so the sentence names none, as the withdrawal notice does.</summary>
+    public static string Line(PublishedRecordKind kind, PublishedCorrection correction) =>
+        $"Civic Lens corrected this {PublishedRecordLabels.KindInSentence(kind)} on {Moment.Full(correction.PublishedAtUtc)}.";
+}
