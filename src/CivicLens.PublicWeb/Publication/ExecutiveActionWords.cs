@@ -15,6 +15,9 @@ public static class ExecutiveActionWords
     public const string SummaryCheck =
         "The title, dates, citation and numbers on this page come from the Federal Register, checked by code. A model wrote only this summary.";
 
+    /// <summary>The Wording line of the source fold of a page with an AI summary. It is the line of the approved mockup, with "document" for "order".</summary>
+    public const string SummaryWording = "The headline is the official title. The summary is an AI summary of the document text.";
+
     public const string KeyFactsHeading = "Key facts";
 
     public const string LinksHeading = "Links to other documents";
@@ -57,7 +60,8 @@ public static class ExecutiveActionWords
     public static IReadOnlyList<Fact> SourceFacts(ExecutiveActionPageData data) =>
     [
         Fact.LinkList("Official document", [new FactLink($"Federal Register document {data.DocumentNumber}", data.DocumentUrl)]),
-        new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) }
+        new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) },
+        .. data.Summary is { Label: not null } ? [new Fact("Wording", SummaryWording)] : Array.Empty<Fact>()
     ];
 
     private static Fact Correction(ExecutiveActionNoticeData notice)

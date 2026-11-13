@@ -40,6 +40,7 @@ public sealed class ExecutiveActionDetailPageTests
         Assert.StartsWith(ExecutiveActionWords.SummaryCheck, slot.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.DoesNotContain("Civic Lens did not summarize", page.TextContent);
         Assert.DoesNotContain(ExecutiveSummaryWords.CutNote, page.TextContent);
+        Assert.Contains(ExecutiveActionWords.SummaryWording, page.QuerySelector("#source")!.TextContent);
     }
 
     [Fact]
@@ -85,6 +86,7 @@ public sealed class ExecutiveActionDetailPageTests
         Assert.Equal("https://www.federalregister.gov/d/2026-21599", page.QuerySelector(".detail-facts a.btn")!.GetAttribute("href"));
         var fold = page.QuerySelector("#source")!.TextContent;
         Assert.Contains("Federal Register document 2026-21599", fold);
+        Assert.DoesNotContain("Wording", fold);
     }
 
     [Fact]
