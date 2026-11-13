@@ -7,13 +7,15 @@ using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Ingest;
 
-/// <summary>The typed reader gives the same index documents as the release JSON feed, which is its oracle, for every kind.</summary>
+/// <summary>The typed reader gives the index documents of every kind from the <c>public_api</c> views. Each test checks them against fixed expected rows.</summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
 public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
 {
     private const int Limit = IndexedRecord.SourceLimit;
-    private static readonly string[] Kinds = ["statement", "documentChange", "action", "vote", "executiveAction", "brief", "relationship"];
+    private const string VoteSourceHead = "Started: 2025-04-10T11:08:00-04:00\nResult: Passed\nMember: A000055, Jane Doe, R, AL, Yea\n";
+    private const string ExecutiveSourceHead = "Federal Register document: 2025-01900\nTitle: Ending the Weaponization\nSigned: 2025-01-20\nPublished: 2025-01-28\n" +
+        "Citation: 90 FR 8235\nDocument URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/x\n";
 
     private sealed record Texts(string StatementSummary, string StatementSource, string ChangeSummary, string After, string Before, string ActionSummary, string BillTitle,
         string ActionSource, string VoteSummary, string VoteSource, string ExecutiveTail, string BriefParagraph, string Reason)
@@ -22,19 +24,35 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
             "A housing bill", "Sponsor: D000001 and more.", "The House passed it.", "Roll call raw text.", "Tail text.", "A brief paragraph.", "The statement describes the bill.");
     }
 
-    [Fact]
-    public async Task TheTypedReaderGivesTheSameIndexDocumentsAsTheReleaseFeedForEveryKindSoTheSwitchChangesNoSearchResult()
-    {
-        var (typed, feed) = await ReadBothAsync(Texts.Short);
+    /// <summary>The texts that the index stores for one record.</summary>
+    private sealed record Row(string Kind, string Summary, string Source, string? Snippet);
 
-        Assert.Equal(Kinds.Order(StringComparer.Ordinal), typed.Select(Kind).Order(StringComparer.Ordinal));
-        Assert.Equal(feed.Select(Project), typed.Select(Project));
-        Assert.Contains(typed, record => record.Entry.Kind == PublishedRecordKind.Action && record.SnippetText == "This bill funds housing.");
-        Assert.Contains(typed, record => record.Entry.Kind == PublishedRecordKind.Statement && record.Entry.IssueIds.SequenceEqual(["housing", "budget"]));
+    [Fact]
+    public async Task EachKindGivesItsFixedSummarySourceAndSnippetTextAndTheEntryOfItsRevision()
+    {
+        var records = Records(Texts.Short);
+
+        var typed = await ReadAsync(records);
+
+        Row[] expected =
+        [
+            new("action", "Doe sponsored it.\nA housing bill", "Sponsor: D000001 and more.", "This bill funds housing."),
+            new("brief", "A brief paragraph.", "", null),
+            new("documentChange", "The rule changed.", "Newer words.\nOlder words.", "The rule changed."),
+            new("executiveAction", "", ExecutiveSourceHead + "Tail text.", null),
+            new("relationship", "The statement describes the bill.\nthe source", "", null),
+            new("statement", "A short account.\nXq", "Xq the source text.", "A short account."),
+            new("vote", "The House passed it.", VoteSourceHead + "Roll call raw text.", "The House passed it.")
+        ];
+        Assert.Equal(expected, typed.Select(ToRow));
+        Assert.Equal(records.Select(record => record.Entry).OrderBy(EntryKey, StringComparer.Ordinal).Select(ProjectEntry),
+            typed.Select(record => ProjectEntry(record.Entry)));
+        Assert.Equal("This bill funds housing.", typed.Single(record => Kind(record) == "action").Entry.BillLine);
+        Assert.Equal(["housing", "budget"], typed.Single(record => Kind(record) == "statement").Entry.IssueIds);
     }
 
     [Fact]
-    public async Task EachKindCutsItsLongTextsAtTheSameLimitsAsTheReleaseFeedWithoutSplittingACharacter()
+    public async Task EachKindCutsItsLongTextsAtTheFixedLimitsWithoutSplittingACharacter()
     {
         var longSummary = new string('w', 8_000);
         var longSource = "Xq " + new string('s', Limit + 10);
@@ -54,21 +72,28 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
             ExecutiveTail = longSource
         };
 
-        var (typed, feed) = await ReadBothAsync(texts);
+        var typed = await ReadAsync(Records(texts));
 
-        Assert.Equal(feed.Select(Project), typed.Select(Project));
-        foreach (var kind in new[] { "documentChange", "vote", "executiveAction" })
-            Assert.Equal(Limit, typed.Single(record => Kind(record) == kind).Source.Length);
-        // The limit falls inside the first emoji of these two sources, so the cut drops its high surrogate.
-        foreach (var kind in new[] { "statement", "action" })
-            Assert.Equal(Limit - 1, typed.Single(record => Kind(record) == kind).Source.Length);
+        // The limit falls inside the first emoji of the statement and action sources, so the cut drops its high surrogate.
+        Row[] expected =
+        [
+            new("action", longSummary + "\nA title", splitSource[..(Limit - 1)], "This bill funds housing."),
+            new("brief", "A brief paragraph.", "", null),
+            new("documentChange", longSummary, longSource[..Limit], longSummary),
+            new("executiveAction", "", (ExecutiveSourceHead + longSource)[..Limit], null),
+            // The relationship quote cuts ten characters from the statement source.
+            new("relationship", "The statement describes the bill.\nssssssssss", "", null),
+            new("statement", longSummary + "\nXq", splitSource[..(Limit - 1)], longSummary),
+            new("vote", new string('w', 4_000), (VoteSourceHead + longSource)[..Limit], new string('w', 4_000))
+        ];
+        Assert.Equal(expected, typed.Select(ToRow));
         Assert.False(char.IsHighSurrogate(typed.Single(record => Kind(record) == "action").Source[^1]));
     }
 
     [Fact]
     public async Task ADocumentChangeIndexesTheNewVersionBeforeTheOldVersionAsTheRecordFileDoes()
     {
-        var (typed, _) = await ReadBothAsync(Texts.Short);
+        var typed = await ReadAsync(Records(Texts.Short));
 
         Assert.Equal("Newer words.\nOlder words.", typed.Single(record => Kind(record) == "documentChange").Source);
     }
@@ -80,10 +105,10 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
-            await TypedSearchSeed.WriteAsync(database, 1, records);
+            await new TypedReleaseSite(database).PublishAsync(1, records);
             await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica; DELETE FROM statement_candidates");
             await using var views = await ViewsReaderAsync(database);
-            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
+            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadActiveAsync(CancellationToken.None))!;
 
             var batch = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
 
@@ -101,10 +126,10 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
-            await TypedSearchSeed.WriteAsync(database, 1, records);
+            await new TypedReleaseSite(database).PublishAsync(1, records);
             var expected = await ReadTypedAsync(database);
             await using var views = await ViewsReaderAsync(database);
-            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
+            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadActiveAsync(CancellationToken.None))!;
 
             // Publication activates release 2 after the list is read. The statement moves to a revision that the read did not list.
             await ViewsSeed.ActivateReleaseAsync(database, 2, DateTimeOffset.UnixEpoch.AddDays(2), records.Length);
@@ -121,39 +146,23 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
     private static async Task<IndexedRecord[]> ReadTypedAsync(string database)
     {
         await using var views = await ViewsReaderAsync(database);
-        await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
+        await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadActiveAsync(CancellationToken.None))!;
         var batch = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
         Assert.Empty(batch.Failures);
         return [.. batch.Records.OrderBy(Key, StringComparer.Ordinal)];
     }
 
-    private static async Task<NpgsqlDataSource> ViewsReaderAsync(string database)
-    {
-        await ViewsSeed.ExecuteAsync(database, "ALTER ROLE civic_lens_public LOGIN PASSWORD 'typed-test'");
-        return NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(database) { Username = "civic_lens_public", Password = "typed-test" }.ConnectionString);
-    }
+    private static async Task<NpgsqlDataSource> ViewsReaderAsync(string database) => NpgsqlDataSource.Create(await ApiHost.LogInPublicRoleAsync(database));
 
-    private async Task<(IndexedRecord[] Typed, IndexedRecord[] Feed)> ReadBothAsync(Texts texts)
+    private async Task<IndexedRecord[]> ReadAsync(SampleRecord[] records)
     {
-        var records = Records(texts);
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
-            await TypedSearchSeed.WriteAsync(database, 1, records);
-            var site = new FakeReleaseSite();
-            site.Publish(1, records);
-            var feed = new FeedReleaseSource(new ReleaseFeed(new HttpClient(site) { BaseAddress = new Uri("http://release.test/") }));
-            await using var oracleRead = (await feed.ReadChangedAsync(CancellationToken.None))!;
-            var oracle = await oracleRead.ReadRecordsAsync(oracleRead.Release.Records.ToArray(), CancellationToken.None);
-
-            await using var views = await ViewsReaderAsync(database);
-            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadChangedAsync(CancellationToken.None))!;
-            var typed = await read.ReadRecordsAsync(read.Release.Records.ToArray(), CancellationToken.None);
-
-            Assert.Empty(oracle.Failures);
-            Assert.Empty(typed.Failures);
-            Assert.Equal(records.Length, read.Release.Records.Count);
-            return ([.. typed.Records.OrderBy(Key, StringComparer.Ordinal)], [.. oracle.Records.OrderBy(Key, StringComparer.Ordinal)]);
+            await new TypedReleaseSite(database).PublishAsync(1, records);
+            var typed = await ReadTypedAsync(database);
+            Assert.Equal(records.Length, typed.Length);
+            return typed;
         }
         finally { await postgres.DropDatabaseAsync(database); }
     }
@@ -184,14 +193,17 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
 
     private static string Kind(IndexedRecord record) => PublicationProtocol.KindText(record.Entry.Kind);
 
-    private static string Key(IndexedRecord record) => Kind(record) + record.Entry.RecordId;
+    private static string Key(IndexedRecord record) => EntryKey(record.Entry);
+
+    private static string EntryKey(PublishedRecordEntry entry) => PublicationProtocol.KindText(entry.Kind) + entry.RecordId;
+
+    private static Row ToRow(IndexedRecord record) => new(Kind(record), record.Summary, record.Source, record.SnippetText);
 
     // Every field that the index stores for the record.
-    private static string Project(IndexedRecord record)
-    {
-        var entry = record.Entry;
-        return string.Join('\u001f', Kind(record), entry.RecordId, entry.RevisionNumber, entry.Headline, entry.FirstPublishedAtUtc.UtcTicks,
-            string.Join(',', entry.Officials.Select(official => official.Id + "=" + official.Name)), string.Join(',', entry.IssueIds), string.Join(',', entry.PolicyAreaIds),
-            entry.SourceHost, entry.EventDate, entry.BillLine, record.Summary, record.Source, record.SnippetText);
-    }
+    private static string Project(IndexedRecord record) => ProjectEntry(record.Entry) + '\u001f' + string.Join('\u001f', record.Summary, record.Source, record.SnippetText);
+
+    // Every entry field that the index stores for the record.
+    private static string ProjectEntry(PublishedRecordEntry entry) => string.Join('\u001f', PublicationProtocol.KindText(entry.Kind), entry.RecordId, entry.RevisionNumber,
+        entry.Headline, entry.FirstPublishedAtUtc.UtcTicks, string.Join(',', entry.Officials.Select(official => official.Id + "=" + official.Name)),
+        string.Join(',', entry.IssueIds), string.Join(',', entry.PolicyAreaIds), entry.SourceHost, entry.EventDate, entry.BillLine);
 }

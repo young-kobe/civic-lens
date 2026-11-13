@@ -2,7 +2,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.PublicApi;
 
-/// <summary>A record file with the manifest entry that lists it.</summary>
+/// <summary>A published record body with its manifest entry. <see cref="Ingest.TypedSearchSeed"/> writes the typed rows of the body.</summary>
 internal sealed record SampleRecord(PublishedRecordEntry Entry, object Body);
 
 /// <summary>Small valid records of every kind. Each takes the texts that a search test needs.</summary>
@@ -73,7 +73,8 @@ internal static class PublishedSamples
         return new(record.ToEntry(), record);
     }
 
-    public static SampleRecord Action(string headline, string summary, string billTitle, string source)
+    public static SampleRecord Action(string headline, string summary, string billTitle, string source, string billType = "hr", int billNumber = 7,
+        string sponsor = "o1", DateOnly? sponsoredOn = null)
     {
         var record = new PublishedAction
         {
@@ -84,22 +85,22 @@ internal static class PublishedSamples
             Summary = summary,
             TextOrigin = PublishedTextOrigin.Model,
             Congress = 119,
-            BillType = "hr",
-            BillNumber = 7,
+            BillType = billType,
+            BillNumber = billNumber,
             BillTitle = billTitle,
             TrackedIssueIds = [],
             Sponsorships =
             [
                 new PublishedSponsorship
                 {
-                    Official = new PublishedOfficial { Id = "o1", Name = "Official o1" },
+                    Official = new PublishedOfficial { Id = sponsor, Name = "Official " + sponsor },
                     Role = PublishedSponsorshipRole.Sponsor,
                     IsOriginal = true,
-                    SponsoredOn = new DateOnly(2026, 1, 3),
+                    SponsoredOn = sponsoredOn ?? new DateOnly(2026, 1, 3),
                     Citations = [new PublishedCitation { ExtractionId = SourceId, Start = 0, Length = 2, Quote = source[..2] }]
                 }
             ],
-            Sources = [new PublishedDocumentVersion { ExtractionId = SourceId, Url = "https://api.congress.gov/v3/bill/119/hr/7", ObservedAtUtc = Published, Text = source }],
+            Sources = [new PublishedDocumentVersion { ExtractionId = SourceId, Url = $"https://api.congress.gov/v3/bill/119/{billType}/{billNumber}", ObservedAtUtc = Published, Text = source }],
             ApprovedAtUtc = Published,
             FirstPublishedAtUtc = Published
         };

@@ -10,7 +10,7 @@ public sealed class SharedMemberVotesEndpointsTests(PostgresCollection postgres)
 {
     private async Task<ApiHost> StartAsync(params SeededVote[] votes)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         return host;
@@ -182,7 +182,7 @@ public sealed class SharedMemberVotesEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task NoActiveReleaseAnswersServiceUnavailable()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
 
         await GetAsync(host, "/v1/member-votes/shared?official=p0", HttpStatusCode.ServiceUnavailable);
     }

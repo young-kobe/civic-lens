@@ -41,7 +41,6 @@ public sealed class PublicApiOptionsTests
     {
         var options = new PublicApiOptions
         {
-            ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
             Database = "Host=search;Database=search",
             PublicViewsDatabase = "Host=operational;Database=civic_lens;Username=civic_lens_public;Password=secret"
         };
@@ -58,7 +57,6 @@ public sealed class PublicApiOptionsTests
         const int RoleIdleSessionSeconds = 60;
         var options = new PublicApiOptions
         {
-            ReleaseBaseUrl = PublicApiOptions.Directory("http://release.test"),
             Database = "Host=search;Database=search",
             PublicViewsDatabase = "Host=operational;Database=civic_lens;Username=civic_lens_public;Password=secret;Minimum Pool Size=2;Connection Pruning Interval=60"
         };

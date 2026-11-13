@@ -21,7 +21,7 @@ public sealed class CorrectionHistoryStoreTests(PostgresCollection postgres)
 
     private async Task<(ApiHost Host, NpgsqlDataSource Views)> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, DateTimeOffset.UnixEpoch);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
             SET session_replication_role = replica;

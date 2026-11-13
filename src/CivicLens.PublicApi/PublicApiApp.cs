@@ -33,10 +33,9 @@ namespace CivicLens.PublicApi;
 
 public static class PublicApiApp
 {
-    /// <summary>Builds the service. A test passes a release source in place of the typed views, a handler that answers the bot check, and a log provider.
+    /// <summary>Builds the service. A test passes a handler that answers the bot check, and a log provider.
     /// The service lowers the request logs of ASP.NET Core to warnings, because an information log holds the request address with the search words.</summary>
-    public static WebApplication Build(PublicApiOptions options, string[] args, IReleaseSource? releaseSource = null,
-        HttpMessageHandler? turnstileHandler = null, ILoggerProvider? logProvider = null)
+    public static WebApplication Build(PublicApiOptions options, string[] args, HttpMessageHandler? turnstileHandler = null, ILoggerProvider? logProvider = null)
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
@@ -49,7 +48,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(options);
         var snapshot = new RecordSnapshot(views);
         builder.Services.AddSingleton(new SchemaMigrator(writer));
-        builder.Services.AddSingleton(new ReleaseIngest(releaseSource ?? new TypedReleaseSource(snapshot), writer));
+        builder.Services.AddSingleton(new ReleaseIngest(new TypedReleaseSource(snapshot), writer));
         builder.Services.AddSingleton(new SearchIndex(reader));
         builder.Services.AddSingleton(new ActiveReleaseReader(views));
         builder.Services.AddSingleton(new VoteStore(views));

@@ -32,7 +32,7 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(bool withNames = true, params string[] additionalDistrictRows)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ZipSeed.AddRecordAsync(host.OperationalDatabase, 1);
         await ZipSeed.AdmitDistrictsAsync(host.OperationalDatabase, additionalDistrictRows);
@@ -579,7 +579,7 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task WithNoActiveReleaseTheRouteAnswers503()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ZipSeed.AdmitDistrictsAsync(host.OperationalDatabase);
 
         var problem = await GetAsync(host, "/v1/zip-districts/99501", HttpStatusCode.ServiceUnavailable);

@@ -29,7 +29,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task InvalidAndUnknownDocumentChangesAnswerNotFound()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         using var invalid = await host.Client.GetAsync("/v1/document-changes/bad-id");
         Assert.Equal(HttpStatusCode.NotFound, invalid.StatusCode);
 
@@ -46,7 +46,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task MissingActiveReleaseAnswersServiceUnavailable()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         using var response = await host.Client.GetAsync("/v1/document-changes/" + new string('a', 32));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
@@ -54,7 +54,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task AnActiveEmptyReleaseAnswersNotFoundRatherThanServiceUnavailable()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, DateTimeOffset.UnixEpoch, recordCount: 0);
 
         using var response = await host.Client.GetAsync("/v1/document-changes/" + new string('a', 32));
@@ -65,7 +65,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task DetailReturnsCompletePinnedSourcesOrderedChangesAndExactCitationQuotes()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         var created = await CreateDraftAsync(host, "detail", "A blue \U00010400 fee.\n\nStable line.\n\nA blue tax.",
             "A green \U00010401 fee.\n\nStable line.\n\nA red tax.");
         var saved = await SaveAsync(host, created, "Headline", created.Citations);
@@ -87,7 +87,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task DateEvidenceRemainsInPublicCitationsWhenItIsTheOnlyCitationAndWithAnotherCitation()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         var created = await CreateDraftAsync(host, "date-only", "Published on June 4, 2026. Old wording.",
             "Published on June 4, 2026. New wording.");
         var dateSpan = new SourceSpan(created.AfterExtractionId, created.AfterText.IndexOf("June 4, 2026", StringComparison.Ordinal), 12);
@@ -107,7 +107,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task DetailStaysOnActiveApprovedRevisionUntilActivationAndReturnsExactRevisionAfterRollback()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         var created = await CreateDraftAsync(host, "pinned", "Before wording.", "After wording.");
         var revisionOne = await SaveAsync(host, created, "First published headline", created.Citations);
         await ApproveAsync(host, revisionOne);
@@ -151,7 +151,7 @@ public sealed class DocumentChangeEndpointsTests(PostgresCollection postgres)
     [InlineData("code-author")]
     public async Task DetailFailsClosedWhenPublishedEvidenceIsIncompleteOrInvalid(string corruption)
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var host = await ApiHost.StartAsync(postgres);
         var created = await CreateDraftAsync(host, "corrupt-count", "Old \U00010400 rule.", "New \U00010401 rule.");
         var draft = await SaveAsync(host, created, "Changed rule", created.Citations);
         await ApproveAsync(host, draft);
