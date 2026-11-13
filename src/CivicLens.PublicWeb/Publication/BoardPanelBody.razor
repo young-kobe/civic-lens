@@ -1,0 +1,85 @@
+@using CivicLens.Publication.Contracts
+
+@* The ranked list of one board, with its empty states, kept Congress line and fold. The boards page shows it in each panel, and the full board page shows it whole. *@
+@if (Board.Congress is not { } congress)
+{
+    <p>No vote figures are in this release yet.</p>
+}
+else if (!Board.Ranked)
+{
+    @Kept(congress)
+    <p>No member of the @PublishedPartyNames.PartyOf(Board.Chamber, Board.Party) has @OfficialBoardPage.MinimumSplitVotes split votes cast in the @CongressCalendar.Ordinal(congress) Congress.</p>
+}
+else if (Board.Rows.Count == 0)
+{
+    @Kept(congress)
+    <p>No member of the @PublishedPartyNames.PartyOf(Board.Chamber, Board.Party) voted against most @PublishedPartyNames.Members(Board.Party) on a split vote in the @CongressCalendar.Ordinal(congress) Congress.</p>
+}
+else
+{
+    @Kept(congress)
+    @if (!NewestInFold && Board.NewestRollCall is { } shown)
+    {
+        <p class="small muted">@BoardWords.NewestRollCall(congress, shown)</p>
+    }
+    <p class="board-lede">The @Board.Rows.Count @(Board.Rows.Count == 1 ? "member" : "members") of the @PublishedPartyNames.PartyOf(Board.Chamber, Board.Party) with the highest share of split votes cast against most @PublishedPartyNames.Members(Board.Party). Count first, then the base it comes from.</p>
+    <ul class="list-rows" role="list">
+        @foreach (var row in Board.Rows)
+        {
+            <li class="list-row">
+                <div>
+                    <a class="list-row-title" href="@(RootPath + row.PagePath)">@row.Name</a>
+                    <div class="list-row-meta">
+                        <span>@PublishedPartyNames.PartyOf(Board.Chamber, Board.Party)</span>
+                        @if (row.Seat is not null)
+                        {
+                            <span>@row.Seat</span>
+                        }
+                    </div>
+                </div>
+                <div class="list-row-side">
+                    <span class="list-row-figure"><b>@row.Breaks</b> of @row.Cast split votes</span>
+                    <span class="badge">@Share(row.Breaks, row.Cast)</span>
+                </div>
+            </li>
+        }
+    </ul>
+    @if (FullListHref is not null)
+    {
+        <p class="small"><a href="@FullListHref">See the full list of the @PublishedPartyNames.PartyOf(Board.Chamber, Board.Party)</a></p>
+    }
+    <details class="list-fold">
+        <summary>Who counts, and what the numbers mean</summary>
+        <div class="in">
+            <p><b>Count</b>: split votes where the member voted Yes or No with the other side's majority, against most @PublishedPartyNames.Members(Board.Party). <b>Base</b>: split votes where the member cast Yes or No. Present and not voting are not counted.</p>
+            <p>Only members of the @PublishedPartyNames.PartyOf(Board.Chamber, Board.Party) with at least @OfficialBoardPage.MinimumSplitVotes split votes cast are listed. A shorter record could put a member first by chance. A vote against the party is not a mistake. A vote with the party is not a sign of good work.</p>
+            @if (NewestInFold && Board.NewestRollCall is { } newest)
+            {
+                <p class="small muted">@BoardWords.NewestRollCall(congress, newest)</p>
+            }
+        </div>
+    </details>
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardPanelData Board { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    /// <summary>True when an eyebrow above the page names the Congress, so the newest roll call line moves into the fold. Otherwise the line names the Congress above the list.</summary>
+    [Parameter] public bool NewestInFold { get; set; }
+
+    /// <summary>The link of the full board page, or null on that page itself.</summary>
+    [Parameter] public string? FullListHref { get; set; }
+
+    private RenderFragment Kept(int congress) => Board.NewerCongress is { } newer
+        ? @<p>@BoardWords.KeptCongressInList(newer, congress)</p>
+        : @<text></text>;
+
+    private static string Share(int breaks, int cast)
+    {
+        var percent = 100.0 * breaks / cast;
+        if (breaks > 0 && percent < 0.5) return "under 1%";
+        if (breaks < cast && percent >= 99.5) return "over 99%";
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{percent:0}%");
+    }
+}
