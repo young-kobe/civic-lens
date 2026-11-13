@@ -1,0 +1,17 @@
+@using CivicLens.Publication.Contracts
+@* The votes of one chamber where the members of a ZIP area differed, or the empty line when the chamber has no shared votes. The Compare view and the official page section both show it. *@
+@if (Data.SharedVotes.FirstOrDefault(votes => votes.Chamber == Chamber) is { } votes)
+{
+    <SharedVoteRows Data="votes" RootPath="@RootPath" DifferencesOnly="true" HeadingLevel="HeadingLevel" />
+}
+else
+{
+    <p class="muted" data-member-votes-empty>@SharedVoteRows.NoDifferences</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedChamber Chamber { get; set; }
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public int HeadingLevel { get; set; } = 2;
+}

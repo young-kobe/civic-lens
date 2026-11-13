@@ -39,7 +39,7 @@
         {
             <section id="@OfficialPageText.ExecutiveAnchor(type.Kind)" class="official-section official-exec" aria-labelledby="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">
                 <h2 id="@(OfficialPageText.ExecutiveAnchor(type.Kind))-title">@OfficialPageText.ExecutiveHeading(type.Kind, type.Count)</h2>
-                <p class="official-lede">@OfficialPageText.ExecutiveMeaning(type.Kind)</p>
+                <p class="official-lede">@ExecutiveActionWords.ExplainerText(type.Kind)</p>
                 <ul class="official-rows" role="list">
                     @foreach (var action in type.Newest)
                     {

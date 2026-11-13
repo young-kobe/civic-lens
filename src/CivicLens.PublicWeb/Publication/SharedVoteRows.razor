@@ -70,11 +70,14 @@
     </ul>
     @if (displayedVotes.Length == 0)
     {
-        <p class="muted" data-member-votes-empty>@(DifferencesOnly ? "No differing votes in this selection." : "No records match.")</p>
+        <p class="muted" data-member-votes-empty>@(DifferencesOnly ? NoDifferences : "No records match.")</p>
     }
 </section>
 
 @code {
+    /// <summary>The empty line of the differences-only mode. <see cref="ChamberDifferences"/> shows it too when a chamber has no shared votes.</summary>
+    public const string NoDifferences = "No differing votes in this selection.";
+
     [Parameter, EditorRequired] public SharedVoteRowsData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter] public bool DifferencesOnly { get; set; }

@@ -1,0 +1,9 @@
+@* The caveat of a ZIP area that lies in more than one district: some listed members may not represent the reader. The Compare view and the official page section both show it. *@
+@if (DistrictCount > 1)
+{
+    <p class="zip-count">Your ZIP area lies in @DistrictCount districts. The district with the most land is first.</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public int DistrictCount { get; set; }
+}

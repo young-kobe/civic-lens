@@ -22,6 +22,10 @@
                 <div>
                     <h1>@Data.Name</h1>
                     <p class="official-lede">@OfficialPageText.Lede(Data)</p>
+                    @if (Data.Website is { } website)
+                    {
+                        <p class="small muted">Official site: <a href="@website" rel="noopener noreferrer">@PublishedWebsite.Host(website)</a>.</p>
+                    }
                 </div>
             </header>
             @if (Data.Attendance.Length > 0 || party is not null || Data.BillsCongress is not null || Data.BillCountsAbsent)
@@ -193,6 +197,14 @@
                     </section>
                 }
 
+                @if (BrowserApiUrl is not null)
+                {
+                    <section id="your-members" class="official-section" aria-labelledby="official-members-title" hidden data-official-members-section>
+                        <h2 id="official-members-title">Compare with your other members</h2>
+                        <div class="official-members" data-official-members="@Data.OfficialId" data-release="@Data.Release" data-members-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite"></div>
+                    </section>
+                }
+
                 @if (!showVotes && !showStatements && !showBills && !showIssues)
                 {
                     <EmptyState Title="@OfficialPageText.NothingToShow" />
@@ -205,4 +217,6 @@
 @code {
     [Parameter, EditorRequired] public OfficialPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    /// <summary>The browser origin of the private members API. Without it the page has no section that reads the remembered ZIP.</summary>
+    [Parameter] public string? BrowserApiUrl { get; set; }
 }

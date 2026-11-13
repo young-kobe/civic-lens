@@ -16,7 +16,7 @@
     }
     else
     {
-        <section class="record-section">
+        <section class="record-section" aria-label="@OfficialRecordText.SectionLabel(Data.Name)">
             <div data-record-filters><FilterTabs Label="@OfficialRecordText.TabsLabel" Tabs="tabs" /></div>
             <div class="records-lead"><p class="muted small">@OfficialRecordText.CountLine(Data.Selected, Data.SelectedCount, Data.Name)</p></div>
             @switch (Data.Selected)

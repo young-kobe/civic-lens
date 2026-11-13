@@ -76,7 +76,18 @@ internal static class OfficialPageQueries
          ORDER BY k.kind, e.signed_on DESC, e.record_id
         """;
 
+    private const string WebsiteSql = "SELECT website FROM public_api.release_officials WHERE official_id = @id";
+
     private const string ExecutiveSpanSql = "SELECT min(signed_on), max(signed_on) FROM public_api.executive_actions WHERE official_id = @id";
+
+    /// <summary>Reads the own website of the official from the release names. A stored address that fails the website rule is a data defect, so it fails the page instead of becoming a link.</summary>
+    public static async Task<string?> ReadWebsiteAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(WebsiteSql, connection, transaction);
+        command.Parameters.AddWithValue("id", officialId);
+        var website = await command.ExecuteScalarAsync(cancellationToken) as string;
+        return website is null || PublishedWebsite.IsValid(website) ? website : throw new InvalidDataException("The stored official website is not a valid https address.");
+    }
 
     /// <summary>Reads the newest marks and how many marks the official has in all.</summary>
     public static async Task<(OfficialMarkData[] Marks, int Total)> ReadMarksAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)

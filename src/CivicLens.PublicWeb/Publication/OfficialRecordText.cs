@@ -45,6 +45,9 @@ public static class OfficialRecordText
 
     public static string Heading(string name) => $"All records of {name}";
 
+    /// <summary>The accessible name of the section that holds the tabs and the rows.</summary>
+    public static string SectionLabel(string name) => $"The record of {name}";
+
     public static string Description(string name) => $"Every published record of {name}: statements, bills, and votes, with a tab for each kind.";
 
     public static string BackToOfficial(string name) => $"Back to {name}";

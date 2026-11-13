@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Roster;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -26,7 +27,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         new("p0", "Ann Able", new SeededTerm("Representative", "Representative", "2021-01-03") { State = "MA", District = 7, Party = "Democrat", EndsOn = "2023-01-03" },
             new SeededTerm("Senator", "Senator", "2023-01-03") { State = "MA", Party = "Democrat" }),
         new("p1", "Ben Baker", new SeededTerm("Representative", "Representative", "2025-01-03") { State = "TX", District = 3, Party = "Republican" }),
-        new("president", "Eve East", new SeededTerm("President", "Executive", "2025-01-20") { Party = "Republican" }),
+        new("president", "Eve East", new SeededTerm(ExecutiveRosterParser.President, "Executive", "2025-01-20") { Party = "Republican" }),
         new("bare", "Cy Cole")
     ];
 
@@ -214,6 +215,28 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Equal(["Executive actions2"], Tabs(page));
         Assert.Equal(["Newer order", "A proclamation"], page.QuerySelectorAll(".record-row > div > a > span:first-child").Select(title => title.TextContent).ToArray());
         Assert.Equal(["Executive order", "Signed 20 May 2026"], page.QuerySelector(".record-row-meta")!.Children.Select(part => part.TextContent).ToArray());
+    }
+
+    [Fact]
+    public async Task TheOfficesHeldFoldOfAPresidentNamesTheOfficeWordAndNeverTheRawExecutiveCode()
+    {
+        await using var host = await StartAsync();
+
+        var page = await GetPageAsync(host, "/web/officials/president/record.html");
+
+        Assert.Equal(["President, Republican, 20 Jan 2025 to Present"], page.QuerySelectorAll("#offices ul.record-rows > li").Select(item => item.TextContent).ToArray());
+        Assert.DoesNotContain(ExecutiveRosterParser.President, page.QuerySelector("#offices")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheRecordSectionHasTheAccessibleNameTheRecordOfTheOfficial()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"));
+
+        var page = await GetPageAsync(host, "/web/officials/p0/record.html");
+
+        Assert.Equal("The record of Ann Able", Assert.Single(page.QuerySelectorAll("section.record-section")).GetAttribute("aria-label"));
     }
 
     [Fact]
