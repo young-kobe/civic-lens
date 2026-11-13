@@ -13,8 +13,8 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class IssuePageTests
 {
     private const string Root = "https://civic-lens.test/";
-    private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, "Passed", 52, 48);
-    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
+    private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, PublishedTextOrigin.Person, "Passed", 52, 48);
+    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
 
     private static IssuePageData Data(IssueLineUpData? lineUp = null, IssueVoteData[]? votes = null, IssueBillData[]? bills = null) =>
         new(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);

@@ -371,7 +371,7 @@ public sealed class HomePageTests
 
     private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>
         [.. Enumerable.Range(0, 4).Select(index => new HomeVoteData(new string((char)('b' + index), 64), new(2026, 3, 2),
-            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, "Passed",
+            index < 2 ? PublishedChamber.House : PublishedChamber.Senate, "Published vote", null, PublishedTextOrigin.Person, "Passed",
             VotePageView.ChamberBar(index < 2 ? PublishedChamber.House : PublishedChamber.Senate, 216, 214, 0, 5, VoteThreshold.None), null)
         { Alignment = alignment })];
 

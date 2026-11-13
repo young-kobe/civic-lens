@@ -160,7 +160,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
         var result = reader.GetString(14);
         var billLine = ViewColumns.Text(reader, 19);
         return new(reader.GetString(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 8), reader.GetInt32(9), reader.GetInt32(10),
-            reader.GetInt32(11), reader.GetString(12), ViewColumns.Text(reader, 13), result, PlainVoteWords.Result(result), ViewColumns.Number(reader, 15)!.Value,
+            reader.GetInt32(11), reader.GetString(12), ViewColumns.Text(reader, 13), ViewColumns.Enum<PublishedTextOrigin>(reader, 21), result, PlainVoteWords.Result(result),
+            ViewColumns.Number(reader, 15)!.Value,
             ViewColumns.Number(reader, 16)!.Value, ViewColumns.Text(reader, 17), ViewColumns.Number(reader, 18), billLine,
             billLine is null ? null : PublishedWording.BillLineSource)
         {

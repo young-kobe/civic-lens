@@ -110,7 +110,7 @@
                     <ul class="record-rows" role="list">
                         @foreach (var vote in Data.Votes)
                         {
-                            <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label"
+                            <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label" LabelOrigin="vote.TextOrigin"
                                              Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" ResultWords="@vote.ResultWords" BillLine="@vote.BillLine">
                                 @if (vote.Totals is { } totals)
                                 {

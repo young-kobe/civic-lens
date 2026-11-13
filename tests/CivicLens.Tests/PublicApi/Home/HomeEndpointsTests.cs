@@ -527,6 +527,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, featured.GetProperty("yea").ValueKind);
         Assert.DoesNotContain(votes[2].RecordId, Ids(answer));
         Assert.Contains(votes[3].RecordId, Ids(answer));
+        Assert.Equal("model", answer.GetProperty("votes").EnumerateArray().Single(vote => vote.GetProperty("recordId").GetString() == votes[3].RecordId).GetProperty("textOrigin").GetString());
         Assert.Equal([votes[5].RecordId, votes[3].RecordId, votes[1].RecordId], Ids(answer));
     }
 
