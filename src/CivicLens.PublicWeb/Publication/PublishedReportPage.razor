@@ -1,11 +1,11 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="null" CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person checks each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)">
-    <PageHeader Title="Report a problem" Lede="Tell us what is wrong with a published record. A person checks each report." />
+<PublicPage Section="null" CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person reads each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)">
+    <PageHeader Title="Report a problem" Lede="Tell us what is wrong with a published record. A person reads each report." />
     @if (!IsAvailable)
     {
         <Panel Label="Report a problem" Padded="true">
-            <EmptyState Title="Reporting is not available"
+            <EmptyState Level="2" Title="Reporting is not available"
                         Text="This release has no report service. Browse the published records instead.">
                 <Action><Button Href="@PublicationProtocol.AllRecordsPagePath(1)">All records</Button></Action>
             </EmptyState>
@@ -14,19 +14,22 @@
     else
     {
         <Panel Label="Report form" Padded="true" hidden data-report-form-panel>
-            <p class="report-subject" data-report-subject></p>
+            <div class="report-subject" data-report-subject>
+                <p class="report-subject-eyebrow">You are reporting this record</p>
+                <h2 class="report-subject-title" hidden data-report-subject-title><a data-report-subject-link></a></h2>
+                <p class="muted small"><span data-report-subject-revision></span> <a href="@PublicationProtocol.ReportPagePath">Wrong record? Choose another.</a></p>
+            </div>
             <form class="form" data-report-title-parameter="@ReaderReportProtocol.TitleParameter" data-report-title-limit="@ReaderReportProtocol.MaximumTitleCharacters" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
                 <input type="hidden" name="@ReaderReportProtocol.RecordIdField" data-report-query />
                 <input type="hidden" name="@ReaderReportProtocol.RevisionField" data-report-query />
-                <Field Label="What is wrong" For="report-category">
-                    <select id="report-category" name="@ReaderReportProtocol.CategoryField" data-text-required="@ReaderReportProtocol.OtherCategory" required>
-                        <option value="">Choose one</option>
+                <FieldSet Legend="What is wrong" Id="report-category">
+                    <div class="choices" data-text-required="@ReaderReportProtocol.OtherCategory">
                         @foreach (var category in ReaderReportProtocol.Categories)
                         {
-                            <option value="@category">@PublishedRecordLabels.ReportCategory(category)</option>
+                            <label class="choice"><input type="radio" name="@ReaderReportProtocol.CategoryField" value="@category" required /><span>@PublishedRecordLabels.ReportCategory(category)</span></label>
                         }
-                    </select>
-                </Field>
+                    </div>
+                </FieldSet>
                 <Field Label="Details" For="report-text"
                        Hint="@($"Say where in the record the problem is. Details are required for \"{PublishedRecordLabels.ReportCategory(ReaderReportProtocol.OtherCategory)}\". Use at most {ReaderReportProtocol.MaximumTextCharacters:N0} characters. Do not add your name or contact details.")">
                     <textarea id="report-text" name="@ReaderReportProtocol.TextField" rows="5" maxlength="@ReaderReportProtocol.MaximumTextCharacters" aria-describedby="report-text-hint"></textarea>
@@ -38,7 +41,7 @@
         <div role="status" tabindex="-1" data-report-result></div>
         <div role="alert" tabindex="-1" data-report-failure></div>
         <Panel Label="Find the record first" Padded="true" hidden data-report-missing>
-            <EmptyState Title="Find the record first"
+            <EmptyState Level="2" Title="Find the record first"
                         Text="@($"To report a record, open the record. Each record page has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\". Use that link to come back here. Search for a record, or start with an official.")">
                 <Action>
                     <Button Href="@PublicationProtocol.SearchPagePath">Search records</Button>

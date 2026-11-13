@@ -6,8 +6,11 @@ using CivicLens.PublicApi.Votes;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Officials;
+using CivicLens.Tests.PublicApi.Statements;
 
 namespace CivicLens.Tests.PublicApi.Votes;
 
@@ -84,6 +87,67 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.Null(page.QuerySelector(".vote-parties"));
         Assert.NotNull(page.QuerySelector(".vote-parties-unknown"));
         Assert.Single(page.QuerySelectorAll(".party-bar"));
+    }
+
+    [Fact]
+    public async Task TheStatementsSectionListsOnlyStatementsLinkedToTheVoteWithTheirCastAndTheApproverOfEachLink()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
+            new SeededStatement('6', "2026-02-11", ["p1"], [], "Person", "Person"), new SeededStatement('7', "2026-02-12", ["p2"], [], "Person", "Person"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.Link(new string('8', 64), new string('5', 64), House.RecordId, "vote", "StatementAboutVote", "2026-02-10")}
+            {PublicRecordPageRows.Link(new string('9', 64), new string('6', 64), House.RecordId, "vote", "StatementAboutVote", "2026-02-11")}
+            UPDATE published_entries SET approved_by = 'Code' WHERE kind = 'relationship' AND record_id = '{new string('8', 64)}';
+            UPDATE published_entries SET approved_by = 'Person' WHERE kind = 'relationship' AND record_id = '{new string('9', 64)}';
+            """);
+
+        var page = await GetPageAsync(host, Path);
+
+        var rows = page.QuerySelectorAll(".vote-statements li").ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.Equal("Statements by members about H.R. 1.", page.QuerySelector(".vote-statements > p")!.TextContent);
+        Assert.Contains("Ben Baker", rows[0].QuerySelector(".official-meta")!.TextContent);
+        Assert.Contains("A reviewer checked this link", rows[0].TextContent);
+        Assert.Contains("No (Nay)", rows[0].QuerySelector(".shared-vote-cast-value")!.TextContent);
+        Assert.Contains("Ann Able", rows[1].QuerySelector(".official-meta")!.TextContent);
+        Assert.Contains("Code checked this link", rows[1].TextContent);
+        Assert.Contains("Yes (Yea)", rows[1].QuerySelector(".shared-vote-cast-value")!.TextContent);
+        Assert.DoesNotContain(page.QuerySelectorAll(".vote-statements a"), link => link.GetAttribute("href")!.Contains(new string('7', 64)));
+    }
+
+    [Fact]
+    public async Task AVoteWithNoLinkedStatementShowsNoStatementsSection()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Person", "Person"));
+
+        var page = await GetPageAsync(host, Path);
+
+        Assert.Null(page.QuerySelector(".vote-statements"));
+    }
+
+    [Theory]
+    [InlineData("Placed on the Union Calendar, Calendar No. 12.", "Waiting for a possible House floor vote", false)]
+    [InlineData("Became Public Law No: 119-111.", "Became law", true)]
+    [InlineData("Some action that no status rule matches.", null, false)]
+    public async Task TheBillStatusShowsTheLabelOfTheStatusOwnerAndTheLawLineOnlyForALawAndNothingForAnUnmatchedAction(string action, string? badge, bool law)
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('b', "2026-03-02") { Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
+        await ViewsSeed.LinkVoteBillsAsync(host.OperationalDatabase, 1, ('a', 'b'));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicRecordPageRows.PinnedStatus(1, new string('b', 64), action, "2026-09-18", new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero).UtcTicks)}
+            """);
+
+        var page = await GetPageAsync(host, Path);
+
+        Assert.Equal(badge, page.QuerySelector(".vote-bill .badge")?.TextContent.Trim());
+        Assert.Equal(law, page.QuerySelector(".vote-explain")!.TextContent.Contains(
+            "The bill became law as Public Law 119-111 on 18 Sep 2026, according to Congress.gov, read on 5 Nov 2026.", StringComparison.Ordinal));
+        if (law) Assert.DoesNotContain(NextStep.NotShown, page.QuerySelector(".vote-explain")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

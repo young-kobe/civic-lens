@@ -1470,7 +1470,8 @@ public sealed class PublishedOfficialPageTests
         Assert.Equal(["1 Mar 2026", "Statement 1", "States position on", "Official title b", "Not a vote"], rows[1]);
         Assert.Equal([$"../records/{new string('2', 64)}.html", $"../records/{new string('a', 64)}.html"],
             panel.QuerySelectorAll("tbody tr")[0].QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.Contains("A reviewer approved each link. A link does not mean the vote or bill matches the statement.", panel.TextContent, StringComparison.Ordinal);
+        Assert.Contains("A link does not mean the vote or bill matches the statement.", panel.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("A reviewer approved each link.", panel.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

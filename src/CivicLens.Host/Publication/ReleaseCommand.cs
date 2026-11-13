@@ -49,7 +49,7 @@ public static class ReleaseCommand
                     case ["releases", "entries", "backfill", var entriesLimit] when TryParsePositive(entriesLimit, out var entriesCount):
                         var result = await entries.ExecuteAsync(owner, entriesCount, cancellationToken);
                         CommandOutput.Write(output, result);
-                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 && result.ReadyRangesWithoutRow == 0 && result.OpenStatementsWithoutApprover == 0 && result.OpenRangesWithoutApprovalTime == 0 ? 0 : 1;
+                        return result.Skipped == 0 && result.OpenRangesWithoutRow == 0 && result.ReadyRangesWithoutRow == 0 && result.OpenRecordsWithoutApprover == 0 && result.OpenRangesWithoutApprovalTime == 0 ? 0 : 1;
                     case ["releases", "corrections", "backfill", var correctionLimit] when TryParsePositive(correctionLimit, out var correctionCount):
                         var resultWithoutCursor = await corrections
                             .ExecuteAsync(owner, correctionCount, null, cancellationToken);

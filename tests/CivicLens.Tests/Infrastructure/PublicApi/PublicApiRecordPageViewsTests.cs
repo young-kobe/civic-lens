@@ -137,6 +137,28 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         Assert.Equal(6, (await PublicAsync("SELECT record_id FROM public_api.record_links")).Length);
     }
 
+    [Fact]
+    public async Task EachRecordLinkShowsTheApproverOfItsRelationshipOnBothEndsAndNoneBeforeTheBackfill()
+    {
+        await SeedAsync($"""
+            {PublicRecordPageRows.Headline("statement", Statement1, "Doe on rent")}
+            {PublicRecordPageRows.Headline("action", Action1, "Housing bill")}
+            {PublicRecordPageRows.Headline("vote", Vote1, "Vote on housing")}
+            {PublicRecordPageRows.Link(Link1, Statement1, Action1, "action", "DescribesOwnBill", null)}
+            {PublicRecordPageRows.Link(Link2, Statement1, Vote1, "vote", "StatementAboutVote", null)}
+            UPDATE published_entries SET approved_by = 'Code' WHERE kind = 'relationship' AND record_id = '{Link1}';
+            UPDATE published_entries SET approved_by = 'Person' WHERE kind = 'relationship' AND record_id = '{Link2}';
+            """);
+
+        Assert.Equal(["action|Code", "vote|Person"], await PublicAsync($"""
+            SELECT related_kind || '|' || approver FROM public_api.record_links WHERE kind = 'statement' AND record_id = '{Statement1}' ORDER BY related_kind
+            """));
+        Assert.Equal(["statement|Code"], await PublicAsync($"SELECT related_kind || '|' || approver FROM public_api.record_links WHERE kind = 'action' AND record_id = '{Action1}'"));
+        Assert.Equal(["statement|Person"], await PublicAsync($"SELECT related_kind || '|' || approver FROM public_api.record_links WHERE kind = 'vote' AND record_id = '{Vote1}'"));
+        await ExecuteAsync($"UPDATE published_entries SET approved_by = NULL WHERE kind = 'relationship' AND record_id = '{Link1}'");
+        Assert.Equal(["none"], await PublicAsync($"SELECT coalesce(approver, 'none') FROM public_api.record_links WHERE kind = 'action' AND record_id = '{Action1}'"));
+    }
+
     [Theory]
     [InlineData("statement", "action")]
     [InlineData("action", "statement")]

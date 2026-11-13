@@ -95,6 +95,7 @@ a.cell-title:hover { text-decoration: underline; }
 .notice { display: flex; align-items: baseline; gap: var(--s3); padding: 10px 14px; border-radius: var(--r-control); background: var(--info-bg); color: var(--info); font-size: var(--t-sm); animation: notice-in var(--med) var(--ease); }
 .notice strong { white-space: nowrap; }
 .notice-ok { background: var(--ins-bg); color: var(--ins); }
+body.public .notice-neutral { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong), inset 6px 0 0 var(--marigold); }
 .notice-warn { background: var(--warn-bg); color: var(--warn); }
 .notice-bad { background: var(--del-bg); color: var(--del); }
 .notice-dismiss { margin-left: auto; border: 0; background: transparent; color: inherit; padding: 0 4px; font-size: 1.1em; line-height: 1; opacity: .6; cursor: pointer; }
@@ -142,9 +143,10 @@ a.cell-title:hover { text-decoration: underline; }
 .hunk-meta { display: flex; justify-content: space-between; gap: var(--s3); color: var(--muted); font-size: var(--t-xs); }
 .hunk-meta a { color: var(--muted); }
 .redline { max-width: var(--measure); color: var(--ink-2); font-family: var(--read); font-size: var(--t-md); line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
-.redline del { padding: 0 2px; border-radius: 2px; background: var(--del-bg); color: var(--del); text-decoration-thickness: 1.5px; }
-.redline ins { padding: 0 2px; border-radius: 2px; background: var(--ins-bg); color: var(--ins); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
+.redline del { padding: 0 2px; border-radius: 2px; background: var(--redline-del-bg); color: var(--ink); text-decoration-thickness: 2px; }
+.redline ins { padding: 0 2px; border-radius: 2px; background: var(--redline-ins-bg); color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: .2em; }
 .redline-context { color: var(--muted); }
+.redline-label { margin: 0 2px; color: var(--muted); font: 650 .7rem/1 var(--ui); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .side-by-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
 .side-by-side > div { min-width: 0; padding: var(--s3); border-radius: var(--r-control); font-family: var(--read); font-size: var(--t-base); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .side-before { background: var(--del-bg); }

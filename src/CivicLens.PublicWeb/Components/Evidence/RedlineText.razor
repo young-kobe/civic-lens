@@ -6,10 +6,10 @@
             <span class="redline-context">@EncodedEvidence.Markup(segment.Text)</span>
             break;
         case RedlineKind.Removed:
-            <del><span class="visually-hidden">Removed: </span>@EncodedEvidence.Markup(segment.Text)</del>
+            <span class="redline-label">Removed</span><del>@EncodedEvidence.Markup(segment.Text)</del>
             break;
         case RedlineKind.Added:
-            <ins><span class="visually-hidden">Added: </span>@EncodedEvidence.Markup(segment.Text)</ins>
+            <span class="redline-label">Added</span><ins>@EncodedEvidence.Markup(segment.Text)</ins>
             break;
         default:
             @EncodedEvidence.Markup(segment.Text)

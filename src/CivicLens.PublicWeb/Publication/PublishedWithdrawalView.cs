@@ -20,10 +20,12 @@ internal static class PublishedWithdrawalView
     public static IReadOnlyList<Fact> Facts(PublishedWithdrawal withdrawal) =>
     [
         new("Kind", PublishedRecordLabels.Kind(withdrawal.Kind)),
-        new("Record", withdrawal.RecordId),
         new("Withdrawn revision", withdrawal.WithdrawnRevisionNumber.ToString(CultureInfo.InvariantCulture)),
-        new("First published", Moment.Full(withdrawal.FirstPublishedAtUtc)),
+        .. PublishedTimeFacts.Of(null, withdrawal.FirstPublishedAtUtc),
         new("Withdrawn", Moment.Full(withdrawal.WithdrawnAtUtc)),
         new("Note", withdrawal.Note)
     ];
+
+    /// <summary>The record ID is not a name that a reader knows, so it sits in the source fold and not in the facts.</summary>
+    public static IReadOnlyList<Fact> SourceFacts(PublishedWithdrawal withdrawal) => [new("Record", withdrawal.RecordId)];
 }

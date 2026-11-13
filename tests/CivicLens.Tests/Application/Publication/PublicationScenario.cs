@@ -499,7 +499,7 @@ internal sealed class PublicationScenario
     }
 
     public string AddRelationship(char id, string statementId, string targetId, PublishedRecordKind targetKind = PublishedRecordKind.Action,
-        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1, SourceSpan? quoteSpan = null, string? correctionNote = null)
+        ReviewDecisionKind decision = ReviewDecisionKind.Approve, int statementRevision = 1, int targetRevision = 1, int revisionNumber = 1, SourceSpan? quoteSpan = null, string? correctionNote = null, bool approvedByCode = false)
     {
         var recordId = new string(id, 64);
         var statement = Statements.Publishable[statementId];
@@ -513,7 +513,7 @@ internal sealed class PublicationScenario
             new(RelationshipMatchBasis.BillNumber, quote),
             targetKind == PublishedRecordKind.Action ? RelationshipType.DescribesOwnBill : RelationshipType.StatementAboutVote,
             $"Statement {id} describes the record.", quote, "F2", statementRevisionRecord.SpeakerOfficialIds[0]);
-        var all = ImmutableArray.Create(Decision(recordId, 1, decision, revisionNumber) with { CorrectionNote = correctionNote });
+        var all = ImmutableArray.Create(Decision(recordId, 1, decision, revisionNumber) with { CorrectionNote = correctionNote, ActorSubject = approvedByCode ? ReviewAuthor.CodeSubject : "reviewer" });
         var concerns = ReviewPolicy.GetUnresolvedConcerns(all);
         var review = new RelationshipReview(recordId, revision, [revision], 1, ReviewPolicy.GetCurrentStatus(revisionNumber, all, concerns), all,
             concerns, false);
@@ -760,7 +760,7 @@ internal sealed class FakePublicationStore : IPublicationStore
 
     public Task<int> FillBillStatusStagesAsync(IReadOnlyCollection<BillStatusGap> gaps, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<int> FillStatementApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
+    public Task<int> FillApproversAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
     public Task<int> FillApprovalTimesAsync(IReadOnlyCollection<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>

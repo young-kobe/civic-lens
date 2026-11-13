@@ -57,7 +57,7 @@ public sealed class CorrectionHistoryStore(NpgsqlDataSource views)
         if (corrections.Count != header.CorrectionCount || rowCount != Math.Max(1, (int)header.CorrectionCount))
             throw new InvalidDataException("The active record correction history count does not match its entries.");
         var items = corrections.ToArray();
-        PublishedCorrection.ValidateAll(items, revisionNumber);
+        PublishedCorrection.ValidateAll(items, revisionNumber, kind);
         if (!string.Equals(PublishedCorrectionHistoryIdentity.Of(items, header.EncodingVersion), header.HistoryId, StringComparison.Ordinal))
             throw new InvalidDataException("The active record correction history identity does not match its entries.");
         return (release, new(release, kind, recordId, revisionNumber, items));

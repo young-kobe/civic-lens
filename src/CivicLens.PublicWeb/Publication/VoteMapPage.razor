@@ -1,0 +1,46 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.Votes" Title="@title" Description="@description" CanonicalPath="@PublicationProtocol.VoteMapPagePath(Data.RecordId)" RootPath="@RootPath"
+            TrailKind="PublishedRecordKind.Vote" TrailName="Map" TrailParent="parent">
+    <PageHeader Title="@title" Eyebrow="@($"{Data.Chamber} vote, {Moment.Day(Data.VotedOn)} | Map")" Lede="@VoteMapWords.Intro(Data.Chamber)">
+        <Meta><a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId))">@VoteMapWords.BackToVote</a></Meta>
+    </PageHeader>
+    @if (map is null)
+    {
+        <section aria-labelledby="vote-map-title">
+            <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
+            <EmptyState Title="@VoteMapWords.NoMapTitle">@VoteMapWords.NoMap <a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId))">@VoteMapWords.BackToVote</a></EmptyState>
+        </section>
+    }
+    else
+    {
+        <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" ColorModes="true" ShowIntro="false" />
+        <Notice>@VoteMapWords.RecordedVotesOnly</Notice>
+        <details class="vote-fold">
+            <summary>@VoteMapWords.SourceFold</summary>
+            <dl class="vote-map-sources">
+                <dt>@VoteMapWords.ShapesTerm</dt>
+                <dd>@VoteMapWords.ShapesSource</dd>
+            </dl>
+        </details>
+    }
+</PublicPage>
+
+@code {
+    private VoteMapData? map;
+    private PublicBreadcrumbItem parent = default!;
+    private string title = string.Empty;
+    private string description = string.Empty;
+
+    [Parameter, EditorRequired] public VotePageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet()
+    {
+        map = VoteMapData.Of(Data);
+        parent = new(Data.ShortName, PublicationProtocol.RecordPagePath(Data.RecordId));
+        title = VoteMapWords.PageTitle(Data);
+        description = VoteMapWords.Intro(Data.Chamber);
+    }
+}

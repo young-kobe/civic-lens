@@ -23,7 +23,7 @@ public static class PublishedBriefView
     public static IReadOnlyList<Fact> Facts(PublishedBrief brief) =>
         Facts(brief.WeekStart, brief.RevisionNumber, brief.CutoffReleaseNumber, brief.Coverage, brief.ApprovedAtUtc, brief.FirstPublishedAtUtc);
 
-    /// <summary>The fact rows of a brief. A time that the data does not hold gets no row, so the page never invents one.</summary>
+    /// <summary>The fact rows of a brief. <see cref="PublishedTimeFacts"/> gives the time rows.</summary>
     public static IReadOnlyList<Fact> Facts(DateOnly weekStart, int revisionNumber, int cutoffReleaseNumber, PublishedBriefCoverage coverage,
         DateTimeOffset? approvedAtUtc, DateTimeOffset? firstPublishedAtUtc)
     {
@@ -35,8 +35,7 @@ public static class PublishedBriefView
             new("Records sent to the drafting model", coverage.SentToModel.ToString(CultureInfo.InvariantCulture)),
             new("Records cited", coverage.Cited.ToString(CultureInfo.InvariantCulture))
         };
-        if (approvedAtUtc is { } approved) facts.Add(new("Approved", Moment.Full(approved)));
-        if (firstPublishedAtUtc is { } first) facts.Add(new("First published", Moment.Full(first)));
+        facts.AddRange(PublishedTimeFacts.Of(approvedAtUtc, firstPublishedAtUtc));
         facts.Add(new("Revision", revisionNumber.ToString(CultureInfo.InvariantCulture)));
         return facts;
     }

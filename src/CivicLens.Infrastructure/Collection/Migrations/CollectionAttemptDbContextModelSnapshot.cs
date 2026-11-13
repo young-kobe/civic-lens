@@ -5936,7 +5936,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_published_entries_approved_at_utc_ticks", "approved_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
-                            t.HasCheckConstraint("ck_published_entries_approved_by", "approved_by IS NULL OR (kind = 'statement' AND approved_by IN ('Code', 'Person'))");
+                            t.HasCheckConstraint("ck_published_entries_approved_by", "approved_by IS NULL OR (kind IN ('statement', 'relationship') AND approved_by IN ('Code', 'Person'))");
 
                             t.HasCheckConstraint("ck_published_entries_bill_line", "bill_line IS NULL OR (kind = 'action' AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200)");
 

@@ -14,7 +14,7 @@ public sealed class PartyBarTests
     [Fact]
     public void TheDescriptionNamesTheGroupAndEverySegmentCount()
     {
-        var bar = VotePageView.CastBar("Group", PartyTone.Neutral, 1, 2, 3, 4, 5, false);
+        var bar = VotePageView.CastBar("Group", PartyTone.Neutral, 1, 2, 3, 4, 5, VoteThreshold.None);
 
         Assert.Equal("Group: Yes 1, No 2, Present 3, Other 5, Not voting 4", bar.Description);
         Assert.Equal(15, bar.Total);
@@ -26,14 +26,14 @@ public sealed class PartyBarTests
     [InlineData(1, 0, 0.5)]
     public void TheHalfLineSitsAtHalfOfTheYesAndNoCasts(int yes, int no, double expected)
     {
-        Assert.Equal(expected, VotePageView.CastBar("Group", PartyTone.Neutral, yes, no, 0, 4, 0, true).Mark!.Count);
+        Assert.Equal(expected, VotePageView.CastBar("Group", PartyTone.Neutral, yes, no, 0, 4, 0, VoteThreshold.Half).Mark!.Count);
     }
 
     [Fact]
     public void NobodyCastingYesOrNoGivesNoLineAndAnOffSwitchGivesNoLine()
     {
-        Assert.Null(VotePageView.CastBar("Group", PartyTone.Neutral, 0, 0, 2, 3, 0, true).Mark);
-        Assert.Null(VotePageView.CastBar("Group", PartyTone.Neutral, 5, 1, 0, 0, 0, false).Mark);
+        Assert.Null(VotePageView.CastBar("Group", PartyTone.Neutral, 0, 0, 2, 3, 0, VoteThreshold.Half).Mark);
+        Assert.Null(VotePageView.CastBar("Group", PartyTone.Neutral, 5, 1, 0, 0, 0, VoteThreshold.None).Mark);
     }
 
     [Theory]
@@ -49,7 +49,7 @@ public sealed class PartyBarTests
     [Fact]
     public async Task EachSegmentHasItsOwnLabelAndLookInTheLegendSoNoTwoLabelsShareALookAndColorIsNotTheOnlyCue()
     {
-        var html = await RenderAsync(VotePageView.CastBar("Democrats", PartyTone.Democrat, 3, 2, 1, 4, 5, true), "bar");
+        var html = await RenderAsync(VotePageView.CastBar("Democrats", PartyTone.Democrat, 3, 2, 1, 4, 5, VoteThreshold.Half), "bar");
         var page = await new HtmlParser().ParseDocumentAsync(html);
 
         var items = page.QuerySelectorAll(".party-bar-legend li");
@@ -67,7 +67,7 @@ public sealed class PartyBarTests
     [Fact]
     public async Task ASegmentWithNoMembersIsInTheLegendAndIsNotDrawn()
     {
-        var html = await RenderAsync(VotePageView.CastBar("Group", PartyTone.Neutral, 3, 0, 0, 1, 0, false), "bar");
+        var html = await RenderAsync(VotePageView.CastBar("Group", PartyTone.Neutral, 3, 0, 0, 1, 0, VoteThreshold.None), "bar");
         var page = await new HtmlParser().ParseDocumentAsync(html);
 
         Assert.Equal(2, page.QuerySelectorAll("svg.party-bar-chart rect.party-bar-fill").Length);

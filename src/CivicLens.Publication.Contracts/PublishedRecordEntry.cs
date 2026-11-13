@@ -34,6 +34,9 @@ public sealed record PublishedRecordEntry
     public int? Congress { get; init; }
     public string[]? CosponsorIds { get; init; }
 
+    /// <summary>The kinds whose entry names who approved the published revision: a statement, and the link of a relationship.</summary>
+    public static bool NamesApprover(PublishedRecordKind kind) => kind is PublishedRecordKind.Statement or PublishedRecordKind.Relationship;
+
     public void Validate()
     {
         if (!PublicationProtocol.IsRecordId(Kind, RecordId) || RevisionNumber < 1 || string.IsNullOrWhiteSpace(Headline))
@@ -49,8 +52,8 @@ public sealed record PublishedRecordEntry
             throw new InvalidDataException("An executive action manifest entry names its document type. Other entries name none.");
         if (Kind == PublishedRecordKind.Relationship ? !HasValidLink : HasAnyLink)
             throw new InvalidDataException("A relationship manifest entry names its link type, statement, and target. Other entries name none.");
-        if (ApprovedBy is { } approver && (Kind != PublishedRecordKind.Statement || !Enum.IsDefined(approver)))
-            throw new InvalidDataException("Only a statement entry may name its public approver classification.");
+        if (ApprovedBy is { } approver && (!NamesApprover(Kind) || !Enum.IsDefined(approver)))
+            throw new InvalidDataException("Only a statement or relationship entry may name its public approver classification.");
         if (!HasValidVoteFacts)
             throw new InvalidDataException("A vote manifest entry holds both Yea and Nay counts or none, and an alignment only with them. Other entries hold none.");
         if (!HasValidChamber)

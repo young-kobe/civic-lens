@@ -124,8 +124,8 @@ public sealed class BillStore(NpgsqlDataSource views)
             ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader))
         {
             KeyTermsLabel = ViewColumns.Text(reader, 34),
-            CheckedAtUtc = Utc(reader, 35),
-            FirstPublishedAtUtc = Utc(reader, 36),
+            CheckedAtUtc = ViewColumns.Utc(reader, 35),
+            FirstPublishedAtUtc = ViewColumns.Utc(reader, 36),
             SummaryFromCrs = reader.GetBoolean(37)
         };
     }
@@ -384,8 +384,6 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static BillHistory? ReadHistory(DbDataReader reader, int observedAtIndex, int actionCountIndex) => reader.IsDBNull(observedAtIndex) || reader.IsDBNull(actionCountIndex)
         ? null
         : new(new DateTimeOffset(reader.GetInt64(observedAtIndex), TimeSpan.Zero), reader.GetInt32(actionCountIndex));
-
-    private static DateTimeOffset? Utc(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : new DateTimeOffset(reader.GetInt64(ordinal), TimeSpan.Zero);
 
     // Columns 28 to 30 hold the status. The view holds no row for a bill with no latest action.
     private static BillLatestAction? ReadLatestAction(DbDataReader reader) => reader.IsDBNull(28)

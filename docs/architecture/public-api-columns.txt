@@ -257,6 +257,7 @@ record_links reason
 record_links quote_extraction_id
 record_links quote_start
 record_links quote_length
+record_links approver
 statement_approvers approved_by
 statement_approvers record_id
 statement_approvers revision_number
@@ -281,6 +282,14 @@ statement_speakers record_id
 statement_speakers revision_number
 statement_speakers position
 statement_speakers official_id
+statement_speaker_terms record_id
+statement_speaker_terms revision_number
+statement_speaker_terms position
+statement_speaker_terms party
+statement_speaker_terms kind
+statement_speaker_terms office
+statement_speaker_terms state
+statement_speaker_terms district
 statements headline
 statements issue_ids
 statements label

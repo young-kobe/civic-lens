@@ -61,7 +61,7 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch);
         var corrections = MaximumHistory();
         var historyId = PublishedCorrectionHistoryIdentity.Of(corrections);
-        await SeedAsync(host.OperationalDatabase, 2, 63, historyId, corrections);
+        await SeedAsync(host.OperationalDatabase, 2, "vote", 63, historyId, corrections);
         await SeedEmptyAsync(host.OperationalDatabase, 2, new string('b', 64));
         await SeedEarlierHistoryAsync(host.OperationalDatabase, new string('a', 64));
 
@@ -70,12 +70,12 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         using (var emptyBody = JsonDocument.Parse(await empty.Content.ReadAsStringAsync()))
             Assert.Empty(emptyBody.RootElement.GetProperty("corrections").EnumerateArray());
 
-        using var response = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        using var response = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = body.RootElement;
         Assert.Equal(2, root.GetProperty("release").GetInt32());
-        Assert.Equal("action", root.GetProperty("kind").GetString());
+        Assert.Equal("vote", root.GetProperty("kind").GetString());
         Assert.Equal(Id, root.GetProperty("recordId").GetString());
         Assert.Equal(63, root.GetProperty("revisionNumber").GetInt32());
         var entries = root.GetProperty("corrections").EnumerateArray().ToArray();
@@ -90,7 +90,7 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Corrected the date.", entries[2].GetProperty("note").GetString());
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, DateTimeOffset.UnixEpoch);
-        using var earlier = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        using var earlier = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.OK, earlier.StatusCode);
         using var earlierBody = JsonDocument.Parse(await earlier.Content.ReadAsStringAsync());
         Assert.Equal(1, earlierBody.RootElement.GetProperty("release").GetInt32());
@@ -98,34 +98,38 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch);
 
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE published_correction_history_entries SET note = 'Changed after publication' WHERE history_id = '{historyId}' AND \"position\" = 2");
-        using var corrupt = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        using var corrupt = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.InternalServerError, corrupt.StatusCode);
 
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE published_correction_history_entries SET note = 'Corrected the date.' WHERE history_id = '{historyId}' AND \"position\" = 2; UPDATE published_correction_histories SET correction_count = 61 WHERE history_id = '{historyId}'");
-        using var wrongCount = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        using var wrongCount = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.InternalServerError, wrongCount.StatusCode);
 
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE published_correction_histories SET correction_count = 62 WHERE history_id = '{historyId}'; DELETE FROM published_correction_history_entries WHERE history_id = '{historyId}' AND \"position\" = 0");
-        using var wrongPosition = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        using var wrongPosition = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.InternalServerError, wrongPosition.StatusCode);
+
+        PublishedCorrection[] actionHistory = [new() { ReplacedRevisionNumber = 1, PublishedAtUtc = DateTimeOffset.UnixEpoch, FactsUnchanged = true }];
+        await SeedAsync(host.OperationalDatabase, 2, "action", 2, PublishedCorrectionHistoryIdentity.Of(actionHistory), actionHistory);
+        using var actionFactsUnchanged = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        Assert.Equal(HttpStatusCode.InternalServerError, actionFactsUnchanged.StatusCode);
     }
 
-    private static Task SeedAsync(string database, int release, int revision, string historyId, PublishedCorrection[] corrections)
+    /// <summary>Seeds a record of the kind with its correction history. The history view needs no published entry, so none is seeded.</summary>
+    private static Task SeedAsync(string database, int release, string kind, int revision, string historyId, PublishedCorrection[] corrections)
     {
         var rows = string.Join(",\n", corrections.Select((entry, position) =>
             $"('{historyId}', {position}, {entry.ReplacedRevisionNumber}, {entry.PublishedAtUtc.UtcTicks}, {(int)entry.PublishedAtUtc.Offset.TotalMinutes}, {(entry.Note is null ? "NULL" : $"'{entry.Note}'")}, {entry.FactsUnchanged.ToString().ToLowerInvariant()})"));
         return ViewsSeed.ExecuteAsync(database, $"""
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
-            VALUES ('action', '{Id}', 1, {revision}, NULL);
-            INSERT INTO published_entries (kind, record_id, revision_number, headline, action_record_id, action_revision_number, bill_title)
-            VALUES ('action', '{Id}', {revision}, 'Headline', '{Id}', {revision}, 'Bill');
+            VALUES ('{kind}', '{Id}', 1, {revision}, NULL);
             INSERT INTO published_correction_histories (history_id, encoding_version, correction_count)
             VALUES ('{historyId}', {PublishedCorrectionHistoryIdentity.CurrentVersion}, {corrections.Length});
             INSERT INTO published_correction_history_entries (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged)
             VALUES {rows};
             INSERT INTO release_correction_histories (release_number, kind, record_id, revision_number, history_id)
-            VALUES ({release}, 'action', '{Id}', {revision}, '{historyId}');
+            VALUES ({release}, '{kind}', '{Id}', {revision}, '{historyId}');
             """);
     }
 
@@ -203,7 +207,7 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         return ViewsSeed.ExecuteAsync(database, $"""
             SET session_replication_role = replica;
             INSERT INTO release_correction_histories (release_number, kind, record_id, revision_number, history_id)
-            VALUES (1, 'action', '{recordId}', 63, '{historyId}');
+            VALUES (1, 'vote', '{recordId}', 63, '{historyId}');
             """);
     }
 }

@@ -108,7 +108,7 @@ CASE
     ELSE 'statement'
 END, target_kind varchar(32) null, target_record_id varchar(64) null, document_type varchar(32) null, bill_line text null, congress integer null, approved_by varchar(32) null, approved_at_utc_ticks bigint null
 - check ck_published_entries_approved_at_utc_ticks: approved_at_utc_ticks >= 0 AND approved_at_utc_ticks <= '3155378975999999999'
-- check ck_published_entries_approved_by: approved_by IS NULL OR kind = 'statement' AND (approved_by in ('Code', 'Person'))
+- check ck_published_entries_approved_by: approved_by IS NULL OR (kind in ('statement', 'relationship')) AND (approved_by in ('Code', 'Person'))
 - check ck_published_entries_bill_line: bill_line IS NULL OR kind = 'action' AND length(btrim(bill_line)) >= 1 AND length(bill_line) <= 200
 - check ck_published_entries_bill_title: (kind = 'action') = (bill_title IS NOT NULL) AND (bill_title IS NULL OR length(btrim(bill_title)) > 0)
 - check ck_published_entries_congress: congress IS NULL OR congress >= 1

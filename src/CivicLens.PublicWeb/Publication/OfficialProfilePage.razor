@@ -126,7 +126,7 @@
                                         {
                                             <span class="official-source-label" data-origin="@statement.TextOrigin?.ToString().ToLowerInvariant()">@statement.Label</span>
                                         }
-                                        <p class="official-meta"><span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span></p>
+                                        <p class="official-meta"><span>@StatementPageView.RowDate(statement.StatementDate)</span></p>
                                         <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@statement.VoteChamber roll call @statement.VoteRollCall, @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
                                             @if (voteLabel is not null)
                                             {
@@ -135,6 +135,10 @@
                                             @if (statement.Cast is { } cast)
                                             {
                                                 <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
+                                            }
+                                            @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
+                                            {
+                                                <span class="link-checker">@checker</span>
                                             }
                                         </p>
                                     </div>
