@@ -14,7 +14,7 @@ public static class AiLabelWords
     public const string CodeWording = "Written automatically from Congress.gov data, with no AI";
 
     /// <summary>The label of a statement summary that a model wrote and code approved.</summary>
-    public const string StatementModelWording = "An AI summary of this release.";
+    public const string StatementModelWording = "An AI summary of this press release.";
 
     /// <summary>The label of a statement summary that a model wrote and a person approved.</summary>
     public const string StatementCheckedByPersonWording = "Drafted by an AI model from this source. A person checked it before publication.";

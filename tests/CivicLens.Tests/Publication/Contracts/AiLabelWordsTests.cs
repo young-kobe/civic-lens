@@ -9,7 +9,7 @@ public sealed class AiLabelWordsTests
     {
         Assert.Equal("An AI summary of the official record", AiLabelWords.ModelWording);
         Assert.Equal("Written automatically from Congress.gov data, with no AI", AiLabelWords.CodeWording);
-        Assert.Equal("An AI summary of this release.", AiLabelWords.StatementModelWording);
+        Assert.Equal("An AI summary of this press release.", AiLabelWords.StatementModelWording);
         Assert.Equal("Drafted by an AI model from this source. A person checked it before publication.", AiLabelWords.StatementCheckedByPersonWording);
         Assert.Equal("A model wrote only this summary.", AiLabelWords.ModelWroteOnlyThisSummary);
     }
