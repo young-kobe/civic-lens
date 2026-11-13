@@ -51,15 +51,32 @@ public sealed class VoteStatementsAndStatusTests
     }
 
     [Fact]
-    public async Task ARowShowsTheCastOfEachSpeakerWhoHasAVoteRowAndNoneForOthers()
+    public async Task ARowNamesEachSpeakerOnceWithTheCastBesideTheNameAndNoCastForASpeakerWithNoVoteRow()
     {
         var page = await RenderAsync(Vote() with { Statements = [Statement("a", PublishedApprover.Code, ("o1", "Ada Able"), ("zz", "Zed Zane"))], StatementTotal = 1 });
 
-        var casts = page.QuerySelectorAll(".vote-statements li .official-related").Where(line => line.TextContent.Contains("Cast on this vote")).ToArray();
-        var cast = Assert.Single(casts);
-        Assert.Contains("Ada Able", cast.TextContent);
-        Assert.Contains("Yes", cast.TextContent);
+        var row = page.QuerySelector(".vote-statements li")!;
+        Assert.Equal(1, Count(row.TextContent, "Ada Able"));
+        Assert.Equal(1, Count(row.TextContent, "Zed Zane"));
+        var speakers = row.QuerySelectorAll(".official-meta .vote-statement-speaker");
+        Assert.Equal(2, speakers.Length);
+        Assert.Contains("Cast on this vote", speakers[0].TextContent);
+        Assert.StartsWith("Yes", speakers[0].QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
+        Assert.DoesNotContain("Cast on this vote", speakers[1].TextContent);
+        Assert.Equal(1, Count(row.TextContent, "Cast on this vote"));
     }
+
+    [Fact]
+    public async Task ARowSaysTheStatementDateOrThatNoDateIsStatedWithTheStatementPageWords()
+    {
+        var dated = Statement("a", PublishedApprover.Code, ("o1", "Ada Able"));
+        var page = await RenderAsync(Vote() with { Statements = [dated, dated with { RecordId = new string('d', 64), StatementDate = null }], StatementTotal = 2 });
+
+        var dates = page.QuerySelectorAll(".vote-statements li .official-meta > span:last-child").Select(date => date.TextContent).ToArray();
+        Assert.Equal(["Said on 12 Sep 2026", StatementPageView.DateNotStated], dates);
+    }
+
+    private static int Count(string text, string part) => (text.Length - text.Replace(part, "", StringComparison.Ordinal).Length) / part.Length;
 
     [Fact]
     public async Task ACutListSaysHowManyAreLinkedAndAFullListSaysNothing()
@@ -105,5 +122,22 @@ public sealed class VoteStatementsAndStatusTests
 
         Assert.Contains("The bill became law as Public Law 119-111 on 18 Sep 2026, according to Congress.gov, read on 5 Nov 2026.", law.QuerySelector(".vote-explain")!.TextContent);
         Assert.DoesNotContain("became law", other.QuerySelector(".vote-explain")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheLawLineTakesThePlaceOfTheNotShownLineAndFollowsAKnownNextStep()
+    {
+        var lawBill = Vote().Bill! with { StatusLabel = "Became law", PublicLaw = "119-111", StatusDate = new(2026, 9, 18), StatusReadAtUtc = new DateTimeOffset(2026, 11, 5, 9, 0, 0, TimeSpan.Zero) };
+        var unknownStep = await RenderAsync(Vote() with { Kind = PublishedVoteKind.Other, Bill = lawBill });
+        var unknownStepNoLaw = await RenderAsync(Vote() with { Kind = PublishedVoteKind.Other });
+        var knownStep = await RenderAsync(Vote() with { Bill = lawBill });
+
+        var lines = unknownStep.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent).ToArray();
+        Assert.Equal(["The bill became law as Public Law 119-111 on 18 Sep 2026, according to Congress.gov, read on 5 Nov 2026."], lines);
+        Assert.Equal([NextStep.NotShown], unknownStepNoLaw.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent));
+        var known = knownStep.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent).ToArray();
+        Assert.Equal(2, known.Length);
+        Assert.NotEqual(NextStep.NotShown, known[0]);
+        Assert.StartsWith("The bill became law", known[1]);
     }
 }

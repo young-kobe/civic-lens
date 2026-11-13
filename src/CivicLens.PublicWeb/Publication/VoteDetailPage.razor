@@ -38,10 +38,9 @@
                         <p>@meaning.No</p>
                     }
                     <h3>@NextStep.Heading</h3>
-                    <p>@(wording?.NextStep ?? NextStep.NotShown)</p>
-                    @if (VotePageView.BecameLaw(Data) is { } law)
+                    @foreach (var line in VotePageView.NextStepLines(Data, wording?.NextStep))
                     {
-                        <p>@law</p>
+                        <p>@line</p>
                     }
                 </section>
                 @if (partyBars.Count == 0)
@@ -85,7 +84,6 @@
                             @foreach (var statement in Data.Statements)
                             {
                                 <li>
-                                    <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
                                     <div>
                                         <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
                                         @if (statement.Label is not null)
@@ -93,16 +91,19 @@
                                             <span class="official-source-label" data-origin="@statement.TextOrigin.ToString().ToLowerInvariant()">@statement.Label</span>
                                         }
                                         <p class="official-meta">
-                                            <span>@string.Join(", ", statement.Speakers.Select(speaker => speaker.Name))</span>
-                                            <span>@(statement.StatementDate is { } said ? "Said on " + Moment.Day(said) : "Date not stated")</span>
-                                        </p>
-                                        @foreach (var speaker in statement.Speakers)
-                                        {
-                                            @if (Data.Members.FirstOrDefault(member => member.OfficialId == speaker.OfficialId) is { } member)
+                                            @foreach (var speaker in statement.Speakers)
                                             {
-                                                <p class="official-related"><span>@VotePageView.CastOnThisVote</span> <a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a> <SharedVoteCast Side="@PublishedOfficialVote.SideOf(member.Cast)"><CastWord Cast="@member.Cast" /></SharedVoteCast></p>
+                                                <span class="vote-statement-speaker">
+                                                    <a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a>
+                                                    @if (Data.Members.FirstOrDefault(member => member.OfficialId == speaker.OfficialId) is { } member)
+                                                    {
+                                                        <span>@VotePageView.CastOnThisVote</span>
+                                                        <SharedVoteCast Side="@PublishedOfficialVote.SideOf(member.Cast)"><CastWord Cast="@member.Cast" /></SharedVoteCast>
+                                                    }
+                                                </span>
                                             }
-                                        }
+                                            <span>@StatementPageView.RowDate(statement.StatementDate)</span>
+                                        </p>
                                         @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
                                         {
                                             <p class="official-related"><span class="link-checker">@checker</span></p>

@@ -477,7 +477,8 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         Assert.Equal([approver.ToString()], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'relationship'"));
         Assert.Equal(0, first.OpenRecordsWithoutApprover);
         var other = approver == PublishedApprover.Code ? PublishedApprover.Person : PublishedApprover.Code;
-        await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillApproversAsync([oldEntry with { ApprovedBy = other }], default));
+        var conflict = await Assert.ThrowsAsync<PublicationConflictException>(() => publications.FillApproversAsync([oldEntry with { ApprovedBy = other }], default));
+        Assert.Contains("The published approval differs from its kept record file.", conflict.Message, StringComparison.Ordinal);
         Assert.Equal([approver.ToString()], await ReadAsync("SELECT approved_by FROM published_entries WHERE kind = 'relationship'"));
         Assert.False((await publications.ReadEntryCandidatesAsync(default)).Single(candidate => candidate.Kind == PublishedRecordKind.Relationship).NeedsBackfill);
     }

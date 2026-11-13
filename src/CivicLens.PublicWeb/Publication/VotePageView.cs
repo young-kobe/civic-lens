@@ -29,8 +29,19 @@ public static class VotePageView
     public static string? StatementsCount(VotePageData vote) =>
         vote.StatementTotal > vote.Statements.Length ? $"The {vote.Statements.Length} newest of {vote.StatementTotal}." : null;
 
+    /// <summary>
+    /// The lines under the next step heading. The law line takes the place of the not-shown line, so the page never says that it does not know what happens next and then tells the reader.
+    /// A known next step stays, and the law line follows it.
+    /// </summary>
+    public static IReadOnlyList<string> NextStepLines(VotePageData vote, string? nextStep)
+    {
+        var step = nextStep ?? NextStep.NotShown;
+        if (BecameLaw(vote) is not { } law) return [step];
+        return step == NextStep.NotShown ? [law] : [step, law];
+    }
+
     /// <summary>The law line of the mockup. It shows only when the latest action of the bill makes it law, and only with the date that Civic Lens read it.</summary>
-    public static string? BecameLaw(VotePageData vote) => vote.Bill is { PublicLaw: { } law, StatusDate: { } day, StatusReadAtUtc: { } read }
+    private static string? BecameLaw(VotePageData vote) => vote.Bill is { PublicLaw: { } law, StatusDate: { } day, StatusReadAtUtc: { } read }
         ? $"The bill became law as Public Law {law} on {Moment.Day(day)}, according to Congress.gov, read on {Moment.Day(read)}."
         : null;
 

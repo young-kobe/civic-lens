@@ -147,6 +147,7 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(badge, page.QuerySelector(".vote-bill .badge")?.TextContent.Trim());
         Assert.Equal(law, page.QuerySelector(".vote-explain")!.TextContent.Contains(
             "The bill became law as Public Law 119-111 on 18 Sep 2026, according to Congress.gov, read on 5 Nov 2026.", StringComparison.Ordinal));
+        if (law) Assert.DoesNotContain(NextStep.NotShown, page.QuerySelector(".vote-explain")!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

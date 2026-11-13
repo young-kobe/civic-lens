@@ -175,23 +175,31 @@ internal static class PublishedEntries
 
     private static readonly string InsertEntries = BuildInsertEntries();
 
-    private const string ReadCandidates = """
-        SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", s.first_release AS "FirstRelease",
-            s.last_release AS "LastRelease", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.kind = 'action' AND e.bill_line IS NULL) AS "LacksBillLine", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.kind IN ('statement', 'relationship') AND e.approved_by IS NULL) AS "LacksApprover", EXISTS (
-                SELECT 1 FROM published_entries e
-                WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
-                    AND e.approved_at_utc_ticks IS NULL) AS "LacksApprovalTime"
-        FROM publication_record_states s
-        ORDER BY s.kind, s.record_id, s.revision_number
-        """;
+    private static readonly string ReadCandidates = BuildReadCandidates();
+
+    /// <summary>The candidate query. The kinds that lack an approver come from <see cref="PublishedRecordEntry.NamesApprover"/>, so that rule has one owner.</summary>
+    private static string BuildReadCandidates()
+    {
+        var approverKinds = string.Join(", ", Enum.GetValues<PublishedRecordKind>().Where(PublishedRecordEntry.NamesApprover)
+            .Select(kind => $"'{PublishedRecordReference.NameOf(kind)}'"));
+        return $$"""
+            SELECT s.kind AS "Kind", s.record_id AS "RecordId", s.revision_number AS "RevisionNumber", s.first_release AS "FirstRelease",
+                s.last_release AS "LastRelease", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number) AS "HasEntry", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                        AND e.kind = 'action' AND e.bill_line IS NULL) AS "LacksBillLine", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                        AND e.kind IN ({{approverKinds}}) AND e.approved_by IS NULL) AS "LacksApprover", EXISTS (
+                    SELECT 1 FROM published_entries e
+                    WHERE e.kind = s.kind AND e.record_id = s.record_id AND e.revision_number = s.revision_number
+                        AND e.approved_at_utc_ticks IS NULL) AS "LacksApprovalTime"
+            FROM publication_record_states s
+            ORDER BY s.kind, s.record_id, s.revision_number
+            """;
+    }
 
     public static async Task<IReadOnlyList<PublishedEntryCandidate>> ReadCandidatesAsync(CollectionAttemptDbContext db,
         CancellationToken cancellationToken)
