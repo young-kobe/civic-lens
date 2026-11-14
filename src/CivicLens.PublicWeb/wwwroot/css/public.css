@@ -522,6 +522,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .bill-members [data-bill-members-body]:empty { display: none; }
 .bill-card-heading { margin: 0; font-family: var(--heading); font-size: 1.25rem; font-weight: 800; letter-spacing: -.015em; }
 .bill-page .ai-label-tag:not([data-origin="code"]) { border-radius: 14px; }
+.bill-page .quote { margin: var(--s3) 0; padding: 2px 0 2px 14px; border-left-width: 4px; font-family: var(--heading); font-size: var(--t-lg); line-height: 1.5; }
 .bill-why-title { margin: var(--s4) 0 var(--s2); font-size: var(--t-lg); font-weight: 800; line-height: 1.25; }
 .bill-terms { display: grid; gap: var(--s3); }
 .bill-terms > h2 { margin: 0; font-size: clamp(var(--t-h2), 3vw, 2rem); font-weight: 800; letter-spacing: -.015em; }

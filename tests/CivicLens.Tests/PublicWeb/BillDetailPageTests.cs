@@ -354,7 +354,7 @@ public sealed class BillDetailPageTests
         var label = section.QuerySelector(".ai-summary.ai-summary-ai > .ai-label")!;
         Assert.Equal(BillTextWords.KeyTermsLabel, label.TextContent);
         Assert.Equal(["Landlord", "Tenant"], terms.Select(term => term.QuerySelector("dt")!.TextContent));
-        Assert.Equal("The term \"landlord\" means an owner of a dwelling unit", terms[0].QuerySelector("blockquote.quote")!.TextContent);
+        Assert.Equal("\"The term “landlord” means an owner of a dwelling unit\"", terms[0].QuerySelector("blockquote.quote")!.TextContent);
         Assert.Equal($"{BillTextWords.KeyTermCutNote} {BillTextWords.KeyTermCutLink}", terms[0].QuerySelector(".bill-term-cut")!.TextContent);
         Assert.Equal("This quote is only the start of the definition. Read the rest on Congress.gov.", terms[0].QuerySelector(".bill-term-cut")!.TextContent);
         var link = terms[0].QuerySelector(".bill-term-cut a")!;
@@ -387,6 +387,26 @@ public sealed class BillDetailPageTests
         Assert.Equal("Based on: Introduced in House, 11 Sep 2025. Read the full text on Congress.gov. This summary covers the first 60,000 of 84,210 characters. Later sections are not covered.", source);
         Assert.Equal(BillTextWords.Label, fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
         Assert.Null(page.QuerySelector(".bill-main > details.source-fold"));
+    }
+
+    [Fact]
+    public async Task EachSentenceQuoteStandsUnderItsOwnPartInViewOrderAndASummaryWithNoSentencesShowsNoQuote()
+    {
+        var page = await RenderAsync(TextBill with
+        {
+            TextSentences =
+            [
+                new(PublishedTextPart.Summary, "The bill would add a tax credit.", "A taxpayer may claim a credit of $500."),
+                new(PublishedTextPart.Summary, "It would end in 2030.", "This section expires on December 31, 2030."),
+                new(PublishedTextPart.WhyItMatters, "Families with a child could pay less tax.", "The credit applies to each qualifying child.")
+            ]
+        });
+        var summary = page.QuerySelector(".bill-main > .ai-summary")!;
+
+        Assert.Equal(["span", "p", "blockquote", "blockquote", "h2", "p", "blockquote"], summary.Children.Select(element => element.LocalName));
+        Assert.Equal(["A taxpayer may claim a credit of $500.", "This section expires on December 31, 2030.", "The credit applies to each qualifying child."],
+            summary.QuerySelectorAll("blockquote.quote").Select(quote => quote.TextContent));
+        Assert.Empty((await RenderAsync(TextBill)).QuerySelectorAll(".bill-main > .ai-summary blockquote"));
     }
 
     [Fact]

@@ -33,10 +33,12 @@
                 {
                     <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label" Check="CrsCheck">
                         <p>@Data.Summary</p>
+                        @SentenceQuotes(PublishedTextPart.Summary)
                         @if (Data.WhyItMatters is { } whyItMatters)
                         {
                             <h2 class="bill-why-title">@BillTextWords.WhyItMattersHeading</h2>
                             <p>@whyItMatters</p>
+                            @SentenceQuotes(PublishedTextPart.WhyItMatters)
                         }
                     </AiSummary>
                 }
@@ -60,7 +62,7 @@
                                     <div class="bill-term">
                                         <dt>@term.Term</dt>
                                         <dd>
-                                            <blockquote class="quote">@EncodedEvidence.Markup(term.Definition)</blockquote>
+                                            <blockquote class="quote">"@EncodedEvidence.Markup(term.Quote)"</blockquote>
                                             @if (term.Cut)
                                             {
                                                 <p class="bill-term-cut">@BillTextWords.KeyTermCutNote <a href="@Data.CongressGovUrl" rel="noopener noreferrer">@BillTextWords.KeyTermCutLink</a></p>
@@ -179,6 +181,14 @@
             parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
         return string.Join(' ', parts);
     }
+
+    /// <summary>The exact quote of each sentence of one part, in view order, so each quote stands under the text that it supports.</summary>
+    private RenderFragment SentenceQuotes(PublishedTextPart part) => @<text>
+        @foreach (var sentence in Data.TextSentences.Where(item => item.Part == part))
+        {
+            <blockquote class="quote">@EncodedEvidence.Markup(sentence.Quote)</blockquote>
+        }
+    </text>;
 
     private static string TextSourceLine(BillTextSourceData text) => string.Join(' ', new[]
     {

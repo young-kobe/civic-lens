@@ -161,12 +161,12 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>
-    private static BillTextSentence[] ReadTextSentences(DbDataReader reader)
+    private static BillTextSentenceData[] ReadTextSentences(DbDataReader reader)
     {
         var parts = reader.GetFieldValue<string[]>(39);
         var sentences = reader.GetFieldValue<string[]>(40);
         var quotes = reader.GetFieldValue<string[]>(41);
-        return [.. parts.Select((part, index) => new BillTextSentence(ViewColumns.Enum<PublishedTextPart>(part), sentences[index], quotes[index]))];
+        return [.. parts.Select((part, index) => new BillTextSentenceData(ViewColumns.Enum<PublishedTextPart>(part), sentences[index], quotes[index]))];
     }
 
     /// <summary>Reads the facts of the bill number match for a bounded set of bills in one query. A bill that left the release has no entry.
