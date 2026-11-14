@@ -70,9 +70,9 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
         var chamber = BillNumbers.ChamberOf(bill.BillType);
         var sponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Sponsor).Select(Person).ToArray();
         var cosponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Cosponsor && row.WithdrawnOn is null).ToArray();
-        var steps = BillSteps.Of(bill, sponsors.FirstOrDefault()?.Name, actions);
+        var steps = BillSteps.Of(bill, sponsors.FirstOrDefault(), actions);
         return new(detail.Release, bill.RecordId, bill.RevisionNumber, bill.Congress, BillNumbers.Of(bill.BillType, bill.BillNumber), bill.BillTitle, bill.Headline,
-            chamber, bill.Summary, bill.TextOrigin, bill.Label, bill.EventDate)
+            chamber, bill.Summary, bill.TextOrigin, bill.Label, BillSteps.IntroducedOn(sponsors.FirstOrDefault()))
         {
             BillLine = bill.BillLine,
             PolicyArea = bill.PolicyArea,
