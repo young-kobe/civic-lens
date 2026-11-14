@@ -337,6 +337,18 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
+    public async Task AVoteDraftWithABannedPhraseGoesBackWithTheReasonThatNamesThePhrase()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "The House passed a resolution that aims to cut costs", summary: SummaryText)).Draft(Drafted);
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Contains("uses the phrase \"aims to\"", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
+        Assert.Equal(HeadlineText, Assert.Single(store.Revisions).Headline);
+    }
+
+    [Fact]
     public async Task AVoteDraftAtThirteenPointFiveIsAcceptedAndOneAtFourteenPointOneGoesBackWithTheOneRepairMessage()
     {
         var passing = Output(headline: GradePassages.PassingHeadline, summary: GradePassages.Summary);

@@ -24,6 +24,7 @@ public static class StatementDraftResolver
         CheckText(output.Headline, StatementDraftRevision.MaximumHeadlineLength, "headline", required: true, errors);
         CheckText(output.Summary, StatementDraftRevision.MaximumSummaryLength, "summary", required: true, errors);
         CheckConfidence(output.Confidence, "confidence", errors);
+        errors.AddRange(AiTextPhrases.Errors([output.Headline, output.Summary]));
         if (AiTextRules.PassageGradeError([output.Headline, output.Summary]) is { } passageGrade) errors.Add(passageGrade);
         var speakers = ResolveSpeakers(output.SpeakerOfficialIds, officials, errors);
         var others = ResolveOtherSpeakers(output.OtherSpeakers, extraction.Text, errors, citationErrors);

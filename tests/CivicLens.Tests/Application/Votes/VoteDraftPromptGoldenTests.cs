@@ -10,10 +10,10 @@ namespace CivicLens.Tests.Application.Votes;
 
 public sealed class VoteDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "36b37c7192b6a419152c080d3a35c8b54aeb99292a29ceca32067b73ff9e5806";
-    private const string SenateSystemSha256 = "2a0b15d8efcf5e8a6837fb5cee216a1f45a8d9920211497787e3db6c7278e1b9";
+    private const string SystemSha256 = "68e39f5ff75809480e6de75e2522c3f2bf27c21b982355d920b359fe94062974";
+    private const string SenateSystemSha256 = "7fa054545418aa57c76a03711fedca1826fdd40a5951a654b1957916cfa0a686";
     private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "e3c5247fddba3f1918830a5da682170a8d0203bd9e6ef219bb456df928cf35be";
+    private const string InputHash = "a985b981acd3a0723fd5632d64d176ad2a68d214a0ae5c284a9b6928c1c84d59";
 
     [Fact]
     public async Task TheHouseAndSenatePromptsHoldTheSharedAiTextSentencesAndStateTheCodeGradeLimit()
@@ -37,7 +37,7 @@ public sealed class VoteDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}) or " +
             $"{nameof(VoteDraftTask.SchemaVersion)} ({VoteDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v6", "vote-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v7", "vote-draft-schema-v2", "claude-haiku-5-5"),
             (VoteDraftTask.Task, VoteDraftTask.TaskVersion, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, VoteDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

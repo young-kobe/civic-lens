@@ -9,7 +9,7 @@ public static class ExecutiveSummaryTask
 {
     public const string Task = "executive-summary";
     public const string TaskVersion = "executive-summary-v1";
-    public const string PromptVersion = "executive-summary-prompt-v3";
+    public const string PromptVersion = "executive-summary-prompt-v4";
     public const string SchemaVersion = "executive-summary-schema-v1";
     public const string Model = ActionDraftTask.Model;
     public const int MaximumOutputTokens = 3_000;

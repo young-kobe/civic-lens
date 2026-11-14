@@ -141,6 +141,18 @@ public sealed class StatementDraftResolverTests
         Assert.StartsWith(GradePassages.RepairMessageStart, Assert.Single(refused.Errors), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ADraftWithABannedPhraseGetsTheReasonThatNamesThePhrase()
+    {
+        var fields = Fields(null, null, ["a rent cap for tenants"], [], 0.8, "Warren backs a rent cap");
+        fields["summary"] = "Warren backs a rent cap. She said the bill seeks to cap rent.";
+
+        var refused = Resolve(JsonSerializer.Serialize(fields));
+
+        Assert.Null(refused.Revision);
+        Assert.Contains("\"She said the bill seeks to cap rent.\" uses the phrase \"seeks to\"", Assert.Single(refused.Errors), StringComparison.Ordinal);
+    }
+
     private static string GradedOutput(string headline)
     {
         var fields = Fields(null, null, ["a rent cap for tenants"], [], 0.8, headline);

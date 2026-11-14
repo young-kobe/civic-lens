@@ -76,7 +76,8 @@ public static class AiTextRules
     private static ImmutableArray<string> PassageOf(IEnumerable<string?> pieces) =>
         [.. pieces.Select(piece => piece?.Trim() ?? string.Empty).Where(piece => piece.Length > 0)];
 
-    private static IEnumerable<string> SentencesOf(string piece)
+    /// <summary>The sentences of one piece, split where <see cref="SentenceEnds"/> says. <see cref="AiTextPhrases"/> checks each one.</summary>
+    internal static IEnumerable<string> SentencesOf(string piece)
     {
         var start = 0;
         foreach (var end in SentenceEnds.After(piece))

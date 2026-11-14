@@ -533,6 +533,18 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ACrsSummaryDraftWithABannedPhraseGoesBackWithTheReasonThatNamesThePhrase()
+    {
+        var model = new FakeHeadlineSummaryModel().Draft(Output(summary: "Elizabeth Warren introduced a housing bill on January 3, 2025. The bill helps renters.")).Draft(Output());
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Equal(2, model.Requests.Count);
+        Assert.Contains("\"The bill helps renters.\" uses the phrase \"the bill helps\"", model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("helps", Assert.Single(store.Revisions).Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ACrsSummaryDraftAtThirteenPointFiveIsAcceptedAndOneAtFourteenPointOneGoesBackWithTheOneRepairMessage()
     {
         var passing = Output(headline: GradePassages.PassingHeadline, summary: GradePassages.Summary);

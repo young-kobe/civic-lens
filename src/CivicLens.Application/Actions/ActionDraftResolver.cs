@@ -36,6 +36,7 @@ public static class ActionDraftResolver
         CheckNames(output.Summary.Text, "summary", snapshot, errors);
         CheckNoSummarySentence(output.Headline.Text, "headline", errors);
         CheckNoSummarySentence(output.Summary.Text, "summary", errors);
+        errors.AddRange(AiTextPhrases.Errors([output.Headline.Text, output.Summary.Text]));
         if (AiTextRules.PassageGradeError([output.Headline.Text, output.Summary.Text]) is { } passageGrade) errors.Add(passageGrade);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
@@ -69,6 +70,7 @@ public static class ActionDraftResolver
         var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", quotes, errors);
         CheckSentences(summary, "summary", context.Snapshot, figures, errors);
         CheckSentences(why, "whyItMatters", context.Snapshot, figures, errors);
+        errors.AddRange(AiTextPhrases.Errors(PassageOf(output)));
         if (AiTextRules.QuotedPassageGradeError(PassageOf(output)) is { } passageGrade) errors.Add(passageGrade);
         var keyTermErrors = new List<string>();
         var terms = keyTerms?.Resolve(output.KeyTerms, quotes, keyTermErrors) ?? default;

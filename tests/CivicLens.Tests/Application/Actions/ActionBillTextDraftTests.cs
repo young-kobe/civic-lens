@@ -204,6 +204,15 @@ public sealed class ActionBillTextDraftTests
     }
 
     [Fact]
+    public async Task ABillTextDraftWithABannedPhraseInASentenceIsRefusedWithTheReasonThatNamesThePhrase()
+    {
+        const string empty = "The bill supports tenants with low income.";
+        var refused = ActionDraftResolver.ResolveBillText(Output([(empty, FirstQuote), (SecondPlain, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.Contains($"\"{empty}\" uses the phrase \"the bill supports\". Write who it affects and what it changes.", Assert.Single(refused.Errors), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheHeadlineIsPartOfThePassage()
     {
         var plainPassage = new[] { FirstPlain, SecondPlain, WhyPlain };
