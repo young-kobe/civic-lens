@@ -40,6 +40,15 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
+    public async Task TheMemberCardOfADelegateNamesTheTerritoryAndNoDistrict()
+    {
+        var page = await RenderAsync(Data(officials: [new("james-moylan", "James Moylan", PublishedOfficeKind.Representative, null, "GU", 0, "Republican")]));
+
+        Assert.Equal("Delegate for Guam. Republican.", page.QuerySelector(".search-official p")!.TextContent);
+        Assert.DoesNotContain("district 0", page.Body!.TextContent);
+    }
+
+    [Fact]
     public async Task OfficialThenBillPinThenResultsThenFiltersInThatOrder()
     {
         var page = await RenderAsync(Data(

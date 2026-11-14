@@ -913,6 +913,9 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .list-fold .in { padding: var(--s4); }
 .list-fold .in .lists-filter { margin-top: 0; padding: 0; border-radius: 0; background: none; box-shadow: none; }
 .board-lede { max-width: var(--measure); color: var(--muted); }
+.board-delegates { margin: var(--s5) 0 var(--s4); }
+.board-delegates h3 { margin: 0 0 var(--s1); font-size: var(--t-lg); font-weight: 800; }
+.board-delegates > p { max-width: var(--measure); margin: 0; }
 .board-kinds { margin: 0 0 var(--s3); }
 .board-kind { display: flex; justify-content: space-between; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
 .board-kind dt { margin: 0; }
