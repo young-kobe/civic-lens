@@ -1,0 +1,192 @@
+BEGIN
+SET
+                                                                                                                                                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                                                                                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Right Join  (cost=3381.59..3387.69 rows=147 width=21) (actual time=1924.722..1925.247 rows=540.00 loops=1)
+   Hash Cond: (((e.person_id)::text = (e_1.person_id)::text) AND ((v.chamber)::text = (v_1.chamber)::text) AND (v.congress = v_1.congress) AND ((e.party)::text = (e_1.party)::text))
+   Buffers: shared hit=23618 read=32007 written=4, temp read=2134 written=2141
+   ->  HashAggregate  (cost=1373.34..1375.34 rows=200 width=65) (actual time=493.118..493.260 rows=539.00 loops=1)
+         Group Key: e.person_id, v.chamber, v.congress, e.party
+         Batches: 1  Memory Usage: 129kB
+         Buffers: shared hit=12152 read=14547
+         ->  Nested Loop  (cost=673.24..1352.10 rows=944 width=1655) (actual time=8.397..418.133 rows=140363.00 loops=1)
+               Buffers: shared hit=12152 read=14547
+               ->  Hash Join  (cost=672.69..1137.40 rows=4 width=90) (actual time=4.292..17.100 rows=1588.00 loops=1)
+                     Hash Cond: (((s.record_id)::text = (v.record_id)::text) AND (s.revision_number = v.revision_number))
+                     Buffers: shared hit=2459 read=729
+                     ->  Nested Loop  (cost=0.41..455.59 rows=625 width=163) (actual time=0.159..10.459 rows=1588.00 loops=1)
+                           Buffers: shared hit=2459 read=104
+                           ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.071..0.074 rows=1.00 loops=1)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..441.19 rows=626 width=77) (actual time=0.079..9.903 rows=1588.00 loops=1)
+                                 Index Cond: (first_release <= r.release_number)
+                                 Filter: (((kind)::text = 'vote'::text) AND ((last_release IS NULL) OR (last_release >= r.release_number)))
+                                 Rows Removed by Filter: 22849
+                                 Index Searches: 1
+                                 Buffers: shared hit=2457 read=104
+                     ->  Hash  (cost=643.91..643.91 rows=1891 width=159) (actual time=4.102..4.104 rows=1901.00 loops=1)
+                           Buckets: 2048  Batches: 1  Memory Usage: 371kB
+                           Buffers: shared read=625
+                           ->  Seq Scan on vote_revisions v  (cost=0.00..643.91 rows=1891 width=159) (actual time=0.155..3.057 rows=1901.00 loops=1)
+                                 Buffers: shared read=625
+               ->  Index Scan using ix_vote_member_list_entries_tallies on vote_member_list_entries e  (cost=0.55..51.29 rows=238 width=92) (actual time=0.130..0.228 rows=88.39 loops=1588)
+                     Index Cond: ((list_id)::text = (v.member_list_id)::text)
+                     Filter: (CASE WHEN (((v.alignment)::text = 'Split'::text) AND ((party)::text = ANY ('{Democrat,Republican}'::text[])) AND ((vote_cast)::text = ANY ('{Yea,Aye,Nay,No}'::text[])) AND (CASE party WHEN 'Democrat'::text THEN v.democrat_majority WHEN 'Republican'::text THEN v.republican_majority ELSE NULL::character varying END IS NOT NULL)) THEN (CASE vote_cast WHEN 'Yea'::text THEN 'Yea'::text WHEN 'Aye'::text THEN 'Yea'::text ELSE 'Nay'::text END <> (CASE party WHEN 'Democrat'::text THEN v.democrat_majority WHEN 'Republican'::text THEN v.republican_majority ELSE NULL::character varying END)::text) ELSE NULL::boolean END IS NOT NULL)
+                     Rows Removed by Filter: 152
+                     Index Searches: 1588
+                     Buffers: shared hit=9693 read=13818
+   ->  Hash  (cost=2005.31..2005.31 rows=147 width=33) (actual time=1431.567..1431.609 rows=540.00 loops=1)
+         Buckets: 1024  Batches: 1  Memory Usage: 44kB
+         Buffers: shared hit=11466 read=17460 written=4, temp read=2134 written=2141
+         ->  Unique  (cost=2003.84..2005.31 rows=147 width=33) (actual time=1188.206..1431.166 rows=540.00 loops=1)
+               Buffers: shared hit=11466 read=17460 written=4, temp read=2134 written=2141
+               ->  Sort  (cost=2003.84..2004.21 rows=147 width=33) (actual time=1188.202..1343.617 rows=381096.00 loops=1)
+                     Sort Key: e_1.person_id, v_1.chamber, e_1.party
+                     Sort Method: external merge  Disk: 17072kB
+                     Buffers: shared hit=11466 read=17460 written=4, temp read=2134 written=2141
+                     ->  Hash Join  (cost=1329.05..1998.55 rows=147 width=33) (actual time=13.418..664.838 rows=381096.00 loops=1)
+                           Hash Cond: ((e_1.person_id)::text = (officials.official_id)::text)
+                           Buffers: shared hit=11463 read=17460 written=4
+                           ->  Nested Loop  (cost=677.96..1332.96 rows=948 width=1655) (actual time=5.446..511.164 rows=381096.00 loops=1)
+                                 Buffers: shared hit=9241 read=17458 written=4
+                                 ->  Hash Join  (cost=677.42..1142.13 rows=4 width=75) (actual time=5.300..20.743 rows=1588.00 loops=1)
+                                       Hash Cond: (((s_1.record_id)::text = (v_1.record_id)::text) AND (s_1.revision_number = v_1.revision_number))
+                                       Buffers: shared hit=2311 read=877
+                                       ->  Nested Loop  (cost=0.41..455.59 rows=625 width=163) (actual time=0.122..12.942 rows=1588.00 loops=1)
+                                             Buffers: shared hit=2311 read=252
+                                             ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_1  (cost=0.12..8.14 rows=1 width=4) (actual time=0.017..0.020 rows=1.00 loops=1)
+                                                   Index Searches: 1
+                                                   Buffers: shared hit=2
+                                             ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s_1  (cost=0.29..441.19 rows=626 width=77) (actual time=0.101..12.418 rows=1588.00 loops=1)
+                                                   Index Cond: (first_release <= r_1.release_number)
+                                                   Filter: (((kind)::text = 'vote'::text) AND ((last_release IS NULL) OR (last_release >= r_1.release_number)))
+                                                   Rows Removed by Filter: 22849
+                                                   Index Searches: 1
+                                                   Buffers: shared hit=2309 read=252
+                                       ->  Hash  (cost=648.64..648.64 rows=1891 width=144) (actual time=5.127..5.150 rows=1901.00 loops=1)
+                                             Buckets: 2048  Batches: 1  Memory Usage: 353kB
+                                             Buffers: shared read=625
+                                             ->  Seq Scan on vote_revisions v_1  (cost=0.00..648.64 rows=1891 width=144) (actual time=0.292..4.190 rows=1901.00 loops=1)
+                                                   Filter: (119 = congress)
+                                                   Buffers: shared read=625
+                                 ->  Index Scan using ix_vote_member_list_entries_tallies on vote_member_list_entries e_1  (cost=0.55..45.32 rows=239 width=88) (actual time=0.035..0.245 rows=239.98 loops=1588)
+                                       Index Cond: ((list_id)::text = (v_1.member_list_id)::text)
+                                       Filter: ((party)::text = ANY ('{Democrat,Republican}'::text[]))
+                                       Index Searches: 1588
+                                       Buffers: shared hit=6930 read=16581 written=4
+                           ->  Hash  (cost=650.70..650.70 rows=31 width=13) (actual time=7.950..7.958 rows=542.00 loops=1)
+                                 Buckets: 1024  Batches: 1  Memory Usage: 33kB
+                                 Buffers: shared hit=2222 read=2
+                                 ->  Subquery Scan on officials  (cost=17.78..650.70 rows=31 width=13) (actual time=0.327..7.731 rows=542.00 loops=1)
+                                       Buffers: shared hit=2222 read=2
+                                       ->  Nested Loop Left Join  (cost=17.78..650.39 rows=31 width=3211) (actual time=0.326..7.634 rows=542.00 loops=1)
+                                             Buffers: shared hit=2222 read=2
+                                             ->  Nested Loop  (cost=0.41..111.53 rows=31 width=25) (actual time=0.166..0.556 rows=542.00 loops=1)
+                                                   Buffers: shared hit=17 read=1
+                                                   ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_2  (cost=0.12..8.14 rows=1 width=12) (actual time=0.035..0.036 rows=1.00 loops=1)
+                                                         Index Searches: 1
+                                                         Buffers: shared hit=2
+                                                   ->  Index Only Scan using "PK_release_officials" on release_officials o  (cost=0.29..97.49 rows=590 width=17) (actual time=0.127..0.403 rows=542.00 loops=1)
+                                                         Index Cond: (release_number = r_2.release_number)
+                                                         Heap Fetches: 542
+                                                         Index Searches: 1
+                                                         Buffers: shared hit=15 read=1
+                                             ->  Limit  (cost=17.36..17.36 rows=1 width=2160) (actual time=0.012..0.012 rows=1.00 loops=542)
+                                                   Buffers: shared hit=2205 read=1
+                                                   ->  Sort  (cost=17.36..17.37 rows=2 width=2160) (actual time=0.011..0.011 rows=1.00 loops=542)
+                                                         Sort Key: x.start_on DESC, x."position" DESC
+                                                         Sort Method: top-N heapsort  Memory: 25kB
+                                                         Buffers: shared hit=2205 read=1
+                                                         ->  Index Scan using "PK_release_official_terms" on release_official_terms x  (cost=0.42..17.35 rows=2 width=2160) (actual time=0.004..0.007 rows=5.15 loops=542)
+                                                               Index Cond: ((release_number = o.release_number) AND ((official_id)::text = (o.official_id)::text))
+                                                               Filter: (start_on <= ('0001-01-01'::date + ((r_2.published_at_utc_ticks / '864000000000'::bigint))::integer))
+                                                               Index Searches: 542
+                                                               Buffers: shared hit=2199 read=1
+ Planning:
+   Buffers: shared hit=783 read=109
+ Planning Time: 13.870 ms
+ Execution Time: 1933.370 ms
+(105 rows)
+
+                       pg_get_viewdef                        
+-------------------------------------------------------------
+  SELECT official_id,                                       +
+     chamber,                                               +
+     congress,                                              +
+     party,                                                 +
+     count(*) FILTER (WHERE NOT breaks_party) AS with_party,+
+     count(*) FILTER (WHERE breaks_party) AS against_party, +
+     count(*) AS cast_count,                                +
+     min(voted_on) AS first_voted_on,                       +
+     max(voted_on) AS last_voted_on                         +
+    FROM public_api.member_votes m                          +
+   WHERE breaks_party IS NOT NULL                           +
+   GROUP BY official_id, chamber, congress, party;
+(1 row)
+
+                                                                                                                                                    pg_get_viewdef                                                                                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT e.person_id AS official_id,                                                                                                                                                                                                                                                                                  +
+     a.record_id,                                                                                                                                                                                                                                                                                                     +
+     v.chamber,                                                                                                                                                                                                                                                                                                       +
+     v.congress,                                                                                                                                                                                                                                                                                                      +
+     v.session_number,                                                                                                                                                                                                                                                                                                +
+     v.roll_call_number,                                                                                                                                                                                                                                                                                              +
+     v.voted_on,                                                                                                                                                                                                                                                                                                      +
+     v.kind,                                                                                                                                                                                                                                                                                                          +
+     v.bill_type,                                                                                                                                                                                                                                                                                                     +
+     v.bill_number,                                                                                                                                                                                                                                                                                                   +
+     v.headline,                                                                                                                                                                                                                                                                                                      +
+         CASE v.text_origin                                                                                                                                                                                                                                                                                           +
+             WHEN 'Model'::text THEN 'An AI summary of the official record'::text                                                                                                                                                                                                                                     +
+             WHEN 'Code'::text THEN 'Written automatically from Congress.gov data, with no AI'::text                                                                                                                                                                                                                  +
+             ELSE NULL::text                                                                                                                                                                                                                                                                                          +
+         END AS label,                                                                                                                                                                                                                                                                                                +
+     v.result,                                                                                                                                                                                                                                                                                                        +
+     e.vote_cast,                                                                                                                                                                                                                                                                                                     +
+     ARRAY( SELECT i.issue_id::text AS issue_id                                                                                                                                                                                                                                                                       +
+            FROM vote_revision_issues i                                                                                                                                                                                                                                                                               +
+           WHERE i.record_id::text = v.record_id::text AND i.revision_number = v.revision_number AND i.is_tracked) AS issue_ids,                                                                                                                                                                                      +
+         CASE e.vote_cast                                                                                                                                                                                                                                                                                             +
+             WHEN 'Yea'::text THEN 'Yea'::text                                                                                                                                                                                                                                                                        +
+             WHEN 'Aye'::text THEN 'Yea'::text                                                                                                                                                                                                                                                                        +
+             WHEN 'Nay'::text THEN 'Nay'::text                                                                                                                                                                                                                                                                        +
+             WHEN 'No'::text THEN 'Nay'::text                                                                                                                                                                                                                                                                         +
+             ELSE NULL::text                                                                                                                                                                                                                                                                                          +
+         END AS side,                                                                                                                                                                                                                                                                                                 +
+         CASE e.party                                                                                                                                                                                                                                                                                                 +
+             WHEN 'Democrat'::text THEN v.democrat_majority                                                                                                                                                                                                                                                           +
+             WHEN 'Republican'::text THEN v.republican_majority                                                                                                                                                                                                                                                       +
+             ELSE NULL::character varying                                                                                                                                                                                                                                                                             +
+         END AS party_majority_cast,                                                                                                                                                                                                                                                                                  +
+     e.party,                                                                                                                                                                                                                                                                                                         +
+     v.alignment,                                                                                                                                                                                                                                                                                                     +
+     v.columns_written AS alignment_known,                                                                                                                                                                                                                                                                            +
+         CASE                                                                                                                                                                                                                                                                                                         +
+             WHEN v.alignment::text = 'Split'::text AND (e.party::text = ANY (ARRAY['Democrat'::character varying, 'Republican'::character varying]::text[])) AND (e.vote_cast::text = ANY (ARRAY['Yea'::character varying, 'Aye'::character varying, 'Nay'::character varying, 'No'::character varying]::text[])) AND+
+             CASE e.party                                                                                                                                                                                                                                                                                             +
+                 WHEN 'Democrat'::text THEN v.democrat_majority                                                                                                                                                                                                                                                       +
+                 WHEN 'Republican'::text THEN v.republican_majority                                                                                                                                                                                                                                                   +
+                 ELSE NULL::character varying                                                                                                                                                                                                                                                                         +
+             END IS NOT NULL THEN                                                                                                                                                                                                                                                                                     +
+             CASE e.vote_cast                                                                                                                                                                                                                                                                                         +
+                 WHEN 'Yea'::text THEN 'Yea'::text                                                                                                                                                                                                                                                                    +
+                 WHEN 'Aye'::text THEN 'Yea'::text                                                                                                                                                                                                                                                                    +
+                 ELSE 'Nay'::text                                                                                                                                                                                                                                                                                     +
+             END <>                                                                                                                                                                                                                                                                                                   +
+             CASE e.party                                                                                                                                                                                                                                                                                             +
+                 WHEN 'Democrat'::text THEN v.democrat_majority                                                                                                                                                                                                                                                       +
+                 WHEN 'Republican'::text THEN v.republican_majority                                                                                                                                                                                                                                                   +
+                 ELSE NULL::character varying                                                                                                                                                                                                                                                                         +
+             END::text                                                                                                                                                                                                                                                                                                +
+             ELSE NULL::boolean                                                                                                                                                                                                                                                                                       +
+         END AS breaks_party,                                                                                                                                                                                                                                                                                         +
+     v.text_origin                                                                                                                                                                                                                                                                                                    +
+    FROM public_api.active_records a                                                                                                                                                                                                                                                                                  +
+      JOIN vote_revisions v ON v.record_id::text = a.record_id::text AND v.revision_number = a.revision_number                                                                                                                                                                                                        +
+      JOIN vote_member_list_entries e ON e.list_id::text = v.member_list_id::text                                                                                                                                                                                                                                     +
+   WHERE a.kind::text = 'vote'::text;
+(1 row)
+
+ROLLBACK
