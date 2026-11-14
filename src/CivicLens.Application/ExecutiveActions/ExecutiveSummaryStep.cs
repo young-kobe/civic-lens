@@ -37,7 +37,7 @@ public sealed class ExecutiveSummaryStep(IExecutiveSummaryStore store, IExecutiv
         var first = ExecutiveSummaryPrompt.Build(evidence, settings.PromptByteCap);
         if (first is null) return await attempt.CompleteAsync(State.Blocked, ExecutiveSummaryErrorCodes.OverByteCap, cancellationToken);
         var loop = new AnalysisValidationLoop<ExecutiveSummaryRun, ExecutiveActionRevision>(Wrap, attempt, Core.Analysis.AnalysisRunOutcome.Drafted,
-            ExecutiveSummaryTask.MaximumValidationPasses,
+            AiTextRules.MaximumValidationPasses,
             errors => errors.IsDefaultOrEmpty ? first : ExecutiveSummaryPrompt.Build(evidence, settings.PromptByteCap, errors), model.DraftAsync,
             (json, run) => ExecutiveSummaryResolver.Resolve(json, evidence, run.FinishedAtUtc), ReadRunAsync);
         return await RunLoopAsync(attempt, loop, cancellationToken);

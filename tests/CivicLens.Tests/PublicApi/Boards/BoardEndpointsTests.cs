@@ -94,6 +94,58 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task EachFullBoardPageListsEveryMemberWithABreakInShareOrderAndTheBoardsPageLinksIt()
+    {
+        string[] houseDemocrats = [.. Enumerable.Range(0, 11).Select(index => $"hd{index:00}")];
+        string[] house = [.. houseDemocrats, "p0", "p7", "p1"];
+        // Democrats vote Yea with their party and Nay against it. hd00 to hd10 break 1 to 11 times, p7 breaks 12 times, and p0 never breaks.
+        string HouseCast(string person, int index) => person switch
+        {
+            "p0" => "Yea",
+            "p7" => index < 12 ? "Nay" : "Yea",
+            "p1" => index < 2 ? "Yea" : "Nay",
+            _ => index <= int.Parse(person[2..], System.Globalization.CultureInfo.InvariantCulture) ? "Nay" : "Yea"
+        };
+        string SenateCast(string person, int index) => person switch
+        {
+            "p3" => index < 3 ? "Nay" : "Yea",
+            "p4" => index < 1 ? "Yea" : "Nay",
+            _ => index < 4 ? "Yea" : "Nay"
+        };
+        string[] senate = ["p3", "p4", "p5"];
+        var votes = Enumerable.Range(0, 25).Select(index => Vote((char)('a' + index), "House", 119, index + 1, house, [.. house.Select(person => HouseCast(person, index))], "Split"))
+            .Concat(Enumerable.Range(0, 25).Select(index => Vote((char)('A' + index), "Senate", 119, index + 1, senate, [.. senate.Select(person => SenateCast(person, index))], "Split") with
+            { RecordId = (index + 200).ToString("x64") })).ToArray();
+        await using var host = await StartAsync(votes, serverPages: true, extraOfficials: [.. houseDemocrats.Select(id =>
+            new SeededOfficial(id, $"House Dem {id[2..]}", new SeededTerm("House", "Representative", "2021-01-03") { State = "NY", District = 2 + int.Parse(id[2..], System.Globalization.CultureInfo.InvariantCulture), Party = "Democrat" }))]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE vote_member_list_entries SET party = 'Democrat' WHERE person_id LIKE 'hd%'");
+
+        async Task<AngleSharp.Dom.IDocument> PageAsync(string path)
+        {
+            using var response = await host.Client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.StartsWith("W/\"r1-", response.Headers.ETag!.ToString());
+            return new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync());
+        }
+        static string[] Names(AngleSharp.Dom.IDocument page) => [.. page.QuerySelectorAll(".board-panel .list-row-title").Select(link => link.TextContent)];
+
+        var houseDemocratPage = await PageAsync("/web/board-house-democrat.html");
+        Assert.Equal(["Hal Hale", .. Enumerable.Range(0, 11).Reverse().Select(index => $"House Dem {index:00}")], Names(houseDemocratPage));
+        Assert.Equal("https://civic-lens.test/board-house-democrat.html", houseDemocratPage.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
+        Assert.Equal("Delegate for DC", houseDemocratPage.QuerySelectorAll(".board-panel .list-row-meta span")[1].TextContent);
+        Assert.Equal("12 of 25 split votes", houseDemocratPage.QuerySelector(".board-panel .list-row-figure")!.TextContent);
+        Assert.Equal(["Ben Baker"], Names(await PageAsync("/web/board-house-republican.html")));
+        Assert.Equal(["Dee Dole"], Names(await PageAsync("/web/board-senate-democrat.html")));
+        Assert.Equal(["Fox Finn", "Eli Ellis"], Names(await PageAsync("/web/board-senate-republican.html")));
+
+        var boards = await PageAsync("/web/boards");
+        var panel = boards.QuerySelectorAll(".board-panel")[0];
+        Assert.Equal(Names(houseDemocratPage).Take(10), panel.QuerySelectorAll(".list-row-title").Select(link => link.TextContent));
+        Assert.Equal("/web/board-house-democrat.html",
+            panel.QuerySelectorAll("a").Single(link => link.TextContent == "See the full list of the House Democrats").GetAttribute("href"));
+    }
+
+    [Fact]
     public async Task AValidEmptyReleaseReturnsFourKnownEmptyBoardsAndTwoExplicitNullAgreements()
     {
         await using var host = await ApiHost.StartAsync(postgres);
@@ -163,7 +215,8 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
-    private async Task<ApiHost> StartAsync(BoardVote[] votes, bool pinParties = true, bool writeAlignment = true, bool serverPages = false)
+    private async Task<ApiHost> StartAsync(BoardVote[] votes, bool pinParties = true, bool writeAlignment = true, bool serverPages = false,
+        SeededOfficial[]? extraOfficials = null)
     {
         var host = await ApiHost.StartAsync(postgres, options => serverPages
             ? options with { PublicBaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test") }
@@ -183,6 +236,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
             new("p5", "Fox Finn", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "FL", Party = "Republican" }),
             new("p6", "Gia Gray", new SeededTerm("House", "Representative", "2021-01-03") { State = "IL", District = 1, Party = "Democrat" }),
             new("p7", "Hal Hale", new SeededTerm("House", "Representative", "2021-01-03") { State = "DC", District = 0, Party = "Democrat" }));
+        if (extraOfficials is not null) await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, extraOfficials);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. votes.Select(vote => vote.ToViewVote())]);
         if (pinParties)
             await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """

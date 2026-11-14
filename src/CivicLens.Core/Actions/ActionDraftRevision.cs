@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json.Serialization;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
@@ -37,13 +38,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
     public const int MaximumBioguideIdLength = VoteDraftRevision.MaximumBioguideIdLength;
     public const int MaximumIssueIdLength = VoteDraftRevision.MaximumIssueIdLength;
     public const int MaximumTextPackageIdLength = 64;
-    public const int MinimumSummarySentences = 2;
-    public const int MaximumSummarySentences = 3;
     public const int MaximumWhyItMattersSentences = 3;
-    public const int MaximumTextCitations = MaximumSummarySentences + MaximumWhyItMattersSentences;
-    public const int MaximumTextQuoteLength = 300;
-    public const int MinimumTextQuoteWords = 4;
-    public const int MaximumTextSentenceLength = 400;
+    public const int MaximumTextCitations = QuotedSentenceLimits.MaximumSentences + MaximumWhyItMattersSentences;
 
     private ImmutableArray<ActionTextCitation> TextCitationList => TextCitations.IsDefault ? [] : TextCitations;
 
@@ -139,11 +135,11 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         var summary = citations.Count(citation => citation.Part == ActionTextPart.Summary);
         var why = citations.Count(citation => citation.Part == ActionTextPart.WhyItMatters);
         var summaryComesFirst = citations.Take(summary).All(citation => citation.Part == ActionTextPart.Summary);
-        if (summary is < MinimumSummarySentences or > MaximumSummarySentences || why is < 1 or > MaximumWhyItMattersSentences || !summaryComesFirst)
+        if (summary is < QuotedSentenceLimits.MinimumSentences or > QuotedSentenceLimits.MaximumSentences || why is < 1 or > MaximumWhyItMattersSentences || !summaryComesFirst)
             throw new ArgumentException("Bill text gives 2 or 3 summary sentences, then 1 to 3 why it matters sentences.");
-        if (citations.Any(citation => !IsBounded(citation.Span) || citation.Span.Length > MaximumTextQuoteLength))
+        if (citations.Any(citation => !IsBounded(citation.Span) || citation.Span.Length > QuotedSentenceLimits.MaximumQuoteLength))
             throw new ArgumentException("Each text citation is a bounded span of one quote.");
-        if (citations.Any(citation => string.IsNullOrWhiteSpace(citation.Sentence) || citation.Sentence.Length > MaximumTextSentenceLength))
+        if (citations.Any(citation => string.IsNullOrWhiteSpace(citation.Sentence) || citation.Sentence.Length > QuotedSentenceLimits.MaximumSentenceLength))
             throw new ArgumentException("Each text sentence has text and at most the maximum length.");
         ValidateKeyTerms();
     }
@@ -154,7 +150,7 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
         if (terms.Length > ActionKeyTerm.MaximumPerRevision)
             throw new ArgumentException($"A revision has at most {ActionKeyTerm.MaximumPerRevision} key terms.");
         if (terms.Any(item => string.IsNullOrWhiteSpace(item.Term) || item.Term.Length > ActionKeyTerm.MaximumTermLength ||
-                string.IsNullOrWhiteSpace(item.Definition) || !IsBounded(item.Span) || item.Span.Length > MaximumTextQuoteLength ||
+                string.IsNullOrWhiteSpace(item.Definition) || !IsBounded(item.Span) || item.Span.Length > QuotedSentenceLimits.MaximumQuoteLength ||
                 item.Definition.Length > item.Span.Length || !item.IsDefinedBy(item.Definition)))
             throw new ArgumentException("Each key term has a term that its bounded definition quote holds.");
         if (terms.Select(item => item.Term).Distinct(StringComparer.OrdinalIgnoreCase).Count() != terms.Length)
@@ -241,8 +237,8 @@ public sealed record ActionDraftRevision(string RecordId, int RevisionNumber, st
             throw new ArgumentException("Model text drawn from the bill text is the join of its sentences.");
         foreach (var citation in TextCitationList)
         {
-            if (ActionTextCitation.WordCount(citation.Span.QuoteIn(extractions)) < MinimumTextQuoteWords)
-                throw new ArgumentException($"Each text quote has at least {MinimumTextQuoteWords} words.");
+            if (ActionTextCitation.WordCount(citation.Span.QuoteIn(extractions)) < QuotedSentenceLimits.MinimumQuoteWords)
+                throw new ArgumentException($"Each text quote has at least {QuotedSentenceLimits.MinimumQuoteWords} words.");
         }
     }
 

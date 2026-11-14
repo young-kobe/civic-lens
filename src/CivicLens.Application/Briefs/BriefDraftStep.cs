@@ -38,7 +38,7 @@ public sealed class BriefDraftStep(IBriefDraftStore store, IBriefDraftModel mode
     private async Task<bool> DraftAsync(IAnalysisAttempt<BriefDraftRun> attempt, BriefDraftContext context, CancellationToken cancellationToken)
     {
         var loop = new AnalysisValidationLoop<BriefDraftRun, BriefRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            BriefDraftTask.MaximumValidationPasses, errors => Prompt(context.Evidence, context.Selection.Sent, errors), model.DraftAsync,
+            AiTextRules.MaximumValidationPasses, errors => Prompt(context.Evidence, context.Selection.Sent, errors), model.DraftAsync,
             (json, run) => BriefDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);

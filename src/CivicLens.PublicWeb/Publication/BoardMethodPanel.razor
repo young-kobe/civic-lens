@@ -1,0 +1,11 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<Panel Title="How these lists are made" Padded="true">
+    <p class="muted">@VoteWords.SplitMeaning @BoardWords.CaucusRule</p>
+    <p><a href="@(RootPath + PublicationProtocol.MethodPagePath)">Read the method note: how Civic Lens counts split votes and agreed votes</a></p>
+</Panel>
+
+@code {
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+}

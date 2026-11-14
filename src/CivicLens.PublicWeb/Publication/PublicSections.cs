@@ -35,6 +35,9 @@ public static class PublicSections
 
     public static RecordList ListOf(PublishedRecordKind kind) => RecordLists.Single(list => list.Kind == kind);
 
+    /// <summary>The origin-relative link of the full list of one board on the gated preview. The preview route and every link to it use this, as <see cref="RecordList.Href"/> does for the lists.</summary>
+    public static string PreviewBoardPath(PublishedChamber chamber, string party) => $"/{PreviewFolder}/{PublicationProtocol.BoardPagePath(chamber, party)}";
+
     public static readonly IReadOnlyList<NavLink> Header =
     [
         new(PublicSection.Officials, "Officials", PublicationProtocol.OfficialsPagePath),
@@ -95,8 +98,9 @@ public static class PublicSections
         return new([home, new(link.Text, link.Path)], title);
     }
 
-    /// <summary>The header links the static board until the cutover, so the server boards page is the page of its own section link.</summary>
-    private static bool IsBoardsPage(NavLink link, string? canonicalPath) => link.Section == PublicSection.Boards && canonicalPath == BoardsPath;
+    /// <summary>The header links the static board until the cutover, so the server boards page and each full board list are the page of their own section link.</summary>
+    private static bool IsBoardsPage(NavLink link, string? canonicalPath) => link.Section == PublicSection.Boards &&
+        (canonicalPath == BoardsPath || OfficialBoard.All.Any(board => board.PagePath == canonicalPath));
 
     /// <summary>The header links the static search page until the cutover, so the preview list is the page of its own section link.</summary>
     private static bool IsListPage(NavLink link, string? canonicalPath) => PreviewKind(link.Section) is { } kind && ListOf(kind).Path == canonicalPath;

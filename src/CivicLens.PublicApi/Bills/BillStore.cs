@@ -8,7 +8,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.bill_key_terms</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.bill_key_terms</c>, <c>public_api.bill_text_sentences</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
 /// <c>public_api.record_entries</c> (the stored approval time), and <c>public_api.record_first_publications</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
@@ -122,7 +122,15 @@ public sealed class BillStore(NpgsqlDataSource views)
                           WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
                    (SELECT k.label FROM public_api.bill_key_terms k
                      WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number LIMIT 1),
-                   e.approved_at_utc_ticks, f.first_published_at_utc_ticks, b.summary_from_crs
+                   e.approved_at_utc_ticks, f.first_published_at_utc_ticks, b.summary_from_crs,
+                   ARRAY(SELECT k.quote FROM public_api.bill_key_terms k
+                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
+                   ARRAY(SELECT t.part FROM public_api.bill_text_sentences t
+                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position"),
+                   ARRAY(SELECT t.sentence FROM public_api.bill_text_sentences t
+                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position"),
+                   ARRAY(SELECT t.quote FROM public_api.bill_text_sentences t
+                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position")
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
               LEFT JOIN public_api.record_entries e ON e.kind = 'action' AND e.record_id = b.record_id AND e.revision_number = b.revision_number
@@ -133,7 +141,7 @@ public sealed class BillStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
-            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader))
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader), ReadTextSentences(reader))
         {
             KeyTermsLabel = ViewColumns.Text(reader, 34),
             CheckedAtUtc = ViewColumns.Utc(reader, 35),
@@ -142,13 +150,23 @@ public sealed class BillStore(NpgsqlDataSource views)
         };
     }
 
-    /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>
+    /// <summary>The four arrays come from one view, ordered by the same position, so they pair by index.</summary>
     private static BillKeyTermData[] ReadKeyTerms(DbDataReader reader)
     {
         var terms = reader.GetFieldValue<string[]>(31);
         var definitions = reader.GetFieldValue<string[]>(32);
         var cuts = reader.GetFieldValue<bool[]>(33);
-        return [.. terms.Select((term, index) => new BillKeyTermData(term, definitions[index], cuts[index]))];
+        var quotes = reader.GetFieldValue<string[]>(38);
+        return [.. terms.Select((term, index) => new BillKeyTermData(term, definitions[index], cuts[index], quotes[index]))];
+    }
+
+    /// <summary>The three arrays come from one view, ordered by the same position, so they pair by index.</summary>
+    private static BillTextSentence[] ReadTextSentences(DbDataReader reader)
+    {
+        var parts = reader.GetFieldValue<string[]>(39);
+        var sentences = reader.GetFieldValue<string[]>(40);
+        var quotes = reader.GetFieldValue<string[]>(41);
+        return [.. parts.Select((part, index) => new BillTextSentence(ViewColumns.Enum<PublishedTextPart>(part), sentences[index], quotes[index]))];
     }
 
     /// <summary>Reads the facts of the bill number match for a bounded set of bills in one query. A bill that left the release has no entry.

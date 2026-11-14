@@ -25,7 +25,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/" + PublicSections.PreviewFolder;
 
-    /// <summary>Maps the gated home, Compare, sitemap, robots file, officials, boards, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -54,6 +54,9 @@ public static class ServerPageEndpoints
         routes.MapGet(PublicSections.ListOf(PublishedRecordKind.ExecutiveAction).Href, ListPageEndpoints.ExecutiveActionsAsync);
         routes.MapGet(Prefix + "/officials", OfficialsPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/boards", BoardsPageEndpoint.RespondAsync);
+        foreach (var board in OfficialBoard.All)
+            routes.MapGet(PublicSections.PreviewBoardPath(board.Chamber, board.Party), (HttpContext context, BoardsPageReader reader, ServerPageResponder responder,
+                CancellationToken cancellationToken) => BoardsPageEndpoint.RespondBoardAsync(board, context, reader, responder, baseUrl, cancellationToken));
         routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/issues/{issueId}", (string issueId, HttpContext context, IssuePageReader issues, HomePageReader home, ServerPageResponder responder,
             CancellationToken cancellationToken) =>

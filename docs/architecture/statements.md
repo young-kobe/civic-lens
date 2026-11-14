@@ -227,7 +227,7 @@ The executor runs when `CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS` and `ANTHROP
 
 `otherSpeakers` holds the names of other people whom the article quotes. A name must be plain: 1 to 128 characters, with no space at either end. It must occur in the article text. It is never a linked identity.
 
-**Prompt and output.** The system prompt holds the instructions only. Each shape has its own fixed system prompt, with no value of the article or the source. The user message holds the source ID, the URL, the capture date, the covered officials, and the article text, marked as untrusted data. The request uses model `claude-sonnet-5-5`, effort `medium`, and at most 16,000 output tokens.
+**Prompt and output.** The system prompt holds the instructions only. Each shape has its own fixed system prompt, with no value of the article or the source. The user message holds the source ID, the URL, the capture date, the covered officials, and the article text, marked as untrusted data. The system prompt holds the shared sentences of the [AI text rules](analysis.md#ai-text-rules). The headline and the summary read as one passage at grade 14 or below. The repair pass checks every draft. The code approval checks the grade again. The request uses model `claude-sonnet-5-5`, effort `medium`, and at most 16,000 output tokens.
 
 Structured outputs fix these fields:
 

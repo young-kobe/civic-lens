@@ -533,6 +533,19 @@ public sealed class ActionDraftStepTests
     }
 
     [Fact]
+    public async Task ACrsSummaryDraftAtThirteenPointFiveIsAcceptedAndOneAtFourteenPointOneGoesBackWithTheOneRepairMessage()
+    {
+        var passing = Output(headline: GradePassages.PassingHeadline, summary: GradePassages.Summary);
+        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: GradePassages.FailingHeadline, summary: GradePassages.Summary)).Draft(passing);
+
+        var (store, _) = await RunAsync(Create(), model);
+
+        Assert.Equal(2, model.Requests.Count);
+        Assert.Contains(GradePassages.RepairMessageStart, model.Requests[1].UserPrompt, StringComparison.Ordinal);
+        Assert.Equal(GradePassages.PassingHeadline, Assert.Single(store.Revisions).Headline);
+    }
+
+    [Fact]
     public async Task ACodeRecordCitesTheBillPageEvenWhenNoSponsorAndNoPolicyAreaCiteItBecauseTheTitleAndTheDateComeFromThatPage()
     {
         var world = ActionBillWorld.Create(sponsors: [Stranger], cosponsorPages: [[MarkeyOriginal]], summaries: [], policyArea: null);

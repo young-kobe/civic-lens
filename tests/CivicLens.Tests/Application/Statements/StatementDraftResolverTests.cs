@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Statements;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.StatementDraftFixtures;
 
 namespace CivicLens.Tests.Application.Statements;
@@ -127,6 +128,24 @@ public sealed class StatementDraftResolverTests
 
         Assert.Null(Resolve(withExtra).Revision);
         Assert.Contains("The output is not valid JSON for the statement schema.", Resolve("{").Errors);
+    }
+
+    [Fact]
+    public void ADraftAtThirteenPointFiveIsAcceptedAndOneAtFourteenPointOneGetsTheOneRepairMessage()
+    {
+        Assert.NotNull(Resolve(GradedOutput(GradePassages.PassingHeadline)).Revision);
+
+        var refused = Resolve(GradedOutput(GradePassages.FailingHeadline));
+
+        Assert.Null(refused.Revision);
+        Assert.StartsWith(GradePassages.RepairMessageStart, Assert.Single(refused.Errors), StringComparison.Ordinal);
+    }
+
+    private static string GradedOutput(string headline)
+    {
+        var fields = Fields(null, null, ["a rent cap for tenants"], [], 0.8, headline);
+        fields["summary"] = GradePassages.Summary;
+        return JsonSerializer.Serialize(fields);
     }
 
     private static CivicLens.Application.Statements.StatementDraftResolution Resolve(string json, params string[] officials) =>

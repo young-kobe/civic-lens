@@ -1,0 +1,25 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.Boards" CanonicalPath="@PublicationProtocol.BoardPagePath(Data.Board.Chamber, Data.Board.Party)" Title="@title"
+            Description="@BoardWords.ListDescription(Data.Board.Chamber, Data.Board.Party)" RootPath="@RootPath">
+    <PageHeader Title="@title" Lede="@BoardWords.CodeBuilt" />
+    <FilterTabs Label="@BoardWords.TabsLabel" Tabs="Tabs" />
+    <Panel Label="@title" Padded="true" Class="board-panel">
+        <BoardPanelBody Board="Data.Board" RootPath="@RootPath" />
+    </Panel>
+    <BoardMethodPanel RootPath="@RootPath" />
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public BoardListPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private string title = string.Empty;
+
+    protected override void OnParametersSet() => title = BoardWords.ListTitle(Data.Board.Chamber, Data.Board.Party);
+
+    /// <summary>One tab for each full board page. The tab of this board is current.</summary>
+    private IReadOnlyList<FilterTab> Tabs => [.. OfficialBoard.All.Select(board => FilterTab.Link(PublishedPartyNames.PartyOf(board.Chamber, board.Party),
+        PublicSections.PreviewBoardPath(board.Chamber, board.Party), board.Chamber == Data.Board.Chamber && board.Party == Data.Board.Party))];
+}
