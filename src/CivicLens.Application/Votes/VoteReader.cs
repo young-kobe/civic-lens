@@ -94,8 +94,7 @@ public sealed class VoteReader(ICollectionJobStore jobs, ApiResponseReader respo
         var votedOnCitation = VoteFacts.Find(facts, VoteFactPrefixes.Started)!.Citation;
         return new(chamber, VoteSources.Of(SourceOf(evidence)), facts, votedOnCitation, kind, kindCitation, read.Members, VoteFingerprint.Compute(facts, read.Members),
             policyArea, subjects, read.Day,
-            configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name),
-            [.. configuredPeople.Select(person => person.Name)]);
+            configuredPeople.Where(person => involved.Contains(person.Id)).ToImmutableDictionary(person => person.Id, person => person.Name));
     }
 
     private static string? BillError(VoteDraftEvidence evidence)

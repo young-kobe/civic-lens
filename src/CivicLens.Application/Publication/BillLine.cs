@@ -12,8 +12,6 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 internal static partial class BillLine
 {
-    private const string CutMarker = "…";
-
     public static PublishedRecordEntry EntryOf(PublishedAction action) => action.ToEntry() with { BillLine = Of(action) };
 
     private static string? Of(PublishedAction action) => action.SummaryCitation is { } summary ? FromSummaryQuote(summary.Quote) : null;
@@ -46,9 +44,9 @@ internal static partial class BillLine
     private static string? Cap(string sentence)
     {
         if (sentence.Length <= PublishedRecordEntry.MaximumBillLineLength) return sentence;
-        var boundary = LastWhitespaceBefore(sentence, PublishedRecordEntry.MaximumBillLineLength - CutMarker.Length + 1);
+        var boundary = LastWhitespaceBefore(sentence, PublishedRecordEntry.MaximumBillLineLength - PublishedRecordEntry.BillLineCutMarker.Length + 1);
         var text = sentence[..boundary].TrimEnd().TrimEnd(',', ';', ':').TrimEnd();
-        return boundary > 0 && text.Length > 0 ? text + CutMarker : null;
+        return boundary > 0 && text.Length > 0 ? text + PublishedRecordEntry.BillLineCutMarker : null;
     }
 
     private static int LastWhitespaceBefore(string text, int end)

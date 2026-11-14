@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application;
 using CivicLens.Application.Publication;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Documents;
@@ -15,15 +16,17 @@ namespace CivicLens.Infrastructure.Votes;
 /// <summary>Owns the mapping between a vote revision and its row, fact rows, and issue rows, in both directions.</summary>
 internal static class VoteRevisionRows
 {
-    public static VoteRevisionRow Create(VoteDraftRevision revision, string? runId)
+    public static VoteRevisionRow Create(VoteDraftRevision revision, string? runId, CodeVersion codeVersion)
     {
+        var authorKind = ReviewAuthor.KindOf(revision.AuthorSubject);
         var row = new VoteRevisionRow
         {
             RecordId = revision.RecordId,
             RevisionNumber = revision.RevisionNumber,
             AuthorSubject = revision.AuthorSubject,
-            AuthorKind = ReviewAuthor.KindOf(revision.AuthorSubject),
+            AuthorKind = authorKind,
             RunId = runId,
+            CodeVersion = authorKind == ReviewAuthorKind.Code ? codeVersion.Sha : null,
             CreatedAtUtcTicks = revision.CreatedAtUtc.UtcTicks
         };
         ReviewTextRows.Fill(row, revision);

@@ -49,7 +49,10 @@
                     {
                         <div class="home-featured-summary">
                             <AiLabel Text="@summaryLabel" Origin="featured.TextOrigin" Id="home-featured-origin" />
-                            <p>@featured.Summary</p>
+                            @if (featured.TextOrigin != PublishedTextOrigin.Code)
+                            {
+                                <p>@featured.Summary</p>
+                            }
                         </div>
                     }
                     @if (featured.BillLine is not null)

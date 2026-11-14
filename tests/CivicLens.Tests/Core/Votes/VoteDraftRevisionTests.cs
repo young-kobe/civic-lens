@@ -44,12 +44,12 @@ public sealed class VoteDraftRevisionTests
     [Fact]
     public void AnAnalysisRevisionFollowsTheCurrentOneAndAFirstRevisionIsNumberOne()
     {
-        Revision().ValidateAsAnalysisRevision(null);
-        Revision(2).ValidateAsAnalysisRevision(Revision());
+        Revision().ValidateAsWorkerRevision(null);
+        Revision(2).ValidateAsWorkerRevision(Revision());
 
-        Assert.Throws<ArgumentException>(() => Revision(2).ValidateAsAnalysisRevision(null));
-        Assert.Throws<ArgumentException>(() => Revision(3).ValidateAsAnalysisRevision(Revision()));
-        Assert.Throws<ArgumentException>(() => Revision(author: "auth0|person").ValidateAsAnalysisRevision(null));
+        Assert.Throws<ArgumentException>(() => Revision(2).ValidateAsWorkerRevision(null));
+        Assert.Throws<ArgumentException>(() => Revision(3).ValidateAsWorkerRevision(Revision()));
+        Assert.Throws<ArgumentException>(() => Revision(author: "auth0|person").ValidateAsWorkerRevision(null));
     }
 
     [Fact]
@@ -159,11 +159,11 @@ public sealed class VoteDraftRevisionTests
         var person = PersonEditOf(Revision(), "Edited headline", "Edited summary.") with { Suggestion = earlier };
         var kept = Revision(3) with { Headline = person.Headline, Summary = person.Summary, TextOrigin = ReviewTextOrigin.Person, Suggestion = Suggestion() };
 
-        kept.ValidateAsAnalysisRevision(person);
+        kept.ValidateAsWorkerRevision(person);
 
-        Assert.Throws<ArgumentException>(() => (kept with { Headline = "Overwritten" }).ValidateAsAnalysisRevision(person));
-        Assert.Throws<ArgumentException>(() => (kept with { Suggestion = null }).ValidateAsAnalysisRevision(person));
-        Assert.Throws<ArgumentException>(() => Revision(3).ValidateAsAnalysisRevision(person));
+        Assert.Throws<ArgumentException>(() => (kept with { Headline = "Overwritten" }).ValidateAsWorkerRevision(person));
+        Assert.Throws<ArgumentException>(() => (kept with { Suggestion = null }).ValidateAsWorkerRevision(person));
+        Assert.Throws<ArgumentException>(() => Revision(3).ValidateAsWorkerRevision(person));
     }
 
     [Fact]
@@ -171,13 +171,13 @@ public sealed class VoteDraftRevisionTests
     {
         var person = PersonEditOf(Revision(), "Edited headline", "Edited summary.") with { Suggestion = Suggestion() };
 
-        (person with { RevisionNumber = 3, AuthorSubject = "civic-lens:analysis", Members = [Member() with { Cast = "Nay" }] }).ValidateAsAnalysisRevision(person);
+        (person with { RevisionNumber = 3, AuthorSubject = "civic-lens:analysis", Members = [Member() with { Cast = "Nay" }] }).ValidateAsWorkerRevision(person);
     }
 
     [Fact]
     public void ModelTextAfterModelTextCarriesNoSuggestion()
     {
-        Assert.Throws<ArgumentException>(() => (Revision(2) with { Suggestion = Suggestion() }).ValidateAsAnalysisRevision(Revision()));
+        Assert.Throws<ArgumentException>(() => (Revision(2) with { Suggestion = Suggestion() }).ValidateAsWorkerRevision(Revision()));
     }
 
     [Fact]

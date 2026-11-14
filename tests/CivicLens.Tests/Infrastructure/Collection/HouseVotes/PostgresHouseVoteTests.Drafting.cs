@@ -80,11 +80,10 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     [Fact]
-    public async Task EveryVoteRunStoresTheExactRequestAndARetryRunStoresItsOwnUserMessage()
+    public async Task AVoteWithNoCandidateIssueStoresACodeRevisionWithTheBuildShaAndABypassedRunAndCallsNoModel()
     {
         var candidate = await ReadableCandidateAsync();
-        var model = new FakeHeadlineSummaryModel().Draft("not json").Draft(HeadlineSummaryOutputs.Output("The House voted on a concurrent resolution",
-            "The House decided whether to agree to a Senate amendment."));
+        var model = new FakeHeadlineSummaryModel();
         var reader = new VoteReader(store, new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString),
             new CaptureBodyReader()), captureRoot);
 
@@ -92,8 +91,9 @@ public sealed partial class PostgresHouseVoteTests
             BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
 
         Assert.Equal([(candidate, "vote-draft", "Succeeded", null)], await QueueAsync());
-        Assert.Equal(2, model.Requests.Count);
-        await StoredRunInputs.AssertMatchAsync(connectionString, "vote_analysis_runs", "candidate_id", candidate, model.Requests);
+        Assert.Empty(model.Requests);
+        Assert.Equal("Code|Code|" + TestCodeVersion.Sha, await ScalarAsync("SELECT author_kind || '|' || text_origin || '|' || code_version FROM vote_revisions"));
+        Assert.Equal("Bypassed|codeWritten|0", await ScalarAsync("SELECT outcome || '|' || reason || '|' || charged_tokens FROM vote_analysis_runs"));
     }
 
     [Fact]
@@ -383,10 +383,11 @@ public sealed partial class PostgresHouseVoteTests
     [Theory]
     [InlineData("none", 1)]
     [InlineData("person", 0)]
+    [InlineData("code", 0)]
     [InlineData("AwaitingReviewWithConcerns", 0)]
     [InlineData("ChangesRequested", 0)]
     [InlineData("ApprovalWithdrawn", 0)]
-    public async Task ARedraftSkipsAVoteWhoseCurrentRevisionHoldsPersonTextAnOpenConcernOrAWithdrawnApproval(string change, int requeued)
+    public async Task ARedraftSkipsAVoteWhoseCurrentRevisionHoldsPersonOrCodeTextAnOpenConcernOrAWithdrawnApproval(string change, int requeued)
     {
         var candidate = await PendingCandidateAsync();
         var revision = await RevisionAsync(candidate, 1);
@@ -394,6 +395,8 @@ public sealed partial class PostgresHouseVoteTests
         await ExecuteAsync("UPDATE vote_analysis_runs SET prompt_version = 'vote-draft-prompt-v1'");
         if (change == "person")
             await ExecuteAsync("UPDATE vote_revisions SET text_origin = 'Person'");
+        else if (change == "code")
+            await ExecuteAsync("UPDATE vote_revisions SET text_origin = 'Code', author_kind = 'Code', author_subject = 'civic-lens:code'");
         else if (change != "none")
             await ExecuteAsync($"UPDATE vote_drafts SET review_status = '{change}'");
 
@@ -541,7 +544,7 @@ public sealed partial class PostgresHouseVoteTests
     }
 
     private PostgresVoteDraftStore VoteStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(
-        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options));
+        new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options), TestCodeVersion.Current);
 
     private async Task<string> RecordIdAsync(string candidate) => (await VoteStore().ReadEvidenceAsync(candidate, default))!.Candidate.RecordId;
 

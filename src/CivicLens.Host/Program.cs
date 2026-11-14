@@ -254,7 +254,7 @@ try
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
         var executiveSummary = ExecutiveSummaryComposition.Create(analysisContexts, connectionString, codeVersion, BeatOf(WorkerLoopNames.ExecutiveSummary), loggers);
         await using var executiveSummaryWakeup = executiveSummary.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, codeVersion, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.RelationshipDrafting), loggers);
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
@@ -327,7 +327,7 @@ try
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var redraftStale = new RedraftStaleAnalyses([
             new("actions", new PostgresActionDraftStore(contexts, codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms())),
-            new("votes", new PostgresVoteDraftStore(contexts)),
+            new("votes", new PostgresVoteDraftStore(contexts, codeVersion)),
             new("statements", new PostgresStatementDraftStore(contexts)),
             new("document-changes", new PostgresDocumentChangeAnalysisStore(contexts)),
             new("briefs", new PostgresBriefDraftStore(contexts))]);
@@ -379,7 +379,7 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var draftStore = new PostgresVoteDraftStore(contexts);
+        var draftStore = new PostgresVoteDraftStore(contexts, codeVersion);
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),

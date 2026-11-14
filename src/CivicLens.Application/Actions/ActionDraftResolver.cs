@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Issues;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;

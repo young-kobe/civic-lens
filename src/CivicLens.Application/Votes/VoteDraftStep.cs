@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
@@ -50,9 +51,11 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         return change switch
         {
             VoteChange.None => await SettleWithoutCallAsync(attempt, snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken),
-            VoteChange.MemberVotesOnly => await CopyTextAsync(attempt, context, VoteDraftErrorCodes.MemberVotesChanged, cancellationToken),
-            VoteChange.KindOnly => await CopyTextAsync(attempt, context, VoteDraftErrorCodes.KindChanged, cancellationToken),
-            _ => await DraftAsync(attempt, context, cancellationToken)
+            VoteChange.MemberVotesOnly => await SettleRevisionWithoutCallAsync(attempt, context, VoteDraftErrorCodes.MemberVotesChanged,
+                VoteDraftResolver.CopyText, cancellationToken),
+            VoteChange.KindOnly => await SettleRevisionWithoutCallAsync(attempt, context, VoteDraftErrorCodes.KindChanged,
+                evidence.Current!.TextOrigin == ReviewTextOrigin.Person ? VoteDraftResolver.CopyText : RewriteKeepingIssues, cancellationToken),
+            _ => await DraftOrWriteAsync(attempt, context, change, cancellationToken)
         };
     }
 
@@ -60,20 +63,21 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
         evidence.Candidate.BillType?.Length > VoteDraftRevision.MaximumBillTypeLength ||
         snapshot.Members.Any(member => member.Cast.Length > VoteDraftRevision.MaximumCastLength);
 
-    private Task<bool> CopyTextAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, string reason,
+    /// <summary>Code writes the wording. Text that a person wrote stays, with no call. A bill with candidate issues gets one issue-only call.
+    /// A vote with no candidate issue gets no call.</summary>
+    private async Task<bool> DraftOrWriteAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, VoteChange change,
         CancellationToken cancellationToken)
     {
-        var run = attempt.BypassRun(VoteDraftTask.Model, context.Snapshot.Fingerprint, null);
-        var revision = VoteDraftResolver.CopyText(context, run.FinishedAtUtc);
-        return attempt.SettleAsync(new VoteDraftRun(run, reason),
-            VoteDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
-    }
-
-    private async Task<bool> DraftAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, CancellationToken cancellationToken)
-    {
+        if (context.Evidence.Current?.TextOrigin == ReviewTextOrigin.Person)
+            return change == VoteChange.StaleOnly
+                ? await SettleWithoutCallAsync(attempt, context.Snapshot.Fingerprint, VoteDraftErrorCodes.Unchanged, cancellationToken)
+                : await SettleRevisionWithoutCallAsync(attempt, context, VoteDraftErrorCodes.TextKept, VoteDraftResolver.CopyText, cancellationToken);
+        if (context.Issues.CandidateIds.IsEmpty)
+            return await SettleRevisionWithoutCallAsync(attempt, context, VoteDraftErrorCodes.CodeWritten,
+                (draft, createdAtUtc) => VoteDraftResolver.WriteByCode(draft, createdAtUtc), cancellationToken);
         var loop = new AnalysisValidationLoop<VoteDraftRun, VoteDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
             AiTextRules.MaximumValidationPasses, errors => context.Issues.BuildDroppingSubjectsWhenOverTheCap(issues => VoteDraftPrompt.Build(context.Snapshot, issues, settings.PromptByteCap, errors)),
-            model.DraftAsync, (json, run) => VoteDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc),
+            model.DraftAsync, (json, run) => VoteDraftResolver.ResolveIssueChoice(json, context, run.FinishedAtUtc),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch
@@ -85,6 +89,18 @@ public sealed class VoteDraftStep(IVoteDraftStore store, VoteReader reader, IVot
             AnalysisLoopEnd.Exhausted or AnalysisLoopEnd.NotSent => await loop.FailAsync(result, cancellationToken),
             _ => result.Progress
         };
+    }
+
+    private static VoteDraftRevision RewriteKeepingIssues(VoteDraftContext context, DateTimeOffset createdAtUtc) =>
+        VoteDraftResolver.WriteByCode(context, createdAtUtc, context.Evidence.Current!.TrackedIssueIds);
+
+    private static Task<bool> SettleRevisionWithoutCallAsync(IAnalysisAttempt<VoteDraftRun> attempt, VoteDraftContext context, string reason,
+        Func<VoteDraftContext, DateTimeOffset, VoteDraftRevision> write, CancellationToken cancellationToken)
+    {
+        var run = attempt.BypassRun(VoteDraftTask.Model, context.Snapshot.Fingerprint, null);
+        var revision = write(context, run.FinishedAtUtc);
+        return attempt.SettleAsync(new VoteDraftRun(run, reason),
+            VoteDraftCheckpoint.From(attempt.Claim, revision), cancellationToken);
     }
 
     private static Task<bool> SettleWithoutCallAsync(IAnalysisAttempt<VoteDraftRun> attempt, string inputHash, string code,

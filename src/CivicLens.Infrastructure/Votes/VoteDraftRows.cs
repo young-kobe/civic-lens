@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
@@ -18,8 +19,8 @@ internal static class VoteDraftRows
         new(PostgresAdvisoryLock.VoteReview, PublishedRecordKind.Vote, "Vote", nameof(VoteDraftRow.RecordId), VoteRevisionRows.ReadAsync,
             Revised, new(RequireNoRefusedUpdateAsync));
 
-    public static async Task<string?> AppendAnalysisRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,
-        CancellationToken cancellationToken)
+    public static async Task<string?> AppendWorkerRevisionAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, string runId,
+        CodeVersion codeVersion, CancellationToken cancellationToken)
     {
         revision.ValidateShape();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.VoteReview, cancellationToken);
@@ -35,7 +36,7 @@ internal static class VoteDraftRows
         }
         if (draft is null) db.Add(draft = NewDraft(revision));
         await VoteMemberLists.EnsureAsync(db, revision, cancellationToken);
-        await Records.AppendCodeApprovedAsync(db, draft, revision, VoteRevisionRows.Create(revision, runId), await Records.ReadCycleAsync(db, draft, cancellationToken),
+        await Records.AppendCodeApprovedAsync(db, draft, revision, VoteRevisionRows.Create(revision, runId, codeVersion), await Records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresVoteReviewStore.ValidateApprovalAsync(db, revision, cancellationToken)));
         return null;
     }

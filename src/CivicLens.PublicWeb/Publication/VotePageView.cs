@@ -124,6 +124,18 @@ public static class VotePageView
 
     public static bool HasUnknownParty(VotePageData vote) => vote.Members.Any(member => member.Party is null);
 
+    /// <summary>The one line under the headline that says what the vote is about. It is the bill line when the bill has a whole one. Else it is
+    /// the source description of the vote, word for word, unless the headline already holds it. Else the vote has none. A bill line that code
+    /// cut ends inside a sentence, so it never shows here.</summary>
+    public static VoteAbout? About(VotePageData vote)
+    {
+        if (vote.Bill?.Line is { } line && PublishedRecordEntry.IsWholeBillLine(line)) return new(line, FromBill: true);
+        var description = vote.Facts.FirstOrDefault(fact => fact.Text.StartsWith(PublishedVote.DescriptionPrefix, StringComparison.Ordinal))
+            ?.Text[PublishedVote.DescriptionPrefix.Length..].Trim();
+        return string.IsNullOrEmpty(description) || vote.Headline.Contains(description.TrimEnd('.'), StringComparison.Ordinal)
+            ? null : new(description, FromBill: false);
+    }
+
     /// <summary>The AI label of the vote summary: the label column of the view, or the label of its text origin when the view gives none.</summary>
     public static string? Label(VotePageData vote) => vote.Label ?? (vote.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
         ? PublishedRecordLabels.Wording(vote.TextOrigin).First().Value : null);

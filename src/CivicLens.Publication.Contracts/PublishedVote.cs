@@ -18,6 +18,8 @@ public sealed record PublishedVote
     public const string QuestionPrefix = "Question: ";
     public const string LegislationPrefix = "Legislation: ";
     public const string TitlePrefix = "Title: ";
+    /// <summary>The prefix of the Senate source description: the amendment purpose or the nomination text, word for word from the Voteview file.</summary>
+    public const string DescriptionPrefix = "Vote title: ";
     public const string ResultPrefix = "Result: ";
     public const string CountPrefix = "Count: ";
     public const string CandidateTotalPrefix = "Candidate total ";

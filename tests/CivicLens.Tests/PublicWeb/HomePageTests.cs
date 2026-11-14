@@ -60,7 +60,8 @@ public sealed class HomePageTests
         var summary = page.QuerySelector(".home-featured-summary, .home-featured .ai-summary")!;
 
         Assert.Null(summary.QuerySelector("script"));
-        Assert.Equal(text, summary.QuerySelector("p")!.TextContent);
+        // Code text repeats the headline, so the card shows only its label.
+        Assert.Equal(origin == PublishedTextOrigin.Code ? null : text, summary.QuerySelector("p")?.TextContent);
         Assert.Equal(wording, summary.QuerySelector("span")?.TextContent);
         Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("ai-summary-ai"));
         var descriptionId = page.QuerySelector(".home-featured h2")!.GetAttribute("aria-describedby");
