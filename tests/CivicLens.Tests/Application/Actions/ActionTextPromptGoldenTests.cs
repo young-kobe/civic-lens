@@ -8,9 +8,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "6a7846282ff43c18313c603111ebb5fde044822812ce25477e90fa3f3b43060f";
+    private const string SystemSha256 = "1ba6ffe4e742a7e049909bb0c2230af77718ac0feef5b2d68425fe57007c7062";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "cf3007077fb2872e82e45323fe2385d043c821a3cc8e4e1994f02e153240a149";
+    private const string InputHash = "62e2603fb8fb2fb3f95a317957931a4626d85cef2a6e46313e878e362bf296a4";
 
     [Fact]
     public async Task ThePromptHoldsTheSharedAiTextSentencesAndStatesTheCodeGradeLimit()
@@ -33,11 +33,11 @@ public sealed class ActionTextPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.TextPromptVersion)} ({ActionDraftTask.TextPromptVersion}) or " +
             $"{nameof(ActionDraftTask.TextSchemaVersion)} ({ActionDraftTask.TextSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-text-prompt-v8", "action-text-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-text-prompt-v10", "action-text-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions(draftsKeyTerms: false).PromptVersions);
-        Assert.Equal("action-draft-prompt-v6", ActionDraftTask.PromptVersion);
+        Assert.Equal("action-draft-prompt-v7", ActionDraftTask.PromptVersion);
         Assert.True(request.CacheSystemPrompt);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

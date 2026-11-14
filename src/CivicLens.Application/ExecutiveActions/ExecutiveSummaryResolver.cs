@@ -11,7 +11,8 @@ using static CivicLens.Application.Analysis.AnalysisAnswerRules;
 namespace CivicLens.Application.ExecutiveActions;
 
 /// <summary>Turns a model answer into a summary revision, or into the reasons that the repair pass sends back. Every quote must be an exact
-/// span of the stored text. The sentences read at the grade limit as one passage, and none holds a phrase of <see cref="ExecutiveSummaryPhrases"/>.
+/// span of the stored text. Each dollar amount and year of a sentence is in the text that was sent (<see cref="BillFigureSet"/>). The sentences
+/// read at the grade limit as one passage, and none holds a phrase of <see cref="AiTextPhrases"/>.
 /// It follows <see cref="ActionDraftResolver.ResolveBillText"/>.</summary>
 public static class ExecutiveSummaryResolver
 {
@@ -26,7 +27,8 @@ public static class ExecutiveSummaryResolver
         if (items.Length < QuotedSentenceLimits.MinimumSentences || items.Length > QuotedSentenceLimits.MaximumSentences)
             errors.Add($"The summary has {items.Length} sentences. Write {QuotedSentenceLimits.MinimumSentences} to {QuotedSentenceLimits.MaximumSentences}.");
         var sentences = items.Take(QuotedSentenceLimits.MaximumSentences).Select(item => Quoted(item, evidence.Text, errors)).OfType<ExecutiveActionSummarySentence>().ToImmutableArray();
-        CheckPhrases(sentences, errors);
+        CheckFigures(sentences, new BillFigureSet(evidence.Text.Body), errors);
+        errors.AddRange(AiTextPhrases.Errors(sentences.Select(sentence => sentence.Sentence)));
         if (AiTextRules.QuotedPassageGradeError(sentences.Select(sentence => sentence.Sentence)) is { } passageGrade) errors.Add(passageGrade);
         if (errors.Count > 0) return AnalysisResolution<ExecutiveActionRevision>.Reject(Bound(errors), false);
         var summary = new ExecutiveActionSummary(ReviewTextOrigin.Model, evidence.Text.Cut, sentences);
@@ -59,10 +61,10 @@ public static class ExecutiveSummaryResolver
         return offset < 0 ? null : new(text.ExtractionId, text.BodyStart + offset, quote.Length);
     }
 
-    private static void CheckPhrases(ImmutableArray<ExecutiveActionSummarySentence> sentences, List<string> errors)
+    /// <summary>A presidential document has no bill number, so no citation token is skipped.</summary>
+    private static void CheckFigures(ImmutableArray<ExecutiveActionSummarySentence> sentences, BillFigureSet figures, List<string> errors)
     {
         foreach (var sentence in sentences)
-            if (ExecutiveSummaryPhrases.FindIn(sentence.Sentence) is { } phrase)
-                errors.Add(ExecutiveSummaryPhrases.Reason(Shorten(sentence.Sentence), phrase));
+            errors.AddRange(figures.Errors(sentence.Sentence, "summary", "the document text", billNumber: null));
     }
 }

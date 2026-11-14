@@ -44,6 +44,22 @@ public sealed class DocumentChangeDraftResolverTests
     }
 
     [Fact]
+    public void AHeadlineAboveThePromptAimPassesAndOnlyAHeadlineAboveTheCodeLimitIsRejected()
+    {
+        var evidence = FakeDocumentChangeDraftModel.Evidence("Deadline: October 15.\n", "Deadline: October 30.\n");
+        var citation = ("h1", "after", "October 30");
+        var longest = new string('h', DocumentChangeDraftRevision.MaximumHeadlineLength);
+
+        Assert.True(longest.Length > DocumentChangeDraftPrompt.TargetHeadlineLength);
+        Assert.NotNull(Resolve(FakeDocumentChangeDraftModel.Output(longest, [citation]), evidence).Revision);
+        var refused = Resolve(FakeDocumentChangeDraftModel.Output(longest + "h", [citation]), evidence);
+        Assert.Null(refused.Revision);
+        Assert.Contains(refused.Errors, error => error.Contains("headline", StringComparison.Ordinal));
+        var system = DocumentChangeDraftPrompt.Build(evidence, Catalog)!.SystemPrompt;
+        Assert.Contains("Aim for 120 characters or fewer. Code rejects a headline above 256 characters.", system, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AQuoteWithHalfOfASurrogatePairNeverBecomesACitation()
     {
         var evidence = FakeDocumentChangeDraftModel.Evidence("Mood: calm.\n", "Mood: \U0001F600 happy.\n");

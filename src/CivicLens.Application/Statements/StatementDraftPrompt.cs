@@ -48,7 +48,7 @@ public static class StatementDraftPrompt
 
         The user message holds the article: the source ID, the URL, the date Civic Lens first captured the article, and the article text. {officialsSentence} {AiTextRules.UntrustedSource("The article text")}
 
-        {AiTextRules.PlainLanguage} Describe only what the article says. Do not add facts, motives, or consequences that the article does not state. Do not judge whether a claim is true. {AiTextRules.NoJudgment} Distinguish a promise or a proposal from a completed action. Attribute each claim to the person who makes it. Code grades the headline and the summary together as one passage. {AiTextRules.GradeTarget} {AiTextRules.GradeLimit} {AiTextRules.InternalWords}
+        {AiTextRules.PlainLanguage} Describe only what the article says. Do not add facts, motives, or consequences that the article does not state. Do not judge whether a claim is true. {AiTextRules.NoJudgment} {AiTextPhrases.Rule("the bill")} Distinguish a promise or a proposal from a completed action. Attribute each claim to the person who makes it. Code grades the headline and the summary together as one passage. {AiTextRules.GradeTarget} {AiTextRules.GradeLimit} {AiTextRules.InternalWords}
 
         Fields:
         - headline: one short line, at most {StatementDraftRevision.MaximumHeadlineLength} characters, that states what was said.

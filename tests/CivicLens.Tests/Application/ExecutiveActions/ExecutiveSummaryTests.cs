@@ -16,7 +16,7 @@ namespace CivicLens.Tests.Application.ExecutiveActions;
 
 public sealed class ExecutiveSummaryTests
 {
-    private const string PromptSha256 = "3119ab8f2aab6e230199ceed059520072adcc183bb397a81afdf22b384062187";
+    private const string PromptSha256 = "f81f4672a95c6963cecbffbb7aa5fd0b7c459330f53fe686fc0a68da31d5e541";
     private const string FirstQuote = "I hereby order the Secretary of Commerce to review each import rule within 30 days";
     private const string SecondQuote = "The Secretary shall report the results to the President by March 1, 2025";
     private const string FirstSentence = "The order tells the Secretary of Commerce to review each import rule. The review must finish within 30 days.";
@@ -110,6 +110,17 @@ public sealed class ExecutiveSummaryTests
     }
 
     [Theory]
+    [InlineData("The Secretary must report the results to the President by March 1, 2026.", "2026")]
+    [InlineData("The Secretary must spend $5 million to report the results by March 1, 2025.", "$5 million")]
+    public void ASentenceWithAFigureThatTheSentTextLacksIsRejectedAndTheReasonNamesTheFigure(string sentence, string figure)
+    {
+        var resolution = Resolve(Output((FirstSentence, FirstQuote), (sentence, SecondQuote)));
+
+        Assert.False(resolution.IsAccepted);
+        Assert.Contains($"The summary has the figure \"{figure}\", which is not in the document text that was sent.", Assert.Single(resolution.Errors), StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("This order aims to cut costs for the Secretary of Commerce.", "aims to")]
     [InlineData("The Secretary Seeks To review each import rule within 30 days.", "seeks to")]
     [InlineData("The review is intended to finish within 30 days.", "intended to")]
@@ -118,14 +129,8 @@ public sealed class ExecutiveSummaryTests
         var resolution = Resolve(Output((sentence, FirstQuote), (SecondSentence, SecondQuote)));
 
         Assert.False(resolution.IsAccepted);
-        Assert.Contains(resolution.Errors, error => ExecutiveSummaryPhrases.IsReason(error) && error.Contains($"\"{phrase}\"", StringComparison.Ordinal));
+        Assert.Contains(resolution.Errors, error => AiTextPhrases.IsReason(error) && error.Contains($"\"{phrase}\"", StringComparison.Ordinal));
     }
-
-    [Theory]
-    [InlineData("The Secretary claims to review each import rule.")]
-    [InlineData("The order names an aim to review each import rule.")]
-    public void AWordThatOnlyContainsAPhraseIsNotAPhrase(string sentence) =>
-        Assert.Null(ExecutiveSummaryPhrases.FindIn(sentence));
 
     [Fact]
     public void ASummaryThatReadsAboveTheMaximumGradeAsOnePassageIsRejected()
@@ -183,7 +188,7 @@ public sealed class ExecutiveSummaryTests
         var system = ExecutiveSummaryPrompt.Build(Evidence(), 100_000)!.SystemPrompt;
 
         var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(system)));
-        Assert.Equal("executive-summary-prompt-v2", ExecutiveSummaryTask.PromptVersion);
+        Assert.Equal("executive-summary-prompt-v4", ExecutiveSummaryTask.PromptVersion);
         Assert.True(hash == PromptSha256, $"The prompt changed. Bump {nameof(ExecutiveSummaryTask.PromptVersion)} ({ExecutiveSummaryTask.PromptVersion}), and then update the pinned hash in this test. System prompt: {hash}");
         AiTextPromptRules.AssertHoldsSharedSentences(system, codeApproves: true);
     }
@@ -228,7 +233,7 @@ public sealed class ExecutiveSummaryTests
 
         var bill = Assert.Single(report.Bills);
         Assert.Equal((ActionTextMeasureOutcome.Accepted, 2, 1), (bill.Outcome, bill.Calls, bill.PhraseRejections));
-        Assert.Equal(2, bill.Rejections.Count(ExecutiveSummaryPhrases.IsReason));
+        Assert.Equal(2, bill.Rejections.Count(AiTextPhrases.IsReason));
     }
 
     [Fact]

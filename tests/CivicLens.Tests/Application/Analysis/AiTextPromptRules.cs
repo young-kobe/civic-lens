@@ -9,6 +9,9 @@ internal static class AiTextPromptRules
 
     public static void AssertHoldsSharedSentences(string systemPrompt, bool codeApproves, bool hasConfidence = true)
     {
+        // Every code-approved public text holds the phrase rule of AiTextPhrases, whatever words the prompt uses for the text.
+        Assert.Equal(codeApproves, systemPrompt.Contains("Never use the phrases \"aims to\", \"seeks to\", or \"intended to\".", StringComparison.Ordinal));
+        Assert.Equal(codeApproves, systemPrompt.Contains("Code rejects a sentence with one of these phrases.", StringComparison.Ordinal));
         Assert.Contains(UntrustedSuffix, systemPrompt, StringComparison.Ordinal);
         Assert.Contains(AiTextRules.PlainLanguage, systemPrompt, StringComparison.Ordinal);
         Assert.Contains(AiTextRules.NoJudgment, systemPrompt, StringComparison.Ordinal);

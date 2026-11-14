@@ -11,6 +11,8 @@ namespace CivicLens.Application.Actions;
 
 public static class ActionDraftResolver
 {
+    private const string BillTextSource = "the bill text";
+
     private readonly record struct TextSource(string? PackageId, string? WhyItMatters, ImmutableArray<ActionTextCitation> Citations,
         ImmutableArray<ActionKeyTerm> KeyTerms = default)
     {
@@ -34,6 +36,7 @@ public static class ActionDraftResolver
         CheckNames(output.Summary.Text, "summary", snapshot, errors);
         CheckNoSummarySentence(output.Headline.Text, "headline", errors);
         CheckNoSummarySentence(output.Summary.Text, "summary", errors);
+        errors.AddRange(AiTextPhrases.Errors([output.Headline.Text, output.Summary.Text]));
         if (AiTextRules.PassageGradeError([output.Headline.Text, output.Summary.Text]) is { } passageGrade) errors.Add(passageGrade);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
@@ -62,11 +65,12 @@ public static class ActionDraftResolver
         var quotes = new BillTextQuotes(billText);
         var figures = new BillFigureSet(quotes.NormalizedBody);
         var billNumber = context.Snapshot.Bill.Number.ToString(CultureInfo.InvariantCulture);
-        CheckFigures(output.Headline.Text, "headline", figures, billNumber, errors);
+        errors.AddRange(figures.Errors(output.Headline.Text, "headline", BillTextSource, billNumber));
         var summary = QuotedSentences(output.Summary.Sentences, ActionTextPart.Summary, "summary", quotes, errors);
         var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", quotes, errors);
         CheckSentences(summary, "summary", context.Snapshot, figures, errors);
         CheckSentences(why, "whyItMatters", context.Snapshot, figures, errors);
+        errors.AddRange(AiTextPhrases.Errors(PassageOf(output)));
         if (AiTextRules.QuotedPassageGradeError(PassageOf(output)) is { } passageGrade) errors.Add(passageGrade);
         var keyTermErrors = new List<string>();
         var terms = keyTerms?.Resolve(output.KeyTerms, quotes, keyTermErrors) ?? default;
@@ -146,14 +150,8 @@ public static class ActionDraftResolver
         var text = ActionTextCitation.Join(citations);
         CheckNames(text, field, snapshot, errors);
         CheckNoSummarySentence(text, field, errors);
-        CheckFigures(text, field, figures, snapshot.Bill.Number.ToString(CultureInfo.InvariantCulture), errors);
-    }
-
-    /// <summary>The sentences are free text apart from their quote, so the figures of a sentence are checked against the bill text that was sent.</summary>
-    private static void CheckFigures(string text, string field, BillFigureSet figures, string billNumber, List<string> errors)
-    {
-        foreach (var figure in figures.Missing(text, billNumber))
-            errors.Add($"The {field} has the figure \"{Shorten(figure)}\", which is not in the bill text that was sent. Use only amounts and years that the bill text has.");
+        // The sentences are free text apart from their quote, so the figures of a sentence are checked against the bill text that was sent.
+        errors.AddRange(figures.Errors(text, field, BillTextSource, snapshot.Bill.Number.ToString(CultureInfo.InvariantCulture)));
     }
 
     /// <summary>The headline, the summary sentences and the whyItMatters sentences read as one passage.</summary>
