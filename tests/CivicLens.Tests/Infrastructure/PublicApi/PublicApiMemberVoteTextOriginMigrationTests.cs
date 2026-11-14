@@ -42,6 +42,7 @@ public sealed class PublicApiMemberVoteTextOriginMigrationTests(PostgresCollecti
             Assert.Equal(ExpectedOrigins, await QueryAsPublicAsync(database, OriginsSql));
             Assert.Equal(ExpectedPartyLines, await QueryAsPublicAsync(database, PartyLinesSql));
 
+            await ApplyAsync(database, new PublicApiOfficialVoteParties().DownOperations);
             var migration = new PublicApiMemberVoteTextOrigin();
             var columns = await ColumnNamesAsync(database);
             Assert.Equal("text_origin", columns[^1]);

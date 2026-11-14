@@ -9,7 +9,7 @@ namespace CivicLens.PublicApi.Officials;
 /// <summary>
 /// The reads that only the official page needs, each inside the caller's snapshot: the vote strip marks, the statements that a reviewer linked to a vote,
 /// the sponsored bills with their introduced dates, and the newest executive actions of each document type.
-/// The marks read <c>member_votes.breaks_party</c>, the one owner of the party-break rule that <c>official_party_lines</c> also reads, so the strip and the figures count the same votes.
+/// The marks read <c>member_votes.breaks_party</c>, the one owner of the party-break rule that <c>official_vote_parties</c> counts for <c>official_party_lines</c>, so the strip and the figures count the same votes.
 /// </summary>
 internal static class OfficialPageQueries
 {
