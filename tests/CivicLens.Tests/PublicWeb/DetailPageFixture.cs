@@ -20,7 +20,7 @@ internal static class DetailPageFixture
 
     public const string StatementText = "Intro line. \"First quote.\" Middle. \"Second quote.\" More. \"Third quote.\" Gap. \"Fourth quote.\" End. Said on Friday.";
 
-    public const string StatementLabel = "An AI summary of this release.";
+    public const string StatementLabel = "An AI summary of this press release.";
 
     public const string ChangeLabel = "Drafted by an AI model from these source versions. A person checked it before publication.";
 

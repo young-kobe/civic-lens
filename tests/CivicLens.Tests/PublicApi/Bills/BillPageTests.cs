@@ -110,8 +110,8 @@ public sealed class BillPageTests(PostgresCollection postgres)
         var rows = (await ReadPageAsync(host, BillId)).QuerySelectorAll(".bill-votes .shared-vote-row");
 
         var origins = rows.ToDictionary(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/')[^1],
-            row => row.QuerySelector(".shared-vote-label")!.GetAttribute("data-origin"));
-        Assert.Equal(new Dictionary<string, string?> { [new string('c', 64) + ".html"] = null, [new string('e', 64) + ".html"] = "model" }, origins);
+            row => row.QuerySelector(".shared-vote-meta .ai-label")!.GetAttribute("data-origin"));
+        Assert.Equal(new Dictionary<string, string?> { [new string('c', 64) + ".html"] = "code", [new string('e', 64) + ".html"] = "model" }, origins);
     }
 
     [Fact]
@@ -257,7 +257,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Equal("The term \"grant\" means a payment", terms[1].QuerySelector("blockquote")!.TextContent);
         Assert.Equal([false, true], terms.Select(term => term.QuerySelector(".bill-term-cut") is not null));
         Assert.Equal(BillTextWords.KeyTermsLabel,
-            page.QuerySelector(".bill-terms .ai-summary-label")!.TextContent);
+            page.QuerySelector(".bill-terms .ai-label")!.TextContent);
         Assert.Equal("It pays landlords.", page.QuerySelector(".bill-why-title")!.NextElementSibling!.TextContent);
         Assert.Equal("Based on: Introduced in House, 2 Mar 2026. Read the full text on Congress.gov. This summary covers the first 59,987 of 85,000 characters. Later sections are not covered.",
             page.QuerySelectorAll("details#source dt").Single(item => item.TextContent == "Bill text").NextElementSibling!.TextContent);

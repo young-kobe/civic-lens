@@ -88,7 +88,7 @@ public static class PublicApiApp
             {
                 BrowserApiRoot = provider.GetRequiredService<HomePageReader>().BrowserApiRoot
             });
-            builder.Services.AddSingleton(new PageCache(buildId!, baseUrl, options.BrowserApiUrl));
+            builder.Services.AddSingleton(new PageCache(buildId!, baseUrl, options.BrowserApiUrl, options.TurnstileSiteKey));
             builder.Services.AddSingleton<ServerPageResponder>();
         }
         builder.Services.AddSingleton(new OfficialStore(views));

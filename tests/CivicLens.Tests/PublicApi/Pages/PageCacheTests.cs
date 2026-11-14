@@ -57,6 +57,18 @@ public sealed class PageCacheTests
         Assert.False(changed.IsNotModified(context, 7));
     }
 
+    [Fact]
+    public void AChangedTurnstileSiteKeyInvalidatesTheReportPageValidator()
+    {
+        var original = new PageCache(Build, Origin, null, "key-one");
+        var changed = new PageCache(Build, Origin, null, "key-two");
+        var context = new DefaultHttpContext();
+        context.Request.Headers.IfNoneMatch = original.ETag(7).ToString();
+
+        Assert.True(original.IsNotModified(context, 7));
+        Assert.False(changed.IsNotModified(context, 7));
+    }
+
     [Theory]
     [InlineData("https://API.civic-lens.test/")]
     [InlineData("https://api.civic-lens.test:443")]

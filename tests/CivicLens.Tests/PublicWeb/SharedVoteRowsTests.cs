@@ -151,20 +151,26 @@ public sealed class SharedVoteRowsTests
     }
 
     [Fact]
+    public async Task TheRowLabelIsDrawnByAiLabel()
+    {
+        var row = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes the bill", AiLabelWords.ModelWording,
+            PublishedTextOrigin.Model, "Vote to pass", "Passed", []);
+
+        AiLabelAssert.DrawnByAiLabel(await RenderAsync(new(PublishedChamber.House, [], [row])), AiLabelWords.ModelWording);
+    }
+
+    [Fact]
     public async Task OnlyAModelLabelTakesTheAiInkAndACodeLabelStaysMutedAsInAListRow()
     {
-        var model = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes the bill", PublishedRecordLabels.ModelWording,
+        var model = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes the bill", AiLabelWords.ModelWording,
             PublishedTextOrigin.Model, "Vote to pass", "Passed", []);
-        var code = model with { RecordId = new string('b', 64), Label = PublishedRecordLabels.CodeWording, TextOrigin = PublishedTextOrigin.Code };
+        var code = model with { RecordId = new string('b', 64), Label = AiLabelWords.CodeWording, TextOrigin = PublishedTextOrigin.Code };
 
-        var labels = (await RenderAsync(new(PublishedChamber.House, [], [model, code]))).QuerySelectorAll(".shared-vote-label");
+        var labels = (await RenderAsync(new(PublishedChamber.House, [], [model, code]))).QuerySelectorAll(".shared-vote-meta .ai-label");
 
-        Assert.Equal(["model", null], labels.Select(label => label.GetAttribute("data-origin")));
-        Assert.Equal([PublishedRecordLabels.ModelWording, PublishedRecordLabels.CodeWording], labels.Select(label => label.TextContent));
-        var css = WebStyleSheets.Read("public.css");
-        Assert.Contains(".shared-vote-label[data-origin=\"model\"] { color: var(--ai-ink); }", css);
-        Assert.DoesNotMatch(@"(?m)^\.shared-vote-label \{[^}]*color", css);
-        Assert.Matches(@"(?m)^\.shared-vote-meta \{[^}]*color: var\(--muted\)", css);
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
+        Assert.Equal([AiLabelWords.ModelWording, AiLabelWords.CodeWording], labels.Select(label => label.TextContent));
+        Assert.DoesNotMatch(@"(?m)^\.shared-vote-[^{]*\{[^}]*color: var\(--ai-ink\)", WebStyleSheets.Read("public.css"));
     }
 
     private static async Task<IDocument> RenderAsync(SharedVoteRowsData data, bool differencesOnly = false, int headingLevel = 2, bool singleMember = false)

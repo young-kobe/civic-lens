@@ -87,10 +87,10 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
             new SeededVote('a', "2026-02-01") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 1, TextOrigin = "Code" },
             new SeededVote('c', "2026-02-05") { Casts = ["Yea"], PersonIds = ["p0"], RollCall = 3, TextOrigin = "Model" });
 
-        var labels = (await GetPageAsync(host, "/web/officials/p0/record.html")).QuerySelectorAll(".shared-vote-label");
+        var labels = (await GetPageAsync(host, "/web/officials/p0/record.html")).QuerySelectorAll(".shared-vote-meta .ai-label");
 
-        Assert.Equal(["model", null], labels.Select(label => label.GetAttribute("data-origin")));
-        Assert.Equal([PublishedRecordLabels.ModelWording, PublishedRecordLabels.CodeWording], labels.Select(label => label.TextContent.Trim()));
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
+        Assert.Equal([AiLabelWords.ModelWording, AiLabelWords.CodeWording], labels.Select(label => label.TextContent.Trim()));
     }
 
     [Fact]

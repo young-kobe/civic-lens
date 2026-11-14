@@ -329,8 +329,8 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         var document = new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var labels = document.QuerySelectorAll("section.shared-vote-rows[data-chamber='house'] .shared-vote-label");
-        Assert.Equal(["model", null], labels.Select(label => label.GetAttribute("data-origin")));
+        var labels = document.QuerySelectorAll("section.shared-vote-rows[data-chamber='house'] .shared-vote-meta .ai-label");
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
         Assert.All(labels, label => Assert.NotEmpty(label.TextContent));
     }
 
