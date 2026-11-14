@@ -125,6 +125,25 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task AShortReleaseOfTheOwnOfficeStoresItsSourceTextAsACodeRevisionWithABypassedRunAndCodeApprovesIt()
+    {
+        var candidate = await PassedCandidateAsync(ShortRelease, admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        var model = new FakeStatementDraftModel();
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(("Code", ShortRelease), (await TextAsync($"SELECT author_kind FROM statement_revisions WHERE candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT summary FROM statement_revisions WHERE candidate_id = '{candidate}'")));
+        Assert.Equal(("Bypassed", StatementDraftErrorCodes.SourceText), (
+            await TextAsync($"SELECT r.outcome FROM statement_analysis_runs r JOIN statement_revisions v ON v.run_id = r.run_id WHERE v.candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT r.reason FROM statement_analysis_runs r JOIN statement_revisions v ON v.run_id = r.run_id WHERE v.candidate_id = '{candidate}'")));
+        await AssertColumnsAndChildRowsMatchJsonAsync(candidate);
+        Assert.Equal("civic-lens:code", await TextAsync($"SELECT actor_subject FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
     public async Task ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair()
     {
         var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));

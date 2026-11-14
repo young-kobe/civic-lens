@@ -27,7 +27,7 @@ public sealed class StatementSelectableSpansTests
         Assert.Equal([Quote, text[..firstParagraph.Length]], options.Take(2).Select(option => option.Text));
         Assert.Equal(["This cap protects families,", "We welcome it."],
             options.Where(option => option.Origin == StatementSpanOrigin.QuotedPassage).Select(option => option.Text));
-        Assert.Equal(2, options.Count(option => option.Origin == StatementSpanOrigin.Paragraph));
+        Assert.Equal(3, options.Count(option => option.Origin == StatementSpanOrigin.Paragraph));
         Assert.Equal(options.Length, options.Select(option => option.Key).Distinct().Count());
     }
 

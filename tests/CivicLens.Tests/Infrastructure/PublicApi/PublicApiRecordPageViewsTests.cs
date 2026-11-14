@@ -208,7 +208,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
     [Fact]
     public async Task RecordHeadlinesGiveTheOriginAndLabelThatTheCSharpRulesGiveForEveryCaseBecauseTheViewRepeatsThoseRules()
     {
-        string[] statements = [new('1', 64), new('2', 64), new('3', 64), new('4', 64), new('5', 64)];
+        string[] statements = [new('1', 64), new('2', 64), new('3', 64), new('4', 64), new('5', 64), new('6', 64)];
         string[] actions = [new('a', 64), new('b', 64), new('c', 64)];
         string[] votes = [new('d', 64), new('e', 64), new('f', 64)];
         string[] origins = ["Model", "Code", "Person"];
@@ -230,12 +230,15 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             {PublicRecordPageRows.Headline("statement", statements[4], "Statement 4", "Model")}
             {PublicRecordPageRows.StatementApproval(statements[4], 1, 1, "auth0|owner")}
             {PublicRecordPageRows.StatementApproval(statements[4], 1, 2, ReviewAuthor.CodeSubject)}
+            {PublicRecordPageRows.Headline("statement", statements[5], "Statement 5", "Code")}
+            {PublicRecordPageRows.StatementApproval(statements[5], 1, 1, ReviewAuthor.CodeSubject)}
             """);
         // Each statement case: the origin that PublishedStatementBuilder gives, and the decisions in order of review state version.
         (PublishedTextOrigin Origin, string[] Approvers)[] cases =
         [
             (PublishedTextOrigin.Model, [ReviewAuthor.CodeSubject]), (PublishedTextOrigin.Model, ["auth0|owner"]), (PublishedTextOrigin.Person, ["auth0|owner"]),
-            (PublishedTextOrigin.Model, [ReviewAuthor.CodeSubject, "auth0|owner"]), (PublishedTextOrigin.Model, ["auth0|owner", ReviewAuthor.CodeSubject])
+            (PublishedTextOrigin.Model, [ReviewAuthor.CodeSubject, "auth0|owner"]), (PublishedTextOrigin.Model, ["auth0|owner", ReviewAuthor.CodeSubject]),
+            (PublishedTextOrigin.Code, [ReviewAuthor.CodeSubject])
         ];
         var expected = origins.Select(origin => $"Action {origin}|{origin}|{LabelOfRecord(Enum.Parse<PublishedTextOrigin>(origin))}")
             .Concat(origins.Select(origin => $"Vote {origin}|{origin}|{LabelOfRecord(Enum.Parse<PublishedTextOrigin>(origin))}"))
@@ -295,7 +298,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
     // The C# rule for an action or a vote is PublishedRecordLabels.Wording.
     private static string LabelOfRecord(PublishedTextOrigin origin) => PublishedRecordLabels.Wording(origin).SingleOrDefault()?.Value ?? "none";
 
-    // The C# rule for a statement is PublishedRecordLabels.StatementWording. It gives the code label when code approved a model statement, the person-checked label when a person did, and none for person text.
+    // The C# rule for a statement is PublishedRecordLabels.StatementWording. It gives the code label when code approved a model statement, the person-checked label when a person did, the source text label for code text, and none for person text.
     private static string LabelOfStatement(PublishedTextOrigin origin, PublishedApprover approver) =>
         PublishedRecordLabels.StatementWording(PublishedStatementTests.Statement() with { TextOrigin = origin, ApprovedBy = approver }).SingleOrDefault()?.Value ?? "none";
 

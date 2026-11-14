@@ -109,8 +109,12 @@ public static class PublishedRecordLabels
         _ => []
     };
 
-    public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
-        statement.TextOrigin == PublishedTextOrigin.Model ? [new(WordingFact, StatementModelLabel(statement.ApprovedBy))] : [];
+    public static IEnumerable<Fact> StatementWording(PublishedStatement statement) => statement.TextOrigin switch
+    {
+        PublishedTextOrigin.Model => [new(WordingFact, StatementModelLabel(statement.ApprovedBy))],
+        PublishedTextOrigin.Code => [new(WordingFact, AiLabelWords.StatementSourceTextWording)],
+        _ => []
+    };
 
     private static string StatementModelLabel(PublishedApprover approver) =>
         approver == PublishedApprover.Code ? AiLabelWords.StatementModelWording : AiLabelWords.StatementCheckedByPersonWording;

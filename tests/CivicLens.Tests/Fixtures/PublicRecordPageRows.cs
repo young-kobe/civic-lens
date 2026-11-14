@@ -65,9 +65,9 @@ internal static class PublicRecordPageRows
     {
         "statement" => $"""
             INSERT INTO published_entries (kind, record_id, revision_number, statement_candidate_id, statement_revision_number, headline, approved_by)
-              VALUES ('statement', '{record}', 1, '{record}', 1, '{headline}', '{approvedBy ?? (origin == "Model" ? "Code" : "Person")}');
+              VALUES ('statement', '{record}', 1, '{record}', 1, '{headline}', '{approvedBy ?? (origin == "Person" ? "Person" : "Code")}');
             INSERT INTO statement_revisions (candidate_id, revision_number, author_kind, author_subject, run_id, created_at_utc_ticks, headline, summary, revision_json)
-              VALUES ('{record}', 1, '{(origin == "Model" ? "Analysis" : "Person")}', 'test', {(origin == "Model" ? $"'run-{record[..16]}'" : "NULL")}, 1, '{headline}', 'Summary', 'x');
+              VALUES ('{record}', 1, '{StatementAuthorKind(origin)}', 'test', {(origin == "Person" ? "NULL" : $"'run-{record[..16]}'")}, 1, '{headline}', 'Summary', 'x');
             """,
         "action" => PublicActionRows.ActionRevision(record, 1, origin, null, null, headline: headline),
         _ => $"""
@@ -76,6 +76,9 @@ internal static class PublicRecordPageRows
                   '2026-02-01', 'ext', 0, 1, 'Passage', '{record}', '{new string('a', 64)}', true, 'Passed');
             """
     };
+
+    /// <summary>A model writes a statement summary as the analysis author, and code writes the source text of a short release as the code author.</summary>
+    private static string StatementAuthorKind(string origin) => origin switch { "Model" => "Analysis", "Code" => "Code", _ => "Person" };
 
     /// <summary>The fact lines of the saved Federal Register record of <see cref="ExecutiveAction"/>. The disposition notes line has no citation until a test sets one.</summary>
     public const string ExecutiveActionFactsText = "Federal Register document: 2026-00001\nSigned: 2026-01-20\nDisposition notes: Amends EO 1\n" +

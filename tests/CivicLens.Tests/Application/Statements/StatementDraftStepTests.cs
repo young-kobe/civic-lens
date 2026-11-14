@@ -172,6 +172,52 @@ public sealed class StatementDraftStepTests
     }
 
     [Fact]
+    public async Task AShortReleaseMakesNoModelCallAndCodeWritesItsSourceTextAsTheRevision()
+    {
+        var store = new FakeStatementDraftStore(DraftEvidence(ShortRelease));
+        var model = new FakeStatementDraftModel();
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        var run = Assert.Single(store.Runs);
+        Assert.Equal((AnalysisRunOutcome.Bypassed, StatementDraftErrorCodes.SourceText, 0L), (run.Run.Outcome, run.Reason, run.Run.ChargedTokens));
+        Assert.Equal((State.Succeeded, null), (store.Entries.Single().Status, store.Entries.Single().ErrorCode));
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("civic-lens:code", ShortRelease, "Warren backs new tenant protections"), (revision.AuthorSubject, revision.Summary, revision.Headline));
+        Assert.Equal([Warren], revision.SpeakerOfficialIds.ToArray());
+        Assert.Equal([StatementQuotationKind.DirectQuotation], revision.Quotations.Select(item => item.Kind));
+    }
+
+    [Fact]
+    public async Task AReleaseOverTheShortLimitKeepsItsAiSummaryFromTheModel()
+    {
+        var store = new FakeStatementDraftStore(DraftEvidence());
+        var model = new FakeStatementDraftModel().Draft(Output());
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Single(model.Requests);
+        Assert.Equal(AnalysisRunOutcome.Drafted, Assert.Single(store.Runs).Run.Outcome);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("civic-lens:analysis", "Warren announces a rent cap"), (revision.AuthorSubject, revision.Headline));
+        Assert.NotEqual(Article, revision.Summary);
+    }
+
+    [Fact]
+    public async Task AShortReleaseOfSeveralOfficialsWithNoOfficeOwnerHasNoSpeakerSoAPersonChoosesIt()
+    {
+        var store = new FakeStatementDraftStore(DraftEvidence(ShortRelease, observed: BothCovered));
+        var model = new FakeStatementDraftModel();
+
+        await Worker(store, model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Empty(Assert.Single(store.Revisions).SpeakerOfficialIds);
+        Assert.Empty(store.CodeApproved);
+    }
+
+    [Fact]
     public async Task AnExistingDraftSucceedsTheEntryWithoutACall()
     {
         var store = new FakeStatementDraftStore(DraftEvidence(existingDraft: new(1, IsStaleModelDraft: false)));
