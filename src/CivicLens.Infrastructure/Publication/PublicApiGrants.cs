@@ -61,14 +61,16 @@ internal static class PublicApiGrants
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)
             ON action_revision_sponsorships TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, "position", is_tracked) ON action_revision_issues TO civic_lens_public_owner;
-        GRANT SELECT (record_id, revision_number, "position", term, definition, cut) ON action_revision_key_terms TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, "position", term, definition, cut, citation_extraction_id, citation_start, citation_length)
+            ON action_revision_key_terms TO civic_lens_public_owner;
         GRANT SELECT (crs_summary_text, summary_version) ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, week_start, headline, text_origin, cutoff_release_number, coverage_considered, coverage_sent_to_model) ON brief_revisions TO civic_lens_public_owner;
         GRANT SELECT (summary_citation_extraction_id, policy_area_citation_extraction_id, bill_citation_extraction_id)
             ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, sponsorship_position, "position", citation_extraction_id)
             ON action_revision_sponsorship_citations TO civic_lens_public_owner;
-        GRANT SELECT (record_id, revision_number, "position", citation_extraction_id) ON action_revision_text_citations TO civic_lens_public_owner;
+        GRANT SELECT (record_id, revision_number, "position", part, sentence, citation_extraction_id, citation_start, citation_length)
+            ON action_revision_text_citations TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, position, paragraph_text) ON brief_revision_paragraphs TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, part, citation_id, position, kind, statement_candidate_id, statement_revision_number,
             action_record_id, action_revision_number, document_change_draft_id, document_change_revision_number) ON brief_revision_citations TO civic_lens_public_owner;
@@ -136,7 +138,7 @@ internal static class PublicApiGrants
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;
         GRANT SELECT ON public_api.active_records, public_api.active_release, public_api.votes, public_api.vote_members, public_api.member_votes, public_api.vote_issues,
-            public_api.bills, public_api.bill_key_terms, public_api.bill_actions, public_api.bill_sponsorships, public_api.bill_sponsorship_parties, public_api.briefs, public_api.brief_paragraphs, public_api.brief_citations, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
+            public_api.bills, public_api.bill_key_terms, public_api.bill_text_sentences, public_api.bill_actions, public_api.bill_sponsorships, public_api.bill_sponsorship_parties, public_api.briefs, public_api.brief_paragraphs, public_api.brief_citations, public_api.issue_votes, public_api.issue_sponsors, public_api.bill_issues, public_api.zip_districts,
             public_api.party_agreement, public_api.release_officials, public_api.release_official_terms, public_api.release_issues, public_api.release_issue_includes,
             public_api.release_issue_excludes, public_api.release_policy_areas, public_api.officials, public_api.official_attendance,
             public_api.official_party_lines, public_api.official_issue_counts, public_api.official_executive_actions,

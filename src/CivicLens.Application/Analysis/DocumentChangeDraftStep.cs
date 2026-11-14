@@ -31,7 +31,7 @@ public sealed class DocumentChangeDraftStep(IDocumentChangeAnalysisStore store, 
         attempt.ContextJson = DocumentChangeDraftPrompt.SerializeCatalog(catalog);
 
         var loop = new AnalysisValidationLoop<AnalysisRun, DocumentChangeDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            DocumentChangeDraftTask.MaximumValidationPasses,
+            AiTextRules.MaximumValidationPasses,
             errors => Bounded(DocumentChangeDraftPrompt.Build(evidence, catalog, errors)), model.DraftAsync,
             (json, run) => Resolve(json, evidence, catalog, run), store.GetRunAsync);
         var result = await loop.RunAsync(cancellationToken);

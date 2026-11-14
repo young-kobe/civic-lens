@@ -222,7 +222,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Single(model.Requests);
         var run = (string)(await ScalarAsync("SELECT run_id FROM action_analysis_runs WHERE outcome = 'Drafted'"))!;
         Assert.Equal(("Code", run), await TupleAsync($"SELECT author_kind, run_id FROM action_revisions WHERE record_id = '{RecordId}'"));
-        Assert.Equal(("action-issue-prompt-v3", "Drafted"), await TupleAsync("SELECT prompt_version, outcome FROM action_analysis_runs"));
+        Assert.Equal((ActionDraftTask.IssuePromptVersion, "Drafted"), await TupleAsync("SELECT prompt_version, outcome FROM action_analysis_runs"));
         var revision = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
         Assert.Equal(["rent"], revision.TrackedIssueIds.ToArray());
         Assert.Single(await ActionDecisionsAsync());

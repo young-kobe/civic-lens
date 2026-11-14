@@ -1,7 +1,5 @@
 using System.Globalization;
-using CivicLens.Application.Analysis;
-
-namespace CivicLens.Application.Actions;
+namespace CivicLens.Application.Analysis;
 
 /// <summary>The one owner of the reading grade of English text, such as a model sentence, a headline or a passage of both. The grade is the Flesch-Kincaid grade level,
 /// 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59. <see cref="SentenceEnds"/> owns where a sentence ends, so a full stop in
@@ -11,15 +9,9 @@ namespace CivicLens.Application.Actions;
 /// a vowel (a vowel before "ed" already sits in a vowel group, as in "agreed"), or the "ed" follows an "l" that a consonant other than "l" precedes. That
 /// "led" is its own syllable, as in "settled", while "called" keeps a silent "ed". A word has at least one syllable.
 /// A passage is graded as one text: <see cref="OfPassage"/> adds the words, syllables and sentences of its pieces. Each piece counts at least one sentence,
-/// so a headline with no full stop is still one sentence.</summary>
+/// so a headline with no full stop is still one sentence. <see cref="AiTextRules"/> owns the grades that AI text aims for and must not pass.</summary>
 public static class ReadingGrade
 {
-    /// <summary>The grade that the prompts and the repair messages ask for. A passage can read above it and still pass.</summary>
-    public const double TargetGrade = 12;
-
-    /// <summary>The grade that code checks. A passage above it goes back to the model, and an approval check rejects it.</summary>
-    public const double MaximumGrade = 14;
-
     public static double Of(string text)
     {
         ArgumentNullException.ThrowIfNull(text);

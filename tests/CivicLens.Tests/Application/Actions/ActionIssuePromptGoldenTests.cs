@@ -8,9 +8,9 @@ namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionIssuePromptGoldenTests
 {
-    private const string SystemSha256 = "c8bb0cd3ac262db5ac023cc98e4bac6c7550b7e20faad53463c69eeef6314e11";
+    private const string SystemSha256 = "9a885868ffc649c15cd67d06e2d70d42ed353a44d73ac12ce6be100628a2c13d";
     private const string SchemaSha256 = "924ddf09fe3d1e1bc40739a6bbe685736955129192b0372e33a985c82a73855f";
-    private const string InputHash = "6f492c8b248e237039d3e83a21ffc75c88d9a9d00084a502f3b10f9091da589a";
+    private const string InputHash = "fdf38acdaeb345b40a9badee6ad4e10db188d8b85fbbcc1a85d05e1d3e7e366f";
 
     [Fact]
     public async Task TheIssueOnlyPromptAndSchemaMatchTheirPinnedVersions()
@@ -22,7 +22,7 @@ public sealed class ActionIssuePromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.IssuePromptVersion)} ({ActionDraftTask.IssuePromptVersion}) or " +
             $"{nameof(ActionDraftTask.IssueSchemaVersion)} ({ActionDraftTask.IssueSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-issue-prompt-v3", "action-issue-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-issue-prompt-v4", "action-issue-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.IssuePromptVersion, ActionDraftTask.IssueSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.IssuePromptVersion, ActionDraftTask.IssueSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.True(request.CacheSystemPrompt);

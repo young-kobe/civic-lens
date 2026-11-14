@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Briefs;
+using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.Fixtures.BriefFixtures;
 
@@ -8,9 +9,9 @@ namespace CivicLens.Tests.Application.Briefs;
 
 public sealed class BriefDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "3f810a189375aee9ef7511c33237630cb8a245b178b818ad95f1dd6cc70ddbcc";
+    private const string SystemSha256 = "e46065da926ca5e89bc61f0a5945fdb2318771e262092c3defceac9f2b18da86";
     private const string SchemaSha256 = "20e71ba28935b2ac806615f28e46f3fd239ef3b97f20b5ceb54f4658ae9176a0";
-    private const string InputHash = "2c7f524e500c37f18a72380abba65136f5cd58991b0ae899ae2d0f97086c0b78";
+    private const string InputHash = "48e59038c9b8637c5e8afbcb27b587692cc6edd17e222e12ac70bfe2f99c6635";
 
     private static readonly BriefRecord[] Records =
     [
@@ -19,13 +20,17 @@ public sealed class BriefDraftPromptGoldenTests
     ];
 
     [Fact]
+    public void ThePromptHoldsTheSharedAiTextSentencesButNoCodeGradeLimitBecauseAPersonApprovesTheBrief() =>
+        AiTextPromptRules.AssertHoldsSharedSentences(Build().SystemPrompt, codeApproves: false);
+
+    [Fact]
     public void ThePromptAndSchemaMatchTheirPinnedVersions()
     {
         var request = Build();
 
         var bump = $"The prompt or schema changed. Bump {nameof(BriefDraftTask.PromptVersion)} ({BriefDraftTask.PromptVersion}) or " +
             $"{nameof(BriefDraftTask.SchemaVersion)} ({BriefDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("brief-draft", "brief-draft-v1", "brief-draft-prompt-v1", "brief-draft-schema-v1", "claude-sonnet-5-5"),
+        Assert.Equal(("brief-draft", "brief-draft-v1", "brief-draft-prompt-v2", "brief-draft-schema-v1", "claude-sonnet-5-5"),
             (BriefDraftTask.Task, BriefDraftTask.TaskVersion, BriefDraftTask.PromptVersion, BriefDraftTask.SchemaVersion, BriefDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

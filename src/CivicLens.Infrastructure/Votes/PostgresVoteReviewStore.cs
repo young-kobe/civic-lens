@@ -190,7 +190,7 @@ public sealed class PostgresVoteReviewStore : IVoteReviewStore
             history.CurrentStatus, history.Decisions, history.UnresolvedConcerns);
 
     internal static async Task ValidateApprovalAsync(CollectionAttemptDbContext db, VoteDraftRevision revision, CancellationToken cancellationToken) =>
-        revision.ValidateForApproval(await ReadExtractionsAsync(db, [revision], cancellationToken));
+        VoteTextApproval.Validate(revision, await ReadExtractionsAsync(db, [revision], cancellationToken));
 
     private static Task<Dictionary<string, DocumentExtraction>> ReadExtractionsAsync(CollectionAttemptDbContext db,
         IEnumerable<VoteDraftRevision> revisions, CancellationToken cancellationToken) =>

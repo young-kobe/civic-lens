@@ -22,6 +22,7 @@ public static class VoteDraftResolver
         CheckConfidence(output.Summary.Confidence, "summary confidence", errors);
         CheckNoNames(output.Headline.Text, "headline", snapshot, errors);
         CheckNoNames(output.Summary.Text, "summary", snapshot, errors);
+        if (AiTextRules.PassageGradeError([output.Headline.Text, output.Summary.Text]) is { } passageGrade) errors.Add(passageGrade);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<VoteDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<VoteDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current, output.Headline.Text,

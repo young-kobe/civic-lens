@@ -1,16 +1,21 @@
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Relationships;
+using CivicLens.Tests.Application.Analysis;
 using static CivicLens.Tests.Fixtures.RelationshipFixtures;
 
 namespace CivicLens.Tests.Application.Relationships;
 
 public sealed class RelationshipDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "7d84be6857fdd345d3ad36002b332b66bb202964dfd4458b2611ac7914e54192";
+    private const string SystemSha256 = "57b4f5689e8b3f3d1523910917fcfda52b8a0e978b8fca00e8ec9c5aae84f763";
     private const string ActionSchemaSha256 = "dff9bafa14ef08eda3c44c0e88f2b9417df0becc8c1de733ff63d3761b5c9264";
     private const string VoteSchemaSha256 = "2ed54e5316072e9abca0da23011fabbcd3ea89fb52fd23b7f3d5cd2740c8701d";
-    private const string InputHash = "6baa668b8813ef60f9f320cd1ee9987899375ac8bf867d94483f2d26a0a99b9c";
+    private const string InputHash = "2d8eadb6092348fb3113439336e548aad224dbc93d3bbe978dc960f3c91eb044";
+
+    [Fact]
+    public void ThePromptHoldsTheSharedAiTextSentencesButNoCodeGradeLimitBecauseAPersonApprovesTheReason() =>
+        AiTextPromptRules.AssertHoldsSharedSentences(Build(ActionPair()).SystemPrompt, codeApproves: false, hasConfidence: false);
 
     [Fact]
     public void ThePromptAndSchemasMatchTheirPinnedVersions()
@@ -20,7 +25,7 @@ public sealed class RelationshipDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(RelationshipDraftTask.PromptVersion)} ({RelationshipDraftTask.PromptVersion}) or " +
             $"{nameof(RelationshipDraftTask.SchemaVersion)} ({RelationshipDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("relationship-draft", "relationship-draft-v1", "relationship-draft-prompt-v1", "relationship-draft-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("relationship-draft", "relationship-draft-v1", "relationship-draft-prompt-v2", "relationship-draft-schema-v1", "claude-haiku-5-5"),
             (RelationshipDraftTask.Task, RelationshipDraftTask.TaskVersion, RelationshipDraftTask.PromptVersion, RelationshipDraftTask.SchemaVersion,
                 RelationshipDraftTask.Model));
         Assert.True(Sha256(action.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(action.SystemPrompt)}");

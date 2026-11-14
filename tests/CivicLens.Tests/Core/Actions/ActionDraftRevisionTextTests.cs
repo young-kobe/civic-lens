@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Review;
 using static CivicLens.Tests.Fixtures.ActionRevisionFixtures;
 
@@ -61,7 +62,7 @@ public sealed class ActionDraftRevisionTextTests
     [Fact]
     public void AQuoteLongerThanTheCapIsRefused()
     {
-        var long_ = TextModel().TextCitations.SetItem(0, new(ActionTextPart.Summary, new(ExtractionId, 0, ActionDraftRevision.MaximumTextQuoteLength + 1), "First sentence."));
+        var long_ = TextModel().TextCitations.SetItem(0, new(ActionTextPart.Summary, new(ExtractionId, 0, QuotedSentenceLimits.MaximumQuoteLength + 1), "First sentence."));
 
         Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = long_ }).ValidateShape());
     }
@@ -72,7 +73,7 @@ public sealed class ActionDraftRevisionTextTests
     public void ASentenceMustHaveTextAndStayUnderItsCap(string sentence)
     {
         Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = TextModel().TextCitations.SetItem(0, TextModel().TextCitations[0] with { Sentence = sentence }) }).ValidateShape());
-        var long_ = new string('a', ActionDraftRevision.MaximumTextSentenceLength + 1);
+        var long_ = new string('a', QuotedSentenceLimits.MaximumSentenceLength + 1);
         Assert.Throws<ArgumentException>(() => (TextModel() with { TextCitations = TextModel().TextCitations.SetItem(0, TextModel().TextCitations[0] with { Sentence = long_ }) }).ValidateShape());
     }
 

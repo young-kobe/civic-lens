@@ -177,6 +177,8 @@ public sealed partial class PostgresBillStreamTests
         var billSpan = new SourceSpan(extractionId, 3, 9);
         var full = basis with
         {
+            Headline = "Warren filed a bill.", // Code approves the revision, so its model text reads at or below the grade limit.
+            Summary = "The bill pays rent.",
             SummaryVersion = "summary-v1",
             SummaryCitation = summarySpan,
             PolicyArea = "Housing",

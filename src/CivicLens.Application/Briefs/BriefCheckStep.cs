@@ -33,7 +33,7 @@ public sealed class BriefCheckStep(IBriefCheckStore store, IBriefCheckModel mode
         ImmutableArray<BriefRecord> notCited, string fingerprint, CancellationToken cancellationToken)
     {
         var loop = new AnalysisValidationLoop<BriefCheckRun, BriefCheckResult>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            BriefCheckTask.MaximumValidationPasses, errors => Prompt(evidence, notCited, errors), model.CheckAsync,
+            AiTextRules.MaximumValidationPasses, errors => Prompt(evidence, notCited, errors), model.CheckAsync,
             (json, _) => BriefCheckResolver.Resolve(json, evidence.Revision),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);
