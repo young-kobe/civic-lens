@@ -7,7 +7,7 @@ namespace CivicLens.PublicApi.Ingest;
 /// Makes the active release of the views the active release of the index, in one transaction.
 /// A release that is stored already only becomes active again. That is how the service follows a rollback of publication.
 /// </summary>
-public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource database)
+public sealed class ReleaseIngest(TypedReleaseSource source, NpgsqlDataSource database)
 {
     public async Task<IngestResult> RunAsync(CancellationToken cancellationToken)
     {
@@ -30,7 +30,7 @@ public sealed class ReleaseIngest(IReleaseSource source, NpgsqlDataSource databa
         return new(moved ? IngestOutcome.Activated : IngestOutcome.AlreadyActive, number, 0, 0, []);
     }
 
-    private static async Task<IngestResult> IngestAsync(IndexTransaction index, IReleaseRead read, CancellationToken cancellationToken)
+    private static async Task<IngestResult> IngestAsync(IndexTransaction index, TypedReleaseRead read, CancellationToken cancellationToken)
     {
         var release = read.Release;
         var previous = await index.LatestReleaseAsync(cancellationToken);
