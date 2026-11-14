@@ -344,6 +344,21 @@ public sealed class HomePageTests
     }
 
     [Fact]
+    public async Task ADelegateShowsOnHomeEvenWhenNoBoardRanksAVotingMember()
+    {
+        var page = await RenderAsync(new(7, null, [], null)
+        {
+            Boards = [Panel(PublishedChamber.House, "Republican", 119) with { Delegates = [Delegate("James Moylan", "Delegate for Guam", 51, 26)] }]
+        });
+        var section = page.QuerySelector(".home-breakers")!;
+
+        Assert.Empty(section.QuerySelectorAll(".home-breaker-card"));
+        Assert.Null(section.QuerySelector(".home-section-lede"));
+        Assert.Equal("James Moylan", section.QuerySelector(".board-delegates .list-row-title")!.TextContent);
+        Assert.Equal("26 of 51 split votes, 119th Congress", section.QuerySelector(".board-delegates .list-row-figure")!.TextContent);
+    }
+
+    [Fact]
     public async Task WhenTheBoardsKeepDifferentCongressesEachDelegateRowNamesItsCongress()
     {
         var page = await RenderAsync(new(7, null, [], null) { Boards = FourPanels(118) });

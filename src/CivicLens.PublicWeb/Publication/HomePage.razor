@@ -129,22 +129,25 @@
                     </ul>
                 </section>
             }
-            @if (breakers.Count > 0)
+            @if (breakers.Count > 0 || delegates.Count > 0)
             {
                 <section class="home-breakers" aria-labelledby="home-breakers-title">
                     <h2 id="home-breakers-title">Who broke from their party most</h2>
-                    <p class="home-section-lede">Each name below is the member in one chamber and party who voted against most of their own party on <Term Key="split-vote">split vote</Term> most often@(sharedCongress is { } congress ? $" in the {CongressCalendar.Ordinal(congress)} Congress" : ""). A member needs at least @OfficialBoardPage.MinimumSplitVotes split votes cast to count.</p>
-                    <ul class="home-breaker-list" role="list">
-                        @foreach (var card in breakers)
-                        {
-                            <li class="home-breaker-card">
-                                <a class="home-breaker-name" href="@(RootPath + card.Row.PagePath)">@card.Row.Name</a>
-                                <p class="muted small">@PublishedPartyNames.PartyOf(card.Panel.Chamber, card.Panel.Party)</p>
-                                <span class="home-breaker-figure">@card.Row.Breaks of @card.Row.Cast</span>
-                                <p class="muted small">split votes cast against most @PublishedPartyNames.Members(card.Panel.Party)@(sharedCongress is null ? $", {CongressCalendar.Ordinal(card.Panel.Congress!.Value)} Congress" : "")</p>
-                            </li>
-                        }
-                    </ul>
+                    @if (breakers.Count > 0)
+                    {
+                        <p class="home-section-lede">Each name below is the member in one chamber and party who voted against most of their own party on <Term Key="split-vote">split vote</Term> most often@(sharedCongress is { } congress ? $" in the {CongressCalendar.Ordinal(congress)} Congress" : ""). A member needs at least @OfficialBoardPage.MinimumSplitVotes split votes cast to count.</p>
+                        <ul class="home-breaker-list" role="list">
+                            @foreach (var card in breakers)
+                            {
+                                <li class="home-breaker-card">
+                                    <a class="home-breaker-name" href="@(RootPath + card.Row.PagePath)">@card.Row.Name</a>
+                                    <p class="muted small">@PublishedPartyNames.PartyOf(card.Panel.Chamber, card.Panel.Party)</p>
+                                    <span class="home-breaker-figure">@card.Row.Breaks of @card.Row.Cast</span>
+                                    <p class="muted small">split votes cast against most @PublishedPartyNames.Members(card.Panel.Party)@(sharedCongress is null ? $", {CongressCalendar.Ordinal(card.Panel.Congress!.Value)} Congress" : "")</p>
+                                </li>
+                            }
+                        </ul>
+                    }
                     @if (delegates.Count > 0)
                     {
                         <div class="board-delegates">
