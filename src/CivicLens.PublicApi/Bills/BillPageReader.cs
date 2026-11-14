@@ -91,6 +91,7 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
             WhyItMatters = bill.WhyItMatters,
             BillText = TextSourceOf(bill),
             KeyTerms = detail.KeyTerms,
+            TextSentences = detail.TextSentences,
             KeyTermsLabel = detail.KeyTermsLabel,
             CrsText = detail.CrsSummaryText,
             CrsVersion = detail.CrsSummaryVersion,

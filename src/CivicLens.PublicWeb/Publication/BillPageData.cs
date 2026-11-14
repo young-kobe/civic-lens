@@ -7,7 +7,7 @@ namespace CivicLens.PublicWeb.Publication;
 /// <c>Status</c> is the plain meaning of the latest Congress.gov action, with the day of that action and the time Civic Lens read it. <c>StatusLabel</c> is the short label of the same action, or null when no rule matches it.
 /// <c>Votes</c> are the shared vote rows of the roll calls that name the bill, with the chamber totals and the split badge. A row holds no cast, because the page names no member.
 /// <c>SenateVoteGap</c> is true when the stepper has a Senate step after the introduction and no Senate roll call vote in the release names the bill.
-/// <c>WhyItMatters</c> and <c>BillText</c> come with an AI summary of the bill text, and are null otherwise. <c>KeyTerms</c> is empty when the bill has none, and <c>KeyTermsLabel</c> is then null.
+/// <c>WhyItMatters</c> and <c>BillText</c> come with an AI summary of the bill text, and are null otherwise. <c>TextSentences</c> holds the sentences of that summary with their quotes, in view order, and is empty otherwise. <c>KeyTerms</c> is empty when the bill has none, and <c>KeyTermsLabel</c> is then null.
 /// <c>SummaryFromCrs</c> is true when the summary is model text drafted from the CRS summary. <c>CheckedAtUtc</c> is the approval time of the published revision.
 /// </summary>
 public sealed record BillPageData(
@@ -33,6 +33,7 @@ public sealed record BillPageData(
     public BillIssueData[] Issues { get; init; } = [];
     public string? WhyItMatters { get; init; }
     public BillTextSourceData? BillText { get; init; }
+    public BillTextSentenceData[] TextSentences { get; init; } = [];
     public BillKeyTermData[] KeyTerms { get; init; } = [];
     public string? KeyTermsLabel { get; init; }
     public string? CrsText { get; init; }

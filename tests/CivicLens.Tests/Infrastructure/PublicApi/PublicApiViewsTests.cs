@@ -874,7 +874,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         var model = (await store.FindAsync("M", default))!;
         var person = (await store.FindAsync("A", default))!;
 
-        CivicLens.PublicApi.Bills.BillTextSentence[] sentences =
+        CivicLens.PublicWeb.Publication.BillTextSentenceData[] sentences =
         [
             new(PublishedTextPart.Summary, "The bill defines a grant.", GrantQuote),
             new(PublishedTextPart.Summary, "The Secretary pays landlords.", PayQuote),

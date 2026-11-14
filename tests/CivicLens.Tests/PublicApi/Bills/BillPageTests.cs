@@ -221,31 +221,45 @@ public sealed class BillPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AModelTextSummaryShowsItsWhyItMattersItsBillTextSourceAndItsKeyTermsInOrderWithTheViewLabel()
+    public async Task AModelTextSummaryShowsEachSentenceQuoteUnderItsPartItsBillTextSourceAndTheExactQuoteOfEachKeyTermInViewOrder()
     {
+        const string secretary = "The term “Secretary” means the Secretary.";
+        const string grant = "The term “grant” means a payment";
+        const string pays = "The Secretary shall pay landlords.";
+        const string ends = "Each grant ends after 5 years.";
+        const string paidSoon = "Landlords get paid within 30 days.";
+        const string text = $"SEC. 2. {secretary} {grant} under section 3. {pays} {ends} {paidSoon}";
+        static string Span(string quote) => $"'{Extraction}', {text.IndexOf(quote, StringComparison.Ordinal)}, {quote.Length}";
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
             SET session_replication_role = replica;
             INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
-              VALUES ('{Extraction}', 'attempt', 'extraction', repeat('a', 130), '{new string('f', 64)}');
+              VALUES ('{Extraction}', 'attempt', 'extraction', '{text}', '{new string('f', 64)}');
             INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
               VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2026-03-02', 'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', '{Extraction}', 85000, 59987);
             UPDATE action_revisions SET text_origin = 'Model', text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It pays landlords.' WHERE record_id = '{BillId}';
             INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
-              SELECT record_id, revision_number, 1, 'grant', '{Extraction}', 100, 30, 'The term "grant" means a payment', true FROM action_revisions WHERE record_id = '{BillId}'
-              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', '{Extraction}', 10, 30, 'The term Secretary means the Secretary.', false FROM action_revisions WHERE record_id = '{BillId}';
+              SELECT record_id, revision_number, 1, 'grant', {Span(grant)}, 'The term "grant" means a payment', true FROM action_revisions WHERE record_id = '{BillId}'
+              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', {Span(secretary)}, 'The term "Secretary" means the Secretary.', false FROM action_revisions WHERE record_id = '{BillId}';
+            INSERT INTO action_revision_text_citations (record_id, revision_number, position, part, citation_extraction_id, citation_start, citation_length, sentence)
+              SELECT record_id, revision_number, 2, 'WhyItMatters', {Span(paidSoon)}, 'It pays landlords.' FROM action_revisions WHERE record_id = '{BillId}'
+              UNION ALL SELECT record_id, revision_number, 0, 'Summary', {Span(pays)}, 'The bill pays landlords.' FROM action_revisions WHERE record_id = '{BillId}'
+              UNION ALL SELECT record_id, revision_number, 1, 'Summary', {Span(ends)}, 'Each grant ends.' FROM action_revisions WHERE record_id = '{BillId}';
             RESET session_replication_role;
             """);
 
         var page = await ReadPageAsync(host, BillId);
 
+        var summary = page.QuerySelector(".bill-main > .ai-summary")!;
+        Assert.Equal(["span", "p", "blockquote", "blockquote", "h2", "p", "blockquote"], summary.Children.Select(element => element.LocalName));
+        Assert.Equal([pays, ends, paidSoon], summary.QuerySelectorAll("blockquote.quote").Select(quote => quote.TextContent));
+        Assert.Equal("It pays landlords.", page.QuerySelector(".bill-why-title")!.NextElementSibling!.TextContent);
         var terms = page.QuerySelectorAll(".bill-term").ToArray();
         Assert.Equal(["Secretary", "grant"], terms.Select(term => term.QuerySelector("dt")!.TextContent));
-        Assert.Equal("The term \"grant\" means a payment", terms[1].QuerySelector("blockquote")!.TextContent);
+        Assert.Equal($"\"{grant}\"", terms[1].QuerySelector("blockquote")!.TextContent);
         Assert.Equal([false, true], terms.Select(term => term.QuerySelector(".bill-term-cut") is not null));
         Assert.Equal(BillTextWords.KeyTermsLabel,
             page.QuerySelector(".bill-terms .ai-summary-label")!.TextContent);
-        Assert.Equal("It pays landlords.", page.QuerySelector(".bill-why-title")!.NextElementSibling!.TextContent);
         Assert.Equal("Based on: Introduced in House, 2 Mar 2026. Read the full text on Congress.gov. This summary covers the first 59,987 of 85,000 characters. Later sections are not covered.",
             page.QuerySelectorAll("details#source dt").Single(item => item.TextContent == "Bill text").NextElementSibling!.TextContent);
     }
