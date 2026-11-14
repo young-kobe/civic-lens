@@ -452,8 +452,10 @@ public sealed class BillDetailPageTests
     {
         var corrected = await RenderAsync(Bill with { Corrections = [PublishedCorrectionBannerTests.Newest] });
         var plain = await RenderAsync(Bill);
+        var updated = await RenderAsync(Bill with { Corrections = [PublishedCorrectionBannerTests.Newest with { Note = null }] });
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+        Assert.Null(updated.QuerySelector(".correction-banner"));
     }
 }

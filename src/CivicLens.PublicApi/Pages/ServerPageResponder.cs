@@ -1,5 +1,6 @@
 using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Http;
 
@@ -35,7 +36,15 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
         var html = await renderer.RenderPageAsync<TComponent>(await parameters(), freshness.PageContextFor(releaseNumber));
         if (IsSuccess(statusCode)) cache.Apply(context, releaseNumber);
         else PageCache.ApplyFailure(context);
-        return Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
+        return Page(html, statusCode);
+    }
+
+    /// <summary>For the page of a server failure. The failure can be a database fault or no active release, so it reads nothing, and its shell shows no freshness line.</summary>
+    public async Task<IResult> RespondFailureAsync<TComponent>(HttpContext context, int statusCode, IReadOnlyDictionary<string, object?> parameters) where TComponent : IComponent
+    {
+        var html = await renderer.RenderPageAsync<TComponent>(parameters, NoFreshness);
+        PageCache.ApplyFailure(context);
+        return Page(html, statusCode);
     }
 
     /// <summary>For a successful server file that is not a page, such as the sitemap. It has no shell, so it needs no freshness read. The content is built only when the file is sent.</summary>
@@ -46,6 +55,10 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
         cache.Apply(context, releaseNumber);
         return Results.Content(text, contentType);
     }
+
+    private static readonly ServerPageContext NoFreshness = new(null, null);
+
+    private static IResult Page(string html, int statusCode) => Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
 
     private IResult? NotModified(HttpContext context, int releaseNumber)
     {

@@ -210,27 +210,35 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task WithNoActiveReleaseAServerPageAnswers503WithNoCacheValidator()
+    public async Task WithNoActiveReleaseAServerPageAnswersTheServerErrorPageWith503NoValidatorAndNoStoreButTheApiKeepsItsProblemAnswer()
     {
         await using var host = await StartAsync();
 
-        foreach (var path in new[] { UnknownPage, "/" + PublicationProtocol.ComparePagePath, VoteKindsRoute })
+        foreach (var path in new[] { "/", UnknownPage, "/" + PublicationProtocol.ComparePagePath, VoteKindsRoute, "/" + PublicationProtocol.OfficialsPagePath })
         {
             using var response = await host.Client.GetAsync(path);
+            var page = Parse(await response.Content.ReadAsStringAsync());
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
             Assert.Null(response.Headers.ETag);
-            Assert.False(response.Headers.Contains("Cache-Control"));
+            Assert.Equal(PageCache.FailureCacheControl, string.Join(", ", response.Headers.GetValues("Cache-Control")));
+            Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
+            Assert.Equal([PublishedServerErrorPage.Title], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TextContent));
         }
+        using var officials = await host.Client.GetAsync("/" + PublicationProtocol.OfficialsPagePath);
+        Assert.Contains(Parse(await officials.Content.ReadAsStringAsync()).QuerySelectorAll("main .panel a"), link => link.TextContent == "Officials");
+        using var api = await host.Client.GetAsync("/v1/release");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, api.StatusCode);
+        Assert.Equal("application/problem+json", api.Content.Headers.ContentType!.MediaType);
     }
 
     [Fact]
-    public async Task TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing()
+    public async Task TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithNoStoreWhenItIsMissing()
     {
         await using var host = await StartAsync();
         var empty = await host.Client.GetAsync("/");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, empty.StatusCode);
         Assert.Null(empty.Headers.ETag);
-        Assert.False(empty.Headers.Contains("Cache-Control"));
+        Assert.True(empty.Headers.CacheControl!.NoStore);
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 9, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);

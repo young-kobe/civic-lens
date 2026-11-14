@@ -2,16 +2,12 @@
 @using CivicLens.PublicWeb.Components.Evidence
 @using CivicLens.PublicWeb.Components.Ui
 
-@if (Corrections.Length > 0)
+@if (Shown(Corrections) is { } shown)
 {
-    var newest = Corrections[0];
     <div class="notice notice-neutral correction-banner" role="status" aria-labelledby="correction-banner-title">
         <h2 id="correction-banner-title">@Title</h2>
-        <p>@Line(Kind, newest)</p>
-        @if (newest.Note is { } note)
-        {
-            <Facts Items="@(new Fact[] { new(WhatChanged, note) })" />
-        }
+        <p>@Line(Kind, shown)</p>
+        <Facts Items="@(new Fact[] { new(WhatChanged, shown.Note!) })" />
     </div>
 }
 
@@ -22,8 +18,12 @@
 
     [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
 
-    /// <summary>The correction history of the shown revision, newest first. The banner shows the newest correction. An empty history shows no banner.</summary>
+    /// <summary>The correction history of the shown revision, newest first.</summary>
     [Parameter, EditorRequired] public PublishedCorrection[] Corrections { get; set; } = [];
+
+    /// <summary>The correction that the banner shows: the newest person correction. Its note says what changed. An entry with no note is a routine
+    /// code update from the source, such as a new bill status or cosponsor, and is not a correction. A history with no person correction shows no banner.</summary>
+    public static PublishedCorrection? Shown(PublishedCorrection[] corrections) => corrections.FirstOrDefault(correction => correction.Note is not null);
 
     /// <summary>The one sentence that says what happened. The stored correction names no decider, so the sentence names none, as the withdrawal notice does.</summary>
     public static string Line(PublishedRecordKind kind, PublishedCorrection correction) =>

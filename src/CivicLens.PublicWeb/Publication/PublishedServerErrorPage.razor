@@ -1,0 +1,17 @@
+<PublishedErrorPage Title="@Title" Description="@Description" Lede="@Lede" RootPath="@RootPath" Section="@SectionLink?.Section">
+    @if (SectionLink is { } link)
+    {
+        <p>You can also go back to <a href="@(RootPath + link.Path)">@link.Text</a>.</p>
+    }
+</PublishedErrorPage>
+
+@code {
+    // The owner approves this wording. Change it here only.
+    public const string Title = "Page not available";
+    public const string Description = "Civic Lens could not load this page.";
+    public const string Lede = "Civic Lens could not load this page right now. Please try again in a few minutes.";
+
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+    /// <summary>The header link of the section of the page that failed. Null when the page is in no header section, such as a record page.</summary>
+    [Parameter] public PublicSections.NavLink? SectionLink { get; set; }
+}
