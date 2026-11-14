@@ -33,6 +33,7 @@ public sealed class SitemapReader(NpgsqlDataSource views)
         string.Empty,
         PublicationProtocol.OfficialsPagePath,
         PublicSections.BoardsPath,
+        .. OfficialBoard.All.Select(board => board.PagePath),
         PublicationProtocol.FacetsPath,
         .. PublicSections.RecordLists.Select(list => list.PublicPath),
         PublicationProtocol.ComparePagePath,

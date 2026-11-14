@@ -73,7 +73,8 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
 
         string[] pages =
         [
-            "", "officials.html", "boards.html", "issues.html", "votes.html", "bills.html", "statements.html", "executive-actions.html", "compare.html",
+            "", "officials.html", "boards.html", "board-house-democrat.html", "board-house-republican.html", "board-senate-democrat.html",
+            "board-senate-republican.html", "issues.html", "votes.html", "bills.html", "statements.html", "executive-actions.html", "compare.html",
             "vote-kinds.html", "glossary.html", "method.html", "about.html", "briefs.html", "briefs-2.html",
             "officials/a0.html", "officials/b0.html", "officials/a0/record.html", "officials/b0/record.html", "issues/tax.html",
             .. briefs.Select(brief => $"records/{brief.RecordId}.html").Order(StringComparer.Ordinal),
@@ -128,7 +129,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
         Assert.Equal([Root + "sitemap-1.xml", Root + "sitemap-2.xml"], index);
         Assert.Equal(SitemapReader.MaximumUrls, first.Length);
         Assert.Equal(Root, first[0]);
-        Assert.Equal(SitemapReader.MaximumUrls + 14, first.Length + second.Length);
+        Assert.Equal(SitemapReader.MaximumUrls + 18, first.Length + second.Length);
         Assert.Equal(first.Length + second.Length, first.Concat(second).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(SitemapReader.MaximumUrls.ToString("x64")), second[^1]);
         Assert.Equal(HttpStatusCode.NotFound, third.StatusCode);
@@ -138,7 +139,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
     public async Task AtTheProtocolLimitTheSitemapIsOneFileAndNoNumberedFileExists()
     {
         await using var host = await StartAsync();
-        await SeedStatementsAsync(host, SitemapReader.MaximumUrls - 14);
+        await SeedStatementsAsync(host, SitemapReader.MaximumUrls - 18);
 
         var urls = Locations(await XmlAsync(host, PublicationProtocol.SitemapPath), "url");
         using var numbered = await GetAsync(host, PublicationProtocol.SitemapPagePath(1));
