@@ -8,7 +8,7 @@ namespace CivicLens.PublicApi.Ingest;
 /// One read of the active release inside one REPEATABLE READ snapshot. The release, its list, the entries and the texts all come from that snapshot.
 /// One statement reads the release and its list. The batch read runs one query for each view, over the revisions that the ingest asks for.
 /// </summary>
-public sealed class TypedReleaseRead : IReleaseRead
+public sealed class TypedReleaseRead : IAsyncDisposable
 {
     private readonly NpgsqlConnection connection;
     private readonly NpgsqlTransaction snapshot;
@@ -66,6 +66,7 @@ public sealed class TypedReleaseRead : IReleaseRead
         return number is { } release ? new(release, published, records) : null;
     }
 
+    /// <summary>Reads the index documents of the given revisions of the release.</summary>
     public async Task<RecordBatch> ReadRecordsAsync(IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken)
     {
         var found = await new TypedEntryReader(snapshot).ReadAsync(new RevisionKeys(wanted), Release.ReleaseNumber, cancellationToken);
