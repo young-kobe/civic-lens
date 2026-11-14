@@ -20,6 +20,31 @@ public sealed class OperatorCommandTests
     }
 
     [Theory]
+    [InlineData("500", null)]
+    [InlineData("500", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
+    public async Task TheActionTextBackfillForwardsTheBoundedCountAndOptionalCursor(string count, string? cursor)
+    {
+        var arguments = cursor is null ? new[] { "actions", "text", "backfill", count } : ["actions", "text", "backfill", count, cursor];
+
+        var result = await RunAsync(arguments, 0);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(new[] { "run", "--rm", "cli" }.Concat(arguments), result.ComposeArguments);
+    }
+
+    [Theory]
+    [InlineData("actions", "text", "backfill")]
+    [InlineData("actions", "text", "backfill", "0")]
+    [InlineData("actions", "text", "backfill", "1", "a", "extra")]
+    public async Task InvalidActionTextBackfillArgumentsNeverInvokeCompose(params string[] arguments)
+    {
+        var result = await RunAsync(arguments, 0);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Empty(result.ComposeArguments);
+    }
+
+    [Theory]
     [InlineData("releases", "tallies", "verify")]
     [InlineData("releases", "tallies", "verify", "0")]
     [InlineData("releases", "tallies", "verify", "01")]

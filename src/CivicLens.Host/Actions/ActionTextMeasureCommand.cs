@@ -15,7 +15,7 @@ public static class ActionTextMeasureCommand
         "Use executive-actions text measure <token-cap> <documents-file> for the executive summary. The documents file holds a JSON array of document numbers such as 2025-01953.";
     public const string ReportDirectory = "action-text-measure";
 
-    public static bool Matches(string[] args) => args is ["actions", "text", ..] or ["executive-actions", "text", "measure", ..];
+    public static bool Matches(string[] args) => args is ["actions", "text", "measure", ..] or ["executive-actions", "text", "measure", ..];
 
     /// <summary><paramref name="createExecutiveMeasure"/> serves the executive form. A command that never gets the executive form may pass null.</summary>
     public static Task<int> ExecuteAsync(string[] args, Func<ActionTextMeasure> createMeasure, string artifactDirectory, TextWriter output,

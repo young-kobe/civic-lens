@@ -39,7 +39,7 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     {
         if (evidence.HasNewerCandidate)
             return await attempt.CompleteAsync(State.Succeeded, ActionDraftErrorCodes.SupersededByNewerCandidate, cancellationToken);
-        if (evidence.SummaryPageCount > ActionDraftTask.MaximumSummaryPages) evidence = evidence with { Pages = [.. evidence.Pages.Where(page => page.Resource != ApiResource.BillSummaries)] };
+        evidence = evidence.WithReadableSummaries();
 
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot)
