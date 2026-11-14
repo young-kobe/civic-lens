@@ -56,6 +56,7 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
         CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<string, DocumentExtraction>? extractions = null;
+        DateOnly? introducedOn = null;
         return Records.SaveRevisionAsync(contextFactory, actorSubject, revision, expectedRevisionNumber, SaveOperation, idempotencyKey,
             payloadHash, async (db, _, current) =>
             {
@@ -63,11 +64,13 @@ public sealed class PostgresActionReviewStore : IActionReviewStore
                 extractions = revision.SummaryCitation is null && approval is null
                     ? ImmutableDictionary<string, DocumentExtraction>.Empty
                     : await ReadExtractionsAsync(db, [revision], cancellationToken);
+                introducedOn = await ActionRevisionRows.ReadIntroducedOnAsync(db, revision.CandidateId, cancellationToken);
                 return revision;
             }, saved =>
             {
                 var row = ActionRevisionRows.Create(saved, null, CodeVersion.Unknown);
                 ActionRevisionRows.FillCrsSummary(row, saved, extractions!);
+                row.IntroducedOn = introducedOn;
                 return row;
             }, null,
             approval is null ? null : new(approval, (db, _, history) => ValidateApprovalAsync(db, history.CurrentRevision!, cancellationToken, extractions),

@@ -4,10 +4,7 @@
         var step = Steps[index];
         <li aria-current="@(index == Steps.Length - 1 ? "step" : null)">
             <b>@step.Title</b>
-            @if (step.Detail.Length > 0)
-            {
-                <span class="bill-step-detail">@step.Detail</span>
-            }
+            <span class="bill-step-detail">@step.Detail</span>
         </li>
     }
 </ol>

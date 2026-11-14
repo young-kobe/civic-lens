@@ -14,7 +14,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 /// </summary>
 public partial class PublicApiBillSponsorPartiesAndTimes : Migration
 {
-    private const string UpSql = """
+    /// <summary>The current <c>public_api.bills</c> view. A later migration that replaces the view restores it from here on rollback.</summary>
+    internal const string BillsView = """
         CREATE OR REPLACE VIEW public_api.bills WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, a.release_number,
                r.congress, r.bill_type, r.bill_number, r.bill_title, r.headline, r.summary, r.text_origin,
@@ -44,6 +45,43 @@ public partial class PublicApiBillSponsorPartiesAndTimes : Migration
            AND EXISTS (SELECT 1 FROM public.action_revision_sponsorships eligible
                         WHERE eligible.record_id = r.record_id AND eligible.revision_number = r.revision_number);
         ALTER VIEW public_api.bills OWNER TO civic_lens_public_owner;
+        """;
+
+    /// <summary>The views that read <c>public_api.bills</c>: <c>bill_actions</c>, <c>votes</c>, and <c>action_sources</c>. A rollback that drops the bill view creates them again from here.</summary>
+    internal static readonly string BillDependentViews = """
+        CREATE VIEW public_api.bill_actions WITH (security_barrier = true) AS
+        SELECT b.release_number, b.record_id, b.revision_number, a.position, a.action_date, a.action_time,
+               a.text, a.type, a.action_code, a.source_system_code, a.source_system_name
+          FROM public_api.bills b
+          JOIN public.release_bill_histories r ON r.release_number = b.release_number AND r.record_id = b.record_id
+          JOIN public.published_bill_history_actions a ON a.detail_job_id = r.detail_job_id AND a.projection_version = r.projection_version;
+        ALTER VIEW public_api.bill_actions OWNER TO civic_lens_public_owner;
+
+        CREATE VIEW public_api.votes WITH (security_barrier = true) AS
+        SELECT a.record_id, a.revision_number, a.release_number,
+               v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number,
+               v.headline, v.summary, v.text_origin,
+               CASE v.text_origin
+                 WHEN 'Model' THEN 'An AI summary of the official record'
+                 WHEN 'Code' THEN 'Written automatically from Congress.gov data, with no AI'
+               END AS label,
+               CASE WHEN t.other_count = 0 THEN t.yea_count::bigint END AS yea,
+               CASE WHEN t.other_count = 0 THEN t.nay_count::bigint END AS nay,
+               CASE WHEN t.other_count = 0 THEN t.present_count::bigint END AS present,
+               CASE WHEN t.other_count = 0 THEN t.not_voting_count::bigint END AS not_voting,
+               v.question, v.result,
+               v.alignment,
+               bill.record_id::varchar(64) AS bill_record_id
+          FROM public_api.active_records a
+          JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
+          LEFT JOIN public.release_vote_bills rb ON rb.release_number = a.release_number AND rb.vote_record_id = a.record_id
+          LEFT JOIN LATERAL (SELECT b.record_id FROM public_api.bills b WHERE b.record_id = rb.bill_record_id LIMIT 1) bill ON TRUE
+          JOIN public.vote_member_lists t ON t.list_id = v.member_list_id
+         WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
+        ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;
+        """ + PublicApiSearchSources.ActionSources;
+
+    private const string UpSql = BillsView + """
 
         CREATE VIEW public_api.bill_sponsorship_parties WITH (security_barrier = true) AS
         SELECT s.record_id, s.revision_number, s."position", term.party
@@ -90,37 +128,7 @@ public partial class PublicApiBillSponsorPartiesAndTimes : Migration
                         WHERE eligible.record_id = r.record_id AND eligible.revision_number = r.revision_number);
         ALTER VIEW public_api.bills OWNER TO civic_lens_public_owner;
 
-        CREATE VIEW public_api.bill_actions WITH (security_barrier = true) AS
-        SELECT b.release_number, b.record_id, b.revision_number, a.position, a.action_date, a.action_time,
-               a.text, a.type, a.action_code, a.source_system_code, a.source_system_name
-          FROM public_api.bills b
-          JOIN public.release_bill_histories r ON r.release_number = b.release_number AND r.record_id = b.record_id
-          JOIN public.published_bill_history_actions a ON a.detail_job_id = r.detail_job_id AND a.projection_version = r.projection_version;
-        ALTER VIEW public_api.bill_actions OWNER TO civic_lens_public_owner;
-
-        CREATE VIEW public_api.votes WITH (security_barrier = true) AS
-        SELECT a.record_id, a.revision_number, a.release_number,
-               v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number,
-               v.headline, v.summary, v.text_origin,
-               CASE v.text_origin
-                 WHEN 'Model' THEN 'An AI summary of the official record'
-                 WHEN 'Code' THEN 'Written automatically from Congress.gov data, with no AI'
-               END AS label,
-               CASE WHEN t.other_count = 0 THEN t.yea_count::bigint END AS yea,
-               CASE WHEN t.other_count = 0 THEN t.nay_count::bigint END AS nay,
-               CASE WHEN t.other_count = 0 THEN t.present_count::bigint END AS present,
-               CASE WHEN t.other_count = 0 THEN t.not_voting_count::bigint END AS not_voting,
-               v.question, v.result,
-               v.alignment,
-               bill.record_id::varchar(64) AS bill_record_id
-          FROM public_api.active_records a
-          JOIN public.vote_revisions v ON v.record_id = a.record_id AND v.revision_number = a.revision_number
-          LEFT JOIN public.release_vote_bills rb ON rb.release_number = a.release_number AND rb.vote_record_id = a.record_id
-          LEFT JOIN LATERAL (SELECT b.record_id FROM public_api.bills b WHERE b.record_id = rb.bill_record_id LIMIT 1) bill ON TRUE
-          JOIN public.vote_member_lists t ON t.list_id = v.member_list_id
-         WHERE a.kind = 'vote' AND v.member_list_id IS NOT NULL;
-        ALTER VIEW public_api.votes OWNER TO civic_lens_public_owner;
-        """ + PublicApiSearchSources.ActionSources + """
+        """ + BillDependentViews + """
 
         GRANT SELECT ON public_api.bills, public_api.bill_actions, public_api.votes, public_api.action_sources TO civic_lens_public;
         """;

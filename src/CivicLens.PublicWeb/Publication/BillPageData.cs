@@ -9,11 +9,11 @@ namespace CivicLens.PublicWeb.Publication;
 /// <c>SenateVoteGap</c> is true when the stepper has a Senate step after the introduction and no Senate roll call vote in the release names the bill.
 /// <c>WhyItMatters</c> and <c>BillText</c> come with an AI summary of the bill text, and are null otherwise. <c>TextSentences</c> holds the sentences of that summary with their quotes, in view order, and is empty otherwise. <c>KeyTerms</c> is empty when the bill has none, and <c>KeyTermsLabel</c> is then null.
 /// <c>SummaryFromCrs</c> is true when the summary is model text drafted from the CRS summary. <c>CheckedAtUtc</c> is the approval time of the published revision.
-/// <c>Introduced</c> is the introduction date of the bill, or null when the page cannot know it.
+/// <c>Introduced</c> is the introduced date of the Congress.gov bill record.
 /// </summary>
 public sealed record BillPageData(
     int Release, string RecordId, int RevisionNumber, int Congress, string Number, string Title, string Headline, PublishedChamber Chamber,
-    string Summary, PublishedTextOrigin TextOrigin, string? Label, DateOnly? Introduced)
+    string Summary, PublishedTextOrigin TextOrigin, string? Label, DateOnly Introduced)
 {
     /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
     public PublishedCorrection[] Corrections { get; init; } = [];

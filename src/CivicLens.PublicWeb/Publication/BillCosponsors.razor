@@ -16,7 +16,7 @@
         <dl class="bill-kv">
             @if (Cosponsors.Original.Length > 0)
             {
-                <dt>@(Introduced is { } day ? $"Added on {Moment.Day(day)}" : "Added on the day it was introduced")</dt>
+                <dt>Added on @Moment.Day(Introduced)</dt>
                 <dd>@Names(Cosponsors.Original, false)</dd>
             }
             @if (Cosponsors.Later.Length > 0)
@@ -31,8 +31,8 @@
 @code {
     [Parameter, EditorRequired] public BillCosponsorsData Cosponsors { get; set; } = default!;
     [Parameter] public BillSponsorData? Sponsor { get; set; }
-    /// <summary>The introduction date of the bill, or null when the page cannot know it.</summary>
-    [Parameter] public DateOnly? Introduced { get; set; }
+    /// <summary>The introduced date of the bill. The original cosponsors joined on it.</summary>
+    [Parameter, EditorRequired] public DateOnly Introduced { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
 
     private RenderFragment Names(BillSponsorData[] members, bool withDates) => @<text>

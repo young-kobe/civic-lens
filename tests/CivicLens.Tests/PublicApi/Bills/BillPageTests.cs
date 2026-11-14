@@ -201,6 +201,53 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.All(laterDates, day => Assert.True(day >= new DateOnly(2026, 4, 6)));
     }
 
+    /// <summary>The sponsor is not a tracked official, so the release holds no sponsor entry. The introduced date comes from the bill record, so the page still prints it.</summary>
+    [Fact]
+    public async Task ABillWithAnUntrackedSponsorShowsTheIntroducedDateOfItsBillRecord()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('d', "2026-07-09")
+        {
+            IntroducedOn = "2026-04-06",
+            Sponsorships = [new("p2", "Cosponsor", "2026-04-06"), new("p3", "Cosponsor", "2026-07-09", null, false)]
+        });
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p2", "Ann Two", "Democrat"), Official("p3", "Bob Three", "Republican"));
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
+
+        var page = await ReadPageAsync(host, new string('d', 64));
+
+        Assert.Equal("Introduced 6 Apr 2026.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
+        Assert.Equal("6 Apr 2026", page.QuerySelector(".bill-stepper .bill-step-detail")!.TextContent);
+        Assert.Equal(["Added on 6 Apr 2026", "Added later"],
+            page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .bill-kv dt").Select(term => term.TextContent));
+    }
+
+    /// <summary>The split compares each sponsorship date with the introduced date of the bill record. The Congress.gov original flag plays no part.</summary>
+    [Fact]
+    public async Task TheCosponsorSplitCountsACosponsorByTheIntroducedDateOfTheBillRecord()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('e', "2026-05-02")
+        {
+            IntroducedOn = "2026-04-06",
+            Sponsorships =
+            [
+                new("p1", "Sponsor", "2026-04-06"), new("p2", "Cosponsor", "2026-04-06", null, false), new("p3", "Cosponsor", "2026-05-02", null, true)
+            ]
+        });
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"), Official("p2", "Ann Two", "Democrat"),
+            Official("p3", "Bob Three", "Republican"));
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
+
+        var page = await ReadPageAsync(host, new string('e', 64));
+
+        var backers = page.QuerySelector("[aria-labelledby=bill-backers-title]")!;
+        Assert.Contains("1 on the day it was introduced and 1 who joined later.", backers.QuerySelector(".bill-lede")!.TextContent);
+        Assert.Equal(["Ann Two", "Bob Three (2 May 2026)"], backers.QuerySelectorAll(".bill-kv dd").Select(names => names.TextContent.Trim()));
+    }
+
     [Fact]
     public async Task TheSourceFoldShowsTheStoredApprovalTimeAndTheFirstPublicationTime()
     {

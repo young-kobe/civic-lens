@@ -49,8 +49,8 @@ internal static class OfficialRecordQueries
 
     private static readonly string BillsSql = $"""
         SELECT {OfficialPageQueries.BillColumns}
-        {OfficialPageQueries.SponsoredBillsSql}{After("p.sponsored_on", "b.record_id")}
-         ORDER BY p.sponsored_on DESC, b.record_id LIMIT @take
+        {OfficialPageQueries.SponsoredBillsSql}{After("b.introduced_on", "b.record_id")}
+         ORDER BY b.introduced_on DESC, b.record_id LIMIT @take
         """;
 
     private static readonly string StatementsSql = $"""

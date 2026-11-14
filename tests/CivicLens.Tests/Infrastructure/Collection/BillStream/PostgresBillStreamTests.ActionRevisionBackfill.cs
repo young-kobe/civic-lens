@@ -47,6 +47,42 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((1, 0, 0), (verification.Checked, verification.Legacy, verification.Mismatched));
     }
 
+    /// <summary>A revision written before the introduced date existed gets it from the stored detail page of its candidate. Until then verify counts it as legacy.</summary>
+    [Fact]
+    public async Task ARevisionWithoutTheIntroducedDateGetsItFromTheStoredDetailPageOfItsCandidate()
+    {
+        await SettleFullRevisionAsync();
+        await ExecuteAsync(connectionString, "UPDATE action_revisions SET introduced_on = NULL");
+        Assert.Equal((0, 1, 0), Counts(await VerifyActionRevisionsAsync()));
+
+        var result = await BackfillActionRevisionsAsync(10);
+
+        Assert.Equal((1, 1, 0), (result.Examined, result.Moved, result.Skipped));
+        Assert.Equal("2025-01-03", await ScalarAsync("SELECT introduced_on::text FROM action_revisions"));
+        Assert.Equal((1, 0, 0), Counts(await VerifyActionRevisionsAsync()));
+    }
+
+    /// <summary>A detail page with no exact introduced line gives no date. The row is skipped, so the operator sees it, and it stays out of the public bill views.</summary>
+    [Fact]
+    public async Task ARevisionWhoseDetailPageHasNoIntroducedLineIsSkippedAndStaysLegacy()
+    {
+        await SettleFullRevisionAsync();
+        await ExecuteAsync(connectionString, """
+            UPDATE action_revisions SET introduced_on = NULL;
+            UPDATE document_extractions SET text = 'Bill: 119 hr 7' WHERE extraction_id IN (SELECT p.extraction_id FROM bill_pages p WHERE p.role = 'Detail');
+            """);
+
+        var result = await BackfillActionRevisionsAsync(10);
+
+        Assert.Equal((1, 0, 1), (result.Examined, result.Moved, result.Skipped));
+        Assert.Equal("RebuildMismatch", Assert.Single(result.SkippedRevisions).Reason);
+        Assert.Null(await ScalarAsync("SELECT introduced_on FROM action_revisions"));
+        Assert.Equal((0, 1, 0), Counts(await VerifyActionRevisionsAsync()));
+    }
+
+    private static (int Checked, int Legacy, int Mismatched) Counts(RevisionVerification verification) =>
+        (verification.Checked, verification.Legacy, verification.Mismatched);
+
     [Fact]
     public async Task ARevisionWithNoCandidateSetKeepsItsTrackedIssuesInOrderAndRecordsThatCandidatesAreUnknown()
     {

@@ -8,16 +8,16 @@ namespace CivicLens.PublicApi.Bills;
 /// <summary>
 /// The one owner of the steps of the bill page. Each rule reads one whole known shape of an official action text from its start. The step titles
 /// are the approved phrases of the Mosaic v2 bill page and the owner approved phrases for the presentation to the President and a veto. Each of those two
-/// steps shows the Congress.gov action date. The introduction step shows the introduction date of <see cref="IntroducedOn"/>.
+/// steps shows the Congress.gov action date. The introduction step shows the introduced date of the Congress.gov bill record, and the sponsor when the release tracks one.
 /// </summary>
 public static partial class BillSteps
 {
     private const string ResolvingDifferences = "ResolvingDifferences";
 
-    public static BillStepData[] Of(BillRow bill, BillSponsorData? sponsor, IReadOnlyList<BillActionRow> actions)
+    public static BillStepData[] Of(BillRow bill, DateOnly introducedOn, BillSponsorData? sponsor, IReadOnlyList<BillActionRow> actions)
     {
         var chamber = BillNumbers.ChamberOf(bill.BillType);
-        var introduced = IntroducedOn(sponsor) is { } day ? $"{Moment.Day(day)}, by {sponsor!.Name}" : "";
+        var introduced = sponsor is null ? Moment.Day(introducedOn) : $"{Moment.Day(introducedOn)}, by {sponsor.Name}";
         var steps = new List<BillStepData> { new($"Introduced in the {chamber}", introduced) { Chamber = chamber } };
         var ordered = actions.OrderBy(action => action.ActionDate).ThenBy(action => action.ActionTime).ThenBy(action => action.Position).ToArray();
         steps.AddRange(Passages(ordered));
@@ -26,10 +26,6 @@ public static partial class BillSteps
         if (Law(ordered) is { } law) steps.Add(law);
         return [.. steps];
     }
-
-    /// <summary>The introduction date of the bill, or null when the release names no tracked sponsor. A sponsor entry holds the introduced date of the
-    /// Congress.gov bill page (<c>ActionBillReader</c> writes it), so it is the introduction date. The bill event date is the latest sponsorship and never the introduction.</summary>
-    public static DateOnly? IntroducedOn(BillSponsorData? sponsor) => sponsor?.SponsoredOn;
 
     /// <summary>True when a step after the introduction happened in the Senate: a passage, an agreement to changes, or another floor step.
     /// The first step is always the introduction, so a bill that was only introduced in the Senate gives false.</summary>

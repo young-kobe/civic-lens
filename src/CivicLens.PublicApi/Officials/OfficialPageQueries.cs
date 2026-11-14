@@ -55,7 +55,7 @@ internal static class OfficialPageQueries
         """;
 
     /// <summary>The columns of one sponsored bill, in the order of <see cref="ReadBill"/>.</summary>
-    internal const string BillColumns = "b.record_id, b.bill_type, b.bill_line, b.bill_title, p.sponsored_on, t.latest_action_text, t.latest_action_date";
+    internal const string BillColumns = "b.record_id, b.bill_type, b.bill_line, b.bill_title, b.introduced_on, t.latest_action_text, t.latest_action_date";
 
     /// <summary>The bills that the official <c>@id</c> sponsored, with their status, for the bills of the official page and the record page. The one owner of that join.
     /// OFFSET 0 keeps the bill lookup correlated, so Postgres reads one bill for each sponsorship and never rebuilds the view.</summary>
@@ -71,7 +71,7 @@ internal static class OfficialPageQueries
     private const string BillsSql = $"""
         SELECT {BillColumns}
         {SponsoredBillsSql} AND b.congress = @congress
-         ORDER BY p.sponsored_on DESC, b.record_id
+         ORDER BY b.introduced_on DESC, b.record_id
          LIMIT @take
         """;
 

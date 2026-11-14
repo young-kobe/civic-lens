@@ -70,9 +70,9 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
         var chamber = BillNumbers.ChamberOf(bill.BillType);
         var sponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Sponsor).Select(Person).ToArray();
         var cosponsors = sponsorships.Where(row => row.Role == PublishedSponsorshipRole.Cosponsor && row.WithdrawnOn is null).ToArray();
-        var steps = BillSteps.Of(bill, sponsors.FirstOrDefault(), actions);
+        var steps = BillSteps.Of(bill, detail.IntroducedOn, sponsors.FirstOrDefault(), actions);
         return new(detail.Release, bill.RecordId, bill.RevisionNumber, bill.Congress, BillNumbers.Of(bill.BillType, bill.BillNumber), bill.BillTitle, bill.Headline,
-            chamber, bill.Summary, bill.TextOrigin, bill.Label, BillSteps.IntroducedOn(sponsors.FirstOrDefault()))
+            chamber, bill.Summary, bill.TextOrigin, bill.Label, detail.IntroducedOn)
         {
             BillLine = bill.BillLine,
             PolicyArea = bill.PolicyArea,
@@ -83,7 +83,8 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
             StatusDate = detail.LatestAction?.Date,
             StatusReadAtUtc = detail.LatestAction?.ReadAtUtc,
             Sponsors = sponsors,
-            Cosponsors = new(chamber, [.. cosponsors.Where(row => row.IsOriginal).Select(Person)], [.. cosponsors.Where(row => !row.IsOriginal).Select(Person)]),
+            Cosponsors = new(chamber, [.. cosponsors.Where(row => JoinedOnIntroduction(row, detail.IntroducedOn)).Select(Person)],
+                [.. cosponsors.Where(row => !JoinedOnIntroduction(row, detail.IntroducedOn)).Select(Person)]),
             Steps = steps,
             Votes = [.. voteRows.Select(VoteRowOf)],
             SenateVoteGap = BillSteps.SenateActedAfterIntroduction(steps) && !votedChambers.Contains(PublishedChamber.Senate),
@@ -116,6 +117,10 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
     private static BillTextSourceData? TextSourceOf(BillRow bill) => bill is { TextVersionName: { } name, TextCharsRead: { } read, TextCharsTotal: { } total }
         ? new(name, bill.TextVersionDate, read, total)
         : null;
+
+    /// <summary>The one owner of the cosponsor split. A cosponsor joined on the day the bill was introduced when the sponsorship date is the introduced date of the
+    /// Congress.gov bill record. Every later sponsorship date joined later.</summary>
+    private static bool JoinedOnIntroduction(BillSponsorRow row, DateOnly introducedOn) => row.SponsoredOn <= introducedOn;
 
     private static BillSponsorData Person(BillSponsorRow row) => new(row.OfficialId, row.Name, row.Party, row.SponsoredOn);
 }
