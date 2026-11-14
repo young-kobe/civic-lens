@@ -97,28 +97,23 @@ public static class PublishedRecordLabels
 
     public const string OtherPeopleQuoted = "Other people quoted, named as the article writes them";
 
-    public const string ModelWording = "An AI summary of the official record";
-
-    public const string CodeWording = "Written automatically from Congress.gov data, with no AI";
-
     public const string ModelChosenIssues = "Chosen by an AI model from the bill title and subjects";
 
-    public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = ModelWording) => origin switch
+    /// <summary>The name of the fact row that holds the AI label of a record.</summary>
+    public const string WordingFact = "Wording";
+
+    public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = AiLabelWords.ModelWording) => origin switch
     {
-        PublishedTextOrigin.Model => [new("Wording", modelWording)],
-        PublishedTextOrigin.Code => [new("Wording", CodeWording)],
+        PublishedTextOrigin.Model => [new(WordingFact, modelWording)],
+        PublishedTextOrigin.Code => [new(WordingFact, AiLabelWords.CodeWording)],
         _ => []
     };
 
-    public const string StatementModelWording = "An AI summary of this release.";
-
-    public const string StatementCheckedByPersonWording = "Drafted by an AI model from this source. A person checked it before publication.";
-
     public static IEnumerable<Fact> StatementWording(PublishedStatement statement) =>
-        statement.TextOrigin == PublishedTextOrigin.Model ? [new("Wording", StatementModelLabel(statement.ApprovedBy))] : [];
+        statement.TextOrigin == PublishedTextOrigin.Model ? [new(WordingFact, StatementModelLabel(statement.ApprovedBy))] : [];
 
     private static string StatementModelLabel(PublishedApprover approver) =>
-        approver == PublishedApprover.Code ? StatementModelWording : StatementCheckedByPersonWording;
+        approver == PublishedApprover.Code ? AiLabelWords.StatementModelWording : AiLabelWords.StatementCheckedByPersonWording;
 
     public const string LinkCheckedByCodeWording = "Code checked this link";
 

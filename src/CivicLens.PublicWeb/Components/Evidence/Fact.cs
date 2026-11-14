@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.PublicWeb.Components.Evidence;
 
 public sealed record Fact(string Label, string Value, IReadOnlyList<FactLink>? Links = null)
@@ -7,6 +9,10 @@ public sealed record Fact(string Label, string Value, IReadOnlyList<FactLink>? L
     public string? TermKey { get; init; }
 
     public FactSource? Source { get; init; }
+
+    /// <summary>The origin of the text whose AI label this fact holds as its value. <see cref="Facts"/> draws such a value through <c>AiLabel</c>.
+    /// Null for any other fact.</summary>
+    public PublishedTextOrigin? AiLabelOrigin { get; init; }
 
     public Fact CitedAt(string? anchor, string? target = null) =>
         anchor is null ? this : this with { Source = new(anchor, target ?? Label) };

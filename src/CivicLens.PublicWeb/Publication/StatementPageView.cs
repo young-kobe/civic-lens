@@ -15,7 +15,7 @@ public static class StatementPageView
 
     public const string CheckLine = "The quotes below come straight from the source and code checked each one.";
 
-    public const string ModelCheckLine = CheckLine + " A model wrote only the summary above.";
+    public const string ModelCheckLine = CheckLine + " " + AiLabelWords.ModelWroteOnlyThisSummary;
 
     /// <summary>The caveat of the static statement page. It sits in the check line, so no separate caveat shows.</summary>
     public const string CaptureCaveat = "The observation time shows when the source was captured. It does not show when the statement was first made.";
