@@ -259,6 +259,26 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Housing"], page.QuerySelectorAll(".detail-chips li").Select(item => item.TextContent.Trim()));
     }
 
+    [Theory]
+    [InlineData("Model", AiLabelWords.ModelWording, "model")]
+    [InlineData("Code", AiLabelWords.CodeWording, "code")]
+    public async Task TheRelationshipRouteColorsTheFactLabelByTheFactTextOriginOfTheViewSoACodeFactNeverShowsInTheAiInk(
+        string origin, string label, string drawnOrigin)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await RelationshipSeed.SeedAsync(host.OperationalDatabase);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"), new SeededOfficial("official-z", "Zed Zane"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'Defined');");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
+            $"SET session_replication_role = replica; UPDATE action_revisions SET text_origin = '{origin}' WHERE record_id = '{RelationshipSeed.ActionId}';");
+
+        var page = await GetPageAsync(host, Path(RelationshipSeed.BillLink));
+
+        var factLabel = page.QuerySelectorAll(".detail-quotes li")[1].QuerySelector(".ai-label")!;
+        Assert.Equal((label, drawnOrigin), (factLabel.TextContent, factLabel.GetAttribute("data-origin")));
+    }
+
     [Fact]
     public async Task ARecordOfAKindWithoutAPageAMalformedIdAndAnUnknownIdAnswerTheNotFoundPage()
     {

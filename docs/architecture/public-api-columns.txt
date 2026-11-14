@@ -292,6 +292,7 @@ relationships quote_length
 relationships quote_source_text
 relationships fact
 relationships fact_label
+relationships fact_text_origin
 statement_approvers approved_by
 statement_approvers record_id
 statement_approvers revision_number

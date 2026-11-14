@@ -4,7 +4,7 @@ namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>Everything that the relationship page shows, read from one active release. The reason, the quote, and the fact come from the exact published
 /// relationship revision. The quote is the exact text of the statement source, and the fact is the exact fact of the cited target revision.
-/// The label is the label column of the public view. A time that the view does not hold is null, and the page shows no row for it.</summary>
+/// The label is the label column of the public view. The fact text origin is null when the fact has no label. A time that the view does not hold is null, and the page shows no row for it.</summary>
 public sealed record RelationshipPageData(
     int Release,
     string RecordId,
@@ -20,6 +20,7 @@ public sealed record RelationshipPageData(
     string Quote,
     string Fact,
     string? FactLabel,
+    PublishedTextOrigin? FactTextOrigin,
     RecordOfficialData[] Speakers,
     RecordIssueData[] Issues,
     DateTimeOffset? ApprovedAtUtc,

@@ -83,7 +83,7 @@ internal static class DetailPageFixture
         origin == PublishedTextOrigin.Model ? PublishedWording.ModelRelationship : null,
         new(PublishedRecordKind.Statement, StatementId, 2, "Kelly announces a bill", PublishedTextOrigin.Model, StatementLabel),
         new(PublishedRecordKind.Action, ActionId, 1, "Drain the Slush Fund Act", PublishedTextOrigin.Code, null),
-        "\u201cI introduced the Drain the Slush Fund Act.\u201d", "Summary: The bill shuts down the fund.", "An AI summary of the official record",
+        "\u201cI introduced the Drain the Slush Fund Act.\u201d", "Summary: The bill shuts down the fund.", "An AI summary of the official record", PublishedTextOrigin.Model,
         [new("official-a", "Mark Kelly")], [new("budget", "Federal budget and debt")],
         new DateTimeOffset(2026, 10, 30, 0, 42, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 30, 0, 44, 0, TimeSpan.Zero));
 
