@@ -7,7 +7,7 @@
         <Panel Label="Report a problem" Padded="true">
             <EmptyState Level="2" Title="Reporting is not available"
                         Text="This release has no report service. Browse the published records instead.">
-                <Action><Button Href="@(RootPath + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote))">All records</Button></Action>
+                <Action><Button Href="@(RootPath + VotesList.Path)">@VotesList.Label</Button></Action>
             </EmptyState>
         </Panel>
     }
@@ -56,7 +56,7 @@
                     <span>This page needs JavaScript to run the check that you are not a robot. Without JavaScript, you cannot send a report here.</span>
                 </div>
             </noscript>
-            <p><a data-report-record href="@(RootPath + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote))">All records</a></p>
+            <p><a data-report-record href="@(RootPath + VotesList.Path)">@VotesList.Label</a></p>
         </Panel>
     }
     <Panel Title="A problem with the site" Padded="true">
@@ -67,6 +67,7 @@
 @code {
 
     private const string TurnstileScript = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    private static PublicSections.RecordList VotesList => PublicSections.ListOf(PublishedRecordKind.Vote);
 
     /// <summary>The public site root of a server page. The static release leaves it empty, so its links stay relative.</summary>
     [Parameter] public string RootPath { get; set; } = string.Empty;

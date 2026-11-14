@@ -311,8 +311,10 @@ public sealed class ReleaseRendererTests
         var message = html.IndexOf("needs JavaScript", StringComparison.Ordinal);
         Assert.InRange(message, start + 1, end);
         Assert.Equal(message, html.LastIndexOf("needs JavaScript", StringComparison.Ordinal));
-        var form = new HtmlParser().ParseDocument(html).QuerySelector("[data-report-form-panel]")!;
-        Assert.NotNull(form.QuerySelector("[data-report-subject]"));
+        var document = new HtmlParser().ParseDocument(html);
+        Assert.NotNull(document.QuerySelector("[data-report-form-panel] [data-report-subject]"));
+        var recordLine = document.QuerySelector("[data-report-record]")!;
+        Assert.Equal(("Votes", PublicationProtocol.ListPagePath(PublishedRecordKind.Vote)), (recordLine.TextContent, recordLine.GetAttribute("href")));
     }
 
     [Fact]
@@ -591,6 +593,8 @@ public sealed class ReleaseRendererTests
         var document = new HtmlParser().ParseDocument(html);
 
         Assert.Contains("Reporting is not available", html, StringComparison.Ordinal);
+        var votes = Assert.Single(document.QuerySelectorAll("main .empty a"));
+        Assert.Equal(("Votes", PublicationProtocol.ListPagePath(PublishedRecordKind.Vote)), (votes.TextContent, votes.GetAttribute("href")));
         Assert.Null(document.QuerySelector("main form"));
         Assert.DoesNotContain("data-sitekey", html, StringComparison.Ordinal);
         Assert.DoesNotContain("challenges.cloudflare.com", html, StringComparison.Ordinal);
