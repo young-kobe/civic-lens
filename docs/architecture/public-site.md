@@ -435,7 +435,6 @@ Limits:
 - `/v1/home` keeps its own freshness fields. The home page no longer reads them. The prune pass removes them.
 - The About page has no sentence about model summaries of bill text. The sentence returns when the owner turns on `CIVIC_LENS_ACTION_DRAFTING_BILL_TEXT`.
 - The Method page has no text about the closest vote card, because the boards page has no such card.
-- A shared vote row has no text origin, so `AiLabel` gives its code label the AI ink. A list row mutes the same label. A small follow-up change adds the origin to the shared vote row.
 - The static Host pages keep their own label markup until the cutover retires them. The static brief page shows no AI label.
 - The issues index lists tracked issues only. It has no policy areas, because no public view holds them.
 - The document changes list waits for published document changes.
