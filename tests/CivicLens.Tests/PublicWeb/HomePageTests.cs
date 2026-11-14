@@ -366,6 +366,25 @@ public sealed class HomePageTests
         Assert.Equal("26 of 51 split votes, 119th Congress", page.QuerySelector(".board-delegates .list-row-figure")!.TextContent);
     }
 
+    [Fact]
+    public async Task ADelegateRowNamesItsCongressWhenItsBoardRanksNoVotingMemberAndTheCardsKeepAnotherCongress()
+    {
+        var page = await RenderAsync(new(7, null, [], null)
+        {
+            Boards =
+            [
+                Panel(PublishedChamber.House, "Republican", 119) with { Delegates = [Delegate("James Moylan", "Delegate for Guam", 51, 26)] },
+                Panel(PublishedChamber.Senate, "Democrat", 118, ("John Fetterman", null, 337, 66)),
+                Panel(PublishedChamber.Senate, "Republican", 118, ("Lisa Murkowski", null, 341, 58))
+            ]
+        });
+        var section = page.QuerySelector(".home-breakers")!;
+
+        Assert.DoesNotContain("118th Congress", section.QuerySelector(".home-section-lede")!.TextContent);
+        Assert.All(section.QuerySelectorAll(".home-breaker-card"), card => Assert.EndsWith(", 118th Congress", card.QuerySelectorAll("p")[1].TextContent));
+        Assert.Equal("26 of 51 split votes, 119th Congress", section.QuerySelector(".board-delegates .list-row-figure")!.TextContent);
+    }
+
     private static BoardPanelData[] FourPanels(int senateCongress = 119) =>
     [
         Panel(PublishedChamber.House, "Democrat", 119, ("Henry Cuellar", null, 254, 160), ("Second Dem", null, 200, 1)),

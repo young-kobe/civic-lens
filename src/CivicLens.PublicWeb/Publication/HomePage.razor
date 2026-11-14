@@ -220,13 +220,24 @@
 
     /// <summary>The map and the party bars come from the page data of the featured vote. Each card of the break board is the first voting member of one board.
     /// The delegate list under the cards holds the first delegate or resident commissioner of each board that ranks one, so a delegate never takes a card.
-    /// The lede names the Congress when every shown board keeps the same one. Otherwise each card names its own.</summary>
+    /// The lede names the Congress when every card and delegate row keeps the same one. Otherwise each card and delegate row names its own.</summary>
     protected override void OnParametersSet()
     {
         featuredMap = Data.FeaturedVoteDetail is { } detail ? VoteMapData.Of(detail) : null;
         featuredParties = Data.FeaturedVoteDetail is { } vote ? VotePageView.PartyBars(vote) : [];
         breakers = [.. Data.Boards.Where(panel => panel.Congress is not null && panel.Rows.Count > 0).Select(panel => (panel, panel.Rows[0]))];
         delegates = [.. Data.Boards.Where(panel => panel.Congress is not null && panel.Delegates.Count > 0).Select(panel => (panel, panel.Delegates[0]))];
-        sharedCongress = breakers.Select(card => card.Panel.Congress).Distinct().ToArray() is [var congress] ? congress : null;
+        sharedCongress = SharedCongress();
+    }
+
+    /// <summary>The Congress that every card and every delegate row keeps, or null. Only the lede names it, so without cards each delegate row names its own.</summary>
+    private int? SharedCongress()
+    {
+        if (breakers.Count == 0)
+        {
+            return null;
+        }
+
+        return breakers.Concat(delegates).Select(card => card.Panel.Congress).Distinct().ToArray() is [var congress] ? congress : null;
     }
 }
