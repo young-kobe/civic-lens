@@ -1,4 +1,6 @@
 using System.Globalization;
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.Application.Analysis;
 
 /// <summary>The one owner of the reading grade of English text, such as a model sentence, a headline or a passage of both. The grade is the Flesch-Kincaid grade level,

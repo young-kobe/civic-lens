@@ -117,6 +117,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Null(byNumber.Headers.ETag);
         Assert.Equal("H.R. 5334, the Sanctions Act", number.QuerySelector(".search-pin h2")!.TextContent);
         Assert.Contains("H.R. 5334 debate", number.QuerySelector(".record-rows")!.TextContent);
+        Assert.Equal("1 result for \"5334\".", number.QuerySelector(".list-status")!.TextContent);
         Assert.Null(number.QuerySelector(".search-official"));
         Assert.Equal("Ayanna Pressley", name.QuerySelector(".search-official h2")!.TextContent);
         Assert.Null(name.QuerySelector(".search-pin"));

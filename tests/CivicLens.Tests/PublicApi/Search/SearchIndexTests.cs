@@ -66,16 +66,38 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
         Assert.DoesNotContain("RAWFOOTER", hit.Snippet, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task TheSnippetComesFromTheSourceTextWithTheMatchMarkedWhenOnlyTheSourceTextMatches()
+    // The raw roll call text of a House vote, as the production review found it in snippets.
+    private const string RawRollCall =
+        "Member: B001307, James Baird, R, IN, Not Voting Member: B001309, Tim Burchett, R, TN, Yea voting 8 Source data: https://clerk.house.gov/evs/2026/roll189.xml Bill: 119 hr 1041 Title:";
+
+    [Theory]
+    [InlineData("Baird")]
+    [InlineData("B001307")]
+    [InlineData("1041")]
+    public async Task AMatchOnlyInTheRawSourceStillFindsTheRecordAndItsSnippetIsThePublishedSummaryWithNoBioguideIdUrlOrSourceData(string text)
     {
-        await world.PublishAndIngestAsync(1,
-            PublishedSamples.Statement('a', "Zoning meeting", summary: "Tenants gain a new cap in the city.", source: "Xq the mayor said rent rises."));
+        await world.PublishAndIngestAsync(1, PublishedSamples.Vote("House passes the bill", "The House passed the bill on a recorded vote.", RawRollCall));
 
-        var hit = Assert.Single((await world.SearchAsync(request => request with { Text = "rent" })).Hits);
+        var hit = Assert.Single((await world.SearchAsync(request => request with { Text = text })).Hits);
 
-        Assert.Contains("the mayor said \uE000rent\uE001 rises", hit.Snippet, StringComparison.Ordinal);
-        Assert.DoesNotContain("Tenants gain", hit.Snippet, StringComparison.Ordinal);
+        Assert.Equal("The House passed the bill on a recorded vote.", hit.Snippet);
+        Assert.DoesNotMatch(@"[A-Z]\d{6}", hit.Snippet);
+        Assert.DoesNotContain("http", hit.Snippet, StringComparison.Ordinal);
+        Assert.DoesNotContain("Source data", hit.Snippet, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ALongSummaryGivesASnippetFromItsFirstWordCutAfterItsLastWholeSentenceAndAMatchPastTheCutStillFindsIt()
+    {
+        var first = "The House passed a bill to fund roads in every state. ";
+        var summary = first + string.Concat(Enumerable.Repeat("It sets aside money for bridges and tunnels in rural areas. ", 4)) + "It also names a zebra crossing.";
+        await world.PublishAndIngestAsync(1, PublishedSamples.Vote("Roads bill", summary, "Xq roll call."));
+
+        var hit = Assert.Single((await world.SearchAsync(request => request with { Text = "zebra" })).Hits);
+
+        Assert.StartsWith(first, hit.Snippet, StringComparison.Ordinal);
+        Assert.EndsWith("rural areas.", hit.Snippet, StringComparison.Ordinal);
+        Assert.InRange(hit.Snippet!.Length, first.Length, SearchSnippet.MaximumCharacters);
     }
 
     [Fact]
@@ -91,19 +113,39 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
     }
 
     [Fact]
-    public async Task ARecordWithNoSummaryKeepsTheBodySnippetSoAnExecutiveActionAndARowFromBeforeTheColumnStillShowText()
+    public async Task AnExecutiveActionSnippetComesFromItsSummaryAndARecordWithNoSnippetTextShowsNoSnippetNotItsSource()
     {
-        await world.PublishAndIngestAsync(1,
-            PublishedSamples.ExecutiveAction("Ending the Weaponization", "Xq the order cites a rent cap here."),
-            PublishedSamples.Statement('a', "Zoning meeting", summary: "Tenants gain a rent cap.", source: "Xq RAWFOOTER rent cap navigation line."));
+        var summarized = PublishedSamples.ExecutiveAction("Ending the Weaponization", "Xq the order cites a rent cap here.", ["The order caps rent.", "It starts today."]);
+        var bare = PublishedSamples.ExecutiveAction("Housing Costs", "Xq Source data: https://www.federalregister.gov/x rent cap.");
+        bare = bare with { Entry = bare.Entry with { RecordId = new string('d', 64) }, Body = ((PublishedExecutiveAction)bare.Body) with { RecordId = new string('d', 64) } };
+        // The statement row loses its summary text, as a row indexed before the summary column holds none.
+        await world.PublishAndIngestAsync(1, summarized, bare,
+            PublishedSamples.Statement('1', "Zoning meeting", summary: "Tenants gain a rent cap.", source: "Xq rent cap RAWFOOTER navigation line."));
         await using (var command = world.Database.CreateCommand("UPDATE records SET summary = NULL WHERE kind = 'statement'"))
             await command.ExecuteNonQueryAsync();
 
         var hits = (await world.SearchAsync(request => request with { Text = "rent" })).Hits;
 
-        Assert.Equal(2, hits.Length);
-        Assert.All(hits, hit => Assert.Contains("\uE000rent\uE001", hit.Snippet, StringComparison.Ordinal));
-        Assert.Contains(hits, hit => hit.Snippet!.Contains("RAWFOOTER", StringComparison.Ordinal));
+        Assert.Equal(3, hits.Length);
+        Assert.Equal("The order caps \uE000rent\uE001. It starts today.", hits.Single(hit => hit.RecordId == new string('f', 64)).Snippet);
+        Assert.All(hits.Where(hit => hit.RecordId != new string('f', 64)), hit => Assert.Null(hit.Snippet));
+    }
+
+    [Fact]
+    public async Task TheTotalCountsEveryMatchOfTheReleaseOnEveryPageAndFollowsTheTextTheFiltersAndThePinnedRelease()
+    {
+        await world.PublishAndIngestAsync(1, PublishedSamples.Statement('a', "Rent cap one"), PublishedSamples.Statement('b', "Rent cap two"));
+        await world.PublishAndIngestAsync(2, PublishedSamples.Statement('a', "Rent cap one"), PublishedSamples.Statement('b', "Rent cap two"),
+            PublishedSamples.Statement('c', "Rent cap three"), PublishedSamples.Vote("Rent vote", "The House passed it.", "Xq roll call."));
+        var text = new SearchRequest { Text = "rent", Limit = 2 };
+        var first = await world.Index.SearchAsync(2, text, CancellationToken.None);
+
+        Assert.Equal(4, await world.Index.CountAsync(2, text, CancellationToken.None));
+        Assert.Equal(4, await world.Index.CountAsync(2, text with { Cursor = SearchCursor.Parse(first.NextCursor) }, CancellationToken.None));
+        Assert.Equal(3, await world.Index.CountAsync(2, text with { Kind = PublishedRecordKind.Statement }, CancellationToken.None));
+        Assert.Equal(1, await world.Index.CountAsync(2, text with { Text = "three" }, CancellationToken.None));
+        Assert.Equal(4, await world.Index.CountAsync(2, new SearchRequest(), CancellationToken.None));
+        Assert.Equal(2, await world.Index.CountAsync(1, text, CancellationToken.None));
     }
 
     [Fact]

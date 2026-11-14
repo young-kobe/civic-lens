@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicWeb.Publication;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -10,8 +11,8 @@ namespace CivicLens.PublicApi.Search;
 /// <summary>Reads the index. Every read names a release, so a pinned read sees the revisions that release held.</summary>
 public sealed class SearchIndex(NpgsqlDataSource database)
 {
-    private const int SnippetScanCharacters = 50_000;
-    private const string SnippetOptions = "StartSel=, StopSel=, MaxFragments=1, MaxWords=25, MinWords=10";
+    private static readonly string SnippetOptions = $"StartSel={SearchResultsPage.MarkStart}, StopSel={SearchResultsPage.MarkEnd}, HighlightAll=true";
+    private const string TextMatch = " AND r.search @@ websearch_to_tsquery('english', @q)";
     private const string SortDate = "COALESCE(r.event_date, (r.first_published_at_utc AT TIME ZONE 'UTC')::date)";
     private const string InRelease = "r.first_release <= @release AND (r.last_release IS NULL OR r.last_release >= @release)";
     private const string RankedAfterCursor = "WHERE r.rank < @cursor_rank OR (r.rank = @cursor_rank AND r.record_id > @cursor_id)";
@@ -61,6 +62,21 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         return new(release, [.. page.Select(row => row.Hit)], hasMore ? NextCursor(release, request, page[^1]).Encode() : null);
     }
 
+    /// <summary>Counts every record of the release that the text and the filters match. The count ignores the cursor, so every page gives the same total.
+    /// The text query is a materialized CTE, as in the ranked query. With a constant query the planner prefers a sequential scan,
+    /// because it does not price reading the large stored vectors. At 22,000 rows that scan takes about 250 ms and the GIN index path at most 14 ms.</summary>
+    public async Task<int> CountAsync(int release, SearchRequest request, CancellationToken cancellationToken)
+    {
+        await using var command = database.CreateCommand(request.Text is null
+            ? $"SELECT count(*)::integer FROM records r WHERE {InRelease}{FieldFilters(request)}"
+            : $"""
+                WITH q AS MATERIALIZED (SELECT websearch_to_tsquery('english', @q) AS query)
+                SELECT count(*)::integer FROM records r CROSS JOIN q WHERE {InRelease} AND r.search @@ q.query{FieldFilters(request)}
+                """);
+        AddFilterParameters(command, release, request);
+        return (int)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
     private static string RankedSql(SearchRequest request) => $"""
         WITH q AS (SELECT websearch_to_tsquery('english', @q) AS query),
         ranked AS (
@@ -72,9 +88,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
             ORDER BY r.rank DESC, r.record_id LIMIT @take
         )
         SELECT {Columns},
-            ts_headline('english', left(
-                CASE WHEN to_tsvector('english', r.summary) @@ q.query THEN r.summary ELSE r.body END,
-                {SnippetScanCharacters}), q.query, '{SnippetOptions}'), r.rank
+            ts_headline('english', left(r.summary, {SearchSnippet.ScanCharacters}), q.query, '{SnippetOptions}'), r.rank
         FROM page r CROSS JOIN q ORDER BY r.rank DESC, r.record_id
         """;
 
@@ -108,8 +122,9 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         _ => throw new ArgumentOutOfRangeException(nameof(sort), sort, "Sort key is not known.")
     };
 
-    private static string Filters(SearchRequest request) =>
-        (request.Text is not null && request.Sort is not null ? " AND r.search @@ websearch_to_tsquery('english', @q)" : "") +
+    private static string Filters(SearchRequest request) => (request.Text is not null && request.Sort is not null ? TextMatch : "") + FieldFilters(request);
+
+    private static string FieldFilters(SearchRequest request) =>
         (request.Kind is null ? "" : " AND r.kind = @kind") +
         (request.Official is null ? "" : " AND r.official_ids @> ARRAY[@official]::text[]") +
         (request.Issue is null ? "" : " AND r.issue_ids @> ARRAY[@issue]::text[]") +
@@ -120,9 +135,21 @@ public sealed class SearchIndex(NpgsqlDataSource database)
 
     private static void AddParameters(NpgsqlCommand command, int release, SearchRequest request)
     {
+        AddFilterParameters(command, release, request);
+        var parameters = command.Parameters;
+        parameters.AddWithValue("take", request.Limit + 1);
+        if (request.Cursor is not { } cursor) return;
+        parameters.AddWithValue("cursor_id", cursor.RecordId);
+        if (cursor.Rank is { } rank) parameters.Add(new NpgsqlParameter("cursor_rank", NpgsqlDbType.Real) { Value = rank });
+        if (cursor.SortDate is { } date) parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = date });
+        if (cursor.PublishedTicks is { } ticks)
+            parameters.Add(new NpgsqlParameter("cursor_published", NpgsqlDbType.TimestampTz) { Value = new DateTime(ticks, DateTimeKind.Utc) });
+    }
+
+    private static void AddFilterParameters(NpgsqlCommand command, int release, SearchRequest request)
+    {
         var parameters = command.Parameters;
         parameters.AddWithValue("release", release);
-        parameters.AddWithValue("take", request.Limit + 1);
         if (request.Text is not null) parameters.AddWithValue("q", request.Text);
         if (request.Kind is { } kind) parameters.AddWithValue("kind", PublicationProtocol.KindText(kind));
         if (request.Official is not null) parameters.AddWithValue("official", request.Official);
@@ -131,12 +158,6 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         if (request.Source is not null) parameters.AddWithValue("source", request.Source);
         if (request.From is { } from) parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
         if (request.To is { } to) parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
-        if (request.Cursor is not { } cursor) return;
-        parameters.AddWithValue("cursor_id", cursor.RecordId);
-        if (cursor.Rank is { } rank) parameters.Add(new NpgsqlParameter("cursor_rank", NpgsqlDbType.Real) { Value = rank });
-        if (cursor.SortDate is { } date) parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = date });
-        if (cursor.PublishedTicks is { } ticks)
-            parameters.Add(new NpgsqlParameter("cursor_published", NpgsqlDbType.TimestampTz) { Value = new DateTime(ticks, DateTimeKind.Utc) });
     }
 
     private static SearchCursor NextCursor(int release, SearchRequest request, (RecordHit Hit, float Rank) last) => request switch
@@ -161,6 +182,6 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         FirstRelease = reader.GetInt32(10),
         LastRelease = reader.IsDBNull(11) ? null : reader.GetInt32(11),
         BillLine = reader.IsDBNull(12) ? null : reader.GetString(12),
-        Snippet = reader.IsDBNull(13) ? null : reader.GetString(13)
+        Snippet = reader.IsDBNull(13) ? null : SearchSnippet.Cut(reader.GetString(13))
     };
 }

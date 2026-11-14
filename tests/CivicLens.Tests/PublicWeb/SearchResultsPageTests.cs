@@ -14,8 +14,8 @@ public sealed class SearchResultsPageTests
         new(PublishedRecordKind.Action, new string(id, 64), headline, new(2026, 2, 23), billLine, snippet, ["Jimmy Panetta"]);
 
     private static SearchPageData Data(SearchQueryData? query = null, SearchOfficialData[]? officials = null, SearchBillData? bill = null,
-        SearchHitData[]? hits = null, string? next = null, string? filterName = null, bool moreOfficials = false) =>
-        new(query ?? Query(), 1028, officials ?? [], moreOfficials, bill, hits ?? [], next, [new("housing", "Housing")], filterName);
+        SearchHitData[]? hits = null, string? next = null, string? filterName = null, bool moreOfficials = false, int? total = null) =>
+        new(query ?? Query(), 1028, officials ?? [], moreOfficials, bill, hits ?? [], total ?? hits?.Length ?? 0, next, [new("housing", "Housing")], filterName);
 
     private static SearchOfficialData Official(string id = "jimmy-panetta", string name = "Jimmy Panetta") =>
         new(id, name, PublishedOfficeKind.Representative, null, "CA", 19, "Democrat");
@@ -60,7 +60,7 @@ public sealed class SearchResultsPageTests
         Assert.Contains("S. 5334, a Senate bill introduced by John Cornyn, is also in the list. A number match can find another bill with the same number.",
             string.Join(' ', others.TextContent.Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries)));
         Assert.Equal(Root + $"records/{new string('s', 64)}.html", others.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Equal("1 result for \"5334\". Release 1028.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal("1 result for \"5334\".", page.QuerySelector(".list-status")!.TextContent);
     }
 
     [Fact]
@@ -224,11 +224,13 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
-    public async Task ACountWithAnotherPageSaysItCoversThisPageAndThePagerOffersNoWayBack()
+    public async Task TheStatusLineNamesTheTotalOfTheReleaseAndHowManyThisPageShowsAndThePagerOffersNoWayBack()
     {
-        var page = await RenderAsync(Data(hits: [Hit('a', "x"), Hit('b', "y")], next: "r.1.abc"));
+        var page = await RenderAsync(Data(hits: [Hit('a', "x"), Hit('b', "y")], next: "r.1.abc", total: 1_250));
+        var filtered = await RenderAsync(Data(Query(null) with { Kind = "vote" }, hits: [Hit('a', "x")]));
 
-        Assert.Equal("2 results on this page for \"5334\". Release 1028.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal("1,250 results for \"5334\". Showing 2 on this page.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal("1 result.", filtered.QuerySelector(".list-status")!.TextContent);
         Assert.Single(page.QuerySelectorAll(".pager a, .pager button"));
     }
 

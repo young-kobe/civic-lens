@@ -77,6 +77,13 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
          ORDER BY x.record_id, x."position"
         """;
 
+    private static readonly string ExecutiveActionSummarySentences = $"""
+        SELECT x.record_id, x.sentence
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.executive_action_summary_sentences x WHERE {RevisionKeys.Match} OFFSET 0) x
+         ORDER BY x.record_id, x."position"
+        """;
+
     private static readonly string BriefParagraphs = $"""
         SELECT x.record_id, x.paragraph_text
           FROM unnest(@ids, @revisions) k(record_id, revision_number)
@@ -146,13 +153,22 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
     private async Task<Dictionary<string, RecordTexts>> ReadExecutiveActionsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var sources = await RowsAsync(keys, ExecutiveActionSources, cancellationToken);
-        return sources.ToDictionary(item => item.Key, item => RecordTexts.Of(() => new([], [.. item.Value.Select(row => Text(row))])));
+        var sentences = await RowsAsync(keys, ExecutiveActionSummarySentences, cancellationToken);
+        return sources.ToDictionary(item => item.Key, item => RecordTexts.Of(() =>
+        {
+            string[] summary = [.. sentences.GetValueOrDefault(item.Key, []).Select(row => Text(row))];
+            return new(summary, [.. item.Value.Select(row => Text(row))], summary.Length == 0 ? null : string.Join(' ', summary));
+        }));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadBriefsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var paragraphs = await RowsAsync(keys, BriefParagraphs, cancellationToken);
-        return paragraphs.ToDictionary(item => item.Key, item => RecordTexts.Of(() => new([.. item.Value.Select(row => Text(row))], [])));
+        return paragraphs.ToDictionary(item => item.Key, item => RecordTexts.Of(() =>
+        {
+            string[] text = [.. item.Value.Select(row => Text(row))];
+            return new(text, [], string.Join('\n', text));
+        }));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadRelationshipsAsync(RevisionKeys keys, CancellationToken cancellationToken)

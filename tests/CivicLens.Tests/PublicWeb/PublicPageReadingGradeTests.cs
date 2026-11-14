@@ -340,7 +340,7 @@ public sealed class PublicPageReadingGradeTests
         var search = new SearchPageData(new("5334", null, null, null, null, null), 1028,
             [new("jimmy-panetta", "Jimmy Panetta", PublishedOfficeKind.Representative, null, "CA", 19, "Democrat")], true,
             new(new string('b', 64), "H.R. 5334, the Sanctioning Act", 119, "Jimmy Panetta", "119-111", new(2026, 9, 18), new(new string('v', 64), PublishedChamber.House), []),
-            [new(PublishedRecordKind.Action, new string('a', 64), "H.R. 5334 would impose sanctions", new(2026, 2, 23), null, null, ["Jimmy Panetta"])],
+            [new(PublishedRecordKind.Action, new string('a', 64), "H.R. 5334 would impose sanctions", new(2026, 2, 23), null, null, ["Jimmy Panetta"])], 1_250,
             "next", [new("housing", "Housing")], null);
         var brief = new BriefPageData(7, new string('b', 64), 3, new DateOnly(2026, 11, 2), "The week in Congress", PublishedTextOrigin.Model, "An AI draft from reviewed records.",
             [new PublishedBriefParagraph { Text = "First paragraph.", CitationIds = ["R1"] }],
