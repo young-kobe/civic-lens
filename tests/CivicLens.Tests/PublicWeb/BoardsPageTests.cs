@@ -21,20 +21,54 @@ public sealed class BoardsPageTests
         ListPageRender.RenderAsync<BoardsPage>(data, nameof(BoardsPage.Data));
 
     [Fact]
-    public async Task ARowGivesTheCountFirstThenItsBaseAndTheShareAndNamesADelegateSeat()
+    public async Task ARowGivesTheCountFirstThenItsBaseAndTheShare()
     {
-        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 119,
-            Row("cuellar", "Henry Cuellar", null, 254, 160), Row("moylan", "James Moylan", "Delegate for GU", 51, 26))]));
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 119, Row("cuellar", "Henry Cuellar", null, 254, 160))]));
 
-        var rows = page.QuerySelectorAll(".board-panel .list-row");
-        Assert.Equal("160 of 254 split votes", rows[0].QuerySelector(".list-row-figure")!.TextContent);
-        Assert.Equal("63%", rows[0].QuerySelector(".badge")!.TextContent);
-        Assert.Equal(["House Democrats"], rows[0].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
-        Assert.Equal(["House Democrats", "Delegate for GU"], rows[1].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
+        var row = page.QuerySelector(".board-panel .list-row")!;
+        Assert.Equal("160 of 254 split votes", row.QuerySelector(".list-row-figure")!.TextContent);
+        Assert.Equal("63%", row.QuerySelector(".badge")!.TextContent);
+        Assert.Equal(["House Democrats"], row.QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
         Assert.Contains("Count first, then the base it comes from.", page.QuerySelector(".board-lede")!.TextContent);
         Assert.Equal("The newest roll call counted here, in the 119th Congress, is on 16 Sep 2026. No count includes a later day.",
             page.QuerySelector(".board-panel details .muted")!.TextContent);
         Assert.DoesNotContain("Congress 119", page.Body!.TextContent);
+    }
+
+    [Fact]
+    public async Task DelegatesRankInTheirOwnListWithItsHeadingAndSeatAfterTheVotingMembers()
+    {
+        var moylan = Row("moylan", "James Moylan", "Delegate for Guam", 51, 26);
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Republican", 119, Row("fitz", "Brian Fitzpatrick", null, 250, 40)) with { Delegates = [moylan] }]));
+
+        var panel = page.QuerySelector(".board-panel")!;
+        var list = Assert.Single(panel.QuerySelectorAll(".board-delegates"));
+        Assert.Equal(["Brian Fitzpatrick"], panel.QuerySelectorAll(".list-row-title").Where(link => link.Closest(".board-delegates") is null).Select(link => link.TextContent));
+        Assert.Equal("Delegates and the Resident Commissioner", list.QuerySelector("h3")!.TextContent);
+        Assert.Equal(BoardWords.DelegatesNote, list.QuerySelector("p")!.TextContent);
+        Assert.Equal(["House Republicans", "Delegate for Guam"], list.QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
+        Assert.Equal("26 of 51 split votes", list.QuerySelector(".list-row-figure")!.TextContent);
+        Assert.True(ListPageRender.Precedes(panel.QuerySelector(".board-lede + .list-rows")!, list));
+        Assert.Contains("The 1 member of the House Republicans", panel.QuerySelector(".board-lede")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ABoardWithDelegatesButNoRankedVotingMemberStillShowsTheDelegateList()
+    {
+        var moylan = Row("moylan", "James Moylan", "Delegate for Guam", 51, 26);
+        var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Republican", 119) with { Delegates = [moylan] }]));
+
+        Assert.Contains("No member of the House Republicans has 25 split votes cast", page.QuerySelector(".board-panel")!.TextContent);
+        Assert.Equal("James Moylan", page.QuerySelector(".board-delegates .list-row-title")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ABoardWithoutDelegatesHasNoDelegateList()
+    {
+        var page = await RenderAsync(Data());
+
+        Assert.Null(page.QuerySelector(".board-delegates"));
+        Assert.DoesNotContain(BoardWords.DelegatesTitle, page.Body!.TextContent);
     }
 
     [Fact]

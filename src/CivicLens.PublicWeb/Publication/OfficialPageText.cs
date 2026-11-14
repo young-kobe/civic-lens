@@ -27,7 +27,7 @@ public static class OfficialPageText
         var role = data.Kind switch
         {
             PublishedOfficeKind.Senator => "senator",
-            PublishedOfficeKind.Representative => "representative",
+            PublishedOfficeKind.Representative => OfficialSeat.HouseRole(data.State).ToLowerInvariant(),
             _ => "official"
         };
         var place = OfficeLede.LedePlace(data.State, data.District);
