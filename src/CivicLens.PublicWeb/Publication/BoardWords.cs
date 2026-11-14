@@ -3,7 +3,7 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>The one owner of the time frame, agreement and caucus words that the static board pages, the server boards page and the full board pages share.</summary>
+/// <summary>The one owner of the time frame, agreement, caucus and delegate list words that the static board pages, the server boards page and the full board pages share.</summary>
 public static class BoardWords
 {
     public const string ListsEyebrow = "Four lists, one for each chamber and party";
@@ -17,6 +17,12 @@ public static class BoardWords
 
     public static string ListDescription(PublishedChamber chamber, string party) =>
         $"{PublishedPartyNames.PartyOf(chamber, party)} ranked by their share of split votes cast against most {PublishedPartyNames.Members(party)}, with the count and base of each.";
+
+    /// <summary>The heading of the delegate list of a House board, on the boards page, the full board page and Home.</summary>
+    public const string DelegatesTitle = "Delegates and the Resident Commissioner";
+
+    /// <summary>Why delegates rank apart from voting members. The fact comes from the glossary entry "delegate".</summary>
+    public const string DelegatesNote = "Delegates may not vote on final passage in the full House, so they cast fewer split votes. They rank apart from voting members.";
 
     public static string Eyebrow(int congress) => $"{CongressCalendar.Ordinal(congress)} Congress | {ListsEyebrow}";
 

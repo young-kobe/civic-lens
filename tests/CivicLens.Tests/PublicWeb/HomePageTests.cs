@@ -325,10 +325,70 @@ public sealed class HomePageTests
         new(chamber, party, congress, null, null, rows.Length > 0,
             [.. rows.Select(row => new BoardRowData(PublicationProtocol.OfficialCongressPagePath(row.Name.ToLowerInvariant(), congress ?? 119), row.Name, row.Seat, row.Cast, row.Breaks))]);
 
+    private static BoardRowData Delegate(string name, string seat, int cast, int breaks) =>
+        new(PublicationProtocol.OfficialCongressPagePath(name.ToLowerInvariant(), 119), name, seat, cast, breaks);
+
+    [Fact]
+    public async Task ADelegateNeverTakesABreakCardAndShowsInTheDelegateListUnderTheCards()
+    {
+        var page = await RenderAsync(new(7, null, [], null) { Boards = FourPanels() });
+        var section = page.QuerySelector(".home-breakers")!;
+
+        Assert.DoesNotContain("James Moylan", string.Join(' ', section.QuerySelectorAll(".home-breaker-card").Select(card => card.TextContent)));
+        var list = Assert.Single(section.QuerySelectorAll(".board-delegates"));
+        Assert.Equal("Delegates and the Resident Commissioner", list.QuerySelector("h3")!.TextContent);
+        Assert.Equal(["James Moylan"], list.QuerySelectorAll(".list-row-title").Select(link => link.TextContent));
+        Assert.Equal(["House Republicans", "Delegate for Guam"], list.QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
+        Assert.Equal("26 of 51 split votes", list.QuerySelector(".list-row-figure")!.TextContent);
+        Assert.True(ListPageRender.Precedes(section.QuerySelector(".home-breaker-list")!, list));
+    }
+
+    [Fact]
+    public async Task ADelegateShowsOnHomeEvenWhenNoBoardRanksAVotingMember()
+    {
+        var page = await RenderAsync(new(7, null, [], null)
+        {
+            Boards = [Panel(PublishedChamber.House, "Republican", 119) with { Delegates = [Delegate("James Moylan", "Delegate for Guam", 51, 26)] }]
+        });
+        var section = page.QuerySelector(".home-breakers")!;
+
+        Assert.Empty(section.QuerySelectorAll(".home-breaker-card"));
+        Assert.Null(section.QuerySelector(".home-section-lede"));
+        Assert.Equal("James Moylan", section.QuerySelector(".board-delegates .list-row-title")!.TextContent);
+        Assert.Equal("26 of 51 split votes, 119th Congress", section.QuerySelector(".board-delegates .list-row-figure")!.TextContent);
+    }
+
+    [Fact]
+    public async Task WhenTheBoardsKeepDifferentCongressesEachDelegateRowNamesItsCongress()
+    {
+        var page = await RenderAsync(new(7, null, [], null) { Boards = FourPanels(118) });
+
+        Assert.Equal("26 of 51 split votes, 119th Congress", page.QuerySelector(".board-delegates .list-row-figure")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ADelegateRowNamesItsCongressWhenItsBoardRanksNoVotingMemberAndTheCardsKeepAnotherCongress()
+    {
+        var page = await RenderAsync(new(7, null, [], null)
+        {
+            Boards =
+            [
+                Panel(PublishedChamber.House, "Republican", 119) with { Delegates = [Delegate("James Moylan", "Delegate for Guam", 51, 26)] },
+                Panel(PublishedChamber.Senate, "Democrat", 118, ("John Fetterman", null, 337, 66)),
+                Panel(PublishedChamber.Senate, "Republican", 118, ("Lisa Murkowski", null, 341, 58))
+            ]
+        });
+        var section = page.QuerySelector(".home-breakers")!;
+
+        Assert.DoesNotContain("118th Congress", section.QuerySelector(".home-section-lede")!.TextContent);
+        Assert.All(section.QuerySelectorAll(".home-breaker-card"), card => Assert.EndsWith(", 118th Congress", card.QuerySelectorAll("p")[1].TextContent));
+        Assert.Equal("26 of 51 split votes, 119th Congress", section.QuerySelector(".board-delegates .list-row-figure")!.TextContent);
+    }
+
     private static BoardPanelData[] FourPanels(int senateCongress = 119) =>
     [
         Panel(PublishedChamber.House, "Democrat", 119, ("Henry Cuellar", null, 254, 160), ("Second Dem", null, 200, 1)),
-        Panel(PublishedChamber.House, "Republican", 119, ("James Moylan", "Delegate for Guam", 51, 26)),
+        Panel(PublishedChamber.House, "Republican", 119, ("Brian Fitzpatrick", null, 250, 40)) with { Delegates = [Delegate("James Moylan", "Delegate for Guam", 51, 26)] },
         Panel(PublishedChamber.Senate, "Democrat", senateCongress, ("John Fetterman", null, 337, 66)),
         Panel(PublishedChamber.Senate, "Republican", senateCongress, ("Lisa Murkowski", null, 341, 58))
     ];
@@ -341,9 +401,9 @@ public sealed class HomePageTests
 
         Assert.Equal("Who broke from their party most", section.QuerySelector("h2")!.TextContent);
         var cards = section.QuerySelectorAll(".home-breaker-card").ToArray();
-        Assert.Equal(["Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski"], cards.Select(card => card.QuerySelector(".home-breaker-name")!.TextContent));
-        Assert.Equal(["160 of 254", "26 of 51", "66 of 337", "58 of 341"], cards.Select(card => card.QuerySelector(".home-breaker-figure")!.TextContent));
-        Assert.Equal(["House Democrats", "House Republicans, Delegate for Guam", "Senate Democrats", "Senate Republicans"], cards.Select(card => card.QuerySelectorAll("p")[0].TextContent));
+        Assert.Equal(["Henry Cuellar", "Brian Fitzpatrick", "John Fetterman", "Lisa Murkowski"], cards.Select(card => card.QuerySelector(".home-breaker-name")!.TextContent));
+        Assert.Equal(["160 of 254", "40 of 250", "66 of 337", "58 of 341"], cards.Select(card => card.QuerySelector(".home-breaker-figure")!.TextContent));
+        Assert.Equal(["House Democrats", "House Republicans", "Senate Democrats", "Senate Republicans"], cards.Select(card => card.QuerySelectorAll("p")[0].TextContent));
         Assert.Equal(["split votes cast against most Democrats", "split votes cast against most Republicans", "split votes cast against most Democrats", "split votes cast against most Republicans"],
             cards.Select(card => card.QuerySelectorAll("p")[1].TextContent));
         Assert.Equal(Root + PublicationProtocol.OfficialCongressPagePath("henry cuellar", 119), cards[0].QuerySelector("a")!.GetAttribute("href"));
