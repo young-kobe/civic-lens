@@ -10,6 +10,4 @@ public sealed record IndexedRecord(PublishedRecordEntry Entry, string Summary, s
 {
     public const int SummaryLimit = 50_000;
     public const int SourceLimit = PublicationProtocol.SearchSourceTextCharacters;
-
-    public string Body => Summary.Length == 0 ? Source : Summary + "\n" + Source;
 }

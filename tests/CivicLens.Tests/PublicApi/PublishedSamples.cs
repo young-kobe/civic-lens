@@ -149,7 +149,8 @@ internal static class PublishedSamples
         return new(record.ToEntry(), record);
     }
 
-    public static SampleRecord ExecutiveAction(string title, string tail)
+    /// <summary>An executive order. Each summary sentence, when given, cites the tail of the document text.</summary>
+    public static SampleRecord ExecutiveAction(string title, string tail, string[]? summary = null)
     {
         string[] lines = ["Federal Register document: 2025-01900", $"Title: {title}", "Signed: 2025-01-20", "Published: 2025-01-28", "Citation: 90 FR 8235",
             "Document URL: https://www.federalregister.gov/documents/2025/01/28/2025-01900/x"];
@@ -179,6 +180,16 @@ internal static class PublishedSamples
             President = new PublishedOfficial { Id = "o1", Name = "Official o1" },
             Facts = [.. lines.Select(Fact)],
             CorrectionNotices = [],
+            Summary = summary is null ? null : new()
+            {
+                TextOrigin = PublishedTextOrigin.Model,
+                Cut = false,
+                Sentences = [.. summary.Select(sentence => new PublishedExecutiveSentence
+                {
+                    Sentence = sentence,
+                    Citation = new() { ExtractionId = SourceId, Start = text.Length - tail.Length, Length = tail.Length, Quote = tail }
+                })]
+            },
             Sources = [new PublishedDocumentVersion { ExtractionId = SourceId, Url = "https://www.federalregister.gov/api/v1/documents/2025-01900.json", ObservedAtUtc = Published, Text = text }],
             ApprovedAtUtc = Published,
             FirstPublishedAtUtc = Published
