@@ -128,22 +128,24 @@
 
 @code {
     public const int MaximumTextLength = 200;
-    private const char MarkStart = '';
-    private const char MarkEnd = '';
+    /// <summary>The marks around each match in a snippet. The search index writes them and this page reads them.</summary>
+    public const char MarkStart = '\uE000';
+    public const char MarkEnd = '\uE001';
 
     [Parameter, EditorRequired] public SearchPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 
     private string NoRecords => Data.Query.Text is { } text ? $"No records match \"{text}\"." : "No records match these filters.";
 
-    /// <summary>Names the count and its scope. A count with a next page covers only this page, so it says so.</summary>
+    /// <summary>Names the total that the request matches. When the page shows fewer, it says how many it shows.</summary>
     private string StatusLine
     {
         get
         {
-            var count = $"{Data.Hits.Count} {(Data.Hits.Count == 1 ? "result" : "results")}{(Data.NextCursor is null ? string.Empty : " on this page")}";
+            var total = $"{PublishedWording.Count(Data.Total)} {(Data.Total == 1 ? "result" : "results")}";
             var text = Data.Query.Text is { } query ? $" for \"{query}\"" : string.Empty;
-            return $"{count}{text}. Release {Data.Release}.";
+            var shown = Data.Total > Data.Hits.Count ? $" Showing {PublishedWording.Count(Data.Hits.Count)} on this page." : string.Empty;
+            return $"{total}{text}.{shown}";
         }
     }
 

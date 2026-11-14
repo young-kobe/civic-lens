@@ -340,7 +340,7 @@ public sealed class PublicPageReadingGradeTests
         var search = new SearchPageData(new("5334", null, null, null, null, null), 1028,
             [new("jimmy-panetta", "Jimmy Panetta", PublishedOfficeKind.Representative, null, "CA", 19, "Democrat")], true,
             new(new string('b', 64), "H.R. 5334, the Sanctioning Act", 119, "Jimmy Panetta", "119-111", new(2026, 9, 18), new(new string('v', 64), PublishedChamber.House), []),
-            [new(PublishedRecordKind.Action, new string('a', 64), "H.R. 5334 would impose sanctions", new(2026, 2, 23), null, null, ["Jimmy Panetta"])],
+            [new(PublishedRecordKind.Action, new string('a', 64), "H.R. 5334 would impose sanctions", new(2026, 2, 23), null, null, ["Jimmy Panetta"])], 1_250,
             "next", [new("housing", "Housing")], null);
         var brief = new BriefPageData(7, new string('b', 64), 3, new DateOnly(2026, 11, 2), "The week in Congress", PublishedTextOrigin.Model, "An AI draft from reviewed records.",
             [new PublishedBriefParagraph { Text = "First paragraph.", CitationIds = ["R1"] }],
@@ -391,12 +391,8 @@ public sealed class PublicPageReadingGradeTests
         static VoteMemberData MapMember(string name, string cast, string party, string? state, int? district) =>
             new("o-" + name, name, cast, party, VoteDetailPageFixture.Cite(VoteDetailPageFixture.Lines[4]), state, district);
         static Func<Task<IDocument>> Page<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<TComponent>(parameters.Where(pair => typeof(TComponent).GetProperty(pair.Key) is not null).ToDictionary());
-        static Func<Task<IDocument>> Shell<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<ServerPageFrame>(new()
-        {
-            [nameof(ServerPageFrame.Context)] = new ServerPageContext(new(2026, 5, 31), new(2026, 5, 29)),
-            [nameof(ServerPageFrame.Page)] = typeof(TComponent),
-            [nameof(ServerPageFrame.Parameters)] = parameters.ToDictionary(pair => pair.Key, pair => pair.Value!)
-        });
+        static Func<Task<IDocument>> Shell<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent =>
+            () => ListPageRender.RenderPageAsync<TComponent>(parameters, new ServerPageContext(new(2026, 5, 31), new(2026, 5, 29)));
         static Dictionary<string, object?> With(string name, object? data, params (string Name, object? Value)[] more) =>
             new Dictionary<string, object?> { [name] = data, ["RootPath"] = Root }.Concat(more.Select(pair => KeyValuePair.Create(pair.Name, pair.Value))).ToDictionary();
 
@@ -506,16 +502,7 @@ public sealed class PublicPageReadingGradeTests
     private static string NormalizeText(IElement element) =>
         string.Join(' ', element.TextContent.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters)
-        where TComponent : IComponent
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<TComponent>(ParameterView.FromDictionary(parameters));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters)
+        where TComponent : IComponent => ListPageRender.RenderPageAsync<TComponent>(parameters);
+
 }

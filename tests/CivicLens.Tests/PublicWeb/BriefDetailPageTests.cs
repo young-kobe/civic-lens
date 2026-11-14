@@ -134,13 +134,17 @@ public sealed class BriefDetailPageTests
     }
 
     [Fact]
-    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyForAPersonCorrectionAndARoutineUpdateShowsTheMutedLineInTheHeader()
     {
         var corrected = await RenderAsync<BriefDetailPage, BriefPageData>(Brief() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
         var plain = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
+        var updated = await RenderAsync<BriefDetailPage, BriefPageData>(Brief() with { Corrections = [PublishedUpdateLineTests.SourceUpdate] });
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+        Assert.Null(corrected.QuerySelector(".update-line"));
+        Assert.Null(plain.QuerySelector(".update-line"));
+        PublishedUpdateLineTests.AssertTheLineIsInTheRecordHeader(updated);
     }
 
     [Fact]

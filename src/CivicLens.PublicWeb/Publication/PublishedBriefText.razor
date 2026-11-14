@@ -6,12 +6,11 @@
         @paragraph.Text
         @foreach (var id in paragraph.CitationIds)
         {
-            <a class="small" href="@(BriefHref + "#" + PublishedBriefView.CitationAnchor(id))">[@id]</a>
+            <a class="small" href="@("#" + PublishedBriefView.CitationAnchor(id))">[@id]</a>
         }
     </p>
 }
 
 @code {
     [Parameter, EditorRequired] public PublishedBriefParagraph[] Paragraphs { get; set; } = [];
-    [Parameter] public string BriefHref { get; set; } = string.Empty;
 }

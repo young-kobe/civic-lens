@@ -32,31 +32,6 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
-    private static PublishedRecordEntry VoteEntry(SeededVote vote) => new()
-    {
-        Kind = PublishedRecordKind.Vote,
-        RecordId = vote.RecordId,
-        RevisionNumber = 1,
-        Headline = "H",
-        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
-        Officials = [],
-        IssueIds = vote.Issues,
-        PolicyAreaIds = [],
-        Alignment = PublishedVoteAlignment.PartiesAgree
-    };
-
-    private static PublishedRecordEntry BillEntry(SeededBill bill) => new()
-    {
-        Kind = PublishedRecordKind.Action,
-        RecordId = bill.RecordId,
-        RevisionNumber = 1,
-        Headline = "H",
-        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
-        Officials = [],
-        IssueIds = bill.Issues,
-        PolicyAreaIds = []
-    };
-
     private static SeededVote Vote(char id, string kind, params string[] issues) => new(id, "2026-03-01") { Kind = kind, RollCall = id, Issues = issues };
 
     private static SeededBill Bill(char id, params string[] issues) => new(id, "2026-03-01") { BillNumber = id, Issues = issues };
@@ -65,7 +40,7 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
         new(id, "2026-03-01") { BillNumber = id, Issues = issues, Sponsorships = [.. sponsors.Select(person => new SeededSponsorship(person, "Sponsor", "2026-01-10"))] };
 
     [Fact]
-    public async Task TheBillCountEqualsTheFacetSummaryOfTheStaticIssuePageBecauseOneRuleMustGiveBothAnswers()
+    public async Task TheBillCountIsTheNumberOfBillsOnTheIssue()
     {
         var votes = new[] { Vote('1', "Passage", "tax"), Vote('2', "Rule", "tax"), Vote('3', "Cloture", "tax", "health"), Vote('4', "Passage", "health") };
         var bills = new[] { Bill('a', "tax"), Bill('b', "tax", "health"), Bill('c', "health") };
@@ -73,9 +48,7 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host, "tax");
 
-        var entries = votes.Select(VoteEntry).Concat(bills.Select(BillEntry)).Where(entry => entry.IssueIds.Contains("tax"));
-        var summary = FacetSummary.From(entries);
-        Assert.Equal(summary.Bills, answer.GetProperty("bills").GetInt32());
+        Assert.Equal(2, answer.GetProperty("bills").GetInt32());
         Assert.Equal(1, answer.GetProperty("release").GetInt32());
         Assert.Equal("tax", answer.GetProperty("issueId").GetString());
     }
@@ -133,21 +106,8 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
     private static SeededBill BillOn(char id, string day, string sponsor) =>
         new(id, day) { BillNumber = id, Issues = ["tax"], Sponsorships = [new(sponsor, "Sponsor", "2025-02-01")] };
 
-    private static PublishedRecordEntry SponsoredEntry(SeededBill bill) => new()
-    {
-        Kind = PublishedRecordKind.Action,
-        RecordId = bill.RecordId,
-        RevisionNumber = 1,
-        Headline = "H",
-        FirstPublishedAtUtc = DateTimeOffset.UnixEpoch,
-        Officials = [.. bill.Sponsorships.Where(sponsorship => sponsorship.Role == "Sponsor").Select(sponsorship => new PublishedOfficial { Id = sponsorship.Person, Name = sponsorship.Person })],
-        IssueIds = bill.Issues,
-        PolicyAreaIds = [],
-        EventDate = DateOnly.Parse(bill.EventOn, System.Globalization.CultureInfo.InvariantCulture)
-    };
-
     [Fact]
-    public async Task SponsoredBillsCountOnlyTheCurrentCongressAsTheStaticIssuePaneDoesAndTheEdgeDaysDecideTheCongress()
+    public async Task SponsoredBillsCountOnlyTheCurrentCongressAndTheEdgeDaysDecideTheCongress()
     {
         // The release is from 2 June 2026, in the 119th Congress, which runs from 3 January 2025 to 2 January 2027.
         var bills = new[]
@@ -161,10 +121,6 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
 
         var served = answer.GetProperty("topSponsors").EnumerateArray()
             .ToDictionary(item => item.GetProperty("officialId").GetString()!, item => item.GetProperty("sponsoredBills").GetInt32());
-        var entries = bills.Select(SponsoredEntry).ToArray();
-        var expected = new[] { "p1", "p2" }.ToDictionary(official => official,
-            official => TalkAndActionProfile.Of(119, entries.Where(entry => entry.Officials.Any(person => person.Id == official)), []).SponsoredOn("tax").Length);
-        Assert.Equal(expected, served);
         Assert.Equal((3, 1), (served["p1"], served["p2"]));
         Assert.All(answer.GetProperty("topSponsors").EnumerateArray(), item => Assert.Equal(bills.Length, item.GetProperty("base").GetInt32()));
     }

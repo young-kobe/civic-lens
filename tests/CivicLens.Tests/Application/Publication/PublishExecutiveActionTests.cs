@@ -38,7 +38,6 @@ public sealed class PublishExecutiveActionTests
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", record));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Contains(PublicationProtocol.RecordPagePath(record), files.Keys);
         var published = JsonSerializer.Deserialize<PublishedExecutiveAction>(files[PublicationProtocol.RecordDataPath(record)], PublicationProtocol.JsonOptions)!;
         Assert.Single(published.Sources);
         Assert.Equal(PublishedExecutiveActionKind.ExecutiveOrder, published.Kind);

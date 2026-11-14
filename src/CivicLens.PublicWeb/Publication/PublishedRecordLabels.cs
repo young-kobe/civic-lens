@@ -95,10 +95,6 @@ public static class PublishedRecordLabels
     public static string Quotation(PublishedQuotationKind kind) =>
         kind == PublishedQuotationKind.DirectQuotation ? "Inside quotation marks" : "Not in quotation marks";
 
-    public const string OtherPeopleQuoted = "Other people quoted, named as the article writes them";
-
-    public const string ModelChosenIssues = "Chosen by an AI model from the bill title and subjects";
-
     /// <summary>The name of the fact row that holds the AI label of a record.</summary>
     public const string WordingFact = "Wording";
 
@@ -141,12 +137,6 @@ public static class PublishedRecordLabels
     private const string CodeApproval = "Checked by code";
 
     public static string Approval(PublishedApprover approver) => approver == PublishedApprover.Code ? CodeApproval : PersonApproval;
-
-    public static string ApprovalOn(PublishedApprover approver, string moment) =>
-        approver == PublishedApprover.Code ? $"{CodeApproval} on {moment}" : $"{PersonApproval} {moment}";
-
-    public static string StatementPolicyAreas(PublishedApprover approver) =>
-        approver == PublishedApprover.Code ? "Policy areas (chosen by AI)" : "Policy areas";
 
     public static string Role(PublishedSponsorshipRole role) => role switch
     {

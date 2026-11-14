@@ -12,7 +12,6 @@ public sealed class PublishOfficialPhotosTests
 {
     private static readonly string FirstHash = new('a', 64);
     private static readonly string SecondHash = new('b', 64);
-    private static readonly string MayorPage = PublicationProtocol.OfficialPagePath("mayor");
 
     [Fact]
     public async Task APublishWritesTheCapturedImageUnderItsCaptureHashEvenWhenTheConfigurationHasNoPhotoSource()
@@ -69,7 +68,7 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
-    public async Task ANewPhotoRewritesTheOfficialPageBecauseTheProfileChanged()
+    public async Task ANewPhotoReplacesTheOldPhotoFileBecauseTheProfileChanged()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"), ("mayor", "attempt-2", SecondHash, "second"));
         scenario.Photos = [PhotoRow("mayor", "attempt-1", FirstHash)];
@@ -80,7 +79,6 @@ public sealed class PublishOfficialPhotosTests
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
 
-        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
         Assert.Contains(PublicationProtocol.PhotoPath(SecondHash), scenario.Releases.WriteOrder);
         Assert.DoesNotContain((first.DirectoryName, PublicationProtocol.PhotoPath(FirstHash)), scenario.Releases.Links);
         Assert.Equal(PublicationProtocol.PhotoPath(SecondHash),
@@ -88,7 +86,7 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
-    public async Task APhotoThatLeavesTheProfileRewritesTheOfficialPageAndWritesNoFile()
+    public async Task APhotoThatLeavesTheProfileWritesNoFile()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
@@ -97,7 +95,6 @@ public sealed class PublishOfficialPhotosTests
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
 
-        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
         var files = scenario.Releases.Directories[second.DirectoryName];
         Assert.Null(Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo);
         Assert.DoesNotContain(PublicationProtocol.PhotoPath(FirstHash), files.Keys);
@@ -160,20 +157,18 @@ public sealed class PublishOfficialPhotosTests
     }
 
     [Fact]
-    public async Task WithholdingRewritesTheOfficialPageAndRemovingTheFlagRestoresThePhoto()
+    public async Task WithholdingDropsThePhotoAndRemovingTheFlagRestoresIt()
     {
         var scenario = ScenarioWith(("mayor", "attempt-1", FirstHash, "first"));
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Vote(scenario, 'a')));
         scenario.WithheldPhotos.Add("mayor");
         scenario.Releases.WriteOrder.Clear();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", scenario.AddDraft('c')));
-        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
         scenario.WithheldPhotos.Clear();
         scenario.Releases.WriteOrder.Clear();
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", scenario.AddDraft('d')));
 
-        Assert.Contains(MayorPage, scenario.Releases.WriteOrder);
         var files = scenario.Releases.Directories[third.DirectoryName];
         Assert.Equal(PublicationProtocol.PhotoPath(FirstHash), Officials(files).Officials.Single(profile => profile.Id == "mayor").Photo!.Path);
         Assert.Equal(Image("first"), files[PublicationProtocol.PhotoPath(FirstHash)]);

@@ -42,8 +42,6 @@ internal sealed class PublicationScenario
     public const string PersonNote = "Fixed.";
     public static readonly DateTimeOffset ApprovedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    public List<string> Events { get; } = [];
-    public List<ReleaseOfficialPage> OfficialPages { get; } = [];
     public FakeClock Clock { get; } = new(new(2026, 2, 1, 0, 0, 0, TimeSpan.Zero));
     public FakePublicationStore Publications { get; } = new();
     public FakeReleaseDirectory Releases { get; }
@@ -83,22 +81,14 @@ internal sealed class PublicationScenario
     private FixedPersonRegistry Settings() => new(OfficialNames.Keys.Where(id => Websites.ContainsKey(id) || WithheldPhotos.Contains(id))
         .ToDictionary(id => id, id => new PersonSetting(WithheldPhotos.Contains(id), Websites.GetValueOrDefault(id))), () => SettingReads++);
 
-    public PublicationScenario() => Releases = new() { Events = Events };
+    public PublicationScenario() => Releases = new();
 
     public PublishedRecordLoaders Loaders() => new(Reviews, Statements, Actions, Votes, Relationships, Briefs, ExecutiveActions);
 
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
-    public PublicBaseUrl? BaseUrl { get; set; }
-
-    public string PageLayout { get; set; } = "";
-
-    public string? RenderFailureOfStatement { get; set; }
-
-    public HomeHighlights? Highlights { get; private set; }
-
-    public PublishRelease Publisher() => new(Publications, Releases, new FakeRenderer { Events = Events, Layout = PageLayout, FailOnStatement = RenderFailureOfStatement, OfficialPages = OfficialPages, PublicBaseUrl = BaseUrl, HomeSeen = seen => Highlights = seen }, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues, IssueIconConfiguration.None), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials), Settings()),
+    public PublishRelease Publisher() => new(Publications, Releases, Loaders(),
+        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials), Settings()),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications, Releases);
@@ -167,10 +157,7 @@ internal sealed class PublicationScenario
         };
         if (withFiles)
             foreach (var entry in entries)
-            {
                 files[PublicationProtocol.RecordDataPath(entry.RecordId)] = [];
-                files[PublicationProtocol.RecordPagePath(entry.RecordId)] = [];
-            }
         Releases.Directories["seeded"] = files;
         Releases.Active = "seeded";
         Publications.Committed.Add(new(1, "seeded", ApprovedAt, recordCount));
@@ -212,10 +199,7 @@ internal sealed class PublicationScenario
                 FirstPublishedAtUtc = ApprovedAt
             }).ToArray();
         foreach (var filler in fillers)
-        {
             directory[PublicationProtocol.RecordDataPath(filler.RecordId)] = [];
-            directory[PublicationProtocol.RecordPagePath(filler.RecordId)] = [];
-        }
         directory[PublicationProtocol.ManifestPath] =
             JsonSerializer.SerializeToUtf8Bytes(manifest with { Records = [.. manifest.Records, .. fillers] }, PublicationProtocol.JsonOptions);
         return fillers;
@@ -546,92 +530,6 @@ internal sealed class PublicationScenario
         new(attemptId, "source", url, url, DateTimeOffset.UnixEpoch,
             new CollectionResponse(200, null, null, "text/html", []), new CaptureIdentity(new string('a', 64), 0)),
         "extraction", text);
-}
-
-internal sealed class FakeRenderer : IReleaseRenderer
-{
-    public List<string>? Events { get; init; }
-    public string Layout { get; init; } = "";
-    public string? FailOnStatement { get; init; }
-    public List<ReleaseOfficialPage>? OfficialPages { get; init; }
-    public IReadOnlyList<ReleaseAsset> Assets { get; } = [new("assets/site.css", [1, 2, 3])];
-    public PublicBaseUrl? PublicBaseUrl { get; init; }
-    public Task<string> RenderNotFoundAsync(CancellationToken cancellationToken) => Task.FromResult("<html>not found</html>");
-    public Task<string> RenderRecordAsync(PublishedDocumentChange record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>{record.RecordId}{Layout}</html>");
-    public Task<string> RenderStatementAsync(PublishedStatement record, ImmutableArray<PublishedRelationship> related, PublicationCatalog catalog,
-        CancellationToken cancellationToken) =>
-        Logged($"render {record.RecordId[..1]}", record.RecordId == FailOnStatement ? throw new InvalidOperationException("render failed") : $"<html>statement {record.RecordId}{Related(related)}{Layout}</html>");
-    public Task<string> RenderActionAsync(PublishedAction record, PublishedBillStatus? billStatus, ImmutableArray<PublishedRelationship> related,
-        PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Logged($"render {record.RecordId[..1]}", $"<html>action {record.RecordId}{Related(related)}{Corrections(record.Corrections)}{StatusText(billStatus)}{Layout}</html>");
-    private static string StatusText(PublishedBillStatus? status) => status is null ? "" : $" status {status.Text} {status.Date:yyyy-MM-dd}";
-    public Task<string> RenderVoteAsync(PublishedVote record, VoteBillLink? bill, ImmutableArray<PublishedRelationship> related,
-        PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>vote {record.RecordId} bill {bill?.ActionRecordId}{(bill?.Line is { } line ? $" line {line}" : "")}{Related(related)}{Layout}</html>");
-    public Task<string> RenderExecutiveActionAsync(PublishedExecutiveAction record, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>executive action {record.RecordId}{Layout}</html>");
-    public Task<string> RenderRelationshipAsync(PublishedRelationship record, PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>relationship {record.RecordId}{Layout}</html>");
-    public Task<string> RenderBriefAsync(PublishedBrief record, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>brief {record.RecordId}{Layout}</html>");
-    public Task<string> RenderWithdrawalAsync(PublishedWithdrawal withdrawal, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>withdrawn {withdrawal.RecordId} {withdrawal.Note}{PublicBaseUrl?.Join(string.Empty)}</html>");
-    public Action<HomeHighlights>? HomeSeen { get; init; }
-    public Task<string> RenderHomeAsync(PublicationRelease release, PublishedBrief? brief, ReleaseFacets facets, HomeHighlights highlights,
-        CancellationToken cancellationToken)
-    {
-        HomeSeen?.Invoke(highlights);
-        return Task.FromResult($"<html>home {release.Records.Length} brief {brief?.RecordId}</html>");
-    }
-    public Task<string> RenderAllRecordsAsync(PublicationRelease release, int page, ReleaseBillLines billLines, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>index {page} {release.Records.Length}{LinesOf(release.Records, billLines)}</html>");
-    private static string LinesOf(IEnumerable<PublishedRecordEntry> entries, ReleaseBillLines billLines) =>
-        entries.Select(entry => (entry.RecordId, Line: billLines.Of(entry))).Where(pair => pair.Line is not null).ToArray() is { Length: > 0 } shown
-            ? $" lines [{string.Join(',', shown.Select(pair => $"{pair.RecordId[0]}:{pair.Line}"))}]" : "";
-    public Task<string> RenderBriefsAsync(PublicationRelease release, PublishedRecordEntry[] briefs, int page,
-        CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>briefs {page} {string.Join(',', briefs.Select(entry => entry.RecordId))}</html>");
-    public Task<string> RenderFacetPageAsync(ReleaseFacet facet, int page, ReleaseBillLines billLines, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>facet {facet.Name} {page} {string.Join(',', facet.RecordsOnPage(page).Select(entry => entry.RecordId))}{LinesOf(facet.RecordsOnPage(page), billLines)}</html>");
-    public Task<string> RenderFacetsAsync(ReleaseFacets facets, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>facets {facets.Issues.Length} {facets.PolicyAreas.Length}</html>");
-    public Task<string> RenderOfficialAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken)
-    {
-        OfficialPages?.Add(page);
-        return Task.FromResult($"<html>official {page.Profile.Id} {(page.IsTracked ? "tracked" : "untracked")} {(page.IsCurrent ? "current" : "past")} {page.Congress} congresses [{string.Join(',', page.Congresses)}] records [{string.Join(',', page.Records.Select(entry => entry.RecordId))}] votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]{StatusSuffix(page)}</html>");
-    }
-    public Task<string> RenderOfficialRecordAsync(ReleaseOfficialPage page, PublicationCatalog catalog, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>record {page.Profile.Id} votes [{string.Join(',', page.Votes.Select(vote => vote.RecordId))}]</html>");
-    private static string StatusSuffix(ReleaseOfficialPage page) =>
-        page.BillStatuses?.Where(pair => page.Records.Any(entry => entry.RecordId == pair.Key)).ToArray() is { Length: > 0 } shown
-            ? $" statuses [{string.Join(',', shown.Select(pair => $"{pair.Key[0]}:{pair.Value.Status.Text}"))}]" : "";
-
-    public Task<string> RenderOfficialsAsync(IReadOnlyList<OfficialListing> officials, DateTimeOffset publishedAtUtc, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>officials {string.Join(',', officials.Select(official => $"{official.Profile.Id}:{official.RecordCount}"))}</html>");
-    public Task<string> RenderBoardAsync(OfficialBoardPage page, ClosestVote? closestVote, ChamberAgreement? agreement, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>board {page.Board.PagePath} [{string.Join(',', page.Members.Select(member => member.Official.Profile.Id))}]</html>");
-    public Task<string> RenderReportAsync(CancellationToken cancellationToken) =>
-        Task.FromResult("<html>report</html>");
-    public Task<string> RenderMethodAsync(CancellationToken cancellationToken) =>
-        Task.FromResult("<html>method</html>");
-    public Task<string> RenderAboutAsync(CancellationToken cancellationToken) =>
-        Task.FromResult("<html>about</html>");
-    public Task<string> RenderGlossaryAsync(CancellationToken cancellationToken) =>
-        Task.FromResult("<html>glossary</html>");
-    public Task<string> RenderSearchAsync(PublicationRelease release, ReleaseFacets facets, CancellationToken cancellationToken) =>
-        Task.FromResult($"<html>search {release.Records.Length} {facets.Issues.Length}</html>");
-
-    private Task<string> Logged(string entry, string page)
-    {
-        Events?.Add(entry);
-        return Task.FromResult(page);
-    }
-
-    private static string Corrections(PublishedCorrection[] corrections) => corrections.Length == 0 ? "" : $" corrections {corrections.Length}";
-
-    private static string Related(ImmutableArray<PublishedRelationship> related) =>
-        related.IsEmpty ? "" : " related " + string.Join(' ', related.Select(link => link.RecordId[..1]));
 }
 
 internal sealed class FakePublicationStore : IPublicationStore
@@ -1044,7 +942,6 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     public List<string> WriteOrder { get; } = [];
     public List<(string SourceDirectory, string RelativePath)> Links { get; } = [];
     public List<string> ReadPaths { get; } = [];
-    public List<string>? Events { get; init; }
     public List<string> Deleted { get; } = [];
     public List<string> Activated { get; } = [];
     public int BeginCount { get; private set; }
@@ -1069,7 +966,6 @@ internal sealed class FakeReleaseDirectory : IReleaseDirectory
     {
         ReadPaths.Add(relativePath);
         if (ReadFailures.TryGetValue(relativePath, out var failure)) throw failure;
-        Events?.Add($"read {relativePath.Split('/', '.')[^2][..1]}");
         var content = Directories.TryGetValue(directoryName, out var directory) && directory.TryGetValue(relativePath, out var file)
             ? file
             : throw new FileNotFoundException("Release file was not found.", relativePath);

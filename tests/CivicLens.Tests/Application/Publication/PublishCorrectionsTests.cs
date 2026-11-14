@@ -298,8 +298,6 @@ public sealed class PublishCorrectionsTests
             new PublishedRecordReference(PublishedRecordKind.Statement, statement),
             new PublishedRecordReference(PublishedRecordKind.Relationship, relationship)));
 
-        var page = Encoding.UTF8.GetString(scenario.Releases.Directories[third.DirectoryName][PublicationProtocol.RecordPagePath(action)]);
-        Assert.Equal($"<html>action {action} related e corrections 1</html>", page);
         Assert.Single(ReadAction(scenario, third.DirectoryName, action).Corrections);
     }
 

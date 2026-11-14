@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using AngleSharp.Html.Parser;
-using CivicLens.Host.Publication;
 using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -11,7 +9,8 @@ public sealed class GlossaryTests
     private const string ApprovedWordingHash = "9CBD8DC8A299CEA5D6B467579FC13FCD5589875DB7776A369BE1215C14F143FE";
     private const int ApprovedTermCount = 44;
 
-    private static readonly ReleaseRenderer Renderer = new(null, null);
+    private static Task<AngleSharp.Dom.IDocument> RenderAsync<TPage>() where TPage : Microsoft.AspNetCore.Components.IComponent =>
+        ListPageRender.RenderPageAsync<TPage>(new Dictionary<string, object?> { ["RootPath"] = ListPageRender.Root });
 
     private static IEnumerable<GlossaryTerm> AllTerms => Glossary.Groups.SelectMany(group => group.Terms);
 
@@ -34,7 +33,7 @@ public sealed class GlossaryTests
     [Fact]
     public async Task TheGlossaryPageListsEveryTermWithItsMeaningReasonAndSourceAndEveryPartyCountRule()
     {
-        var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
+        var document = await RenderAsync<PublishedGlossaryPage>();
         var main = document.QuerySelector("main")!;
 
         foreach (var term in AllTerms)
@@ -64,7 +63,7 @@ public sealed class GlossaryTests
     [Fact]
     public async Task TheGlossaryIndexGroupsEveryTermAlphabeticallyAndLinksPopulatedLettersAndDefinitions()
     {
-        var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
+        var document = await RenderAsync<PublishedGlossaryPage>();
         var main = document.QuerySelector("main")!;
         var index = main.QuerySelector($"nav[aria-label='{Glossary.IndexLabel}']")!;
         var entries = index.QuerySelectorAll(".glossary-index-terms a").ToList();
@@ -101,7 +100,7 @@ public sealed class GlossaryTests
     [Fact]
     public async Task ThePartyCountNoteKeepsItsBodyGroupAndIsInTheAlphabeticalIndex()
     {
-        var document = new HtmlParser().ParseDocument(await Renderer.RenderGlossaryAsync(CancellationToken.None));
+        var document = await RenderAsync<PublishedGlossaryPage>();
         var main = document.QuerySelector("main")!;
         var indexLink = main.QuerySelector($"nav a[href='#{Glossary.PartyCountAnchorId}']")!;
         var bodyPanel = main.QuerySelectorAll("section[aria-labelledby^='glossary-group-']")
@@ -114,7 +113,7 @@ public sealed class GlossaryTests
     [Fact]
     public async Task ATermIsAPopoverOnItsFirstUseOnlyAndPlainTextAfterThat()
     {
-        var document = new HtmlParser().ParseDocument(await Renderer.RenderMethodAsync(CancellationToken.None));
+        var document = await RenderAsync<MethodPage>();
 
         var targets = document.QuerySelectorAll("button.term").Select(button => button.GetAttribute("popovertarget")).ToList();
 
@@ -128,7 +127,7 @@ public sealed class GlossaryTests
     [Fact]
     public async Task TheMethodPageExplainsPresidentialNoticesWithThePresidentialDefinitionNotTheAgencyOne()
     {
-        var document = new HtmlParser().ParseDocument(await Renderer.RenderMethodAsync(CancellationToken.None));
+        var document = await RenderAsync<MethodPage>();
 
         var notices = document.QuerySelectorAll("button.term").Single(button => button.TextContent == "notices");
 
@@ -138,7 +137,7 @@ public sealed class GlossaryTests
     [Fact]
     public async Task ATermIsAButtonWithAPopoverHoldingTheApprovedMeaningAndTheFooterLinksToTheGlossaryPage()
     {
-        var document = new HtmlParser().ParseDocument(await Renderer.RenderAboutAsync(CancellationToken.None));
+        var document = await RenderAsync<AboutPage>();
 
         var button = document.QuerySelector("button.term")!;
         var popover = document.QuerySelector($"#{button.GetAttribute("popovertarget")}")!;
