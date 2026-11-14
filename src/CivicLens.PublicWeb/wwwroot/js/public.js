@@ -433,7 +433,6 @@
 
     const initZipLookup = (form, remembered) => {
         const api = form.dataset.zipApi;
-        const view = form.dataset.zipView === "compare" ? "compare" : "";
         const panel = document.querySelector("[data-zip-results]");
         const body = panel.querySelector("[data-zip-body]");
         const notes = panel.querySelector("[data-zip-notes]");
@@ -485,7 +484,7 @@
         let renderedSinceRelease = null;
         const loader = memberLoader(remembered, {
             api,
-            view,
+            view: "",
             onFragment: (fragment, call) => {
                 showAnswer(fragment);
                 mountStrip(fragment);

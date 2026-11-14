@@ -312,6 +312,8 @@ body.public .correction-banner h2 { margin: 0; font: 650 .8rem/1.3 var(--ui); le
 .public-nav + .topbar-tools { margin-left: auto; }
 .your-members { display: flex; align-items: center; gap: var(--s2); }
 .your-members[hidden] { display: none; }
+/* One members bar: the header chip steps aside while the members strip shows its own Forget control. */
+.public:has(#members-strip [data-forget-members]) .your-members { display: none; }
 .your-members a, .your-members button { display: inline-flex; align-items: center; min-height: 44px; }
 .your-members a { color: var(--ink); font-weight: 600; text-decoration: none; }
 .your-members a:hover { text-decoration: underline; text-decoration-color: var(--marigold); text-decoration-thickness: 2px; text-underline-offset: 4px; }

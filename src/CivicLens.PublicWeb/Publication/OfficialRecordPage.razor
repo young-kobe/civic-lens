@@ -22,7 +22,29 @@
             @switch (Data.Selected)
             {
                 case OfficialRecordKind.Votes:
-                    <SharedVoteRows Data="VoteRows" RootPath="@RootPath" SingleMember="true" HeadingLevel="1" />
+                    <ListFilterFold Summary="@OfficialRecordText.VoteFilterSummary" FormLabel="@OfficialRecordText.VoteFilterLabel" IsActive="Filter.IsActive" IsRefused="Filter.Invalid is not null"
+                                    ClearHref="@OfficialRecordText.Path(RootPath, Data.OfficialId, OfficialRecordKind.Votes)">
+                        <Hidden><input type="hidden" name="kind" value="@OfficialRecordText.Query(OfficialRecordKind.Votes)" /></Hidden>
+                        <Fields>
+                            <RecordListSelect Id="record-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Filter" />
+                            <RecordListText Id="record-bill" Name="bill" Label="Bill number" Placeholder="H.R. 5334" Filter="Filter" />
+                            <RecordListSelect Id="record-party" Name="party" Label="@OfficialRecordText.PartyLineLabel" Choices="OfficialRecordText.PartyLineChoices" Filter="Filter" />
+                            <RecordListSelect Id="record-cast" Name="cast" Label="@OfficialRecordText.CastLabel" Choices="OfficialRecordText.CastChoices" Filter="Filter" />
+                        </Fields>
+                    </ListFilterFold>
+                    @* A refused request shows the form with the marked field and no rows. A filtered list names its filters and its rows on this page. *@
+                    @if (IsFiltered)
+                    {
+                        <ListStatus Count="Data.Votes.Length" Singular="vote" Plural="votes" Chips="OfficialRecordText.VoteChips(Filter, Data.Issues)" />
+                    }
+                    @if (Data.Votes.Length > 0)
+                    {
+                        <SharedVoteRows Data="VoteRows" RootPath="@RootPath" SingleMember="true" HeadingLevel="1" />
+                    }
+                    else if (IsFiltered)
+                    {
+                        <EmptyState Title="No vote matches these filters." Level="2" />
+                    }
                     break;
                 case OfficialRecordKind.Bills:
                     @if (Data.Bills.Any(bill => bill.BillLine is not null))
@@ -61,8 +83,9 @@
                     </ul>
                     break;
             }
-            <Pager Label="@OfficialRecordText.PagerLabel" ForwardOnly="true" Summary="@OfficialRecordText.PagerSummary(Shown, Data.SelectedCount)"
-                   OlderHref="@NextHref" OlderText="Next page" LastPage="@(Data.LaterPage && Data.NextCursor is null)" />
+            @* A filtered list counts no total, so its pager names none. *@
+            <Pager Label="@OfficialRecordText.PagerLabel" ForwardOnly="true" Summary="@(Filter.IsActive ? null : OfficialRecordText.PagerSummary(Shown, Data.SelectedCount))"
+                   OlderHref="@NextHref" OlderText="Next page" LastPage="@(!Filter.IsActive && Data.LaterPage && Data.NextCursor is null)" />
         </section>
     }
     @if (Data.Offices.Length > 0)
@@ -93,5 +116,9 @@
         _ => Data.ExecutiveActions.Length
     };
 
-    private string? NextHref => Data.NextCursor is null ? null : OfficialRecordText.Path(RootPath, Data.OfficialId, Data.Selected, Data.NextCursor);
+    private RecordListFilter Filter => Data.VoteFilter;
+
+    private bool IsFiltered => Filter.IsActive && Filter.Invalid is null;
+
+    private string? NextHref => Data.NextCursor is null ? null : OfficialRecordText.Path(RootPath, Data.OfficialId, Data.Selected, Data.NextCursor, Filter);
 }

@@ -399,7 +399,7 @@ public sealed class ReleaseRendererTests
             .QuerySelectorAll("p")[1].QuerySelector("button.term")!.TextContent);
         Assert.Equal("statement", about.QuerySelectorAll("main section").Single(panel => panel.QuerySelector("h2")!.TextContent == "Who approves a record")
             .QuerySelector("button.term")!.TextContent);
-        Assert.Equal("How we check records", method.QuerySelector(".public-footer-nav a[href='method.html']")!.TextContent);
+        Assert.Equal("How the counts work", method.QuerySelector(".public-footer-nav a[href='method.html']")!.TextContent);
         Assert.Equal("How the counts work", about.QuerySelector("main a[href='method.html']")!.TextContent);
     }
 
@@ -2866,7 +2866,7 @@ public sealed class ReleaseRendererTests
     private static readonly string[] ServedRootPages =
     [
         .. WrittenRootPages, PublicationProtocol.BoardsPagePath,
-        .. new[] { PublishedRecordKind.Vote, PublishedRecordKind.Action, PublishedRecordKind.ExecutiveAction }.Select(PublicationProtocol.ListPagePath)
+        .. new[] { PublishedRecordKind.Vote, PublishedRecordKind.Action, PublishedRecordKind.Statement, PublishedRecordKind.ExecutiveAction }.Select(PublicationProtocol.ListPagePath)
     ];
 
     [Fact]
@@ -2983,7 +2983,7 @@ public sealed class ReleaseRendererTests
         return
         [
             ("record", PublicationProtocol.RecordPagePath(Record().RecordId), await renderer.RenderRecordAsync(Record(), PublicationCatalogs.None, CancellationToken.None), "All records"),
-            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), null),
+            ("statement", PublicationProtocol.RecordPagePath(Statement().RecordId), await renderer.RenderStatementAsync(Statement(), [], PublicationCatalogs.None, CancellationToken.None), "Statements"),
             ("action", PublicationProtocol.RecordPagePath(Action().RecordId), await renderer.RenderActionAsync(Action(), null, [], PublicationCatalogs.None, CancellationToken.None), "Bills"),
             ("vote", PublicationProtocol.RecordPagePath(Vote().RecordId), await renderer.RenderVoteAsync(Vote(), null, [], PublicationCatalogs.None, CancellationToken.None), "Votes"),
             ("relationship", PublicationProtocol.RecordPagePath(relationship.RecordId), await renderer.RenderRelationshipAsync(relationship, PublicationCatalogs.None, CancellationToken.None), "All records"),

@@ -58,6 +58,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
+        await HomeSeed.AddBriefsAsync(host.OperationalDatabase, new SeededBrief('a', "2026-01-05"));
+
         var (status, page) = await GetAsync(host, PublicationProtocol.AboutPagePath);
         var text = page.QuerySelector("main")!.TextContent;
 
@@ -160,19 +162,17 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBriefsListShowsTheEmptyStateWithALinkToTheVotesListWhenNoBriefIsPublished()
+    public async Task WhileNoBriefIsPublishedTheBriefsListAnswersTheNotFoundPageAndAboutDoesNotLinkIt()
     {
         await using var host = await StartAsync();
 
         var (status, page) = await GetAsync(host, PublicationProtocol.BriefsPagePath(1));
+        var (_, about) = await GetAsync(host, PublicationProtocol.AboutPagePath);
 
-        Assert.Equal(HttpStatusCode.OK, status);
-        Assert.Equal("No weekly briefs yet", page.QuerySelector(".empty h2")!.TextContent);
-        var action = Assert.Single(page.QuerySelectorAll(".empty a"));
-        Assert.Equal(Root + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote), action.GetAttribute("href"));
-        Assert.Equal("Votes", action.TextContent.Trim());
-        Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
-        Assert.Contains("Release 4, published 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal(HttpStatusCode.NotFound, status);
+        Assert.Equal("Page not found", page.QuerySelector("h1")!.TextContent);
+        Assert.DoesNotContain(about.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("briefs", StringComparison.Ordinal));
+        Assert.Contains("A weekly brief is a sample.", about.QuerySelector("main")!.TextContent);
     }
 
     [Fact]
@@ -272,7 +272,6 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     [InlineData(PublicationProtocol.VoteKindsPagePath)]
     [InlineData(PublicationProtocol.GlossaryPagePath)]
     [InlineData(PublicationProtocol.ReportPagePath)]
-    [InlineData("compare")]
     [InlineData("no-such-page")]
     public async Task EveryServerPageShowsTheNewestRollCallOfEachChamberFromOneOwner(string path)
     {

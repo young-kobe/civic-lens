@@ -16,21 +16,14 @@ public sealed class PublicPageReadingGradeTests
     private const double PageTextCeiling = 14;
     private const string DifficultSummary = "Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.";
 
-    [Theory]
-    [InlineData("home")]
-    [InlineData("compare")]
-    public async Task HomeAndCompareIntroPassagesReadAtOrBelowThePageTextCeiling(string pageName)
+    [Fact]
+    public async Task HomeIntroPassagesReadAtOrBelowThePageTextCeiling()
     {
-        var page = pageName == "home"
-            ? await RenderAsync<HomePage>(new Dictionary<string, object?>
-            {
-                [nameof(HomePage.Data)] = new HomePageData(7, null, [], null),
-                [nameof(HomePage.RootPath)] = Root
-            })
-            : await RenderAsync<ComparePage>(new Dictionary<string, object?>
-            {
-                [nameof(ComparePage.RootPath)] = Root
-            });
+        var page = await RenderAsync<HomePage>(new Dictionary<string, object?>
+        {
+            [nameof(HomePage.Data)] = new HomePageData(7, null, [], null),
+            [nameof(HomePage.RootPath)] = Root
+        });
 
         var intro = Assert.Single(page.QuerySelectorAll(".home-intro"));
         var heading = Assert.Single(intro.QuerySelectorAll("h1"));
@@ -38,7 +31,7 @@ public sealed class PublicPageReadingGradeTests
         var grade = PassageGrade(heading, lead);
 
         Assert.True(grade <= PageTextCeiling,
-            $"The {pageName} intro reads at grade {ReadingGrade.Format(grade)}.");
+            $"The home intro reads at grade {ReadingGrade.Format(grade)}.");
     }
 
     [Fact]
@@ -237,7 +230,7 @@ public sealed class PublicPageReadingGradeTests
     [Fact]
     public async Task AHardLongSentenceInFixedPageTextFailsTheGate()
     {
-        var page = await RenderAsync<ComparePage>(new Dictionary<string, object?> { [nameof(ComparePage.RootPath)] = Root });
+        var page = await RenderAsync<AboutPage>(new Dictionary<string, object?> { [nameof(AboutPage.RootPath)] = Root });
         var extra = page.CreateElement("p");
         extra.TextContent = DifficultSummary;
         page.QuerySelector("main, body")!.AppendChild(extra);
@@ -405,7 +398,6 @@ public sealed class PublicPageReadingGradeTests
             ("home", Page<HomePage>(With("Data", home, ("BrowserApiUrl", "https://api.civic-lens.test"))),
                 ["Published", "Newest notice", "Health", "Current bill line", "Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski", "Ada Able", "Ben Baker"]),
             ("home empty", Page<HomePage>(With("Data", new HomePageData(7, null, [], null))), []),
-            ("compare", Page<ComparePage>(With("Data", null)), []),
             ("officials", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], OfficialsFilterData.None, null))), []),
             ("officials filtered", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], new(null, null, null, "zzq"), null))), []),
             ("boards", Page<BoardsPage>(With("Data", boards)), ["Henry Cuellar"]),
@@ -452,7 +444,6 @@ public sealed class PublicPageReadingGradeTests
             ("about", Page<AboutPage>(new() { ["RootPath"] = Root }), []),
             ("method", Page<MethodPage>(new() { ["RootPath"] = Root }), []),
             ("briefs", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 1, [new(new string('b', 64), new(2026, 11, 2), "The week in Congress", "An AI draft from reviewed records.", new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero))]))), ["The week in Congress"]),
-            ("briefs empty", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 0, []))), []),
             ("issues index", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, [new("firearms", "Firearms", 119, 3, 186)]))), ["Firearms"]),
             ("issues index empty", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, []))), []),
             ("official votes", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 0)], OfficialRecordKind.Votes) { Votes = [new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, PublishedTextOrigin.Model, "Vote to pass or agree to", "Passed", [])], NextCursor = "next" })), ["Ann Able", "House agrees"]),
@@ -481,7 +472,6 @@ public sealed class PublicPageReadingGradeTests
             ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),
             ("server error", Page<PublishedServerErrorPage>(new() { ["RootPath"] = Root, ["SectionLink"] = PublicSections.SectionOf("bills.html") }), []),
             ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
-            ("zip compare", Page<ZipMemberCards>(With("Data", zipCompare, ("View", "compare"))), ZipRecordData),
             ("zip issue", Page<IssueMemberVotes>(With("Data", zipCompare)), ZipRecordData),
             ("bill members", Page<BillMembersFragment>(With("Data", billMembers)), ZipRecordData),
         ];

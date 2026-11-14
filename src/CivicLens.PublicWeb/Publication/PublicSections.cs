@@ -24,15 +24,18 @@ public static class PublicSections
 
     public static RecordList ListOf(PublishedRecordKind kind) => RecordLists.Single(list => list.Kind == kind);
 
-    /// <summary>The header of every page. Each kind link leads to the list page of its kind.</summary>
+    /// <summary>The header of every page and of its Menu sheet, in the order of the mockup. Each kind link leads to the list page of its kind.
+    /// Search comes last, because the mockup holds no Search link and a link after the sections keeps their approved order.</summary>
     public static readonly IReadOnlyList<NavLink> Header =
     [
         new(PublicSection.Officials, "Officials", PublicationProtocol.OfficialsPagePath),
         new(PublicSection.Issues, "Issues", PublicationProtocol.FacetsPath),
         new(PublicSection.Votes, "Votes", PublicationProtocol.ListPagePath(PublishedRecordKind.Vote)),
         new(PublicSection.Bills, "Bills", PublicationProtocol.ListPagePath(PublishedRecordKind.Action)),
+        new(PublicSection.Statements, "Statements", PublicationProtocol.ListPagePath(PublishedRecordKind.Statement)),
         new(PublicSection.ExecutiveActions, "Executive actions", PublicationProtocol.ListPagePath(PublishedRecordKind.ExecutiveAction)),
-        new(PublicSection.Boards, "Compare parties", PublicationProtocol.BoardsPagePath)
+        new(PublicSection.Boards, "Compare parties", PublicationProtocol.BoardsPagePath),
+        new(PublicSection.Search, "Search", PublicationProtocol.SearchPagePath)
     ];
 
     /// <summary>The header link of the section that holds a public path: the link of the page itself, or of the folder that holds its pages,
@@ -45,9 +48,12 @@ public static class PublicSections
 
     public static readonly NavLink Report = new(null, $"{PublishedRecordLabels.ReportLinkStart} page", PublicationProtocol.ReportPagePath);
 
+    /// <summary>The footer link of the method page. Its text is the title of the page.</summary>
+    public static readonly NavLink Method = new(null, "How the counts work", PublicationProtocol.MethodPagePath);
+
     public static readonly IReadOnlyList<NavLink> Footer =
     [
-        new(null, "How we check records", PublicationProtocol.MethodPagePath),
+        Method,
         new(PublicSection.Glossary, "Glossary", PublicationProtocol.GlossaryPagePath),
         new(PublicSection.About, "About", PublicationProtocol.AboutPagePath),
         Report
@@ -76,6 +82,7 @@ public static class PublicSections
     {
         PublishedRecordKind.Vote => PublicSection.Votes,
         PublishedRecordKind.Action => PublicSection.Bills,
+        PublishedRecordKind.Statement => PublicSection.Statements,
         PublishedRecordKind.ExecutiveAction => PublicSection.ExecutiveActions,
         _ => null
     };

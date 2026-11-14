@@ -1,4 +1,5 @@
 using System.Data;
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicWeb.Publication;
 using Npgsql;
 
@@ -24,11 +25,15 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
         var counts = await OfficialRecordQueries.ReadCountsAsync(connection, transaction, officialId, cancellationToken);
         var tabs = TabOrder.Where(kind => counts[kind] > 0).Select(kind => new OfficialRecordCountData(kind, counts[kind])).ToArray();
         var selected = request.Kind is { } asked && counts[asked] > 0 ? asked : tabs.FirstOrDefault()?.Kind ?? OfficialRecordKind.Votes;
-        var page = new OfficialRecordPageData(release, official.OfficialId, official.Name, official.Kind, tabs, selected);
+        var page = new OfficialRecordPageData(release, official.OfficialId, official.Name, official.Kind, tabs, selected) { VoteFilter = request.Filter };
         if (request.Cursor is { } stale && stale.Release != release) return page;
         page = page with { Offices = await ReadOfficesAsync(connection, transaction, officialId, cancellationToken) };
         var after = request.Kind == selected ? request.Cursor : null;
-        return tabs.Length == 0 ? page : await ReadPageAsync(connection, transaction, page with { LaterPage = after is not null }, after, cancellationToken);
+        if (tabs.Length == 0) return page;
+        // Only the votes tab shows the issue choices of its filter form.
+        if (selected == OfficialRecordKind.Votes)
+            page = page with { Issues = [.. (await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken)).Select(issue => issue.ToChoice())] };
+        return await ReadPageAsync(connection, transaction, page with { LaterPage = after is not null }, request, after, cancellationToken);
     }
 
     private static async Task<OfficialOfficeData[]> ReadOfficesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
@@ -39,13 +44,13 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
     }
 
     private static async Task<OfficialRecordPageData> ReadPageAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, OfficialRecordPageData page,
-        OfficialRecordCursor? after, CancellationToken cancellationToken)
+        OfficialRecordRequest request, OfficialRecordCursor? after, CancellationToken cancellationToken)
     {
         var id = page.OfficialId;
         switch (page.Selected)
         {
             case OfficialRecordKind.Votes:
-                var votes = await OfficialRecordQueries.ReadVotesAsync(connection, transaction, id, after, cancellationToken);
+                var votes = await OfficialRecordQueries.ReadVotesAsync(connection, transaction, id, request, after, cancellationToken);
                 return Continue(page with { Votes = votes.Rows }, votes.Next);
             case OfficialRecordKind.Bills:
                 var bills = await OfficialRecordQueries.ReadBillsAsync(connection, transaction, id, after, cancellationToken);

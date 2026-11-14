@@ -229,7 +229,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal(["Vote to end debate", "On or before 9 Mar 2026"], Chips(await GetPageAsync(host, "/votes.html?kind=cloture&to=2026-03-09")));
         Assert.Equal("senate", page.QuerySelector("select[name=chamber] option[selected]")!.GetAttribute("value"));
         Assert.Equal("2026-03-01", page.QuerySelector("input[name=from]")!.GetAttribute("value"));
-        Assert.NotNull(page.QuerySelector(".list-fold[open]"));
+        // The fold closes after Apply on every screen, and the chips name the active filters.
+        Assert.NotNull(page.QuerySelector("details.list-fold:not([open]):not([data-wide-open])"));
         Assert.NotNull(page.QuerySelector("a[href='?']"));
     }
 

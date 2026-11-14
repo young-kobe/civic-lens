@@ -29,7 +29,7 @@ public static class ServerPageEndpoints
     /// <summary>The route of a public path. Every server page, file, and redirect is mapped at the path that <see cref="PublicationProtocol"/> names for it.</summary>
     internal static string Route(string publicPath) => "/" + publicPath;
 
-    /// <summary>Maps the home, Compare, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record pages,
+    /// <summary>Maps the home, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record pages,
     /// the vote map page, the redirects of old paths, and the not found page, each at its public path. A server failure of any of them answers the server error page.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
@@ -47,13 +47,6 @@ public static class ServerPageEndpoints
                 : ApiResults.NoRelease());
         pages.MapGet("/", homePage);
         pages.MapGet(Route(PublicationProtocol.HomePath), homePage);
-        pages.MapGet(Route(PublicationProtocol.ComparePagePath), (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            ApiResults.GuardAsync(() => responder.RespondAsync<ComparePage>(context, StatusCodes.Status200OK,
-                new Dictionary<string, object?>
-                {
-                    [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
-                    [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
-                }, cancellationToken)));
         pages.MapFixedPages(baseUrl);
         pages.MapSitemap(baseUrl);
         pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Vote)), ListPageEndpoints.VotesAsync);
@@ -90,13 +83,15 @@ public static class ServerPageEndpoints
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
         {
-            var request = OfficialRecordRequest.Parse(context.Request.Query);
+            // A refused filter shows the votes tab with its form, the typed text, and the refused field, and no rows, as the list pages do.
+            var (request, refused) = OfficialRecordRequest.ParseOrRefuse(context.Request.Query);
             if (!PublicationProtocol.IsPathSegment(id) || await records.ReadAsync(id, request, cancellationToken) is not { } page)
                 return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
             // A cursor of a release that is no longer active starts the same kind again.
             if (request.Cursor is { } cursor && cursor.Release != page.Release)
                 return FirstPage(baseUrl, PublicationProtocol.OfficialRecordPagePath(id), context.Request.Query);
-            return await responder.RespondAsync<OfficialRecordPage>(context, StatusCodes.Status200OK, page.Release, new Dictionary<string, object?>
+            if (refused is not null) page = page with { Votes = [], NextCursor = null, VoteFilter = refused };
+            return await responder.RespondAsync<OfficialRecordPage>(context, refused is null ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest, page.Release, new Dictionary<string, object?>
             {
                 [nameof(OfficialRecordPage.Data)] = page,
                 [nameof(OfficialRecordPage.RootPath)] = baseUrl.Join(string.Empty)
