@@ -1,0 +1,220 @@
+BEGIN
+SET
+SET
+board
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Incremental Sort  (cost=1400.94..1418.88 rows=200 width=81) (actual time=892.402..893.620 rows=540.00 loops=1)
+   Sort Key: official_vote_parties.official_id, official_vote_parties.congress DESC, official_vote_parties.chamber, official_vote_parties.party
+   Presorted Key: official_vote_parties.official_id
+   Full-sort Groups: 17  Sort Method: quicksort  Average Memory: 28kB  Peak Memory: 28kB
+   Buffers: shared hit=11655 read=15152
+   ->  Subquery Scan on official_vote_parties  (cost=1400.88..1409.88 rows=200 width=81) (actual time=892.240..893.158 rows=540.00 loops=1)
+         Buffers: shared hit=11649 read=15152
+         ->  WindowAgg  (cost=1400.88..1407.88 rows=200 width=97) (actual time=892.238..893.059 rows=540.00 loops=1)
+               Window: seat AS (PARTITION BY g.official_id, g.chamber, g.congress)
+               Storage: Memory  Maximum Storage: 17kB
+               Buffers: shared hit=11649 read=15152
+               ->  Sort  (cost=1400.88..1401.38 rows=200 width=81) (actual time=892.181..892.238 rows=540.00 loops=1)
+                     Sort Key: g.official_id, g.chamber, g.congress
+                     Sort Method: quicksort  Memory: 79kB
+                     Buffers: shared hit=11649 read=15152
+                     ->  Subquery Scan on g  (cost=1389.24..1393.24 rows=200 width=81) (actual time=891.196..891.581 rows=540.00 loops=1)
+                           Buffers: shared hit=11649 read=15152
+                           ->  HashAggregate  (cost=1389.24..1391.24 rows=200 width=97) (actual time=891.194..891.408 rows=540.00 loops=1)
+                                 Group Key: e.person_id, v.chamber, v.congress, e.party
+                                 Batches: 1  Memory Usage: 193kB
+                                 Buffers: shared hit=11649 read=15152
+                                 ->  Nested Loop  (cost=673.24..1360.76 rows=712 width=1577) (actual time=6.563..627.653 rows=381496.00 loops=1)
+                                       Buffers: shared hit=11649 read=15152
+                                       ->  Hash Join  (cost=672.69..1199.81 rows=3 width=95) (actual time=6.444..27.047 rows=1592.00 loops=1)
+                                             Hash Cond: (((s.record_id)::text = (v.record_id)::text) AND (s.revision_number = v.revision_number))
+                                             Buffers: shared hit=3247
+                                             ->  Nested Loop  (cost=0.41..518.63 rows=584 width=163) (actual time=0.102..17.219 rows=1592.00 loops=1)
+                                                   Buffers: shared hit=2622
+                                                   ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.045..0.047 rows=1.00 loops=1)
+                                                         Index Searches: 1
+                                                         Buffers: shared hit=2
+                                                   ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..504.65 rows=584 width=77) (actual time=0.051..14.585 rows=1592.00 loops=1)
+                                                         Index Cond: (first_release <= r.release_number)
+                                                         Filter: (((kind)::text = 'vote'::text) AND ((last_release IS NULL) OR (last_release >= r.release_number)))
+                                                         Rows Removed by Filter: 23263
+                                                         Index Searches: 1
+                                                         Buffers: shared hit=2620
+                                             ->  Hash  (cost=643.91..643.91 rows=1891 width=164) (actual time=6.308..6.309 rows=1905.00 loops=1)
+                                                   Buckets: 2048  Batches: 1  Memory Usage: 386kB
+                                                   Buffers: shared hit=625
+                                                   ->  Seq Scan on vote_revisions v  (cost=0.00..643.91 rows=1891 width=164) (actual time=0.027..5.178 rows=1905.00 loops=1)
+                                                         Buffers: shared hit=625
+                                       ->  Index Scan using ix_vote_member_list_entries_tallies on vote_member_list_entries e  (cost=0.55..44.73 rows=239 width=92) (actual time=0.038..0.218 rows=239.63 loops=1592)
+                                             Index Cond: ((list_id)::text = (v.member_list_id)::text)
+                                             Index Searches: 1592
+                                             Buffers: shared hit=8402 read=15152
+ Planning:
+   Buffers: shared hit=656 read=81
+ Planning Time: 12.502 ms
+ Execution Time: 894.354 ms
+(50 rows)
+
+attendance
+                                                                                                                         QUERY PLAN                                                                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on official_attendance  (cost=1943.32..1943.40 rows=1 width=34) (actual time=32.535..32.554 rows=1.00 loops=1)
+   Buffers: shared hit=10735 read=195
+   InitPlan 1
+     ->  Aggregate  (cost=719.99..720.00 rows=1 width=32) (actual time=8.021..8.030 rows=1.00 loops=1)
+           Buffers: shared hit=2200 read=17
+           ->  Nested Loop Left Join  (cost=17.78..719.55 rows=35 width=3211) (actual time=0.362..7.893 rows=542.00 loops=1)
+                 Buffers: shared hit=2200 read=17
+                 ->  Nested Loop  (cost=0.41..111.16 rows=35 width=25) (actual time=0.207..0.699 rows=542.00 loops=1)
+                       Buffers: shared hit=2 read=17
+                       ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_1  (cost=0.12..8.14 rows=1 width=12) (actual time=0.028..0.030 rows=1.00 loops=1)
+                             Index Searches: 1
+                             Buffers: shared hit=2
+                       ->  Index Only Scan using "PK_release_officials" on release_officials o  (cost=0.29..97.20 rows=582 width=17) (actual time=0.174..0.568 rows=542.00 loops=1)
+                             Index Cond: (release_number = r_1.release_number)
+                             Heap Fetches: 542
+                             Index Searches: 1
+                             Buffers: shared read=17
+                 ->  Limit  (cost=17.36..17.36 rows=1 width=2160) (actual time=0.013..0.013 rows=1.00 loops=542)
+                       Buffers: shared hit=2198
+                       ->  Sort  (cost=17.36..17.37 rows=2 width=2160) (actual time=0.011..0.011 rows=1.00 loops=542)
+                             Sort Key: x.start_on DESC, x."position" DESC
+                             Sort Method: top-N heapsort  Memory: 25kB
+                             Buffers: shared hit=2198
+                             ->  Index Scan using "PK_release_official_terms" on release_official_terms x  (cost=0.42..17.35 rows=2 width=2160) (actual time=0.004..0.007 rows=5.15 loops=542)
+                                   Index Cond: ((release_number = o.release_number) AND ((official_id)::text = (o.official_id)::text))
+                                   Filter: (start_on <= ('0001-01-01'::date + ((r_1.published_at_utc_ticks / '864000000000'::bigint))::integer))
+                                   Index Searches: 542
+                                   Buffers: shared hit=2195
+   ->  Unique  (cost=1223.32..1223.39 rows=1 width=47) (actual time=32.533..32.542 rows=1.00 loops=1)
+         Buffers: shared hit=10735 read=195
+         ->  Incremental Sort  (cost=1223.32..1223.36 rows=2 width=47) (actual time=32.531..32.539 rows=1.00 loops=1)
+               Sort Key: p.chamber, p.congress, p.held, p.missed, p.first_voted_on, p.last_voted_on
+               Presorted Key: p.chamber, p.congress
+               Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+               Buffers: shared hit=10735 read=195
+               ->  Subquery Scan on p  (cost=1223.22..1223.31 rows=1 width=47) (actual time=32.436..32.445 rows=1.00 loops=1)
+                     Buffers: shared hit=10729 read=195
+                     ->  WindowAgg  (cost=1223.22..1223.30 rows=1 width=603) (actual time=32.434..32.442 rows=1.00 loops=1)
+                           Window: seat AS (PARTITION BY g.chamber, g.congress)
+                           Storage: Memory  Maximum Storage: 17kB
+                           Buffers: shared hit=10729 read=195
+                           ->  Subquery Scan on g  (cost=1223.22..1223.27 rows=1 width=47) (actual time=32.395..32.403 rows=1.00 loops=1)
+                                 Buffers: shared hit=10729 read=195
+                                 ->  GroupAggregate  (cost=1223.22..1223.26 rows=1 width=97) (actual time=32.394..32.400 rows=1.00 loops=1)
+                                       Group Key: m.chamber, m.congress, m.party
+                                       Buffers: shared hit=10729 read=195
+                                       ->  Sort  (cost=1223.22..1223.23 rows=1 width=41) (actual time=32.087..32.146 rows=684.00 loops=1)
+                                             Sort Key: m.chamber, m.congress, m.party
+                                             Sort Method: quicksort  Memory: 67kB
+                                             Buffers: shared hit=10729 read=195
+                                             ->  Subquery Scan on m  (cost=673.11..1223.21 rows=1 width=41) (actual time=11.445..31.645 rows=684.00 loops=1)
+                                                   Buffers: shared hit=10729 read=195
+                                                   ->  Nested Loop  (cost=673.11..1223.20 rows=1 width=1577) (actual time=11.443..31.512 rows=684.00 loops=1)
+                                                         Buffers: shared hit=10729 read=195
+                                                         ->  Hash Join  (cost=672.69..1199.81 rows=3 width=79) (actual time=3.346..13.381 rows=1592.00 loops=1)
+                                                               Hash Cond: (((s.record_id)::text = (v.record_id)::text) AND (s.revision_number = v.revision_number))
+                                                               Buffers: shared hit=3244 read=3
+                                                               ->  Nested Loop  (cost=0.41..518.63 rows=584 width=163) (actual time=0.092..8.471 rows=1592.00 loops=1)
+                                                                     Buffers: shared hit=2619 read=3
+                                                                     ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.017..0.020 rows=1.00 loops=1)
+                                                                           Index Searches: 1
+                                                                           Buffers: shared hit=2
+                                                                     ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..504.65 rows=584 width=77) (actual time=0.069..8.158 rows=1592.00 loops=1)
+                                                                           Index Cond: (first_release <= r.release_number)
+                                                                           Filter: (((kind)::text = 'vote'::text) AND ((last_release IS NULL) OR (last_release >= r.release_number)))
+                                                                           Rows Removed by Filter: 23263
+                                                                           Index Searches: 1
+                                                                           Buffers: shared hit=2617 read=3
+                                                               ->  Hash  (cost=643.91..643.91 rows=1891 width=148) (actual time=3.225..3.227 rows=1905.00 loops=1)
+                                                                     Buckets: 2048  Batches: 1  Memory Usage: 361kB
+                                                                     Buffers: shared hit=625
+                                                                     ->  Seq Scan on vote_revisions v  (cost=0.00..643.91 rows=1891 width=148) (actual time=0.023..2.320 rows=1905.00 loops=1)
+                                                                           Buffers: shared hit=625
+                                                         ->  Index Scan using ix_vote_member_list_entries_person on vote_member_list_entries e  (cost=0.42..7.79 rows=1 width=92) (actual time=0.006..0.006 rows=0.43 loops=1592)
+                                                               Index Cond: (((person_id)::text = (InitPlan 1).col1) AND ((list_id)::text = (v.member_list_id)::text))
+                                                               Index Searches: 1592
+                                                               Buffers: shared hit=5285 read=175
+ Planning:
+   Buffers: shared hit=234 read=21
+ Planning Time: 4.719 ms
+ Execution Time: 33.360 ms
+(81 rows)
+
+partylines
+                                                                                                             QUERY PLAN                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on official_party_lines  (cost=1947.98..1948.04 rows=1 width=52) (actual time=33.950..33.968 rows=1.00 loops=1)
+   Buffers: shared hit=10921
+   InitPlan 1
+     ->  Aggregate  (cost=719.99..720.00 rows=1 width=32) (actual time=7.706..7.715 rows=1.00 loops=1)
+           Buffers: shared hit=2214
+           ->  Nested Loop Left Join  (cost=17.78..719.55 rows=35 width=3211) (actual time=0.191..7.564 rows=542.00 loops=1)
+                 Buffers: shared hit=2214
+                 ->  Nested Loop  (cost=0.41..111.16 rows=35 width=25) (actual time=0.098..1.223 rows=542.00 loops=1)
+                       Buffers: shared hit=19
+                       ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_1  (cost=0.12..8.14 rows=1 width=12) (actual time=0.050..0.052 rows=1.00 loops=1)
+                             Index Searches: 1
+                             Buffers: shared hit=2
+                       ->  Index Only Scan using "PK_release_officials" on release_officials o  (cost=0.29..97.20 rows=582 width=17) (actual time=0.043..1.069 rows=542.00 loops=1)
+                             Index Cond: (release_number = r_1.release_number)
+                             Heap Fetches: 542
+                             Index Searches: 1
+                             Buffers: shared hit=17
+                 ->  Limit  (cost=17.36..17.36 rows=1 width=2160) (actual time=0.011..0.011 rows=1.00 loops=542)
+                       Buffers: shared hit=2195
+                       ->  Sort  (cost=17.36..17.37 rows=2 width=2160) (actual time=0.010..0.010 rows=1.00 loops=542)
+                             Sort Key: x.start_on DESC, x."position" DESC
+                             Sort Method: top-N heapsort  Memory: 25kB
+                             Buffers: shared hit=2195
+                             ->  Index Scan using "PK_release_official_terms" on release_official_terms x  (cost=0.42..17.35 rows=2 width=2160) (actual time=0.005..0.007 rows=5.15 loops=542)
+                                   Index Cond: ((release_number = o.release_number) AND ((official_id)::text = (o.official_id)::text))
+                                   Filter: (start_on <= ('0001-01-01'::date + ((r_1.published_at_utc_ticks / '864000000000'::bigint))::integer))
+                                   Index Searches: 542
+                                   Buffers: shared hit=2195
+   ->  Subquery Scan on p  (cost=1227.98..1228.03 rows=1 width=326) (actual time=33.947..33.954 rows=1.00 loops=1)
+         Filter: (p.cast_count > 0)
+         Buffers: shared hit=10921
+         ->  GroupAggregate  (cost=1227.98..1228.01 rows=1 width=97) (actual time=33.943..33.949 rows=1.00 loops=1)
+               Group Key: m.chamber, m.party
+               Buffers: shared hit=10921
+               ->  Sort  (cost=1227.98..1227.98 rows=1 width=38) (actual time=33.666..33.724 rows=684.00 loops=1)
+                     Sort Key: m.chamber, m.party
+                     Sort Method: quicksort  Memory: 62kB
+                     Buffers: shared hit=10921
+                     ->  Subquery Scan on m  (cost=677.84..1227.97 rows=1 width=38) (actual time=12.039..33.264 rows=684.00 loops=1)
+                           Buffers: shared hit=10921
+                           ->  Nested Loop  (cost=677.84..1227.96 rows=1 width=1655) (actual time=12.038..33.136 rows=684.00 loops=1)
+                                 Buffers: shared hit=10921
+                                 ->  Hash Join  (cost=677.42..1204.54 rows=3 width=94) (actual time=4.271..16.141 rows=1592.00 loops=1)
+                                       Hash Cond: (((s.record_id)::text = (v.record_id)::text) AND (s.revision_number = v.revision_number))
+                                       Buffers: shared hit=3247
+                                       ->  Nested Loop  (cost=0.41..518.63 rows=584 width=163) (actual time=0.237..10.369 rows=1592.00 loops=1)
+                                             Buffers: shared hit=2622
+                                             ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.180..0.183 rows=1.00 loops=1)
+                                                   Index Searches: 1
+                                                   Buffers: shared hit=2
+                                             ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..504.65 rows=584 width=77) (actual time=0.050..9.878 rows=1592.00 loops=1)
+                                                   Index Cond: (first_release <= r.release_number)
+                                                   Filter: (((kind)::text = 'vote'::text) AND ((last_release IS NULL) OR (last_release >= r.release_number)))
+                                                   Rows Removed by Filter: 23263
+                                                   Index Searches: 1
+                                                   Buffers: shared hit=2620
+                                       ->  Hash  (cost=648.64..648.64 rows=1891 width=163) (actual time=4.003..4.005 rows=1905.00 loops=1)
+                                             Buckets: 2048  Batches: 1  Memory Usage: 386kB
+                                             Buffers: shared hit=625
+                                             ->  Seq Scan on vote_revisions v  (cost=0.00..648.64 rows=1891 width=163) (actual time=0.045..2.880 rows=1905.00 loops=1)
+                                                   Filter: (congress = 119)
+                                                   Buffers: shared hit=625
+                                 ->  Index Scan using ix_vote_member_list_entries_person on vote_member_list_entries e  (cost=0.42..7.79 rows=1 width=92) (actual time=0.005..0.005 rows=0.43 loops=1592)
+                                       Index Cond: (((person_id)::text = (InitPlan 1).col1) AND ((list_id)::text = (v.member_list_id)::text))
+                                       Index Searches: 1592
+                                       Buffers: shared hit=5460
+ Planning:
+   Buffers: shared hit=29
+ Planning Time: 2.403 ms
+ Execution Time: 34.473 ms
+(70 rows)
+
+ROLLBACK
