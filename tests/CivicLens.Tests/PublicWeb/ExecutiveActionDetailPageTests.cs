@@ -30,12 +30,18 @@ public sealed class ExecutiveActionDetailPageTests
     }
 
     [Fact]
+    public async Task TheExecutiveActionSummaryLabelIsDrawnByAiLabel()
+    {
+        AiLabelAssert.DrawnByAiLabel(await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: false)), ExecutiveSummaryWords.Label);
+    }
+
+    [Fact]
     public async Task TheSummarySlotShowsTheViewLabelTheSentencesAndTheCheckLineAndNoCutNoteWhenTheModelReadAllOfTheText()
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: false));
 
         var slot = page.QuerySelector(".ai-summary-ai")!;
-        Assert.Equal(ExecutiveSummaryWords.Label, slot.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(ExecutiveSummaryWords.Label, slot.QuerySelector(".ai-label")!.TextContent);
         Assert.Equal(["The order tells agencies to act.", "Each agency reports in 30 days."], slot.QuerySelectorAll("p").Where(p => p.ClassName is null or "").Select(p => p.TextContent));
         Assert.StartsWith(ExecutiveActionWords.SummaryCheck, slot.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.DoesNotContain("Civic Lens did not summarize", page.TextContent);
@@ -58,7 +64,7 @@ public sealed class ExecutiveActionDetailPageTests
             Action() with { Summary = new(PublishedTextOrigin.Model, null, false, [], null) });
 
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
-        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.Null(page.QuerySelector(".ai-label"));
     }
 
     private const string BodyText = "Section 1. Each agency shall act on this order. Sec. 2. Each agency shall report within 30 days. Sec. 3. Unread body words.";

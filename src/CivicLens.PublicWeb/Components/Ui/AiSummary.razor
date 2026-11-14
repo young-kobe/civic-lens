@@ -1,8 +1,5 @@
 <div class="@(TextOrigin == PublishedTextOrigin.Model && Label is not null ? "ai-summary ai-summary-ai" : "ai-summary")">
-    @if (Label is not null)
-    {
-        <span id="@LabelId" class="ai-summary-label">@Label</span>
-    }
+    <AiLabel Text="@Label" Origin="TextOrigin" Look="AiLabelLook.Tag" Id="@LabelId" />
     @ChildContent
     @if (Check is not null)
     {

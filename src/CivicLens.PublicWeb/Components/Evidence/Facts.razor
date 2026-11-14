@@ -4,7 +4,11 @@
     {
         <dt>@fact.Label</dt>
         <dd>
-            @if (fact.Links is null && fact.TermKey is { } key)
+            @if (fact.AiLabelOrigin is { } origin)
+            {
+                <AiLabel Text="@fact.Value" Origin="origin" />
+            }
+            else if (fact.Links is null && fact.TermKey is { } key)
             {
                 <Term Key="@key">@fact.Value</Term>
             }

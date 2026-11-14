@@ -1,0 +1,19 @@
+@using CivicLens.Publication.Contracts
+@if (Text is not null)
+{
+    <span id="@Id" class="ai-label ai-label-@Look.ToString().ToLowerInvariant()" data-origin="@Origin?.ToString().ToLowerInvariant()">@Text</span>
+}
+
+@code {
+    /// <summary>The label text, from the label column of the public view. Null draws nothing.</summary>
+    [Parameter, EditorRequired] public string? Text { get; set; }
+
+    /// <summary>The origin of the labeled text. A code label, which says "with no AI", stays muted. Every other label shows in the AI ink. A caller whose
+    /// data names no origin passes none, so its label shows in the AI ink.</summary>
+    [Parameter] public PublishedTextOrigin? Origin { get; set; }
+
+    [Parameter] public AiLabelLook Look { get; set; }
+
+    /// <summary>The ID of the label, for a heading that names it with aria-describedby.</summary>
+    [Parameter] public string? Id { get; set; }
+}

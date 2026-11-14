@@ -51,10 +51,7 @@
                     else
                     {
                         <div class="home-featured-summary">
-                            @if (summaryLabel is not null)
-                            {
-                                <span id="home-featured-origin" class="muted small">@summaryLabel</span>
-                            }
+                            <AiLabel Text="@summaryLabel" Origin="featured.TextOrigin" Id="home-featured-origin" />
                             <p>@featured.Summary</p>
                         </div>
                     }
@@ -88,10 +85,7 @@
                 <p class="home-brief-line">
                     <span>This week:</span>
                     <a href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))">@brief.Headline</a>
-                    @if (brief.Label is not null)
-                    {
-                        <span class="muted small">@brief.Label</span>
-                    }
+                    <AiLabel Text="@brief.Label" />
                 </p>
             }
             @if (Data.Votes.Length > 0)

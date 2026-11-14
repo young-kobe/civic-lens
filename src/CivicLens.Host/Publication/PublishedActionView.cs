@@ -21,7 +21,7 @@ internal static class PublishedActionView
         .. PolicyArea(action, catalog),
         .. PublishedRecordView.Issues("Tracked issues", action.TrackedIssueIds, catalog),
         new("Published", $"From the official record, checked {Moment.Full(action.ApprovedAtUtc)}; first published {Moment.Full(action.FirstPublishedAtUtc)}"),
-        .. PublishedRecordLabels.Wording(action.TextOrigin, action.BillText is null ? PublishedRecordLabels.ModelWording : BillTextWords.Label),
+        .. PublishedRecordLabels.Wording(action.TextOrigin, action.BillText is null ? AiLabelWords.ModelWording : BillTextWords.Label),
         .. IssueWording(action),
         new("Revision", action.RevisionNumber.ToString(CultureInfo.InvariantCulture))
     ];

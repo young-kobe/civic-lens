@@ -9,7 +9,6 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Districts;
 using CivicLens.Infrastructure.Roster;
-using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
@@ -462,9 +461,9 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes WHERE text_origin IN ('Model', 'Code') AND label IS NULL"));
         Assert.Equal(
         [
-            $"a Code {PublishedRecordLabels.CodeWording}", $"c Person none", $"d Model {PublishedRecordLabels.ModelWording}"
+            $"a Code {AiLabelWords.CodeWording}", $"c Person none", $"d Model {AiLabelWords.ModelWording}"
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.votes ORDER BY 1"));
-        Assert.Equal([$"a Code {PublishedRecordLabels.CodeWording}", "c Person none", $"d Model {PublishedRecordLabels.ModelWording}"],
+        Assert.Equal([$"a Code {AiLabelWords.CodeWording}", "c Person none", $"d Model {AiLabelWords.ModelWording}"],
             await PublicAsync("SELECT DISTINCT m.record_id || ' ' || v.text_origin || ' ' || coalesce(m.label, 'none') FROM public_api.member_votes m JOIN public_api.votes v ON v.record_id = m.record_id ORDER BY 1"));
         Assert.Equal(["0 0 0 1"], await PublicAsync("SELECT yea || ' ' || nay || ' ' || present || ' ' || not_voting FROM public_api.votes WHERE record_id = 'd'"));
     }
@@ -781,7 +780,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
         Assert.Equal(
         [
-            $"A Person none", $"C Code {PublishedRecordLabels.CodeWording}", $"M Model {PublishedRecordLabels.ModelWording}"
+            $"A Person none", $"C Code {AiLabelWords.CodeWording}", $"M Model {AiLabelWords.ModelWording}"
         ], await PublicAsync("SELECT record_id || ' ' || text_origin || ' ' || coalesce(label, 'none') FROM public_api.bills ORDER BY 1"));
     }
 
@@ -800,7 +799,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Equal(
         [
             "A|Person|none|none|Introduced in House|2025-01-03|59987|85000",
-            $"C|Code|{PublishedRecordLabels.CodeWording}|none|none|none|none|none",
+            $"C|Code|{AiLabelWords.CodeWording}|none|none|none|none|none",
             $"M|Model|{BillTextWords.Label}|It pays landlords.|Introduced in House|2025-01-03|59987|85000"
         ], await PublicAsync("""
             SELECT concat_ws('|', record_id, text_origin, coalesce(label, 'none'), coalesce(why_it_matters, 'none'), coalesce(text_version_name, 'none'),

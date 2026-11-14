@@ -1,6 +1,6 @@
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection.Migrations;
-using CivicLens.PublicWeb.Publication;
+using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
@@ -8,13 +8,18 @@ using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
-/// <summary>The migration that gives a person-approved model statement its own AI label in both views that carry a statement label.</summary>
+/// <summary>
+/// The migration that gives a person-approved model statement its own AI label in both views that carry a statement label. The test first rolls back the
+/// later migration <see cref="PressReleaseStatementLabel"/>, so the views hold the code label that this migration wrote.
+/// </summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
 public sealed class PersonApprovedStatementLabelMigrationTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private static readonly string CodeApproved = new('5', 64);
     private static readonly string PersonApproved = new('6', 64);
+
+    private const string FormerCodeLabel = "An AI summary of this release.";
 
     private string database = null!;
 
@@ -33,6 +38,7 @@ public sealed class PersonApprovedStatementLabelMigrationTests(PostgresCollectio
             INSERT INTO statement_revision_speakers (candidate_id, revision_number, official_id, position)
               VALUES ('{CodeApproved}', 1, 'official', 0), ('{PersonApproved}', 1, 'official', 0);
             """);
+        await ApplyAsync(new PressReleaseStatementLabel().DownOperations);
     }
 
     public Task DisposeAsync() => postgres.DropDatabaseAsync(database);
@@ -40,8 +46,8 @@ public sealed class PersonApprovedStatementLabelMigrationTests(PostgresCollectio
     [Fact]
     public async Task ThePersonApprovedModelStatementKeepsItsAiLabelInBothViewsAndTheRollbackReturnsItsLabelToNullInBoth()
     {
-        string[] withLabel = [$"Code approved|{PublishedRecordLabels.StatementModelWording}", $"Person approved|{PublishedRecordLabels.StatementCheckedByPersonWording}"];
-        string[] withoutLabel = [$"Code approved|{PublishedRecordLabels.StatementModelWording}", "Person approved|null"];
+        string[] withLabel = [$"Code approved|{FormerCodeLabel}", $"Person approved|{AiLabelWords.StatementCheckedByPersonWording}"];
+        string[] withoutLabel = [$"Code approved|{FormerCodeLabel}", "Person approved|null"];
         Assert.Equal(withLabel, await LabelsAsync("record_headlines WHERE kind = 'statement'"));
         Assert.Equal(withLabel, await LabelsAsync("statements"));
 
