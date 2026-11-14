@@ -358,6 +358,8 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     [InlineData("issue=health", "ea")]
     [InlineData("issue=tax", "a")]
     [InlineData("issue=zoning", "")]
+    [InlineData("issue=health&sponsor=p4", "e")]
+    [InlineData("issue=health&sponsor=p1", "a")]
     [InlineData("policyArea=health", "eaf")]
     [InlineData("policyArea=tax", "b")]
     [InlineData("from=2026-03-02&to=2026-03-02", "abc")]
