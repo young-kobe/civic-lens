@@ -625,6 +625,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .source-fold-body > * { min-width: 0; margin: 0; }
 .detail-list { display: grid; gap: var(--s1); margin: 0; padding: 0; list-style: none; font-weight: 650; }
 .detail-list p { margin: 2px 0 0; font-weight: 400; }
+.detail-list .ai-label { display: block; margin-top: 2px; font-weight: 400; }
 .detail-card-raised { box-shadow: inset 0 0 0 2px var(--marigold); }
 .detail-targets { gap: var(--s4); }
 .detail-target-reference { margin: var(--s1) 0 0; color: var(--muted); font-size: var(--t-sm); font-weight: 400; }

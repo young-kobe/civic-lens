@@ -1,0 +1,91 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSections.OfRecord(PublishedRecordKind.Relationship)" Title="@Data.Headline" Description="@Data.Reason" CanonicalPath="@PublicationProtocol.RecordPagePath(Data.RecordId)" IsArticle="true" RootPath="@RootPath" Record="record">
+    <article class="detail">
+        <header class="detail-head">
+            <p class="detail-eyebrow">@RelationshipPageView.Eyebrow(Data)</p>
+            <h1 class="detail-headline">@Data.Headline</h1>
+            <p class="detail-lede">@RelationshipPageView.DateLine(Data)</p>
+        </header>
+        <PublishedCorrectionBanner Kind="PublishedRecordKind.Relationship" Corrections="Data.Corrections" />
+        <div class="detail-layout">
+            <div class="detail-main">
+                <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
+                    <ChildContent><p>@Data.Reason</p></ChildContent>
+                    <Check>@RelationshipPageView.Caveat <a href="#source">@SourceFold.Title</a></Check>
+                </AiSummary>
+                <section class="detail-section" aria-labelledby="relationship-evidence-title">
+                    <h2 id="relationship-evidence-title">@RelationshipPageView.EvidenceHeading</h2>
+                    <ul class="choices detail-quotes">
+                        <li><CitationQuote Label="@RelationshipPageView.QuoteLabel" Quote="@Data.Quote" /></li>
+                        <li>
+                            @if (Data.FactLabel is not null)
+                            {
+                                <CitationQuote Label="@RelationshipPageView.FactLabel(Data.Target.Kind)" Quote="@Data.Fact"><AiLabel Text="@Data.FactLabel" /></CitationQuote>
+                            }
+                            else
+                            {
+                                <CitationQuote Label="@RelationshipPageView.FactLabel(Data.Target.Kind)" Quote="@Data.Fact" />
+                            }
+                        </li>
+                    </ul>
+                </section>
+            </div>
+            <aside class="detail-rail" aria-label="Linked records, speakers, and issues">
+                <section class="detail-card detail-card-raised" aria-labelledby="relationship-linked-title">
+                    <h2 id="relationship-linked-title">@RelationshipPageView.LinkedHeading</h2>
+                    <p class="muted small">@RelationshipPageView.LinkedNote</p>
+                    <ul class="detail-list" role="list">
+                        @foreach (var end in new[] { Data.Statement, Data.Target })
+                        {
+                            <li>
+                                <a href="@(RootPath + PublicationProtocol.RecordPagePath(end.RecordId))">@end.Headline</a>
+                                <AiLabel Text="@end.Label" Origin="end.TextOrigin" />
+                                <p class="muted small">@RelationshipPageView.CitedRevision(end.Kind, end.RevisionNumber)</p>
+                            </li>
+                        }
+                    </ul>
+                </section>
+                @if (Data.Speakers.Length > 0)
+                {
+                    <section class="detail-card" aria-labelledby="relationship-speakers-title">
+                        <h2 id="relationship-speakers-title">@(Data.Speakers.Length == 1 ? "Speaker" : "Speakers")</h2>
+                        <ul class="detail-list" role="list">
+                            @foreach (var speaker in Data.Speakers)
+                            {
+                                <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a></li>
+                            }
+                        </ul>
+                    </section>
+                }
+                @if (Data.Issues.Length > 0)
+                {
+                    <section class="detail-card" aria-labelledby="relationship-issues-title">
+                        <h2 id="relationship-issues-title">@(Data.Issues.Length == 1 ? "Issue" : "Issues")</h2>
+                        <ul class="detail-chips" role="list">
+                            @foreach (var issue in Data.Issues)
+                            {
+                                <li><LinkChip Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))">@issue.Name</LinkChip></li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </aside>
+        </div>
+        <SourceFold>
+            <Facts Items="RelationshipPageView.Facts(Data)" />
+        </SourceFold>
+    </article>
+</PublicPage>
+
+@code {
+    private ReportedRecord record = default!;
+
+    [Parameter, EditorRequired] public RelationshipPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    protected override void OnParametersSet() =>
+        record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Relationship, Data.Headline, Data.ShortName);
+}

@@ -8,6 +8,7 @@ using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
+using CivicLens.PublicApi.Relationships;
 using CivicLens.PublicApi.Search;
 using CivicLens.PublicApi.Statements;
 using CivicLens.PublicApi.Votes;
@@ -93,7 +94,7 @@ public static class ServerPageEndpoints
             }, cancellationToken);
         }));
         routes.MapGet(RecordRoute("{recordId}"), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
-            ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, WithdrawalStore withdrawals, ServerPageResponder responder,
+            ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, RelationshipPageReader relationships, WithdrawalStore withdrawals, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
         {
@@ -140,6 +141,12 @@ public static class ServerPageEndpoints
                     {
                         [nameof(BriefDetailPage.Data)] = brief,
                         [nameof(BriefDetailPage.RootPath)] = rootPath
+                    }, cancellationToken);
+                case PublishedRecordKind.Relationship when await relationships.ReadAsync(recordId, cancellationToken) is { } relationship:
+                    return await responder.RespondAsync<RelationshipDetailPage>(context, StatusCodes.Status200OK, relationship.Release, new Dictionary<string, object?>
+                    {
+                        [nameof(RelationshipDetailPage.Data)] = relationship,
+                        [nameof(RelationshipDetailPage.RootPath)] = rootPath
                     }, cancellationToken);
                 case null when PublicationProtocol.IsAnyRecordId(recordId) && await withdrawals.FindAsync(recordId, cancellationToken) is { } notice:
                     return await responder.RespondAsync<PublishedWithdrawalPage>(context, StatusCodes.Status200OK, notice.Release, new Dictionary<string, object?>

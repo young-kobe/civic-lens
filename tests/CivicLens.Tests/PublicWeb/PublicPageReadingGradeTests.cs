@@ -441,6 +441,7 @@ public sealed class PublicPageReadingGradeTests
             ("executive action summary", Page<ExecutiveActionDetailPage>(With("Data", DetailPageFixture.Action() with { Summary = new(PublishedTextOrigin.Model, "AI summary label", true, [new() { Sentence = "The order sets sanctions.", Citation = new() { ExtractionId = "b", Start = 0, Length = 4, Quote = "Sec." } }], null) })),
                 ["Implementing the Sanctioning", "Donald Trump", "2026-21599", "91 FR", "AI summary label", "sets sanctions"]),
             ("brief", Page<BriefDetailPage>(With("Data", brief)), ["The week in Congress", "First paragraph", "Kelly announces"]),
+            ("relationship", Page<RelationshipDetailPage>(With("Data", DetailPageFixture.Relationship())), ["Kelly announces", "Kelly says", "Drain the Slush", "I introduced", "shuts down the fund", "Mark Kelly"]),
             ("withdrawal", Page<PublishedWithdrawalPage>(With("Withdrawal", WithdrawalNoticePageTests.Notice)), ["The quote came"]),
             ("report", Page<PublishedReportPage>(new() { ["RootPath"] = Root, ["PublicApiUrl"] = "https://api.civic-lens.test", ["TurnstileSiteKey"] = "key" }), []),
             ("report off", Page<PublishedReportPage>(new() { ["RootPath"] = Root }), []),
