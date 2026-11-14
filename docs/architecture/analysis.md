@@ -144,6 +144,15 @@ Prompts aim for grade 12, and code rejects only a passage above grade 14. Code c
 | Each prompt whose text code approves states the phrase rule and the code rule. A prompt whose text a person approves does not. | `AiTextPhrases.Rule` | each prompt class | `AiTextPhrasesTests.ThePromptRuleNamesEveryPhraseAndStatesTheCodeRule`, `AiTextPromptRules.AssertHoldsSharedSentences` |
 | The document change prompt aims for a headline of 120 characters. Code rejects only a headline above 256 characters, as the grade check rejects only above grade 14. | `DocumentChangeDraftPrompt.TargetHeadlineLength`, `DocumentChangeDraftRevision.MaximumHeadlineLength` | `DocumentChangeDraftResolver` | `DocumentChangeDraftResolverTests.AHeadlineAboveThePromptAimPassesAndOnlyAHeadlineAboveTheCodeLimitIsRejected` |
 
+Quote rules stay with each stage (owner decision, 2026-11-13). Each line gives the rule of one stage and its reasons:
+
+- Bill text summary and key terms: at least 4 words, at most 300 characters, first match. Four words keep a quote from matching by chance. 300 characters keep it to one clause that a reader checks beside its sentence. Legal text repeats phrases, so a unique match would refuse a correct quote, and the first match proves the words.
+- Executive summary: the bill text rule, for the same reasons. A presidential document is legal text that repeats phrases too.
+- Statement quotations and date: no minimum, at most 4,096 characters, unique match. A short quote of the speaker can carry the meaning. Code reads the kind of each quotation from its position, so it needs one exact position. A whole quoted paragraph fits.
+- Statement gate: no minimum, at most 2,000 characters, unique match. A person reads the span that shows the issue match, so it needs one position. The span never reaches the public.
+- Relationship: the statement rule, because the quote is a span of the same statement article.
+- Document change: no minimum, at most 8,192 characters, unique match in the named window. A changed number can be one word. The limit equals the window limit, so any window text fits. A unique match gives exact offsets.
+
 A change to a shared sentence changes each prompt that holds it, so each of those prompts gets a new version. No redraft step runs for a version change (owner decision, 2026-11-13). Old drafts stay until their source changes. A new candidate of the record then drafts again with the current prompt.
 
 The gate, the brief check, and the issue prompt write no public text. They hold the untrusted source sentence and the confidence scale only.
