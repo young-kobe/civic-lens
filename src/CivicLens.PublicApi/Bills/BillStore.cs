@@ -8,7 +8,7 @@ using NpgsqlTypes;
 
 namespace CivicLens.PublicApi.Bills;
 
-/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.bill_key_terms</c>, <c>public_api.bill_text_sentences</c>, <c>public_api.officials</c>, <c>public_api.release_issues</c>,
+/// <summary>Reads the views <c>public_api.bills</c>, <c>public_api.bill_keys</c>, <c>public_api.bill_sponsorships</c>, <c>public_api.bill_issues</c>, <c>public_api.bill_key_terms</c>, <c>public_api.bill_text_sentences</c>, <c>public_api.officials</c>, <c>public_api.release_officials</c>, <c>public_api.release_issues</c>,
 /// <c>public_api.record_entries</c> (the stored approval time), and <c>public_api.record_first_publications</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
@@ -35,6 +35,18 @@ public sealed class BillStore(NpgsqlDataSource views)
               WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number OFFSET 0) t
           ON TRUE
         """;
+
+    /// <summary>Joins the bill <c>b</c> of each key <c>k</c> of a bounded page of keys from <c>public_api.bill_keys</c>. The one owner of that join.
+    /// OFFSET 0 keeps the lookup correlated, so Postgres reads the wide bill columns only for the keys of the page.</summary>
+    internal const string BillsOfKeysSql = """
+        CROSS JOIN LATERAL (
+             SELECT b.* FROM public_api.bills b
+              WHERE b.record_id = k.record_id AND b.revision_number = k.revision_number OFFSET 0) b
+        """;
+
+    /// <summary>The FROM clause of the keys <c>b</c> of the bills of the issue <c>@issue</c>. The one owner of that join. The few issue rows drive the read, and OFFSET 0 keeps each key lookup correlated,
+    /// because Postgres underestimates the rows of a view on <c>active_records</c> and a plain semi join reads the whole issue view once for each bill.</summary>
+    internal static readonly string IssueKeysSql = KeysOf("SELECT i.record_id, i.revision_number FROM public_api.bill_issues i WHERE i.issue_id = @issue");
 
     private const string PinFactsSql = $"""
         SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, v.record_id, v.chamber
@@ -307,9 +319,11 @@ public sealed class BillStore(NpgsqlDataSource views)
         SELECT a.release_number, {Columns}
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT b.* FROM public_api.bills b
-                WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
-                ORDER BY {Order} LIMIT @take) b
+               SELECT b.* FROM (
+                    SELECT b.record_id, b.revision_number {KeysOf(request)}
+                     WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
+                     ORDER BY {Order} LIMIT @take) k
+               {BillsOfKeysSql}) b
             ON TRUE
          ORDER BY {Order}
         """;
@@ -321,36 +335,49 @@ public sealed class BillStore(NpgsqlDataSource views)
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN newest n ON TRUE
           LEFT JOIN LATERAL (
-               SELECT b.* FROM public_api.bills b
-                WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
-                ORDER BY {Order} LIMIT @take) b
+               SELECT b.* FROM (
+                    SELECT b.record_id, b.revision_number {KeysOf(request)}
+                     WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
+                     ORDER BY {Order} LIMIT @take) k
+               {BillsOfKeysSql}) b
             ON TRUE
          ORDER BY {Order}
         """;
 
+    /// <summary>The FROM clause of the keys <c>b</c> that a list reads. The issue or the sponsor drives the read when the request names one, because those rows are few.
+    /// Each other filter is a test on the key columns.</summary>
+    private static string KeysOf(BillRequest request) =>
+        request.Issue is not null ? IssueKeysSql
+        : HasSponsor(request) ? KeysOf($"SELECT DISTINCT s.record_id, s.revision_number FROM public_api.bill_sponsorships s WHERE {SponsorMatch(request)}")
+        : "FROM public_api.bill_keys b";
+
+    private static string KeysOf(string rows) => $"""
+        FROM ({rows}) d
+        CROSS JOIN LATERAL (
+             SELECT b.* FROM public_api.bill_keys b
+              WHERE b.record_id = d.record_id AND b.revision_number = d.revision_number OFFSET 0) b
+        """;
+
+    private static bool HasSponsor(BillRequest request) => request.Sponsor is not null || request.SponsorName is not null;
+
+    /// <summary>The test of one sponsorship <c>s</c> against the sponsor of the request. The JSON list names the sponsor ID and the list page names the sponsor; never both.
+    /// The names come from <c>release_officials</c>, the names that <c>officials</c> shows, once for each statement, so no bill rebuilds the official counts of <c>officials</c>.</summary>
+    private static string SponsorMatch(BillRequest request) =>
+        $"s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}'" +
+        (request.Sponsor is null ? "" : " AND s.official_id = @sponsor") +
+        (request.SponsorName is null ? "" : $" AND s.official_id IN (SELECT o.official_id FROM public_api.release_officials o WHERE {OfficialStore.NameMatchSql("o")})");
+
+    // The sponsor test runs here only when the issue drives the read. OFFSET 0 keeps it a lookup for each key of the issue.
     private static string Filters(BillRequest request) =>
         (request.Congress is null ? "" : " AND b.congress = @congress") +
         (request.BillType is null ? "" : " AND b.bill_type = @bill_type") +
         (request.BillNumber is null ? "" : " AND b.bill_number = @bill_number") +
         (request.PolicyArea is null ? "" : " AND b.policy_area_id = @policy_area") +
-        (request.Sponsor is null ? "" : $"""
+        (request.Issue is null || !HasSponsor(request) ? "" : $"""
              AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s
-                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.official_id = @sponsor
-                            AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}')
+                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND {SponsorMatch(request)} OFFSET 0)
             """) +
-        (request.SponsorName is null ? "" : $"""
-             AND EXISTS (SELECT 1 FROM public_api.bill_sponsorships s JOIN public_api.officials o ON o.official_id = s.official_id
-                          WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number
-                            AND s.role = '{nameof(PublishedSponsorshipRole.Sponsor)}' AND {OfficialStore.NameMatchSql("o")})
-            """) +
-        (request.Status is null ? "" : """
-             AND EXISTS (SELECT 1 FROM public_api.bill_status t
-                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number AND t.status = @status)
-            """) +
-        (request.Issue is null ? "" : """
-             AND EXISTS (SELECT 1 FROM public_api.bill_issues i
-                          WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number AND i.issue_id = @issue)
-            """) +
+        (request.Status is null ? "" : " AND b.status = @status") +
         (request.From is null ? "" : " AND b.event_date >= @from") +
         (request.To is null ? "" : " AND b.event_date <= @to");
 

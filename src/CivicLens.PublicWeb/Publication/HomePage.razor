@@ -128,22 +128,38 @@
                     </ul>
                 </section>
             }
-            @if (breakers.Count > 0)
+            @if (breakers.Count > 0 || delegates.Count > 0)
             {
                 <section class="home-breakers" aria-labelledby="home-breakers-title">
                     <h2 id="home-breakers-title">Who broke from their party most</h2>
-                    <p class="home-section-lede">Each name below is the member in one chamber and party who voted against most of their own party on <Term Key="split-vote">split vote</Term> most often@(sharedCongress is { } congress ? $" in the {CongressCalendar.Ordinal(congress)} Congress" : ""). A member needs at least @OfficialBoardPage.MinimumSplitVotes split votes cast to count.</p>
-                    <ul class="home-breaker-list" role="list">
-                        @foreach (var card in breakers)
-                        {
-                            <li class="home-breaker-card">
-                                <a class="home-breaker-name" href="@(RootPath + card.Row.PagePath)">@card.Row.Name</a>
-                                <p class="muted small">@PublishedPartyNames.PartyOf(card.Panel.Chamber, card.Panel.Party)@(card.Row.Seat is null ? "" : ", " + card.Row.Seat)</p>
-                                <span class="home-breaker-figure">@card.Row.Breaks of @card.Row.Cast</span>
-                                <p class="muted small">split votes cast against most @PublishedPartyNames.Members(card.Panel.Party)@(sharedCongress is null ? $", {CongressCalendar.Ordinal(card.Panel.Congress!.Value)} Congress" : "")</p>
-                            </li>
-                        }
-                    </ul>
+                    @if (breakers.Count > 0)
+                    {
+                        <p class="home-section-lede">Each name below is the member in one chamber and party who voted against most of their own party on <Term Key="split-vote">split vote</Term> most often@(sharedCongress is { } congress ? $" in the {CongressCalendar.Ordinal(congress)} Congress" : ""). A member needs at least @OfficialBoardPage.MinimumSplitVotes split votes cast to count.</p>
+                        <ul class="home-breaker-list" role="list">
+                            @foreach (var card in breakers)
+                            {
+                                <li class="home-breaker-card">
+                                    <a class="home-breaker-name" href="@(RootPath + card.Row.PagePath)">@card.Row.Name</a>
+                                    <p class="muted small">@PublishedPartyNames.PartyOf(card.Panel.Chamber, card.Panel.Party)</p>
+                                    <span class="home-breaker-figure">@card.Row.Breaks of @card.Row.Cast</span>
+                                    <p class="muted small">split votes cast against most @PublishedPartyNames.Members(card.Panel.Party)@(sharedCongress is null ? $", {CongressCalendar.Ordinal(card.Panel.Congress!.Value)} Congress" : "")</p>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (delegates.Count > 0)
+                    {
+                        <div class="board-delegates">
+                            <h3>@BoardWords.DelegatesTitle</h3>
+                            <p class="small muted">@BoardWords.DelegatesNote</p>
+                            <ul class="list-rows" role="list">
+                                @foreach (var card in delegates)
+                                {
+                                    <BoardRow Row="card.Row" Chamber="card.Panel.Chamber" Party="@card.Panel.Party" RootPath="@RootPath" Congress="@(sharedCongress is null ? card.Panel.Congress : null)" />
+                                }
+                            </ul>
+                        </div>
+                    }
                     <p class="small home-breakers-more">A vote against the party is not a mistake. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we choose these members</a> | <a href="@(RootPath + PublicationProtocol.BoardsPagePath)">See all four party boards</a></p>
                 </section>
             }
@@ -194,19 +210,33 @@
     private VoteMapData? featuredMap;
     private IReadOnlyList<PartyBarData> featuredParties = [];
     private IReadOnlyList<(BoardPanelData Panel, BoardRowData Row)> breakers = [];
+    private IReadOnlyList<(BoardPanelData Panel, BoardRowData Row)> delegates = [];
     private int? sharedCongress;
 
     [Parameter, EditorRequired] public HomePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
     [Parameter] public string? BrowserApiUrl { get; set; }
 
-    /// <summary>The map and the party bars come from the page data of the featured vote. Each card of the break board is the first member of one board.
-    /// The lede names the Congress when every shown board keeps the same one. Otherwise each card names its own.</summary>
+    /// <summary>The map and the party bars come from the page data of the featured vote. Each card of the break board is the first voting member of one board.
+    /// The delegate list under the cards holds the first delegate or resident commissioner of each board that ranks one, so a delegate never takes a card.
+    /// The lede names the Congress when every card and delegate row keeps the same one. Otherwise each card and delegate row names its own.</summary>
     protected override void OnParametersSet()
     {
         featuredMap = Data.FeaturedVoteDetail is { } detail ? VoteMapData.Of(detail) : null;
         featuredParties = Data.FeaturedVoteDetail is { } vote ? VotePageView.PartyBars(vote) : [];
         breakers = [.. Data.Boards.Where(panel => panel.Congress is not null && panel.Rows.Count > 0).Select(panel => (panel, panel.Rows[0]))];
-        sharedCongress = breakers.Select(card => card.Panel.Congress).Distinct().ToArray() is [var congress] ? congress : null;
+        delegates = [.. Data.Boards.Where(panel => panel.Congress is not null && panel.Delegates.Count > 0).Select(panel => (panel, panel.Delegates[0]))];
+        sharedCongress = SharedCongress();
+    }
+
+    /// <summary>The Congress that every card and every delegate row keeps, or null. Only the lede names it, so without cards each delegate row names its own.</summary>
+    private int? SharedCongress()
+    {
+        if (breakers.Count == 0)
+        {
+            return null;
+        }
+
+        return breakers.Concat(delegates).Select(card => card.Panel.Congress).Distinct().ToArray() is [var congress] ? congress : null;
     }
 }

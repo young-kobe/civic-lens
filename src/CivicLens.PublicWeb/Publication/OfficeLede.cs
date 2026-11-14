@@ -3,7 +3,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>
-/// The one owner of the lede rules for an office holder: the party word, the place, the caucus phrase, and when a term has ended.
+/// The one owner of the lede rules for an office holder: the party word, the place of a seat, the caucus phrase, and when a term has ended.
 /// The static official page and the server-rendered official page both call it, so a rule cannot differ between them.
 /// </summary>
 public static class OfficeLede
@@ -16,11 +16,13 @@ public static class OfficeLede
         return char.ToUpperInvariant(words[0]) + words[1..] + place + caucusPhrase;
     }
 
-    /// <summary>The place of a seat, such as " for Massachusetts, district 7". It is empty when the seat has no state.</summary>
-    public static string Place(string? state, int? district) => (state, district) switch
+    /// <summary>The one owner of the place of a seat, such as " for MA, district 7" or " for Guam". It writes a non-state code as its full name and never names a district below 1,
+    /// because a delegate seat and an at-large seat both hold district 0. It is empty when the seat has no state.</summary>
+    public static string Place(string? state, int? district) => state switch
     {
-        (null, _) => "",
-        (_, { } number) => $" for {state}, district {number}",
+        null => "",
+        _ when NonStateSeats.Contains(state) => $" for {UsStates.NameOf(state)}",
+        _ when district is > 0 => $" for {state}, district {district}",
         _ => $" for {state}"
     };
 

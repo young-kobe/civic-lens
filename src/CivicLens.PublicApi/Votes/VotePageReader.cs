@@ -10,7 +10,9 @@ namespace CivicLens.PublicApi.Votes;
 /// <summary>
 /// Reads everything that the server-rendered vote page shows: the vote detail, all tracked members, and the names of the officials, the bill, and the issues.
 /// One read-only REPEATABLE READ transaction on one connection holds every read, so the page comes from one snapshot and one release.
-/// The detail already reads the source texts, so the member read does not read them again. The three name reads go out as one batch.
+/// The detail already reads the source texts, so the member read does not read them again. The name, statement, and party line reads go out as one batch.
+/// The party line of each member comes from <c>public_api.member_votes.breaks_party</c>, the one owner of the break rule for both chambers.
+/// A Senate vote takes its party counts from its member list; see <see cref="SenatePartyTallies"/>.
 /// Only the record page shows the correction banner, so only <see cref="ReadRecordPageAsync"/> reads the corrections. Home and the map page do not.
 /// </summary>
 public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corrections, NpgsqlDataSource views)
@@ -31,6 +33,9 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
          ORDER BY s.statement_date DESC NULLS LAST, s.record_id
          LIMIT @take
         """;
+
+    // The members with a party line on the vote. A null breaks_party means no party line, so the page needs only the other rows.
+    private const string PartyLinesSql = "SELECT m.official_id, m.breaks_party FROM public_api.member_votes m WHERE m.record_id = @id AND m.breaks_party IS NOT NULL";
 
     /// <summary>Reads the page of one vote. Null means the active release holds no such vote.</summary>
     public Task<VotePageData?> ReadAsync(string recordId, CancellationToken cancellationToken) => ReadAsync(recordId, false, cancellationToken);
@@ -78,6 +83,9 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
         linked.Parameters.AddWithValue("id", detail.Vote.RecordId);
         linked.Parameters.AddWithValue("take", VotePageView.StatementLimit);
         batch.BatchCommands.Add(linked);
+        var partyLines = new NpgsqlBatchCommand(PartyLinesSql);
+        partyLines.Parameters.AddWithValue("id", detail.Vote.RecordId);
+        batch.BatchCommands.Add(partyLines);
         await using var reader = await batch.ExecuteReaderAsync(cancellationToken);
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         while (await reader.ReadAsync(cancellationToken)) names[reader.GetString(0)] = reader.GetString(1);
@@ -101,7 +109,10 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
             total = (int)reader.GetInt64(6);
             statements.Add(ReadStatement(reader));
         }
-        return new(names, billData, [.. issueData], [.. statements], total);
+        await reader.NextResultAsync(cancellationToken);
+        var breaks = new Dictionary<string, bool>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(cancellationToken)) breaks[reader.GetString(0)] = reader.GetBoolean(1);
+        return new(names, billData, [.. issueData], [.. statements], total, breaks);
     }
 
     // Columns 2 to 4 hold the latest action. The view holds no row for a bill with no latest action. A text that no rule matches has no label and no law number.
@@ -135,10 +146,11 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
             : null;
         var memberData = members.Select(member => new VoteMemberData(member.OfficialId,
             names.Officials.TryGetValue(member.OfficialId, out var name) ? name : throw new InvalidDataException("A member of a published vote has no official name."),
-            member.Cast, member.Party, member.Citation, member.State, member.District)).ToArray();
+            member.Cast, member.Party, member.Citation, member.State, member.District)
+        { BreaksParty = names.BreaksParty.TryGetValue(member.OfficialId, out var breaks) ? breaks : null }).ToArray();
         return new(detail.Release, vote.RecordId, vote.RevisionNumber, vote.Chamber, vote.Congress, vote.Session, vote.RollCall, vote.VotedOn,
             vote.Kind, detail.Source, vote.Headline, vote.Summary, vote.TextOrigin, vote.Label, vote.Result, vote.Alignment, totals,
-            detail.PartyTallies, detail.VotedOnCitation, detail.KindCitation, detail.Facts, detail.Sources, memberData,
+            vote.Chamber == PublishedChamber.Senate ? SenatePartyTallies(memberData, totals) : detail.PartyTallies, detail.VotedOnCitation, detail.KindCitation, detail.Facts, detail.Sources, memberData,
             names.Bill, names.Issues, vote.BillType, vote.BillNumber)
         {
             Statements = names.Statements,
@@ -146,5 +158,24 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
         };
     }
 
-    private sealed record PageNames(Dictionary<string, string> Officials, VoteBillData? Bill, VoteIssueData[] Issues, VoteStatementData[] Statements, int StatementTotal);
+    /// <summary>
+    /// The party counts of a Senate vote, from its member list, which holds the party of each senator on the vote day. The Voteview source gives no party tally line,
+    /// and a Senate revision published before the stored tallies keeps a zero tally marker that no later revision replaces. The vote totals of the view count the
+    /// same list, so the party counts add up to them. A list with a member of no stored party, or with a cast outside Yes, No, Present, and Not voting, has no totals
+    /// and shows no party counts.
+    /// </summary>
+    private static PublishedPartyTally[]? SenatePartyTallies(VoteMemberData[] members, PublishedVoteTotals? totals) =>
+        totals is null || members.Any(member => member.Party is null) ? null
+        : [.. members.GroupBy(member => member.Party!, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => new PublishedPartyTally
+        {
+            Party = group.Key,
+            Yea = group.Count(member => PublishedOfficialVote.SideOf(member.Cast) == PublishedPartyMajority.Yea),
+            Nay = group.Count(member => PublishedOfficialVote.SideOf(member.Cast) == PublishedPartyMajority.Nay),
+            Present = group.Count(member => member.Cast == PublishedOfficialVote.Present),
+            NotVoting = group.Count(member => member.Cast == PublishedOfficialVote.NotVoting),
+            Other = 0
+        })];
+
+    private sealed record PageNames(Dictionary<string, string> Officials, VoteBillData? Bill, VoteIssueData[] Issues, VoteStatementData[] Statements, int StatementTotal,
+        Dictionary<string, bool> BreaksParty);
 }

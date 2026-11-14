@@ -237,7 +237,7 @@ public sealed class PublishOfficialsTests
     }
 
     [Fact]
-    public async Task TheCatalogNamesEveryIssueAndPolicyAreaOfTheReleaseAndAnUnconfiguredIdNamesItself()
+    public async Task TheFacetNamesOfTheCommitNameEveryIssueAndPolicyAreaOfTheReleaseAndAnUnconfiguredIdNamesItself()
     {
         var scenario = new PublicationScenario
         {
@@ -261,9 +261,9 @@ public sealed class PublishOfficialsTests
 
         var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
 
-        var catalog = Read<PublishedCatalog>(scenario, summary.DirectoryName, PublicationProtocol.CatalogPath);
-        Assert.Equal([("housing", "Housing costs"), ("retired-issue", "retired-issue")], catalog.Issues.Select(entry => (entry.Id, entry.Name)));
-        Assert.Equal([("land-use", "Land use"), ("retired-area", "retired-area")], catalog.PolicyAreas.Select(entry => (entry.Id, entry.Name)));
+        var facets = scenario.Publications.LastCommit!.Names.Facets;
+        Assert.Equal([("housing", "Housing costs"), ("retired-issue", "retired-issue")], facets.Issues.Select(entry => (entry.Id, entry.Name)));
+        Assert.Equal([("land-use", "Land use"), ("retired-area", "retired-area")], facets.PolicyAreas.Select(entry => (entry.Id, entry.Name)));
     }
 
     private static Task<PublicationReleaseSummary> PublishAsync(PublicationScenario scenario, string recordId)

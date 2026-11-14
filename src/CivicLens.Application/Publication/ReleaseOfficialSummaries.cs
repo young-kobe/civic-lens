@@ -4,23 +4,20 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Builds the summary rows of the officials from the figures that the official pages already compute. The vote figures of an untouched
+/// Builds the summary rows of the officials from their vote rows. The vote figures of an untouched
 /// official come from the previous release. The cosponsor count comes from the manifest entries of every publish, so it never goes stale. It is null while any action entry has no cosponsor data.
 /// </summary>
 internal static class ReleaseOfficialSummaries
 {
-    public static PublishedOfficialSummary Of(string officialId, int? congress, TalkAndActionProfile? profile, PublishedVoteFigures? previous) =>
-        profile is null || congress is null
-            ? PublishedOfficialSummary.Empty(officialId)
-            : new()
-            {
-                Id = officialId,
-                Congress = congress,
-                CosponsoredBills = null,
-                PartyVotes = PartyVotesOf(profile.WithPartyByChamber),
-                Attendance = AttendanceOf(profile.MissedByChamber),
-                Previous = previous
-            };
+    public static PublishedOfficialSummary Of(string officialId, PublishedVoteFigures current, PublishedVoteFigures? previous) => new()
+    {
+        Id = officialId,
+        Congress = current.Congress,
+        CosponsoredBills = null,
+        PartyVotes = current.PartyVotes,
+        Attendance = current.Attendance,
+        Previous = previous
+    };
 
     public static PublishedVoteFigures FiguresOf(int congress, IEnumerable<PublishedOfficialVote> votes)
     {

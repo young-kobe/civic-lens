@@ -3,7 +3,7 @@ using CivicLens.Application.Issues;
 
 namespace CivicLens.Application.Publication;
 
-public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> officialNames, IssueConfiguration issues, IssueIconConfiguration icons)
+public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> officialNames, IssueConfiguration issues)
 {
     private readonly ImmutableDictionary<string, string> issueNames =
         issues.Issues.ToImmutableDictionary(issue => issue.Id, issue => issue.Name, StringComparer.Ordinal);
@@ -16,15 +16,9 @@ public sealed class PublicationCatalog(IReadOnlyDictionary<string, string> offic
     public ImmutableDictionary<string, string> OfficialNames { get; } =
         officialNames.ToImmutableDictionary(StringComparer.Ordinal);
 
-    public bool HasIssue(string id) => issueNames.ContainsKey(id);
-
     public string IssueName(string id) => issueNames.GetValueOrDefault(id, id);
 
-    public string? IssueIcon(string id) => icons.Icons.GetValueOrDefault(id);
-
     public IssueDefinition? DefinitionOf(string id) => issueDefinitions.GetValueOrDefault(id);
-
-    public bool HasPolicyArea(string id) => policyAreaNames.ContainsKey(id);
 
     public string PolicyAreaName(string id) => policyAreaNames.GetValueOrDefault(id, id);
 }

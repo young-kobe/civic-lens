@@ -3,7 +3,7 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>The one owner of the time frame, agreement and caucus words that the static board pages, the server boards page and the full board pages share.</summary>
+/// <summary>The one owner of the time frame, agreement, caucus and delegate list words that the static board pages, the server boards page and the full board pages share.</summary>
 public static class BoardWords
 {
     public const string ListsEyebrow = "Four lists, one for each chamber and party";
@@ -18,13 +18,16 @@ public static class BoardWords
     public static string ListDescription(PublishedChamber chamber, string party) =>
         $"{PublishedPartyNames.PartyOf(chamber, party)} ranked by their share of split votes cast against most {PublishedPartyNames.Members(party)}, with the count and base of each.";
 
+    /// <summary>The heading of the delegate list of a House board, on the boards page, the full board page and Home.</summary>
+    public const string DelegatesTitle = "Delegates and the Resident Commissioner";
+
+    /// <summary>Why delegates rank apart from voting members. The fact comes from the glossary entry "delegate".</summary>
+    public const string DelegatesNote = "Delegates may not vote on final passage in the full House, so they cast fewer split votes. They rank apart from voting members.";
+
     public static string Eyebrow(int congress) => $"{CongressCalendar.Ordinal(congress)} Congress | {ListsEyebrow}";
 
     public static string NewestRollCall(int congress, DateOnly day) =>
         $"The newest roll call counted here, in the {CongressCalendar.Ordinal(congress)} Congress, is on {Moment.Day(day)}. No count includes a later day.";
-
-    /// <summary>The kept Congress words of a static board page, which shows one board.</summary>
-    public static string KeptCongress(int newer, int kept) => Kept(newer, kept, "this page");
 
     /// <summary>The kept Congress words of one list on the server boards page. The House and the Senate lists on that page can keep different Congresses.</summary>
     public static string KeptCongressInList(int newer, int kept) => Kept(newer, kept, "this list");

@@ -3,7 +3,7 @@
 <figure class="@(Compact ? "portrait portrait-compact" : "portrait")" data-portrait>
     @if (PhotoPath is { } photoPath && PublicationProtocol.IsPhotoPath(photoPath))
     {
-        <img src="@(RootPath + photoPath)" width="@PhotoWidth" height="@PhotoHeight" alt="Official portrait of @Name" loading="@(Compact ? "lazy" : "eager")" decoding="async" data-portrait-image />
+        <img src="@(RootPath + photoPath)" alt="Official portrait of @Name" loading="@(Compact ? "lazy" : "eager")" decoding="async" data-portrait-image />
         @if (ShowCredit && PhotoCredit is not null)
         {
             <figcaption>@PhotoCredit</figcaption>
@@ -19,8 +19,6 @@
 @code {
     [Parameter, EditorRequired] public string Name { get; set; } = default!;
     [Parameter] public string? PhotoPath { get; set; }
-    [Parameter] public int? PhotoWidth { get; set; }
-    [Parameter] public int? PhotoHeight { get; set; }
     [Parameter] public string? PhotoCredit { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter] public bool Compact { get; set; }

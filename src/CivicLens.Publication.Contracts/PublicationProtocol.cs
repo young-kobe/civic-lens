@@ -12,7 +12,6 @@ public static class PublicationProtocol
     public const string ManifestBrotliPath = ManifestPath + ".br";
     public const int MaximumRecordsPerRelease = 40000;
     public const int PageSize = 50;
-    public const int HomeRecordCount = 20;
     public const int MaximumFacetIdLength = 60;
     public const string HomePath = "index.html";
     /// <summary>The ZIP results of the home page, where a reader sees and compares their members.</summary>
@@ -27,7 +26,6 @@ public static class PublicationProtocol
     public const string OfficialsPath = "officials.json";
     public const string OfficialSummariesPath = "officials-summary.json";
     public const string BillStatusPath = "bill-status.json";
-    public const string CatalogPath = "catalog.json";
     public const string OfficialsPagePath = "officials.html";
     public const string AboutPagePath = "about.html";
     public const string GlossaryPagePath = "glossary.html";
@@ -37,7 +35,6 @@ public static class PublicationProtocol
     public const string BoardsPagePath = "boards.html";
     public const string SitemapPath = "sitemap.xml";
     public const string RobotsPath = "robots.txt";
-    public const string NotFoundPagePath = "404.html";
     public const int MaximumOfficialFiles = 512;
     private const string PhotoFolder = "photos/";
     private const string PhotoExtension = ".jpg";
@@ -73,7 +70,6 @@ public static class PublicationProtocol
         path is not null && path.StartsWith(PhotoFolder, StringComparison.Ordinal) && path.EndsWith(PhotoExtension, StringComparison.Ordinal) &&
         IsSha256(path[PhotoFolder.Length..^PhotoExtension.Length]);
     public static int? VotesCongressOf(string path) => CongressIn(path, "/votes-", ".json");
-    public static int? CongressPageOf(string path) => CongressIn(path, "/", ".html");
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
     /// <summary>The full map page of one vote. It sits under the record folder of the vote, beside no other page of that record.</summary>

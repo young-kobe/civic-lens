@@ -450,6 +450,30 @@ public sealed class OfficialProfilePageTests
         });
     }
 
+    [Theory]
+    [InlineData("GU", "Republican delegate for Guam.", "Delegate for Guam")]
+    [InlineData("PR", "Republican resident commissioner for Puerto Rico.", "Resident Commissioner for Puerto Rico")]
+    [InlineData("DC", "Republican delegate for District of Columbia.", "Delegate for District of Columbia")]
+    [InlineData("AK", "Republican representative for Alaska.", "Representative for AK")]
+    public async Task ASeatWithDistrictZeroNamesItsTitleAndPlaceAndNeverDistrictZero(string state, string lede, string seat)
+    {
+        var data = Member() with { State = state, District = 0, Party = "Republican" };
+        var page = await RenderAsync<OfficialProfilePage>(data);
+
+        Assert.StartsWith(lede, OfficialPageText.Lede(data));
+        Assert.Contains(lede, page.Body!.TextContent);
+        Assert.DoesNotContain("district 0", page.Body.TextContent);
+        Assert.Equal(seat, OfficialSeat.Text(PublishedOfficeKind.Representative, "House", state, 0));
+    }
+
+    [Fact]
+    public void EveryNonStateSeatNamesItsHouseTitleAndFullNameInARow()
+    {
+        Assert.All(NonStateSeats.All, seat => Assert.Equal($"{seat.HouseOffice} for {seat.Name}",
+            OfficialSeat.Text(PublishedOfficeKind.Representative, "House", seat.Code, 0)));
+        Assert.Equal("Representative for MA, district 7", OfficialSeat.Text(PublishedOfficeKind.Representative, "House", "MA", 7));
+    }
+
     [Fact]
     public void TheLedeRulesHaveOneOwnerInOfficeLede()
     {
@@ -551,19 +575,7 @@ public sealed class OfficialProfilePageTests
         return pattern.Contains("--s", StringComparison.Ordinal) ? new[] { 0, 4, 8, 12, 16, 24, 32, 48 }[value] : value;
     }
 
-    private static async Task<IDocument> RenderAsync<TComponent>(object data) where TComponent : IComponent
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<TComponent>(ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                ["Data"] = data,
-                ["RootPath"] = Root
-            }));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAsync<TComponent>(object data) where TComponent : IComponent =>
+        ListPageRender.RenderAsync<TComponent>(data, "Data");
+
 }

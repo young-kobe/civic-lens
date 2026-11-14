@@ -55,7 +55,6 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
     [Theory]
     [InlineData(UnknownPage)]
-    [InlineData("/" + PublicationProtocol.NotFoundPagePath)]
     [InlineData("/records/not-a-record.html")]
     [InlineData("/no-such-folder/page.html")]
     public async Task TheNotFoundPageAnswers404WithNoValidatorAndNoStoreAsTheStatic404PageDoes(string path)
@@ -379,18 +378,15 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheNotFoundPageIsTheStaticNotFoundPagePlusTheEmptyMembersStrip()
+    public async Task TheNotFoundPageCarriesTheEmptyMembersStripAndTheSiteSearch()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        var staticHtml = await new ReleaseRenderer(null, null, BaseUrl).RenderNotFoundAsync(CancellationToken.None);
 
         var served = await (await host.Client.GetAsync(UnknownPage)).Content.ReadAsStringAsync();
 
-        Assert.DoesNotContain(MembersStripSlot.ElementId, staticHtml);
         Assert.Contains($"id=\"{MembersStripSlot.ElementId}\"", served);
-        Assert.Equal(staticHtml, ServerShellOnly(served));
         Assert.Contains("id=\"site-search\"", served);
     }
 
@@ -460,11 +456,6 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag, VoteKindsRoute);
-
-    /// <summary>The served page without the two things that only a server page adds: the members strip and the freshness line. Both kinds of page share one header.</summary>
-    private static string ServerShellOnly(string served) =>
-        System.Text.RegularExpressions.Regex.Replace(served.Replace(MembersStripHtml, string.Empty), "<p class=\"public-freshness\">.*?</p>", string.Empty,
-            System.Text.RegularExpressions.RegexOptions.Singleline);
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 
