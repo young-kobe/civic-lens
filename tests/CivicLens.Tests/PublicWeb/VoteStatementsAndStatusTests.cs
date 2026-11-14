@@ -152,6 +152,7 @@ public sealed class VoteStatementsAndStatusTests
         Assert.Equal([NextStep.NotShown], NextStepLines(unknownStepNoLaw));
     }
 
+    /// <summary>The text lines under "What happens next". The vote-kind index link that follows them is not a next step line.</summary>
     private static string[] NextStepLines(AngleSharp.Dom.IDocument page) =>
-        page.QuerySelectorAll(".vote-explain h3 ~ p").Select(line => line.TextContent).ToArray();
+        page.QuerySelectorAll(".vote-explain h3 ~ p").Where(line => line.QuerySelector("a") is null).Select(line => line.TextContent).ToArray();
 }
