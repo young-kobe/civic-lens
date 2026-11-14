@@ -288,7 +288,7 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Comparison algorithm | `line-lcs-context-v1` | `src/CivicLens.Core/Documents/DocumentComparison.cs` | Stored comparison IDs and hunks | Hunk or word-edit output changes |
 | Comparison settings | `bounded-lines-2000-...-v1` | same file | Limits recorded with each comparison | Any limit constant changes |
 | Draft task | `document-change-draft-v1` | `src/CivicLens.Application/Analysis/DocumentChangeDraftTask.cs` | Analysis runs | Task flow or output handling changes |
-| Draft prompt | `document-change-draft-prompt-v2` | same file | Analysis runs | Prompt text or input framing changes |
+| Draft prompt | `document-change-draft-prompt-v3` | same file | Analysis runs | Prompt text or input framing changes |
 | Draft schema | `document-change-draft-schema-v1` | same file | Analysis runs | The model output schema changes |
 | Statement draft task | `statement-draft-v1` | `src/CivicLens.Application/Statements/StatementDraftTask.cs` | Statement analysis runs | Task flow or output handling changes |
 | Statement draft prompt | `statement-draft-prompt-v4` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |

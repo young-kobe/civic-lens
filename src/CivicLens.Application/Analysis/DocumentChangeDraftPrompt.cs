@@ -10,6 +10,10 @@ namespace CivicLens.Application.Analysis;
 
 public static class DocumentChangeDraftPrompt
 {
+    /// <summary>The headline length that the prompt asks for. Code rejects only a headline above
+    /// <see cref="DocumentChangeDraftRevision.MaximumHeadlineLength"/>, as the grade check rejects only above <see cref="AiTextRules.MaximumGrade"/>.</summary>
+    public const int TargetHeadlineLength = 120;
+
     private static readonly JsonSerializerOptions EvidenceJson = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -24,7 +28,7 @@ public static class DocumentChangeDraftPrompt
         {AiTextRules.PlainLanguage} Describe only what the evidence shows. Do not guess at motive, cause, or consequence. {AiTextRules.NoJudgment} {AiTextRules.GradeTarget} {AiTextRules.InternalWords} Distinguish a statement or a proposal from a completed action. The observation times show when Civic Lens saw each version. They are not the time of the edit.
 
         Fields:
-        - headline: one short line, at most 120 characters.
+        - headline: one short line. Aim for {TargetHeadlineLength} characters or fewer. Code rejects a headline above {DocumentChangeDraftRevision.MaximumHeadlineLength} characters.
         - summary: what changed, in one to three short paragraphs.
         - significance: why the change can matter, only when the evidence supports it. Otherwise null.
         - limits: what the evidence cannot establish, for example the exact time of the edit, the reason for it, or text outside the changed regions.
