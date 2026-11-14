@@ -200,7 +200,7 @@ public sealed class PostgresExecutiveSummaryTests(PostgresCollection postgres) :
             new PublishedRecordLoaders(new PostgresDocumentChangeReviewStore(factory),
                 new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory), new PostgresVoteReviewStore(factory),
                 new PostgresRelationshipReviewStore(factory), new PostgresBriefReviewStore(factory), ReviewStore()),
-            new PublicationCatalog(new Dictionary<string, string> { ["joe-biden"] = "Joe Biden" }, IssueConfiguration.None, IssueIconConfiguration.None),
+            new PublicationCatalog(new Dictionary<string, string> { ["joe-biden"] = "Joe Biden" }, IssueConfiguration.None),
             FixedRosters.NamedOnly(["joe-biden"]), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, directory, NullLogger<PruneReleases>.Instance));
         return await publish.ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner),

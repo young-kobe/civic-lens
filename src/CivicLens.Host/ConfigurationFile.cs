@@ -30,14 +30,6 @@ internal static class ConfigurationFile
         return configuration;
     }
 
-    public static IssueIconConfiguration? ReadIssueIconsFromEnvironment(IssueConfiguration issues)
-    {
-        if (AbsolutePathFromEnvironment("CIVIC_LENS_ISSUE_ICONS_CONFIG") is not { } path) return null;
-        var configuration = Read<IssueIconConfiguration>(path, CollectionProtocol.JsonOptions);
-        configuration.Validate(issues);
-        return configuration;
-    }
-
     private static string? AbsolutePathFromEnvironment(string variable)
     {
         var path = Environment.GetEnvironmentVariable(variable);

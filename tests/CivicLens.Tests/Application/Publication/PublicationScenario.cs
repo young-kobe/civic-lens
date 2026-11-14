@@ -88,7 +88,7 @@ internal sealed class PublicationScenario
     public IssueConfiguration Issues { get; set; } = IssueConfiguration.None;
 
     public PublishRelease Publisher() => new(Publications, Releases, Loaders(),
-        new PublicationCatalog(OfficialNames, Issues, IssueIconConfiguration.None), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials), Settings()),
+        new PublicationCatalog(OfficialNames, Issues), new PublicationOfficials(Collection(), new FixedMemberRoster(RosterMembers, Photos, () => PhotoReads++), new FixedExecutiveRoster(ExecutiveOfficials), Settings()),
         Captures.Photos("artifacts"), Clock, new PruneReleases(Publications, Releases, NullLogger<PruneReleases>.Instance));
 
     public BlockedPublishedRecords Blocked() => new(Publications, Releases);
