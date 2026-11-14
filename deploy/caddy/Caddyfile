@@ -31,39 +31,30 @@
 
 http://civic-lens.info, http://127.0.0.1 {
 	import security_headers
-	root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
 
-	handle /compare.html {
+	# The publisher still writes the member photos into the release. Each name holds the hash of its bytes, so a photo never changes.
+	@photos path_regexp photos ^/photos/[0-9a-f]{64}\.jpg$
+	handle @photos {
+		root * {$CIVIC_LENS_RELEASE_DIRECTORY}/current
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# The API and its internal routes live on the API host only.
+	@api path /v1/* /internal/*
+	handle @api {
+		respond 404
+	}
+
+	# PublicApi serves every page, the shared assets, the sitemap, the robots file, and the not found page at their public paths.
+	handle {
 		encode zstd gzip
 		header {
 			+Cache-Control no-transform
 			+Vary Accept-Encoding
 			defer
 		}
-		rewrite * /web/compare
 		reverse_proxy 127.0.0.1:{$CIVIC_LENS_API_PORT:8100}
-	}
-
-	handle {
-		encode zstd gzip
-
-		@html path_regexp html ^/(?:|.*\.html|.*/)$
-		header @html >Cache-Control "public, max-age=60, no-transform"
-		header ?Cache-Control "public, max-age=60"
-
-		@photos path_regexp photos ^/photos/[0-9a-f]{64}\.jpg$
-		header @photos Cache-Control "public, max-age=31536000, immutable"
-
-		file_server {
-			precompressed br gzip
-		}
-	}
-
-	handle_errors 404 {
-		import security_headers
-		header >Cache-Control "no-store, no-transform"
-		rewrite * /404.html
-		file_server
 	}
 
 	handle_errors {
@@ -76,20 +67,20 @@ http://civic-lens.info, http://127.0.0.1 {
 http://api.civic-lens.info {
 	import security_headers
 
-	@web path /web /web/* /v1/zip-districts/*/members
-	encode @web zstd gzip
-	header @web {
+	@fragments path /v1/zip-districts/*/members
+	encode @fragments zstd gzip
+	header @fragments {
 		+Cache-Control no-transform
 		+Vary Accept-Encoding
 		defer
 	}
 
-	handle /internal/* {
-		respond 404
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:{$CIVIC_LENS_API_PORT:8100}
 	}
 
 	handle {
-		reverse_proxy 127.0.0.1:{$CIVIC_LENS_API_PORT:8100}
+		respond 404
 	}
 }
 

@@ -115,6 +115,13 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
     private static T Deserialize<T>(string path) =>
         JsonSerializer.Deserialize<T>(File.ReadAllBytes(path), PublicationProtocol.JsonOptions)!;
 
+    /// <summary>The pages that the shared header links and only PublicApi serves: the boards page and the list pages. <c>PublicRouteMapTests</c> proves the server answers each one.</summary>
+    private static readonly string[] ServerOnlyPages =
+    [
+        PublicationProtocol.BoardsPagePath,
+        .. new[] { PublishedRecordKind.Vote, PublishedRecordKind.Action, PublishedRecordKind.Statement, PublishedRecordKind.ExecutiveAction }.Select(PublicationProtocol.ListPagePath)
+    ];
+
     private static void AssertLocalLinksResolve(string current, string pagePath)
     {
         var document = new HtmlParser().ParseDocument(File.ReadAllText(pagePath));
@@ -130,6 +137,7 @@ public sealed class PublishedReleaseOutlivesDatabaseTests : IAsyncLifetime
             var relative = reference.Split('#', '?')[0];
             var target = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(pagePath)!, relative));
             Assert.StartsWith(current + Path.DirectorySeparatorChar, target, StringComparison.Ordinal);
+            if (ServerOnlyPages.Contains(Path.GetRelativePath(current, target))) continue;
             Assert.True(File.Exists(target), $"{reference} in {Path.GetFileName(pagePath)} does not resolve inside the release.");
         }
     }

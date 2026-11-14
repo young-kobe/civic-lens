@@ -119,7 +119,7 @@
                         <p class="muted small">@VoteWords.BreakMeaning</p>
                         @foreach (var group in breakers)
                         {
-                            var board = PublicSections.PreviewBoardPath(Data.Chamber, group.Party);
+                            var board = RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party);
                             <div class="vote-breaker-group">
                                 @if (group.Members.Length == 0)
                                 {
@@ -256,8 +256,8 @@
 
     [Parameter, EditorRequired] public VotePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
-    /// <summary>The path of the page that serves this vote, as the browser sees it. The filter form and the clear link keep the reader on it.</summary>
-    [Parameter, EditorRequired] public string PagePath { get; set; } = default!;
+    /// <summary>The public address of this vote page. The filter form and the clear link keep the reader on it.</summary>
+    private string PagePath => RootPath + PublicationProtocol.RecordPagePath(Data.RecordId);
     [Parameter] public VoteMemberFilter Filter { get; set; } = new();
 
     protected override void OnParametersSet()

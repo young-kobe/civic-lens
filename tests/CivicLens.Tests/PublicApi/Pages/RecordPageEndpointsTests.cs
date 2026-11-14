@@ -40,7 +40,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         return await new HtmlParser().ParseDocumentAsync(body);
     }
 
-    private static string Path(string id) => $"{ServerPageEndpoints.Prefix}/{PublicationProtocol.RecordPagePath(id)}";
+    private static string Path(string id) => $"/{PublicationProtocol.RecordPagePath(id)}";
 
     [Fact]
     public async Task TheStatementRouteRendersTheSavedQuoteWithOrderedSpeakerNamesAndIssueNames()
@@ -288,10 +288,10 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE publication_record_states SET kind = 'brief' WHERE record_id = '{Statement.RecordId}';");
 
         await GetPageAsync(host, Path(Statement.RecordId), HttpStatusCode.NotFound);
-        await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/records/bad-id.html", HttpStatusCode.NotFound);
+        await GetPageAsync(host, $"/records/bad-id.html", HttpStatusCode.NotFound);
         await GetPageAsync(host, Path(new string('f', 64)), HttpStatusCode.NotFound);
         foreach (var kindRoute in new[] { "statements", "executive-actions", "document-changes" })
-            await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/{kindRoute}/{Statement.RecordId}", HttpStatusCode.NotFound);
+            await GetPageAsync(host, $"/{kindRoute}/{Statement.RecordId}", HttpStatusCode.NotFound);
     }
 
     [Fact]

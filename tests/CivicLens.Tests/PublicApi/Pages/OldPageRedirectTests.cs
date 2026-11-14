@@ -6,7 +6,7 @@ using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
-/// <summary>The permanent redirects of the old static paths that have no server page, on the gated preview.</summary>
+/// <summary>The permanent redirects of the old static paths that have no server page. Each names the public address of its target.</summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
 public sealed class OldPageRedirectTests(PostgresCollection postgres)
@@ -18,7 +18,7 @@ public sealed class OldPageRedirectTests(PostgresCollection postgres)
         await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, new DateTimeOffset(2026, 6, 9, 12, 0, 0, TimeSpan.Zero));
         using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress };
-        using var response = await client.GetAsync(ServerPageEndpoints.Prefix + "/" + path);
+        using var response = await client.GetAsync("/" + path);
         return (response.StatusCode, response.Headers.Location?.OriginalString);
     }
 
@@ -30,7 +30,7 @@ public sealed class OldPageRedirectTests(PostgresCollection postgres)
         var (status, location) = await GetAsync(PublicationProtocol.OfficialCongressPagePath("jane-doe", congress) + query);
 
         Assert.Equal(HttpStatusCode.MovedPermanently, status);
-        Assert.Equal("/web/officials/jane-doe" + query, location);
+        Assert.Equal(Root + "officials/jane-doe.html" + query, location);
     }
 
     [Theory]
@@ -41,7 +41,7 @@ public sealed class OldPageRedirectTests(PostgresCollection postgres)
         var (status, location) = await GetAsync(PublicationProtocol.PolicyAreaPagePath("health", page) + "?policyArea=taxation&q=clinic");
 
         Assert.Equal(HttpStatusCode.MovedPermanently, status);
-        Assert.Equal("/web/search?policyArea=health&q=clinic", location);
+        Assert.Equal(Root + "search.html?policyArea=health&q=clinic", location);
     }
 
     [Theory]
@@ -52,7 +52,7 @@ public sealed class OldPageRedirectTests(PostgresCollection postgres)
         var (status, location) = await GetAsync(PublicationProtocol.AllRecordsPagePath(page) + "?chamber=house");
 
         Assert.Equal(HttpStatusCode.MovedPermanently, status);
-        Assert.Equal("/web/votes?chamber=house", location);
+        Assert.Equal(Root + "votes.html?chamber=house", location);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class OldPageRedirectTests(PostgresCollection postgres)
         var (status, location) = await GetAsync(PublicationProtocol.IssuePagePath("health-care", 2) + "?chamber=senate");
 
         Assert.Equal(HttpStatusCode.MovedPermanently, status);
-        Assert.Equal("/web/votes?issue=health-care&chamber=senate", location);
+        Assert.Equal(Root + "votes.html?issue=health-care&chamber=senate", location);
     }
 
     [Theory]

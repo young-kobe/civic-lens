@@ -154,7 +154,7 @@ flowchart LR
 | Captures | Compressed content-addressed files; immutable source and extraction versions |
 | Classification (planned) | Rules from measured change history first. A model tier only if the R-13 measurement shows a need (D-05) |
 | Drafting | Claude models through the official `Anthropic` C# SDK in Infrastructure; model extraction is planned; the model for each task can change after evaluation |
-| Public website | The C# release builder renders shared Razor components for the static public root; small JS modules add the theme toggle, the comparison control, and the search page. `/web` and `/web/compare` are gated Home and Compare previews configured with the public base URL |
+| Public website | The C# release builder renders shared Razor components for the static public root; small JS modules add the theme toggle, the comparison control, and the search page. PublicApi serves every reader page at its public path from the `public_api` views. The static pages remain release output until retirement |
 | Public search and read API | `CivicLens.PublicApi` uses its own Postgres database, fed from published releases, for full-text search. Its read API and server-rendered previews read published data from the operational database's `public_api` views as the restricted role `civic_lens_public` |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
 | Public MCP (planned) | Separate deployment over published artifacts and index; Cloudflare Worker is a candidate |

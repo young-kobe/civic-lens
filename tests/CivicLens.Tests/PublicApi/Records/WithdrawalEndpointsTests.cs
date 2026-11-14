@@ -113,7 +113,7 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
             VALUES ('unknown-kind', '{Id}', 3, {withdrawn}, 'Notice', 6, NULL);
             """);
 
-        using var response = await host.Client.GetAsync($"/web/records/{Id}.html");
+        using var response = await host.Client.GetAsync($"/records/{Id}.html");
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }

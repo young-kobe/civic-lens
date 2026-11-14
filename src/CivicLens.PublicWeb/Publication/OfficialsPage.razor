@@ -3,7 +3,7 @@
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialsPagePath" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." RootPath="@RootPath">
     <PageHeader Title="Officials" Lede="@Lede">
-        <Meta><a href="@(RootPath + PublicSections.StaticBoardsPath)">Compare the parties</a></Meta>
+        <Meta><a href="@(RootPath + PublicationProtocol.BoardsPagePath)">Compare the parties</a></Meta>
     </PageHeader>
     @if (Data.Officials.Count == 0)
     {

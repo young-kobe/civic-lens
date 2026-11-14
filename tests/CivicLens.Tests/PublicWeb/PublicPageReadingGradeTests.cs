@@ -402,7 +402,7 @@ public sealed class PublicPageReadingGradeTests
 
         return
         [
-            ("home", Page<HomePage>(With("Data", home, ("BrowserApiUrl", "https://api.civic-lens.test"), ("FeaturedMapHref", "/web/records/" + VoteDetailPageFixture.RecordId + "/map.html"))),
+            ("home", Page<HomePage>(With("Data", home, ("BrowserApiUrl", "https://api.civic-lens.test"))),
                 ["Published", "Newest notice", "Health", "Current bill line", "Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski", "Ada Able", "Ben Baker"]),
             ("home empty", Page<HomePage>(With("Data", new HomePageData(7, null, [], null))), []),
             ("compare", Page<ComparePage>(With("Data", null)), []),
@@ -415,15 +415,15 @@ public sealed class PublicPageReadingGradeTests
             ("vote kinds", Page<VoteKindsPage>(With("Data", null)), []),
             ("bill", Page<BillDetailPage>(With("Data", bill)), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
             ("bill bare", Page<BillDetailPage>(With("Data", bill with { Votes = [], Issues = [], PolicyArea = null, Steps = [], Status = null, StatusLabel = null, Sponsors = [], Cosponsors = null, BillLine = null, CrsText = null, SenateVoteGap = true, TextOrigin = PublishedTextOrigin.Code })), ["Example Act", "headline", "tax credit"]),
-            ("vote", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote(), ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton"]),
-            ("vote house map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Kind = PublishedVoteKind.Suspension, Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Dee Cee", "Present", "Democrat", "DC", 0), MapMember("Pat Rico", "Nay", "Republican", "PR", 0), MapMember("Sam Solo", "Aye", "Republican", null, null)] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter { Name = "zzq" }))), VoteRecordData),
-            ("vote senate map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Chamber = PublishedChamber.Senate, Kind = PublishedVoteKind.VetoOverride, Members = [MapMember("Ed Ward", "Nay", "Democrat", "MA", null), MapMember("Cal Ray", "Not Voting", "Republican", "TX", null)], PartyTallies = null, Bill = null, Issues = [] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), VoteRecordData),
+            ("vote", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote(), ("Filter", new VoteMemberFilter()))), ["Sanctioning", "H.R. 5334", "A bill line", "voted on a bill", "Ada Able", "Ben Baker", "Cy Cole", "Di Dole", "Ed Eaton"]),
+            ("vote house map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Kind = PublishedVoteKind.Suspension, Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Dee Cee", "Present", "Democrat", "DC", 0), MapMember("Pat Rico", "Nay", "Republican", "PR", 0), MapMember("Sam Solo", "Aye", "Republican", null, null)] }, ("Filter", new VoteMemberFilter { Name = "zzq" }))), VoteRecordData),
+            ("vote senate map", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Chamber = PublishedChamber.Senate, Kind = PublishedVoteKind.VetoOverride, Members = [MapMember("Ed Ward", "Nay", "Democrat", "MA", null), MapMember("Cal Ray", "Not Voting", "Republican", "TX", null)], PartyTallies = null, Bill = null, Issues = [] }, ("Filter", new VoteMemberFilter()))), VoteRecordData),
             ("vote statements", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with
             {
                 Bill = VoteDetailPageFixture.Vote().Bill! with { StatusLabel = "Became law", PublicLaw = "119-111", StatusDate = new(2026, 9, 18) },
                 Statements = [new(new string('d', 64), new(2026, 9, 12), "Kelly speaks on the bill", "AI statement label", PublishedTextOrigin.Model, PublishedApprover.Person, [new("o1", "Ada Able"), new("o9", "Una Unseen")]),
                     new(new string('e', 64), null, "Schiff speaks on the bill", null, PublishedTextOrigin.Person, null, [new("o2", "Ben Baker")])]
-            }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, "speaks on the bill", "AI statement label", "Una Unseen"]),
+            }, ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, "speaks on the bill", "AI statement label", "Una Unseen"]),
             ("vote map page", Page<VoteMapPage>(With("Data", VoteDetailPageFixture.Vote() with { Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Dee Cee", "Present", "Democrat", "DC", 0)] })), VoteRecordData),
             ("vote map page empty", Page<VoteMapPage>(With("Data", VoteDetailPageFixture.Vote())), VoteRecordData),
             ("official bare", Page<OfficialProfilePage>(With("Data", new OfficialPageData(7, "p9", "Una Unseen", PublishedOfficeKind.Senator, "Senate", "TX", null, null, null, null, null) { BillCountsAbsent = true })), ["Una Unseen"]),
@@ -475,7 +475,7 @@ public sealed class PublicPageReadingGradeTests
             ("executive action list filtered empty", Page<ExecutiveActionListPage>(With("Data", actionList with { Actions = [], NextCursor = null, Type = PublishedExecutiveActionKind.Notice, Filter = RecordListFilter.Of(null, null, ("type", "notice")) })), ListRecordData),
             ("executive action list release empty", Page<ExecutiveActionListPage>(With("Data", actionList with { ActionsInRelease = 0, Actions = [], NextCursor = null })), ListRecordData),
             ("executive action list refused", Page<ExecutiveActionListPage>(With("Data", actionList with { Actions = [], NextCursor = null, Filter = RecordListFilter.Refused("to", ("to", "soon")) })), ListRecordData),
-            ("vote corrected", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] }, ("PagePath", VoteDetailPageFixture.PagePath), ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, PublishedCorrectionBannerTests.Newest.Note!]),
+            ("vote corrected", Page<VoteDetailPage>(With("Data", VoteDetailPageFixture.Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] }, ("Filter", new VoteMemberFilter()))), [.. VoteRecordData, PublishedCorrectionBannerTests.Newest.Note!]),
             ("bill corrected without note", Page<BillDetailPage>(With("Data", bill with { Corrections = [PublishedCorrectionBannerTests.Newest with { Note = null }] })), ["Pat One", "Ann Two", "Cy Four", "Example Act", "headline", "tax credit", "House agrees", "imposes sanctions", "International Affairs"]),
             ("server shell", Shell<AboutPage>(new() { ["RootPath"] = Root }), []),
             ("not found", Page<PublishedNotFoundPage>(new() { ["RootPath"] = Root }), []),

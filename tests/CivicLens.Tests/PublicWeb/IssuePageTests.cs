@@ -58,10 +58,10 @@ public sealed class IssuePageTests
         var page = await RenderAsync(Data() with { BillCount = 1234 });
 
         var votes = Assert.Single(page.QuerySelectorAll("#votes a[href*='?issue=']"));
-        Assert.Equal(("/web/votes?issue=firearms", "See all roll call votes tagged Firearms"), (votes.GetAttribute("href"), votes.TextContent));
+        Assert.Equal((Root + "votes.html?issue=firearms", "See all roll call votes tagged Firearms"), (votes.GetAttribute("href"), votes.TextContent));
         Assert.Equal("See all roll call votes tagged Firearms, of every kind and Congress, newest first.", votes.ParentElement!.TextContent);
         var bills = Assert.Single(page.QuerySelectorAll("#bills a[href*='?issue=']"));
-        Assert.Equal(("/web/bills?issue=firearms", "See all 1,234 bills"), (bills.GetAttribute("href"), bills.TextContent));
+        Assert.Equal((Root + "bills.html?issue=firearms", "See all 1,234 bills"), (bills.GetAttribute("href"), bills.TextContent));
         Assert.Equal("See all 1,234 bills, newest first.", bills.ParentElement!.TextContent);
 
         var empty = await RenderAsync(Data(votes: [], bills: []));

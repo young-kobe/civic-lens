@@ -19,7 +19,7 @@ public static class IssueRecordWords
 
     public const string AllBillsScope = ", newest first.";
 
-    /// <summary>The origin-relative link to the list of one kind, filtered by the issue. The list filter owns the query string.</summary>
-    public static string ListHref(PublishedRecordKind kind, string issueId) =>
-        PublicSections.ListOf(kind).Href + RecordListFilter.Of(null, null, ("issue", issueId)).Query();
+    /// <summary>The public path of the list of one kind, filtered by the issue, without the site root. The list filter owns the query string.</summary>
+    public static string ListPath(PublishedRecordKind kind, string issueId) =>
+        PublicationProtocol.ListPagePath(kind) + RecordListFilter.Of(null, null, ("issue", issueId)).Query();
 }

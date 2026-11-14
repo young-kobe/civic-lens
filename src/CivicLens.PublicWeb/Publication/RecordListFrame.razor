@@ -94,5 +94,5 @@
 
     private IReadOnlyList<string> AllChips => [.. Chips.Append(Filter.DateChip).OfType<string>()];
 
-    private IReadOnlyList<FilterTab> Tabs => [.. PublicSections.RecordLists.Select(list => FilterTab.Link(list.Label, list.Href, list.Kind == Kind))];
+    private IReadOnlyList<FilterTab> Tabs => [.. PublicSections.RecordLists.Select(list => FilterTab.Link(list.Label, RootPath + list.Path, list.Kind == Kind))];
 }

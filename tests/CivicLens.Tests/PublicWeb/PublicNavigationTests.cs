@@ -23,27 +23,27 @@ public sealed class PublicNavigationTests
         foreach (var nav in navs)
         {
             var links = nav.QuerySelectorAll("a");
-            Assert.Equal(PublicSections.PreviewHeader.Count, links.Length);
+            Assert.Equal(PublicSections.Header.Count, links.Length);
             for (var index = 0; index < links.Length; index++)
             {
-                var expected = PublicSections.PreviewHeader[index];
+                var expected = PublicSections.Header[index];
                 Assert.Equal(expected.Text, links[index].TextContent);
-                Assert.Equal(expected.Path.StartsWith('/') ? expected.Path : Root + expected.Path, links[index].GetAttribute("href"));
+                Assert.Equal(Root + expected.Path, links[index].GetAttribute("href"));
                 Assert.Equal(expected.Section == PublicSection.Officials ? "page" : null, links[index].GetAttribute("aria-current"));
             }
         }
     }
 
     [Fact]
-    public async Task TheHeaderHasOneLinkForEachKindAndTheStaticPartyBoardUntilTheCutoverAndNoLinkForTheOldAllRecordsList()
+    public async Task TheHeaderLinksEachKindToItsListPageAndTheBoardsPageAndHasNoLinkForTheOldAllRecordsList()
     {
-        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.StaticBoardsPath, server: true);
+        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicationProtocol.BoardsPagePath, server: true);
         var nav = page.QuerySelector(".public-nav")!;
 
         Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Compare parties"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
         Assert.Equal(
-            [Root + PublicationProtocol.OfficialsPagePath, PublicSections.PreviewIssuesPath,
-             "/web/votes", "/web/bills", "/web/executive-actions", Root + PublicSections.StaticBoardsPath],
+            [Root + PublicationProtocol.OfficialsPagePath, Root + PublicationProtocol.FacetsPath, Root + "votes.html", Root + "bills.html", Root + "executive-actions.html",
+             Root + "boards.html"],
             nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
         Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);
@@ -51,7 +51,7 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task AStaticPageKeepsTheSearchLinksOfTheHeaderUntilTheCutover()
+    public async Task AStaticPageHasTheSameHeaderAsAServerPage()
     {
         var page = await RenderAsync<PublicPage>(new Dictionary<string, object?>
         {
@@ -65,11 +65,11 @@ public sealed class PublicNavigationTests
         var hrefs = page.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")).ToArray();
 
         Assert.Equal(PublicSections.Header.Select(link => "../" + link.Path), hrefs);
-        Assert.Contains("../" + PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote), hrefs);
+        Assert.Equal((await RenderAsync(server: true)).QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")!.Replace(Root, "../")), hrefs);
     }
 
     [Fact]
-    public async Task APreviewListPageIsTheOwnPageOfItsSectionLinkSoItsTrailHasNoSectionCrumb()
+    public async Task AListPageIsTheOwnPageOfItsSectionLinkSoItsTrailHasNoSectionCrumb()
     {
         var page = await RenderAsync(section: PublicSection.Votes, title: "Votes", canonicalPath: PublicSections.ListOf(PublishedRecordKind.Vote).Path, server: true);
 
@@ -78,12 +78,15 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task TheServerBoardsPageTrailEndsAtItsSectionWithNoLinkToTheStaticBoard()
+    public async Task TheBoardsPageIsTheOwnPageOfItsSectionLinkAndAFullBoardListLinksItInItsTrail()
     {
-        var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicSections.BoardsPath);
+        var boards = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicationProtocol.BoardsPagePath);
+        var list = await RenderAsync(section: PublicSection.Boards, title: "House Democrats",
+            canonicalPath: PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat));
 
-        Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
-        Assert.DoesNotContain(PublicSections.StaticBoardsPath, page.QuerySelector("main nav[aria-label=Breadcrumb]")!.InnerHtml);
+        Assert.Equal(["Home"], boards.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
+        Assert.Equal([Root + PublicationProtocol.HomePath, Root + PublicationProtocol.BoardsPagePath],
+            list.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.GetAttribute("href")));
     }
 
     [Fact]
@@ -188,9 +191,12 @@ public sealed class PublicNavigationTests
     {
         var cases = new (PublishedRecordKind Kind, string Section, string SectionPath)[]
         {
-            (PublishedRecordKind.Vote, "Votes", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Vote)),
-            (PublishedRecordKind.Action, "Bills", PublicationProtocol.SearchByKindPath(PublishedRecordKind.Action)),
-            (PublishedRecordKind.Brief, "Weekly briefs", PublicationProtocol.BriefsPagePath(1))
+            (PublishedRecordKind.Vote, "Votes", "votes.html"),
+            (PublishedRecordKind.Action, "Bills", "bills.html"),
+            (PublishedRecordKind.Statement, "Statements", "statements.html"),
+            (PublishedRecordKind.ExecutiveAction, "Executive actions", "executive-actions.html"),
+            (PublishedRecordKind.Brief, "Weekly briefs", PublicationProtocol.BriefsPagePath(1)),
+            (PublishedRecordKind.DocumentChange, "Document changes", PublicationProtocol.SearchByKindPath(PublishedRecordKind.DocumentChange))
         };
 
         foreach (var (kind, section, sectionPath) in cases)
@@ -256,16 +262,16 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task OnlyAServerPageShowsTheFreshnessLineAndTheIssuesLinkOfThePreview()
+    public async Task OnlyAServerPageShowsTheFreshnessLineAndBothKindsOfPageShareTheHeader()
     {
         var staticPage = await RenderAsync();
         var serverPage = await RenderFramedAsync(new(new(2026, 5, 31), new(2026, 5, 29)));
 
         Assert.Null(staticPage.QuerySelector(".public-freshness"));
-        Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(staticPage).GetAttribute("href"));
         Assert.Equal(["Newest published House roll call: 31 May 2026", "Newest published Senate roll call: 29 May 2026"],
             serverPage.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
-        Assert.Equal(PublicSections.PreviewHeader.Select(link => link.Path.StartsWith('/') ? link.Path : Root + link.Path),
+        Assert.Equal(PublicSections.Header.Select(link => Root + link.Path), serverPage.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")));
+        Assert.Equal(staticPage.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")),
             serverPage.QuerySelectorAll(".public-nav a").Select(link => link.GetAttribute("href")));
     }
 
@@ -279,17 +285,7 @@ public sealed class PublicNavigationTests
         Assert.Null(neither.QuerySelector(".public-freshness"));
     }
 
-    [Fact]
-    public async Task APageOnAPublicRouteKeepsTheStaticIssuesLink()
-    {
-        var page = await RenderFramedAsync(new(null, null), onPublicRoute: true);
-
-        Assert.Equal(Root + PublicationProtocol.FacetsPath, IssuesLink(page).GetAttribute("href"));
-    }
-
-    private static IElement IssuesLink(IDocument page) => page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues");
-
-    private static Task<IDocument> RenderFramedAsync(ServerPageContext context, bool onPublicRoute = false) => RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
+    private static Task<IDocument> RenderFramedAsync(ServerPageContext context) => RenderAsync<ServerPageFrame>(new Dictionary<string, object?>
     {
         [nameof(ServerPageFrame.Context)] = context,
         [nameof(ServerPageFrame.Page)] = typeof(PublicPage),
@@ -299,8 +295,7 @@ public sealed class PublicNavigationTests
             [nameof(PublicPage.Description)] = "Test page",
             [nameof(PublicPage.CanonicalPath)] = "x.html",
             [nameof(PublicPage.RootPath)] = Root,
-            [nameof(PublicPage.Section)] = PublicSection.Officials!,
-            [nameof(PublicPage.OnPublicRoute)] = onPublicRoute
+            [nameof(PublicPage.Section)] = PublicSection.Officials!
         }
     });
 

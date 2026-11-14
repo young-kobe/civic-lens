@@ -22,8 +22,8 @@ namespace CivicLens.Tests.PublicApi.Pages;
 [Trait("Category", "Postgres")]
 public sealed class ServerPageTests(PostgresCollection postgres)
 {
-    private const string UnknownPage = ServerPageEndpoints.Prefix + "/no-such-page";
-    private const string VoteKindsRoute = ServerPageEndpoints.Prefix + "/" + PublicationProtocol.VoteKindsPagePath;
+    private const string UnknownPage = "/no-such-page";
+    private const string VoteKindsRoute = "/" + PublicationProtocol.VoteKindsPagePath;
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly SeededVote Vote = new('e', "2026-03-03");
     private static readonly DateTimeOffset PublishedAt = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
@@ -55,8 +55,9 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
     [Theory]
     [InlineData(UnknownPage)]
-    [InlineData(ServerPageEndpoints.Prefix + "/404.html")]
-    [InlineData(ServerPageEndpoints.Prefix + "/records/not-a-record.html")]
+    [InlineData("/" + PublicationProtocol.NotFoundPagePath)]
+    [InlineData("/records/not-a-record.html")]
+    [InlineData("/no-such-folder/page.html")]
     public async Task TheNotFoundPageAnswers404WithNoValidatorAndNoStoreAsTheStatic404PageDoes(string path)
     {
         await using var host = await StartAsync();
@@ -71,7 +72,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         Assert.Equal(PageCache.FailureCacheControl, string.Join(", ", response.Headers.GetValues("Cache-Control")));
         Assert.True(response.Headers.CacheControl!.NoStore);
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
-        Assert.Equal("Page not found", page.QuerySelector(".empty h3")!.TextContent);
+        Assert.Equal(["Page not found"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TextContent));
+        Assert.NotNull(page.QuerySelector("main .page-header h1"));
         Assert.Null(page.QuerySelector("link[rel=canonical]"));
         Assert.Equal("noindex", page.QuerySelector("meta[name=robots]")!.GetAttribute("content"));
         Assert.NotNull(page.QuerySelector(".public-freshness"));
@@ -212,7 +214,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        foreach (var path in new[] { UnknownPage, ServerPageEndpoints.Prefix + "/compare", VoteKindsRoute })
+        foreach (var path in new[] { UnknownPage, "/" + PublicationProtocol.ComparePagePath, VoteKindsRoute })
         {
             using var response = await host.Client.GetAsync(path);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
@@ -225,14 +227,14 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     public async Task TheHomeRouteUsesTheHomeSnapshotReleaseAndAnswers503WithoutCacheWhenItIsMissing()
     {
         await using var host = await StartAsync();
-        var empty = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
+        var empty = await host.Client.GetAsync("/");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, empty.StatusCode);
         Assert.Null(empty.Headers.ETag);
         Assert.False(empty.Headers.Contains("Cache-Control"));
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 9, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        using var request = new HttpRequestMessage(HttpMethod.Get, ServerPageEndpoints.Prefix + "?zip=55401");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/?zip=55401");
         request.Headers.Add("Cookie", "session=reader");
         var response = await host.Client.SendAsync(request);
         var html = await response.Content.ReadAsStringAsync();
@@ -248,7 +250,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         Assert.False(response.Headers.Contains("Set-Cookie"));
         Assert.DoesNotContain(response.Headers.Vary, name => name.Equals("Cookie", StringComparison.OrdinalIgnoreCase));
 
-        using var revalidation = new HttpRequestMessage(HttpMethod.Get, ServerPageEndpoints.Prefix + "/");
+        using var revalidation = new HttpRequestMessage(HttpMethod.Get, "/");
         revalidation.Headers.IfNoneMatch.Add(response.Headers.ETag!);
         using var cached = await host.Client.SendAsync(revalidation);
         Assert.Equal(HttpStatusCode.NotModified, cached.StatusCode);
@@ -268,7 +270,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote,
             new SeededVote('f', "2026-03-02") { Kind = "Amendment", TextOrigin = origin });
 
-        var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
+        var response = await host.Client.GetAsync("/");
         var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
         var row = Assert.Single(page.QuerySelectorAll(".record-rows > li"));
 
@@ -284,16 +286,19 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheHomePreviewDoesNotClaimTheLiveRootRoute()
+    public async Task TheHomePageAnswersAtTheSiteRootAndAtItsIndexPath()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
-        using var response = await host.Client.GetAsync("/");
+        using var root = await host.Client.GetAsync("/");
+        using var index = await host.Client.GetAsync("/" + PublicationProtocol.HomePath);
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Null(response.Headers.ETag);
+        Assert.Equal(HttpStatusCode.OK, root.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, index.StatusCode);
+        Assert.Equal(root.Headers.ETag, index.Headers.ETag);
+        Assert.Equal(await root.Content.ReadAsStringAsync(), await index.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -303,7 +308,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
-        var html = await (await host.Client.GetAsync(ServerPageEndpoints.Prefix)).Content.ReadAsStringAsync();
+        var html = await (await host.Client.GetAsync("/")).Content.ReadAsStringAsync();
 
         Assert.Contains("data-zip-api=\"https://api.civic-lens.test\"", html);
         Assert.Contains("Find my members", html);
@@ -316,7 +321,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await using var host = await StartWithBrowserApiAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        using var response = await host.Client.GetAsync("/web/compare?zip=55401");
+        using var response = await host.Client.GetAsync("/compare.html?zip=55401");
         var html = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -327,7 +332,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         Assert.Equal(PageCache.CacheControl, response.Headers.CacheControl?.ToString());
         Assert.NotNull(response.Headers.ETag);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/web/compare");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/compare.html");
         request.Headers.IfNoneMatch.Add(response.Headers.ETag!);
         using var revalidated = await host.Client.SendAsync(request);
         Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
@@ -355,9 +360,9 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Theory]
-    [InlineData("/web/vote-kinds")]
-    [InlineData("/web/vote-kinds.html/extra")]
-    [InlineData("/web/Vote-Kinds.htm")]
+    [InlineData("/vote-kinds")]
+    [InlineData("/vote-kinds.html/extra")]
+    [InlineData("/Vote-Kinds.htm")]
     public async Task ABadVoteKindIndexPathAnswers404ThroughTheSharedNotFoundPage(string path)
     {
         await using var host = await StartAsync();
@@ -367,7 +372,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var page = Parse(await response.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Equal("Page not found", page.QuerySelector(".empty h3")!.TextContent.Trim());
+        Assert.Equal("Page not found", page.QuerySelector("main h1")!.TextContent.Trim());
         Assert.Empty(page.QuerySelectorAll("tbody tr"));
     }
 
@@ -378,7 +383,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.bills FROM civic_lens_public");
 
-        using var response = await host.Client.GetAsync("/web/compare");
+        using var response = await host.Client.GetAsync("/compare.html");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("r4-", response.Headers.ETag!.ToString());
@@ -392,7 +397,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
-        var html = await host.Client.GetStringAsync("/web/compare");
+        var html = await host.Client.GetStringAsync("/compare.html");
         var page = Parse(html);
 
         Assert.Equal("Compare your members", page.QuerySelector("h1")!.TextContent);
@@ -442,8 +447,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
         var response = await host.Client.GetAsync(UnknownPage);
-        var home = await host.Client.GetAsync(ServerPageEndpoints.Prefix);
-        using var compare = await host.Client.GetAsync(ServerPageEndpoints.Prefix + "/compare");
+        var home = await host.Client.GetAsync("/");
+        using var compare = await host.Client.GetAsync("/" + PublicationProtocol.ComparePagePath);
         using var kinds = await host.Client.GetAsync(VoteKindsRoute);
 
         Assert.Equal(HttpStatusCode.NotFound, compare.StatusCode);
@@ -501,16 +506,10 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
     private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag, VoteKindsRoute);
 
-    /// <summary>The served page without the three things that only a server page adds: the members strip, the freshness line, and the preview Issues link.</summary>
-    /// <summary>The served page with the parts that only a server page has put back to the static form: the members strip, the freshness line,
-    /// and the preview header links of the issues index and the three kind lists, which the static header points at the issues page and the search page.</summary>
-    private static string ServerShellOnly(string served)
-    {
-        var staticHeader = PublicSections.RecordLists.Where(list => list.Kind is PublishedRecordKind.Vote or PublishedRecordKind.Action or PublishedRecordKind.ExecutiveAction)
-            .Aggregate(served.Replace(MembersStripHtml, string.Empty).Replace(PublicSections.PreviewIssuesPath, BaseUrl.Join(PublicationProtocol.FacetsPath)),
-                (html, list) => html.Replace($"\"{list.Href}\"", $"\"{BaseUrl.Join(PublicationProtocol.SearchByKindPath(list.Kind))}\""));
-        return System.Text.RegularExpressions.Regex.Replace(staticHeader, "<p class=\"public-freshness\">.*?</p>", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
-    }
+    /// <summary>The served page without the two things that only a server page adds: the members strip and the freshness line. Both kinds of page share one header.</summary>
+    private static string ServerShellOnly(string served) =>
+        System.Text.RegularExpressions.Regex.Replace(served.Replace(MembersStripHtml, string.Empty), "<p class=\"public-freshness\">.*?</p>", string.Empty,
+            System.Text.RegularExpressions.RegexOptions.Singleline);
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 

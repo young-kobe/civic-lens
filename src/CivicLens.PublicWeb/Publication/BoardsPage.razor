@@ -1,14 +1,14 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<PublicPage Section="PublicSection.Boards" CanonicalPath="@PublicSections.BoardsPath" Title="Compare the parties" Description="Which members voted against most of their own party, and how often both parties voted the same way." RootPath="@RootPath">
+<PublicPage Section="PublicSection.Boards" CanonicalPath="@PublicationProtocol.BoardsPagePath" Title="Compare the parties" Description="Which members voted against most of their own party, and how often both parties voted the same way." RootPath="@RootPath">
     <PageHeader Title="Compare the parties" Eyebrow="@Eyebrow" Lede="@($"Which members voted against most of their own party, and how often both parties voted the same way. {BoardWords.CodeBuilt}")" />
     <FilterTabs Label="@BoardWords.TabsLabel" Tabs="Tabs" />
     @foreach (var board in Data.Boards)
     {
         var id = Anchor(board);
         <Panel Id="@($"h-{id}")" Title="@BoardWords.ListTitle(board.Chamber, board.Party)" Padded="true" Class="board-panel">
-            <BoardPanelBody Board="board" RootPath="@RootPath" NewestInFold="@(Eyebrow is not null)" FullListHref="@PublicSections.PreviewBoardPath(board.Chamber, board.Party)" />
+            <BoardPanelBody Board="board" RootPath="@RootPath" NewestInFold="@(Eyebrow is not null)" FullListHref="@(RootPath + PublicationProtocol.BoardPagePath(board.Chamber, board.Party))" />
         </Panel>
     }
     @foreach (var agreement in Data.Agreements)

@@ -84,7 +84,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
             { RecordId = (index + 4).ToString("x64") })).ToArray();
         await using var host = await StartAsync(votes, serverPages: true);
 
-        var page = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web/boards"));
+        var page = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await host.Client.GetStringAsync("/boards.html"));
 
         var houseDemocrats = page.QuerySelectorAll(".board-panel")[0];
         Assert.Contains("The 119th Congress has no member with 25 split votes yet, so this list keeps the 118th Congress.", houseDemocrats.TextContent);
@@ -129,19 +129,19 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
         }
         static string[] Names(AngleSharp.Dom.IDocument page) => [.. page.QuerySelectorAll(".board-panel .list-row-title").Select(link => link.TextContent)];
 
-        var houseDemocratPage = await PageAsync("/web/board-house-democrat.html");
+        var houseDemocratPage = await PageAsync("/board-house-democrat.html");
         Assert.Equal(["Hal Hale", .. Enumerable.Range(0, 11).Reverse().Select(index => $"House Dem {index:00}")], Names(houseDemocratPage));
         Assert.Equal("https://civic-lens.test/board-house-democrat.html", houseDemocratPage.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
         Assert.Equal("Delegate for DC", houseDemocratPage.QuerySelectorAll(".board-panel .list-row-meta span")[1].TextContent);
         Assert.Equal("12 of 25 split votes", houseDemocratPage.QuerySelector(".board-panel .list-row-figure")!.TextContent);
-        Assert.Equal(["Ben Baker"], Names(await PageAsync("/web/board-house-republican.html")));
-        Assert.Equal(["Dee Dole"], Names(await PageAsync("/web/board-senate-democrat.html")));
-        Assert.Equal(["Fox Finn", "Eli Ellis"], Names(await PageAsync("/web/board-senate-republican.html")));
+        Assert.Equal(["Ben Baker"], Names(await PageAsync("/board-house-republican.html")));
+        Assert.Equal(["Dee Dole"], Names(await PageAsync("/board-senate-democrat.html")));
+        Assert.Equal(["Fox Finn", "Eli Ellis"], Names(await PageAsync("/board-senate-republican.html")));
 
-        var boards = await PageAsync("/web/boards");
+        var boards = await PageAsync("/boards.html");
         var panel = boards.QuerySelectorAll(".board-panel")[0];
         Assert.Equal(Names(houseDemocratPage).Take(10), panel.QuerySelectorAll(".list-row-title").Select(link => link.TextContent));
-        Assert.Equal("/web/board-house-democrat.html",
+        Assert.Equal("https://civic-lens.test/board-house-democrat.html",
             panel.QuerySelectorAll("a").Single(link => link.TextContent == "See the full list of the House Democrats").GetAttribute("href"));
     }
 

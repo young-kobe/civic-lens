@@ -21,5 +21,5 @@
 
     /// <summary>One tab for each full board page. The tab of this board is current.</summary>
     private IReadOnlyList<FilterTab> Tabs => [.. OfficialBoard.All.Select(board => FilterTab.Link(PublishedPartyNames.PartyOf(board.Chamber, board.Party),
-        PublicSections.PreviewBoardPath(board.Chamber, board.Party), board.Chamber == Data.Board.Chamber && board.Party == Data.Board.Party))];
+        RootPath + PublicationProtocol.BoardPagePath(board.Chamber, board.Party), board.Chamber == Data.Board.Chamber && board.Party == Data.Board.Party))];
 }

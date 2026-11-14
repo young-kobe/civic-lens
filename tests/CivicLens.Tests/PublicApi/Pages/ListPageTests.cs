@@ -36,10 +36,10 @@ public sealed class ListPageTests(PostgresCollection postgres)
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
             [.. Enumerable.Range(0, 30).Select(Senator), new("h1", "Rep One", new SeededTerm("House", "Representative", "2021-01-03") { State = "TX", District = 2, Party = "Republican" })]);
 
-        var first = await host.Client.GetAsync("/web/officials?chamber=senate");
+        var first = await host.Client.GetAsync("/officials.html?chamber=senate");
         var firstPage = await ParseAsync(first);
         var next = firstPage.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
-        var second = await ParseAsync(await host.Client.GetAsync("/web/officials" + next));
+        var second = await ParseAsync(await host.Client.GetAsync("/officials.html" + next));
 
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(PageCache.CacheControl, string.Join(", ", first.Headers.GetValues("Cache-Control")));
@@ -63,10 +63,10 @@ public sealed class ListPageTests(PostgresCollection postgres)
         var stale = new OfficialCursor(99, "Sen 01", "p01").Encode();
 
         var response = await new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress }
-            .GetAsync($"/web/officials?party=democrat&cursor={stale}");
+            .GetAsync($"/officials.html?party=democrat&cursor={stale}");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/web/officials?party=democrat", response.Headers.Location!.OriginalString);
+        Assert.Equal(BaseUrl.Join("officials.html?party=democrat"), response.Headers.Location!.OriginalString);
     }
 
     [Fact]
@@ -74,9 +74,9 @@ public sealed class ListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var none = await host.Client.GetAsync("/web/officials");
+        var none = await host.Client.GetAsync("/officials.html");
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
-        var invalid = await host.Client.GetAsync("/web/officials?chamber=moon");
+        var invalid = await host.Client.GetAsync("/officials.html?chamber=moon");
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, none.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
@@ -88,7 +88,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, PublishedAt);
 
-        var response = await host.Client.GetAsync("/web/boards");
+        var response = await host.Client.GetAsync("/boards.html");
         var page = await ParseAsync(response);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -107,8 +107,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
             new SeededOfficial("p1", "Ayanna Pressley", new SeededTerm("House", "Representative", "2021-01-03") { State = "MA", District = 7, Party = "Democrat" }));
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('1', "2026-03-03") { BillNumber = 5334, BillLine = "H.R. 5334, the Sanctions Act" });
 
-        var byNumber = await host.Client.GetAsync("/web/search?q=5334");
-        var byName = await host.Client.GetAsync("/web/search?q=Pressley");
+        var byNumber = await host.Client.GetAsync("/search.html?q=5334");
+        var byName = await host.Client.GetAsync("/search.html?q=Pressley");
         var number = await ParseAsync(byNumber);
         var name = await ParseAsync(byName);
 
@@ -120,8 +120,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Null(number.QuerySelector(".search-official"));
         Assert.Equal("Ayanna Pressley", name.QuerySelector(".search-official h2")!.TextContent);
         Assert.Null(name.QuerySelector(".search-pin"));
-        Assert.Null((await ParseAsync(await host.Client.GetAsync("/web/search?q=Pr"))).QuerySelector(".search-official"));
-        Assert.Equal("Ayanna Pressley", (await ParseAsync(await host.Client.GetAsync("/web/search?q=ayanna%20pre"))).QuerySelector(".search-official h2")!.TextContent);
+        Assert.Null((await ParseAsync(await host.Client.GetAsync("/search.html?q=Pr"))).QuerySelector(".search-official"));
+        Assert.Equal("Ayanna Pressley", (await ParseAsync(await host.Client.GetAsync("/search.html?q=ayanna%20pre"))).QuerySelector(".search-official h2")!.TextContent);
     }
 
     [Fact]
@@ -142,8 +142,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
             new SeededVote('4', "2026-03-02") { BillNumber = 5334, RollCall = 2 },
             new SeededVote('5', "2026-03-04") { BillNumber = 5334, RollCall = 3, Chamber = "Senate" });
 
-        var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=5334"));
-        var filtered = await ParseAsync(await host.Client.GetAsync("/web/search?q=5334&kind=vote"));
+        var page = await ParseAsync(await host.Client.GetAsync("/search.html?q=5334"));
+        var filtered = await ParseAsync(await host.Client.GetAsync("/search.html?q=5334&kind=vote"));
         var pin = page.QuerySelector(".search-pin")!;
 
         Assert.Equal("Bill in the 119th Congress. Sponsored by Jimmy Panetta.", pin.QuerySelector("p.muted")!.TextContent);
@@ -171,7 +171,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
             new SeededVote('3', "2026-03-04") { BillType = "s", BillNumber = 77, RollCall = 1, Chamber = "Senate" },
             new SeededVote('4', "2026-03-05") { BillType = "s", BillNumber = 77, RollCall = 2, Chamber = "Senate" });
 
-        var pin = (await ParseAsync(await host.Client.GetAsync("/web/search?q=S.%2077"))).QuerySelector(".search-pin")!;
+        var pin = (await ParseAsync(await host.Client.GetAsync("/search.html?q=S.%2077"))).QuerySelector(".search-pin")!;
 
         var vote = Assert.Single(pin.QuerySelectorAll(".search-pin-actions a"), link => link.TextContent.EndsWith("vote on it", StringComparison.Ordinal));
         Assert.Equal("Senate vote on it", vote.TextContent);
@@ -187,14 +187,14 @@ public sealed class ListPageTests(PostgresCollection postgres)
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, [.. new[] { "Ann", "Bo", "Cy", "Di" }.Select((first, index) =>
             new SeededOfficial($"p{index}", $"{first} Leeds", new SeededTerm("House", "Representative", "2021-01-03") { State = "MA", District = index + 1, Party = "Democrat" }))]);
 
-        var four = await ParseAsync(await host.Client.GetAsync("/web/search?q=leeds"));
-        var one = await ParseAsync(await host.Client.GetAsync("/web/search?q=ann%20leeds"));
+        var four = await ParseAsync(await host.Client.GetAsync("/search.html?q=leeds"));
+        var one = await ParseAsync(await host.Client.GetAsync("/search.html?q=ann%20leeds"));
 
         Assert.Equal(3, four.QuerySelectorAll(".search-official").Length);
         var more = four.QuerySelector(".search-more-officials")!;
         Assert.Equal("More officials match. See all of them in the officials list.", more.TextContent);
         Assert.Equal("https://civic-lens.test/" + PublicationProtocol.OfficialsPagePath + "?name=leeds", more.QuerySelector("a")!.GetAttribute("href"));
-        var list = await ParseAsync(await host.Client.GetAsync("/web/officials?name=leeds"));
+        var list = await ParseAsync(await host.Client.GetAsync("/officials.html?name=leeds"));
         Assert.Equal(4, list.QuerySelectorAll(".list-row").Length);
         Assert.Single(one.QuerySelectorAll(".search-official"));
         Assert.Null(one.QuerySelector(".search-more-officials"));
@@ -210,7 +210,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
             new SeededOfficial("p1", "Abe Ann Lee", new SeededTerm("House", "Representative", "2021-01-03") { State = "MA", District = 7, Party = "Democrat" }),
             new SeededOfficial("p2", "Ann Lee", new SeededTerm("House", "Representative", "2021-01-03") { State = "TX", District = 2, Party = "Republican" }));
 
-        var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=ann%20lee"));
+        var page = await ParseAsync(await host.Client.GetAsync("/search.html?q=ann%20lee"));
 
         Assert.Equal(["Ann Lee", "Abe Ann Lee"], page.QuerySelectorAll(".search-official h2").Select(heading => heading.TextContent));
     }
@@ -224,7 +224,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
             "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'tax', 'Taxes', 'd'), (1, 'air', 'Air', 'd');");
 
-        var page = await ParseAsync(await host.Client.GetAsync("/web/search?q=rent"));
+        var page = await ParseAsync(await host.Client.GetAsync("/search.html?q=rent"));
 
         Assert.Equal(["air", "tax"], page.QuerySelectorAll("#search-issue option").Select(option => option.GetAttribute("value")).Where(value => !string.IsNullOrEmpty(value)));
     }
@@ -236,8 +236,8 @@ public sealed class ListPageTests(PostgresCollection postgres)
         await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
 
-        var none = await ParseAsync(await host.Client.GetAsync("/web/search?q=zzqxv"));
-        var blank = await ParseAsync(await host.Client.GetAsync("/web/search"));
+        var none = await ParseAsync(await host.Client.GetAsync("/search.html?q=zzqxv"));
+        var blank = await ParseAsync(await host.Client.GetAsync("/search.html"));
 
         Assert.Contains("No records match \"zzqxv\".", none.QuerySelector(".empty")!.TextContent);
         Assert.Null(blank.QuerySelector(".empty"));
