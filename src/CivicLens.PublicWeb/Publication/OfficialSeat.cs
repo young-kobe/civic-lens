@@ -19,7 +19,7 @@ public static class OfficialSeat
         return role + OfficeLede.Place(state, district);
     }
 
-    /// <summary>The House title of a seat: "Delegate" or "Resident Commissioner" for a non-state code, else "Representative".</summary>
+    /// <summary>The House title of a seat: the House office of a non-state code from <see cref="NonStateSeats"/>, else "Representative".</summary>
     public static string HouseRole(string? state) =>
         UsStates.HouseOfficeByNonStateCode.GetValueOrDefault(state ?? string.Empty) ?? "Representative";
 
