@@ -15,7 +15,7 @@ public sealed class RelationshipStore
         SELECT a.release_number, r.record_id, r.revision_number, r.headline, r.link_type, r.statement_date, r.reason, r.text_origin, r.label,
                r.statement_record_id, r.statement_revision_number, r.statement_headline, r.statement_text_origin, r.statement_label,
                r.target_kind, r.target_record_id, r.target_revision_number, r.target_headline, r.target_text_origin, r.target_label,
-               r.quote_start, r.quote_length, r.quote_source_text, r.fact, r.fact_label,
+               r.quote_start, r.quote_length, r.quote_source_text, r.fact, r.fact_label, r.fact_text_origin,
                ARRAY(SELECT o.official_id FROM public_api.record_officials o
                       WHERE o.kind = 'relationship' AND o.record_id = r.record_id AND o.revision_number = r.revision_number ORDER BY o."position" LIMIT @label_limit),
                ARRAY(SELECT i.issue_id FROM public_api.record_issues i
@@ -40,9 +40,9 @@ public sealed class RelationshipStore
         if (reader.IsDBNull(1)) return (release, null);
         var page = new RelationshipPageData(release, reader.GetString(1), reader.GetInt32(2), Required(reader, 3), ViewColumns.Enum<PublishedRelationshipType>(reader, 4),
             ViewColumns.Date(reader, 5), Required(reader, 6), ViewColumns.Enum<PublishedTextOrigin>(reader, 7), ViewColumns.Text(reader, 8),
-            ReadEnd(reader, PublishedRecordKind.Statement, 9), ReadEnd(reader, TargetKind(reader), 15), ReadQuote(reader), Required(reader, 23), ViewColumns.Text(reader, 24), [], [],
-            ViewColumns.Utc(reader, 27), ViewColumns.Utc(reader, 28));
-        var detail = new RelationshipDetail(page, reader.GetFieldValue<string[]>(25), reader.GetFieldValue<string[]>(26));
+            ReadEnd(reader, PublishedRecordKind.Statement, 9), ReadEnd(reader, TargetKind(reader), 15), ReadQuote(reader), Required(reader, 23), ViewColumns.Text(reader, 24),
+            ViewColumns.NullableEnum<PublishedTextOrigin>(reader, 25), [], [], ViewColumns.Utc(reader, 28), ViewColumns.Utc(reader, 29));
+        var detail = new RelationshipDetail(page, reader.GetFieldValue<string[]>(26), reader.GetFieldValue<string[]>(27));
         Validate(detail);
         return (release, detail);
     }

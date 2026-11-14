@@ -90,8 +90,18 @@ public sealed class RelationshipStoreTests(PostgresCollection postgres) : IAsync
             var page = (await FindAsync(BillLink)).Page;
 
             Assert.Equal(fact.Text, page.Fact);
-            Assert.Equal(fact.Id is "F3" or "F4" ? AiLabelWords.ModelWording : null, page.FactLabel);
+            Assert.Equal(fact.Id is "F3" or "F4" ? (AiLabelWords.ModelWording, PublishedTextOrigin.Model) : (null, null), (page.FactLabel, page.FactTextOrigin));
         }
+    }
+
+    [Fact]
+    public async Task ACodeFactOfABillCarriesTheCodeOriginBesideTheCodeLabel()
+    {
+        await ViewsSeed.ExecuteAsync(database, $"SET session_replication_role = replica; UPDATE action_revisions SET text_origin = 'Code' WHERE record_id = '{ActionId}'");
+
+        var page = (await FindAsync(BillLink)).Page;
+
+        Assert.Equal((AiLabelWords.CodeWording, PublishedTextOrigin.Code), (page.FactLabel, page.FactTextOrigin));
     }
 
     [Fact]
@@ -100,7 +110,7 @@ public sealed class RelationshipStoreTests(PostgresCollection postgres) : IAsync
         var page = (await FindAsync(VoteLink)).Page;
 
         Assert.Equal(VoteFactTexts[1], page.Fact);
-        Assert.Null(page.FactLabel);
+        Assert.Equal((null, null), (page.FactLabel, page.FactTextOrigin));
         Assert.Equal((PublishedRecordKind.Vote, VoteId, 1, "Vote on housing"), (page.Target.Kind, page.Target.RecordId, page.Target.RevisionNumber, page.Target.Headline));
     }
 

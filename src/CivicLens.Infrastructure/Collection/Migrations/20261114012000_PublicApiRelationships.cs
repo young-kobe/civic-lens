@@ -13,19 +13,20 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 public partial class PublicApiRelationships : Migration
 {
     // RelationshipTarget.Of owns the fact words: F1 to F4 of an action and one numbered fact per vote fact in position order. A view test compares them.
-    // The headline and summary facts of an action are its model or code text, so they carry the label of record_headlines.
+    // The headline and summary facts of an action are its model or code text, so they carry the text origin of the action and the label of record_headlines.
+    // Every other fact has no stored origin, so its origin and its label are null.
     private const string FactsSql = $"""
-        SELECT 'F' || row_number() OVER (ORDER BY vf."position") AS fact_id, vf.fact_text AS fact, NULL::text AS fact_label
+        SELECT 'F' || row_number() OVER (ORDER BY vf."position") AS fact_id, vf.fact_text AS fact, NULL::text AS fact_label, NULL::text AS fact_text_origin
           FROM public.vote_revision_facts vf
          WHERE r.target_kind = 'Vote' AND vf.record_id = r.target_vote_record_id AND vf.revision_number = r.target_vote_revision_number
         UNION ALL
-        SELECT c.fact_id, c.fact, c.fact_label
+        SELECT c.fact_id, c.fact, c.fact_label, c.fact_text_origin
           FROM public.action_revisions ar
           CROSS JOIN LATERAL (VALUES
-              ('F1', 'Bill: ' || ar.bill_type || ' ' || ar.bill_number || ', Congress ' || ar.congress, NULL::text),
-              ('F2', 'Title: ' || ar.bill_title, NULL),
-              ('F3', 'Headline: ' || ar.headline, {ActionTextLabel}),
-              ('F4', 'Summary: ' || ar.summary, {ActionTextLabel})) c(fact_id, fact, fact_label)
+              ('F1', 'Bill: ' || ar.bill_type || ' ' || ar.bill_number || ', Congress ' || ar.congress, NULL::text, NULL::text),
+              ('F2', 'Title: ' || ar.bill_title, NULL, NULL),
+              ('F3', 'Headline: ' || ar.headline, {ActionTextLabel}, ar.text_origin),
+              ('F4', 'Summary: ' || ar.summary, {ActionTextLabel}, ar.text_origin)) c(fact_id, fact, fact_label, fact_text_origin)
          WHERE r.target_kind = 'Action' AND ar.record_id = r.target_action_record_id AND ar.revision_number = r.target_action_revision_number
         """;
 
@@ -34,8 +35,8 @@ public partial class PublicApiRelationships : Migration
         """;
 
     // People approve every relationship. The label of a reason that a model drafted repeats PublishedWording.ModelRelationship, and a test compares the two.
-    private const string RelationshipsSql = $"""
-        CREATE VIEW public_api.relationships WITH (security_barrier = true) AS
+    // A later migration that appends a column composes the view from these two parts, so the view has one SQL owner.
+    internal const string RelationshipsColumns = """
         SELECT a.record_id, a.revision_number, e.headline, e.link_type, e.event_date AS statement_date, r.reason,
                CASE r.author_kind WHEN 'Analysis' THEN 'Model' ELSE 'Person' END AS text_origin,
                CASE WHEN r.author_kind = 'Analysis' THEN 'Drafted by an AI model from these two records. A person checked it before publication.' END AS label,
@@ -45,6 +46,9 @@ public partial class PublicApiRelationships : Migration
                th.headline AS target_headline, th.text_origin AS target_text_origin, th.label AS target_label,
                r.statement_quote_extraction_id AS quote_extraction_id, r.statement_quote_start AS quote_start, r.statement_quote_length AS quote_length,
                x.text AS quote_source_text, f.fact, f.fact_label
+        """;
+
+    internal const string RelationshipsFrom = $"""
           FROM public_api.active_records a
           JOIN public.published_entries e ON e.kind = 'relationship' AND e.record_id = a.record_id AND e.revision_number = a.revision_number
           JOIN public_api.active_records s ON s.kind = e.statement_kind AND s.record_id = e.statement_record_id
@@ -55,8 +59,14 @@ public partial class PublicApiRelationships : Migration
                               WHERE h.kind = e.statement_kind AND h.record_id = e.statement_record_id OFFSET 0) sh ON TRUE
           LEFT JOIN LATERAL (SELECT h.headline, h.text_origin, h.label FROM public_api.record_headlines h
                               WHERE h.kind = e.target_kind AND h.record_id = e.target_record_id OFFSET 0) th ON TRUE
-          LEFT JOIN LATERAL (SELECT v.fact, v.fact_label FROM ({FactsSql}) v WHERE v.fact_id = r.target_fact_id) f ON TRUE
-         WHERE a.kind = 'relationship' AND e.statement_kind = 'statement';
+          LEFT JOIN LATERAL (SELECT v.fact, v.fact_label, v.fact_text_origin FROM ({FactsSql}) v WHERE v.fact_id = r.target_fact_id) f ON TRUE
+         WHERE a.kind = 'relationship' AND e.statement_kind = 'statement'
+        """;
+
+    private const string RelationshipsSql = $"""
+        CREATE VIEW public_api.relationships WITH (security_barrier = true) AS
+        {RelationshipsColumns}
+        {RelationshipsFrom};
         ALTER VIEW public_api.relationships OWNER TO civic_lens_public_owner;
         """;
 
