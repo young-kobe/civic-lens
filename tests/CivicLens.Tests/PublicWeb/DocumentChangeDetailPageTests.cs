@@ -69,7 +69,7 @@ public sealed class DocumentChangeDetailPageTests
         var model = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
         var person = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(PublishedTextOrigin.Person));
 
-        Assert.Equal(ChangeLabel, model.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(ChangeLabel, model.QuerySelector(".ai-label")!.TextContent);
         Assert.Contains("A model wrote only this summary.", model.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Null(person.QuerySelector(".ai-summary-ai"));
         Assert.DoesNotContain("model", person.QuerySelector(".ai-summary-check")!.TextContent, StringComparison.OrdinalIgnoreCase);
@@ -82,7 +82,7 @@ public sealed class DocumentChangeDetailPageTests
     {
         var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(label: null));
 
-        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.Null(page.QuerySelector(".ai-label"));
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
     }
 
@@ -127,5 +127,11 @@ public sealed class DocumentChangeDetailPageTests
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+    }
+
+    [Fact]
+    public async Task TheDocumentChangeSummaryLabelIsDrawnByAiLabel()
+    {
+        AiLabelAssert.DrawnByAiLabel(await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change()), ChangeLabel);
     }
 }

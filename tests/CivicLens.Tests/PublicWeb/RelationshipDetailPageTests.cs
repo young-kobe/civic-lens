@@ -25,10 +25,12 @@ public sealed class RelationshipDetailPageTests
         var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship());
 
         var summary = page.QuerySelector(".ai-summary-ai")!;
-        Assert.Equal(PublishedWording.ModelRelationship, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(PublishedWording.ModelRelationship, summary.QuerySelector(".ai-label-tag")!.TextContent);
+        AiLabelAssert.DrawnByAiLabel(page, PublishedWording.ModelRelationship);
+        AiLabelAssert.DrawnByAiLabel(page, AiLabelWords.ModelWording);
         Assert.Contains(RelationshipPageView.Caveat, summary.QuerySelector(".ai-summary-check")!.TextContent);
         Assert.Equal("#source", summary.QuerySelector(".ai-summary-check a")!.GetAttribute("href"));
-        Assert.Equal("An AI summary of the official record", page.QuerySelectorAll(".detail-quotes li")[1].QuerySelector(".row span")!.TextContent);
+        Assert.Equal("An AI summary of the official record", page.QuerySelectorAll(".detail-quotes li")[1].QuerySelector(".row .ai-label")!.TextContent);
         Assert.Null(page.QuerySelectorAll(".detail-quotes li")[0].QuerySelector(".row"));
     }
 
@@ -38,7 +40,7 @@ public sealed class RelationshipDetailPageTests
         var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship(PublishedTextOrigin.Person) with { FactLabel = null });
 
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
-        Assert.Null(page.QuerySelector(".ai-summary-label"));
+        Assert.Null(page.QuerySelector(".ai-summary .ai-label"));
         Assert.Null(page.QuerySelector(".detail-quotes .row"));
     }
 
@@ -64,7 +66,8 @@ public sealed class RelationshipDetailPageTests
         Assert.Equal([Root + PublicationProtocol.RecordPagePath(StatementId), Root + PublicationProtocol.RecordPagePath(ActionId)],
             rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")));
         Assert.Equal([$"{StatementLabel}|Statement, revision 2", "Bill or resolution, revision 1"],
-            rows.Select(row => string.Join('|', row.QuerySelectorAll("p").Select(line => line.TextContent))));
+            rows.Select(row => string.Join('|', row.QuerySelectorAll(".ai-label, p").Select(line => line.TextContent))));
+        AiLabelAssert.DrawnByAiLabel(page, StatementLabel);
         Assert.Equal("Relationship | Describes own bill", page.QuerySelector(".detail-eyebrow")!.TextContent);
         Assert.Equal("Mark Kelly", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
     }

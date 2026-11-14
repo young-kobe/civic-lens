@@ -42,7 +42,7 @@ noun:['statement','statements'],
 chips:function(f){var c=[],s=f.official.value.trim();if(s)c.push('Official: '+s);if(f.issue.value)c.push(f.issue.value);return c.concat(CL.range(f))},
 row:function(o){var m='<span>'+CL.esc(o.sp)+', '+o.se+', '+o.pa+'</span><span>'+(o.d?'Said on '+CL.day(o.d):'Date not stated')+'</span><span>From '+o.src+'</span>';
 return '<li class="row"><div><a class="t" href="'+o.h+'">'+CL.esc(o.t)+'</a>'+CL.label(o.l)+'<div class="meta">'+m+'</div></div><div class="side">'+(o.ln?'<span class="badge">Linked to a vote</span>':'')+'</div></li>'}};</script>
-<script>/* Prototype data: each row shows the label column of its public view. */LIST.rows.forEach(function(o,i){o.l='An AI summary of this release.'});</script>
+<script>/* Prototype data: each row shows the label column of its public view. */LIST.rows.forEach(function(o,i){o.l='An AI summary of this press release.'});</script>
 <script src="list.js"></script>
 </div></main>
 <footer class="site"><div class="wrap"><a href="#">How we check records</a><a href="#">Glossary</a><a href="#">About</a><a href="report.html">Report a problem with this page</a><span class="muted" style="padding:10px 0">Prototype. Not the live site.</span></div></footer>

@@ -21,9 +21,9 @@
                     <ul class="choices detail-quotes">
                         <li><CitationQuote Label="@RelationshipPageView.QuoteLabel" Quote="@Data.Quote" /></li>
                         <li>
-                            @if (Data.FactLabel is { } factLabel)
+                            @if (Data.FactLabel is not null)
                             {
-                                <CitationQuote Label="@RelationshipPageView.FactLabel(Data.Target.Kind)" Quote="@Data.Fact"><span>@factLabel</span></CitationQuote>
+                                <CitationQuote Label="@RelationshipPageView.FactLabel(Data.Target.Kind)" Quote="@Data.Fact"><AiLabel Text="@Data.FactLabel" /></CitationQuote>
                             }
                             else
                             {
@@ -42,10 +42,7 @@
                         {
                             <li>
                                 <a href="@(RootPath + PublicationProtocol.RecordPagePath(end.RecordId))">@end.Headline</a>
-                                @if (end.Label is { } label)
-                                {
-                                    <p class="muted small">@label</p>
-                                }
+                                <AiLabel Text="@end.Label" Origin="end.TextOrigin" />
                                 <p class="muted small">@RelationshipPageView.CitedRevision(end.Kind, end.RevisionNumber)</p>
                             </li>
                         }

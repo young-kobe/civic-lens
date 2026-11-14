@@ -17,7 +17,7 @@ public static class DocumentChangeWords
 
     public const string CheckLine = "Code found the changed words.";
 
-    public const string ModelCheckLine = CheckLine + " A model wrote only this summary.";
+    public const string ModelCheckLine = CheckLine + " " + AiLabelWords.ModelWroteOnlyThisSummary;
 
     public const string Limit = "A change in wording does not show why the source changed.";
 

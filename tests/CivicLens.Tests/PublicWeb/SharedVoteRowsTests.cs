@@ -149,6 +149,14 @@ public sealed class SharedVoteRowsTests
         Assert.Equal("A vote", normal.QuerySelector("h3 a")!.TextContent);
     }
 
+    [Fact]
+    public async Task TheRowLabelIsDrawnByAiLabel()
+    {
+        var row = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes the bill", AiLabelWords.ModelWording, "Vote to pass", "Passed", []);
+
+        AiLabelAssert.DrawnByAiLabel(await RenderAsync(new(PublishedChamber.House, [], [row])), AiLabelWords.ModelWording);
+    }
+
     private static async Task<IDocument> RenderAsync(SharedVoteRowsData data, bool differencesOnly = false, int headingLevel = 2, bool singleMember = false)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();

@@ -90,7 +90,7 @@ public sealed class RelationshipStoreTests(PostgresCollection postgres) : IAsync
             var page = (await FindAsync(BillLink)).Page;
 
             Assert.Equal(fact.Text, page.Fact);
-            Assert.Equal(fact.Id is "F3" or "F4" ? PublishedRecordLabels.ModelWording : null, page.FactLabel);
+            Assert.Equal(fact.Id is "F3" or "F4" ? AiLabelWords.ModelWording : null, page.FactLabel);
         }
     }
 
@@ -116,10 +116,10 @@ public sealed class RelationshipStoreTests(PostgresCollection postgres) : IAsync
         var page = (await FindAsync(BillLink)).Page;
 
         Assert.Equal($"Summary: {ActionSummary}", page.Fact);
-        Assert.Equal(PublishedRecordLabels.ModelWording, page.FactLabel);
+        Assert.Equal(AiLabelWords.ModelWording, page.FactLabel);
         Assert.Equal((1, "Housing bill, revised", PublishedTextOrigin.Person, (string?)null),
             (page.Target.RevisionNumber, page.Target.Headline, page.Target.TextOrigin, page.Target.Label));
-        Assert.Equal((PublishedRecordKind.Statement, StatementId, 1, PublishedTextOrigin.Model, PublishedRecordLabels.StatementCheckedByPersonWording),
+        Assert.Equal((PublishedRecordKind.Statement, StatementId, 1, PublishedTextOrigin.Model, AiLabelWords.StatementCheckedByPersonWording),
             (page.Statement.Kind, page.Statement.RecordId, page.Statement.RevisionNumber, page.Statement.TextOrigin, page.Statement.Label));
     }
 

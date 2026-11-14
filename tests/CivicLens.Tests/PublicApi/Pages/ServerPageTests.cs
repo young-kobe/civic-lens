@@ -39,18 +39,42 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         });
 
     [Fact]
-    public async Task AnUnknownServerPageAnswers404WithTheETagOfTheActiveReleaseAndBuild()
+    public async Task ASuccessfulServerPageCarriesTheETagOfTheActiveReleaseAndBuild()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 7, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
-        var response = await host.Client.GetAsync(UnknownPage);
+        var response = await host.Client.GetAsync(VoteKindsRoute);
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Headers.ETag!.IsWeak);
         Assert.Matches($"^W/\"r7-{BuildId.FromAssembly(typeof(PublicApiApp).Assembly)}-[0-9a-f]{{64}}\"$", response.Headers.ETag.ToString());
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
+    }
+
+    [Theory]
+    [InlineData(UnknownPage)]
+    [InlineData(ServerPageEndpoints.Prefix + "/404.html")]
+    [InlineData(ServerPageEndpoints.Prefix + "/records/not-a-record.html")]
+    public async Task TheNotFoundPageAnswers404WithNoValidatorAndNoStoreAsTheStatic404PageDoes(string path)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 7, PublishedAt);
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
+
+        using var response = await host.Client.GetAsync(path);
+        var page = Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Null(response.Headers.ETag);
+        Assert.Equal(PageCache.FailureCacheControl, string.Join(", ", response.Headers.GetValues("Cache-Control")));
+        Assert.True(response.Headers.CacheControl!.NoStore);
+        Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
+        Assert.Equal("Page not found", page.QuerySelector(".empty h3")!.TextContent);
+        Assert.Null(page.QuerySelector("link[rel=canonical]"));
+        Assert.Equal("noindex", page.QuerySelector("meta[name=robots]")!.GetAttribute("content"));
+        Assert.NotNull(page.QuerySelector(".public-freshness"));
     }
 
     [Fact]
@@ -59,24 +83,25 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        var first = (await host.Client.GetAsync(UnknownPage)).Headers.ETag;
+        var first = (await host.Client.GetAsync(VoteKindsRoute)).Headers.ETag;
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, PublishedAt.AddDays(7));
 
-        var second = (await host.Client.GetAsync(UnknownPage)).Headers.ETag;
+        var second = (await host.Client.GetAsync(VoteKindsRoute)).Headers.ETag;
 
         Assert.NotEqual(first, second);
     }
 
     [Fact]
-    public async Task EveryServerPageResponseCarriesTheSharedCacheControlValue()
+    public async Task EverySuccessfulServerPageResponseCarriesTheSharedCacheControlValue()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
 
-        var fresh = await host.Client.GetAsync(UnknownPage);
+        var fresh = await host.Client.GetAsync(VoteKindsRoute);
         var revalidated = await Revalidate(host, fresh);
 
+        Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
         Assert.Equal(PageCache.CacheControl, string.Join(", ", fresh.Headers.GetValues("Cache-Control")));
         Assert.False(fresh.Headers.CacheControl!.NoTransform);
         Assert.Equal(string.Join(", ", fresh.Headers.GetValues("Cache-Control")), string.Join(", ", revalidated.Headers.GetValues("Cache-Control")));
@@ -88,11 +113,11 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        var fresh = await host.Client.GetAsync(UnknownPage);
+        var fresh = await host.Client.GetAsync(VoteKindsRoute);
 
         foreach (var tag in new[] { fresh.Headers.ETag!.ToString(), fresh.Headers.ETag.Tag, "*", "\"r2-old\"" })
         {
-            using var response = await Send(host, tag);
+            using var response = await Send(host, tag, UnknownPage);
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
             Assert.NotEmpty(await response.Content.ReadAsStringAsync());
         }
@@ -151,11 +176,11 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         var cache = new PageCache(TestCodeVersion.Sha, BaseUrl);
         var responder = new ServerPageResponder(new ActiveReleaseReader(views), cache,
             new PageRenderer(services, services.GetRequiredService<ILoggerFactory>()));
-        var parameters = new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = "https://civic-lens.test/" };
+        var parameters = new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = "https://civic-lens.test/" };
         var earlierContext = new DefaultHttpContext();
 
-        var same = await responder.RespondAsync<PublishedNotFoundPage>(new DefaultHttpContext(), StatusCodes.Status404NotFound, 4, parameters, default);
-        var earlier = await responder.RespondAsync<PublishedNotFoundPage>(earlierContext, StatusCodes.Status404NotFound, 3, parameters, default);
+        var same = await responder.RespondAsync<VoteKindsPage>(new DefaultHttpContext(), StatusCodes.Status200OK, 4, parameters, default);
+        var earlier = await responder.RespondAsync<VoteKindsPage>(earlierContext, StatusCodes.Status200OK, 3, parameters, default);
 
         Assert.Contains("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(same).ResponseContent);
         Assert.DoesNotContain("public-freshness", Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ContentHttpResult>(earlier).ResponseContent);
@@ -233,8 +258,8 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Theory]
-    [InlineData("Model", PublishedRecordLabels.ModelWording)]
-    [InlineData("Code", PublishedRecordLabels.CodeWording)]
+    [InlineData("Model", AiLabelWords.ModelWording)]
+    [InlineData("Code", AiLabelWords.CodeWording)]
     [InlineData("Person", null)]
     public async Task RecentHeadlinesKeepTheirOwnPublishedWordingLabel(string origin, string? expectedLabel)
     {
@@ -249,12 +274,12 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Headline f", row.TextContent);
-        Assert.Equal(origin == "Model" ? "model" : null, row.QuerySelector(".record-row-label")?.GetAttribute("data-origin"));
+        Assert.Equal(expectedLabel is null ? null : origin.ToLowerInvariant(), row.QuerySelector(".ai-label")?.GetAttribute("data-origin"));
         if (expectedLabel is not null) Assert.Contains(expectedLabel, row.TextContent);
         else
         {
-            Assert.DoesNotContain(PublishedRecordLabels.ModelWording, row.TextContent);
-            Assert.DoesNotContain(PublishedRecordLabels.CodeWording, row.TextContent);
+            Assert.DoesNotContain(AiLabelWords.ModelWording, row.TextContent);
+            Assert.DoesNotContain(AiLabelWords.CodeWording, row.TextContent);
         }
     }
 
@@ -382,7 +407,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        using var request = new HttpRequestMessage(HttpMethod.Get, UnknownPage + "?zip=55401");
+        using var request = new HttpRequestMessage(HttpMethod.Get, VoteKindsRoute + "?zip=55401");
         request.Headers.Add("Cookie", "session=reader");
 
         var response = await host.Client.SendAsync(request);
@@ -474,7 +499,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         protected override void BuildRenderTree(RenderTreeBuilder builder) => throw new InvalidOperationException("Render failed.");
     }
 
-    private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag);
+    private static Task<HttpResponseMessage> Revalidate(ApiHost host, HttpResponseMessage fresh) => Send(host, fresh.Headers.ETag!.Tag, VoteKindsRoute);
 
     /// <summary>The served page without the three things that only a server page adds: the members strip, the freshness line, and the preview Issues link.</summary>
     /// <summary>The served page with the parts that only a server page has put back to the static form: the members strip, the freshness line,
@@ -489,9 +514,9 @@ public sealed class ServerPageTests(PostgresCollection postgres)
 
     private static AngleSharp.Dom.IDocument Parse(string html) => new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
 
-    private static async Task<HttpResponseMessage> Send(ApiHost host, string tag)
+    private static async Task<HttpResponseMessage> Send(ApiHost host, string tag, string path)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, UnknownPage);
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.TryAddWithoutValidation("If-None-Match", tag);
         return await host.Client.SendAsync(request);
     }

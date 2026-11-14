@@ -4,7 +4,7 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.PublicApi.Search;
 
 /// <summary>
-/// One indexed record revision: the manifest entry fields, the releases that hold it, and where its files are.
+/// One indexed record revision: the manifest entry fields, the releases that hold it, and the path of its page.
 /// A snippet marks each match between U+E000 and U+E001. Only a search with text gives one.
 /// </summary>
 public sealed record RecordHit
@@ -26,5 +26,4 @@ public sealed record RecordHit
     public string? Snippet { get; init; }
 
     public string PagePath => PublicationProtocol.RecordPagePath(RecordId);
-    public string DataPath => PublicationProtocol.RecordDataPath(RecordId);
 }
