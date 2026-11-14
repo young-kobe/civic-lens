@@ -6,11 +6,25 @@ namespace CivicLens.PublicApi.Ingest;
 /// The record revisions of one batch read, as two parallel arrays. Each query reads its view for each key with <see cref="Match"/>.
 /// The keys drive the read, and each key finds its view rows in a correlated <c>LATERAL</c> subquery with <c>OFFSET 0</c>.
 /// Postgres underestimates the rows of a view that reads <c>active_records</c>. A plain <c>IN</c> filter on the keys then scans the key list again for each view row.
+/// One set holds at most <see cref="MaxCount"/> keys, so each statement stays inside the statement timeout of <c>civic_lens_public</c>.
 /// </summary>
-public sealed class RevisionKeys(IReadOnlyCollection<ListedRecord> records)
+public sealed class RevisionKeys
 {
-    private readonly string[] ids = [.. records.Select(record => record.RecordId)];
-    private readonly int[] revisions = [.. records.Select(record => record.RevisionNumber)];
+    /// <summary>
+    /// The most keys that one statement reads. On production, 500 action keys read the bills in 0.15 seconds and the action sources in 0.21 seconds.
+    /// The role stops a statement after 2 seconds.
+    /// </summary>
+    public const int MaxCount = 500;
+
+    private readonly string[] ids;
+    private readonly int[] revisions;
+
+    public RevisionKeys(IReadOnlyCollection<ListedRecord> records)
+    {
+        if (records.Count > MaxCount) throw new ArgumentException($"One statement reads at most {MaxCount} keys.", nameof(records));
+        ids = [.. records.Select(record => record.RecordId)];
+        revisions = [.. records.Select(record => record.RevisionNumber)];
+    }
 
     /// <summary>
     /// Each query reads <c>FROM unnest(@ids, @revisions) k(record_id, revision_number)</c> and then its view in <c>CROSS JOIN LATERAL (SELECT * FROM view x WHERE Match OFFSET 0) x</c>.
