@@ -9,8 +9,6 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 public sealed record MissedVotes(PublishedChamber Chamber, int Missed, int Held, DateOnly First, DateOnly Last)
 {
-    public double? Share => TalkAndActionProfile.ShareOf(Missed, Held);
-
     public static ImmutableArray<MissedVotes> Of(IEnumerable<PublishedOfficialVote> votes) =>
     [.. votes.GroupBy(vote => vote.Chamber).OrderBy(chamber => chamber.Key).Select(chamber => new MissedVotes(chamber.Key,
         chamber.Count(vote => !vote.IsCast), chamber.Count(), chamber.Min(vote => vote.VotedOn), chamber.Max(vote => vote.VotedOn)))];

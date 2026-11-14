@@ -7,12 +7,12 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Writes the data files built from the manifest: the officials with a published record, their photos, and the issue and policy area names.
+/// Writes the data files built from the manifest: the officials with a published record and their photos.
 /// Only the photos of those officials are loaded, so a configured person with no published record causes no capture read.
 /// </summary>
 internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoader votes, PublicationOfficials officials, ReleasePhotos photos)
 {
-    public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest, ReleaseFacets facets,
+    public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest,
         IReadOnlyList<PendingRecord> additions, PreviousRelease previous, IReadOnlyList<RosterMember> roster,
         IReadOnlyDictionary<string, PersonSetting> settings, IReadOnlyList<OfficialPhoto> photoRows, CancellationToken cancellationToken)
     {
@@ -28,7 +28,6 @@ internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoa
             throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));
         await staging.WriteFileAsync(PublicationProtocol.OfficialsPath, officialsJson, cancellationToken);
         await photos.WriteAsync(staging, published, photoFiles, previous, cancellationToken);
-        await WriteAsync(staging, PublicationProtocol.CatalogPath, CatalogOf(facets), cancellationToken);
         return published;
     }
 
@@ -52,17 +51,4 @@ internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoa
         }
         return names;
     }
-
-    private static PublishedCatalog CatalogOf(ReleaseFacets facets)
-    {
-        var catalog = new PublishedCatalog { Issues = EntriesOf(facets.Issues), PolicyAreas = EntriesOf(facets.PolicyAreas) };
-        catalog.Validate();
-        return catalog;
-    }
-
-    private static PublishedCatalogEntry[] EntriesOf(IEnumerable<ReleaseFacet> facets) =>
-        [.. facets.Select(facet => new PublishedCatalogEntry { Id = facet.Id, Name = facet.Name })];
-
-    private static Task WriteAsync<TFile>(IReleaseStaging staging, string path, TFile file, CancellationToken cancellationToken) =>
-        staging.WriteFileAsync(path, JsonSerializer.SerializeToUtf8Bytes(file, PublicationProtocol.JsonOptions), cancellationToken);
 }

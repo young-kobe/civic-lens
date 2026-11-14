@@ -405,18 +405,17 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ACodeUpdateOfAnExecutiveActionShowsTheBannerWithNoWhatChangedText()
+    public async Task ACodeUpdateOfAnExecutiveActionShowsNoBannerBecauseARoutineUpdateFromTheSourceIsNotACorrection()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
         await CorrectionHistorySeed.BindAsync(host.OperationalDatabase, 1, PublishedRecordKind.ExecutiveAction, ActionId,
             new PublishedCorrection { ReplacedRevisionNumber = 1, PublishedAtUtc = CorrectedAt });
 
-        var banner = (await GetPageAsync(host, Path(ActionId))).QuerySelector(".correction-banner")!;
+        var page = await GetPageAsync(host, Path(ActionId));
 
-        Assert.Equal("Civic Lens corrected this executive action on 1 Jun 2026, 12:30 UTC.", banner.QuerySelector("p")!.TextContent);
-        Assert.Null(banner.QuerySelector("dl"));
-        Assert.DoesNotContain(PublishedCorrectionBanner.WhatChanged, banner.TextContent);
+        Assert.NotNull(page.QuerySelector("h1"));
+        Assert.Null(page.QuerySelector(".correction-banner"));
     }
 
     public static TheoryData<PublishedRecordKind> PageKinds => new()
@@ -443,6 +442,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.NotNull(page.QuerySelector("h1"));
         Assert.Null(page.QuerySelector(".correction-banner"));
         Assert.Equal(HttpStatusCode.InternalServerError, missing.StatusCode);
+        Assert.Contains($"<h1>{PublishedServerErrorPage.Title}</h1>", await missing.Content.ReadAsStringAsync());
     }
 
     /// <summary>Seeds one record of the kind with all that its page needs, and returns its ID.</summary>

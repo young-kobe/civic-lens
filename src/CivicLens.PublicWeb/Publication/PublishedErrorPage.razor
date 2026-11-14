@@ -1,0 +1,21 @@
+@using CivicLens.Publication.Contracts
+
+@* The one shell of a page that answers an error: the not found page and the server error page. It is never indexed and has no canonical address. *@
+<PublicPage Section="Section" CanonicalPath="@null" NoIndex="true" Title="@Title" Description="@Description" RootPath="@RootPath">
+    <PageHeader Title="@Title" Lede="@Lede" />
+    <Panel Label="@Title" Padded="true">
+        <div class="row"><Button Href="@(RootPath + PublicationProtocol.HomePath)">Go to the home page</Button></div>
+        @ChildContent
+    </Panel>
+</PublicPage>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Lede { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+    /// <summary>The header section that the page marks as current. Null marks none.</summary>
+    [Parameter] public PublicSection? Section { get; set; }
+    /// <summary>More ways back, under the home page button.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

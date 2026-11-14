@@ -29,18 +29,13 @@ public sealed class WithdrawalNoticePageTests
         ]
     };
 
-    private static async Task<IDocument> RenderAsync(PublishedWithdrawal notice, string? root = Root)
+    private static Task<IDocument> RenderAsync(PublishedWithdrawal notice, string? root = Root)
     {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var parameters = new Dictionary<string, object?> { ["Withdrawal"] = notice };
-            if (root is not null) parameters["RootPath"] = root;
-            return (await renderer.RenderComponentAsync<PublishedWithdrawalPage>(ParameterView.FromDictionary(parameters))).ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
+        var parameters = new Dictionary<string, object?> { ["Withdrawal"] = notice };
+        if (root is not null) parameters["RootPath"] = root;
+        return ListPageRender.RenderPageAsync<PublishedWithdrawalPage>(parameters);
     }
+
 
     [Fact]
     public async Task TheNoticeSaysThatCivicLensWithdrewTheRecordWithItsKindAndTimeAndNamesNoDeciderTheDataDoesNotHold()

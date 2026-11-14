@@ -447,6 +447,84 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Empty(Titles(first).Intersect(Titles(second)));
     }
 
+    // The list once joined each filter as a semi join to a view. The oracle keeps that form, so the test proves that the keyed read gives the same bills in the same order.
+    private static string OracleFilter(string name, string value) => name switch
+    {
+        "status" => $"EXISTS (SELECT 1 FROM public_api.bill_status t WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number AND t.status = '{char.ToUpperInvariant(value[0])}{value[1..]}')",
+        "issue" => $"EXISTS (SELECT 1 FROM public_api.bill_issues i WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number AND i.issue_id = '{value}')",
+        "sponsor" => $"""
+            EXISTS (SELECT 1 FROM public_api.bill_sponsorships s JOIN public_api.officials o ON o.official_id = s.official_id
+                     WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.role = 'Sponsor'
+                       AND strpos(' ' || lower(o.name), ' ' || lower('{value}')) > 0)
+            """,
+        "type" => $"b.bill_type = '{value}'",
+        "policyArea" => $"b.policy_area_id = '{value}'",
+        "from" => $"b.event_date >= '{value}'",
+        "to" => $"b.event_date <= '{value}'",
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, null)
+    };
+
+    // Stage 4 has no status row and stage 3 has a row with no stage. An inactive release holds another stage for each bill of stage 0.
+    private static string StatusRows(SeededBill bill, int index) => (index % 5) switch
+    {
+        4 => "",
+        3 => PublicRecordPageRows.PinnedStatus(1, bill.RecordId, "Introduced.", "2026-02-13", PublishedAt.UtcTicks),
+        var stage => PublicRecordPageRows.PinnedStatus(1, bill.RecordId, "Acted on.", "2026-02-13", PublishedAt.UtcTicks, Enum.GetName((BillStatusStage)stage))
+            + (stage == 0 ? "\n" + PublicRecordPageRows.PinnedStatus(2, bill.RecordId, "Acted on.", "2026-02-13", PublishedAt.UtcTicks, nameof(BillStatusStage.PassedHouse)) : "")
+    };
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("status=inCommittee")]
+    [InlineData("status=passedHouse")]
+    [InlineData("status=passedSenate")]
+    [InlineData("issue=health")]
+    [InlineData("issue=energy")]
+    [InlineData("sponsor=ann")]
+    [InlineData("sponsor=zed")]
+    [InlineData("type=s")]
+    [InlineData("policyArea=tax")]
+    [InlineData("from=2026-02-04&to=2026-02-09")]
+    [InlineData("issue=health&status=inCommittee")]
+    [InlineData("issue=health&sponsor=ann")]
+    [InlineData("sponsor=bo&status=passedHouse")]
+    [InlineData("type=s&status=passedSenate&policyArea=tax")]
+    [InlineData("issue=energy&sponsor=zed&status=inCommittee&from=2026-02-03")]
+    public async Task EachBillListFilterGivesTheBillsOfTheNewestCongressThatTheViewsMatchInListOrderOnEveryPage(string query)
+    {
+        await using var host = await StartAsync();
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("p0", "Ann Able"), new SeededOfficial("p1", "Bo Zed"), new SeededOfficial("p2", "Ann Zed"));
+        // Three bills share each day, so the record ID orders them. Every ninth bill is of Congress 118, and some bills hold an untracked issue.
+        var bills = Enumerable.Range(0, 36).Select(index => new SeededBill('b', $"2026-02-{1 + index % 12:00}")
+        {
+            RecordId = new string('b', 60) + index.ToString("0000"),
+            Congress = index % 9 == 8 ? 118 : 119,
+            BillType = index % 3 == 0 ? "s" : "hr",
+            BillNumber = 100 + index,
+            PolicyAreaId = index % 4 == 0 ? "tax" : "health",
+            Sponsorships = [new($"p{index % 3}", "Sponsor", "2026-02-01"), new($"p{(index + 1) % 3}", "Cosponsor", "2026-02-01")],
+            Issues = [.. new[] { index % 2 == 0 ? "health" : null, index % 5 == 0 ? "energy" : null }.OfType<string>()],
+            UntrackedIssues = index % 2 == 1 && index % 3 == 0 ? ["health"] : []
+        }).ToArray();
+        await AddBillsAsync(host, bills);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + string.Join("\n", bills.Select(StatusRows))
+            + "\nINSERT INTO release_issues (release_number, issue_id, name) VALUES (1, 'health', 'Health care'), (1, 'energy', 'Energy');");
+        var filters = query.Length == 0 ? [] : query.Split('&').Select(pair => pair.Split('=')).Select(pair => OracleFilter(pair[0], pair[1]));
+        var expected = await ViewsSeed.QueryAsPublicAsync(host.OperationalDatabase,
+            $"SELECT b.record_id FROM public_api.bills b WHERE {string.Join(" AND ", filters.Prepend("b.congress = 119"))} ORDER BY b.event_date DESC, b.record_id");
+
+        var listed = new List<string>();
+        for (var path = "/bills.html?" + query; path is not null;)
+        {
+            var page = await GetPageAsync(host, path);
+            listed.AddRange(Rows(page).Select(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/').Last().Replace(".html", "")));
+            path = page.QuerySelector(".pager a[rel=next]")?.GetAttribute("href") is { } next ? "/bills.html" + next : null;
+        }
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, listed);
+    }
+
     private static string[] Ids(IDocument page) =>
         [.. Rows(page).Select(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/').Last().Replace(".html", "")[..1])];
 

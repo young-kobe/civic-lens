@@ -150,7 +150,6 @@ public sealed class PublishActionTests
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Contains(PublicationProtocol.RecordPagePath(action), files.Keys);
         var record = JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(action)], PublicationProtocol.JsonOptions)!;
         Assert.Equal([PublicationScenario.ActionDetail, PublicationScenario.ActionCosponsors], record.Sources.Select(source => source.Text));
         Assert.Equal(PublishedTextOrigin.Model, record.TextOrigin);

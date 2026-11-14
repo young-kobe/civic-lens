@@ -7,10 +7,26 @@ table[data-paged]:focus { outline: none; }
 .public .panel > .table-wrap:first-child { border-top-left-radius: var(--r-panel); border-top-right-radius: var(--r-panel); }
 .public .panel > .table-wrap:last-child { border-bottom-left-radius: var(--r-panel); border-bottom-right-radius: var(--r-panel); }
 .public .panel > .panel-note { margin: 0; padding: var(--s3) var(--s4) var(--s4); }
-.report-subject { display: grid; gap: var(--s1); margin: 0 0 var(--s4); padding-bottom: var(--s4); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.report-page { display: grid; gap: var(--s6); }
+.report-form-area { display: grid; gap: var(--s5); }
+.report-subject { display: grid; gap: var(--s1); padding: 20px; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--raised); overflow-wrap: anywhere; }
 .report-subject p { margin: 0; }
 .report-subject-eyebrow { color: var(--muted); font-size: .75rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .report-subject-title { margin: 0; font-size: 1.25rem; }
+.report-form { max-width: none; }
+.report-form .field legend, .report-form .field-label { font-size: var(--t-base); font-weight: 650; }
+.report-form .choice { align-items: center; min-height: 44px; padding: 6px var(--s3); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--t-base); }
+.report-form .choice input { width: 20px; height: 20px; margin: 0; }
+.report-form .choice:hover, .report-form .choice:has(input:checked) { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.report-form textarea { min-height: 150px; }
+.report-form .field-hint { font-size: var(--t-sm); }
+.report-form .btn { min-height: 48px; padding: 0 20px; font-size: var(--t-base); font-weight: 700; }
+.report-note { color: var(--muted); font-size: var(--t-sm); }
+.report-note p { margin: 0 0 var(--s2); }
+.report-page .empty { padding: var(--s4); border: 1px dashed var(--line-strong); border-radius: var(--r-panel); }
+.report-page .empty h2 { font-size: var(--t-base); }
+.report-site h2 { margin: 0 0 6px; font-size: 1.25rem; }
+.report-site p { margin: 0; color: var(--muted); }
 .public .page-header-lede { margin-top: var(--s3); font-size: 1.125rem; }
 .page-header-eyebrow { margin: 0 0 var(--s2); color: var(--muted); font-size: .75rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .public .page-header h1 { font-size: var(--t-h1); line-height: 1.05; }

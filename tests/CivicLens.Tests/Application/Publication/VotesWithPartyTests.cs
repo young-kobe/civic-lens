@@ -12,7 +12,7 @@ public sealed class VotesWithPartyTests
 
         var result = Assert.Single(VotesWithParty.Of(votes));
 
-        Assert.Equal((2, 1, 3), (result.Matched, result.Breaks.Length, result.NotCast));
+        Assert.Equal((2, 1), (result.Matched, result.Breaks.Length));
     }
 
     [Fact]
@@ -35,24 +35,24 @@ public sealed class VotesWithPartyTests
     [InlineData(PublishedOfficialVote.NotVoting, true, false)]
     [InlineData("Nay", false, false)]
     public void OnlyAYeaOrNayAgainstTheMajorityOfASplitVoteIsABreak(string cast, bool split, bool expected) =>
-        Assert.Equal(expected, VotesWithParty.IsBreak(Vote(1, cast) with { SplitVote = split }));
+        Assert.Equal(expected, IsBreak(Vote(1, cast) with { SplitVote = split }));
 
     [Fact]
     public void ASplitVoteRowWithoutAPartyMajorityIsNeverABreak() =>
-        Assert.False(VotesWithParty.IsBreak(Vote(1, "Nay") with { SplitVote = true, PartyMajority = null }));
+        Assert.False(IsBreak(Vote(1, "Nay") with { SplitVote = true, PartyMajority = null }));
 
     [Theory]
     [InlineData("Independent")]
     [InlineData("Unknown")]
     public void AVoteOfAPartyThatIsNeitherDemocratNorRepublicanIsNeverABreak(string party) =>
-        Assert.False(VotesWithParty.IsBreak(Vote(1, "Nay") with { Party = party }));
+        Assert.False(IsBreak(Vote(1, "Nay") with { Party = party }));
 
     [Theory]
     [InlineData("Yea")]
     [InlineData("Nay")]
     [InlineData("Not Voting")]
     public void ARowWithNoPartyMajorityIsNeverABreak(string cast) =>
-        Assert.False(VotesWithParty.IsBreak(Vote(1, cast) with { Party = "Independent", PartyMajority = null }));
+        Assert.False(IsBreak(Vote(1, cast) with { Party = "Independent", PartyMajority = null }));
 
     [Fact]
     public void AVoteThatIsNotSplitCountsNowhere()
@@ -61,7 +61,7 @@ public sealed class VotesWithPartyTests
 
         var result = Assert.Single(VotesWithParty.Of(votes));
 
-        Assert.Equal((1, 0, 0), (result.Matched, result.Breaks.Length, result.NotCast));
+        Assert.Equal((1, 0), (result.Matched, result.Breaks.Length));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class VotesWithPartyTests
     {
         var result = Assert.Single(VotesWithParty.Of([Vote(1, "Yea") with { SplitVote = false }]));
 
-        Assert.Equal((0, null), (result.Cast, TalkAndActionProfile.ShareOf(result.Matched, result.Cast)));
+        Assert.Equal(0, result.Cast);
     }
 
     [Fact]
@@ -100,18 +100,7 @@ public sealed class VotesWithPartyTests
         Assert.Empty(VotesWithParty.Of([Vote(1, "Yea") with { Party = party }]));
     }
 
-    [Theory]
-    [InlineData(4, false)]
-    [InlineData(5, true)]
-    public void TheShareShowsOnlyAtTheThresholdOfCastSplitVotes(int cast, bool showsShare)
-    {
-        var votes = Enumerable.Range(0, cast).Select(index => Vote(index, index == 0 ? "Nay" : "Yea"));
-
-        var result = Assert.Single(VotesWithParty.Of(votes));
-        var share = TalkAndActionProfile.ShareOf(result.Matched, result.Cast);
-
-        Assert.Equal(showsShare ? (cast - 1.0) / cast : null, share);
-    }
+    private static bool IsBreak(PublishedOfficialVote vote) => VotesWithParty.Of([vote]).Any(party => party.Breaks.Length > 0);
 
     private static PublishedOfficialVote Vote(int id, string cast, PublishedChamber chamber = PublishedChamber.House) => new()
     {

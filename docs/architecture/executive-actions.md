@@ -213,13 +213,13 @@ The source fold names the document and its citation. It shows the quote of each 
 | Revision mapping and backfill | `src/CivicLens.Infrastructure/ExecutiveActions/ExecutiveActionRevisionRows.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/ExecutiveActionRevisionPage.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/PostgresExecutiveActionRevisionBackfillStore.cs`, `src/CivicLens.Infrastructure/ExecutiveActions/PostgresExecutiveActionTargetBackfillStore.cs`, `src/CivicLens.Host/ExecutiveActions/ExecutiveActionCommand.cs` |
 | Publication | `src/CivicLens.Application/Publication/ExecutiveActionRecordLoader.cs`, `src/CivicLens.Application/Publication/PublishedExecutiveActionBuilder.cs`, `src/CivicLens.Publication.Contracts/PublishedExecutiveAction.cs`, `PublishedExecutiveSummary.cs`, `ExecutiveSummaryWords.cs` |
 | Summary views and server page | `src/CivicLens.Infrastructure/Collection/Migrations/20261113060100_PublicApiExecutiveActionSummary.cs`, `20261113202000_PublicApiExecutiveActionEvidence.cs`, `src/CivicLens.PublicApi/ExecutiveActions/ExecutiveActionStore.cs`, `ExecutiveActionEvidenceStore.cs`, `src/CivicLens.PublicWeb/Publication/ExecutiveActionDetailPage.razor` |
-| Pages | `src/CivicLens.Host/Publication/PublishedExecutiveActionPage.razor`, `src/CivicLens.Host/ExecutiveActions/ExecutiveActionEditor.razor` |
+| Pages | `src/CivicLens.Host/ExecutiveActions/ExecutiveActionEditor.razor` |
 | Search | `src/CivicLens.PublicApi/Ingest/RecordReader.cs` |
 | Sources and people | `config/federal-coverage.json` |
 
 ## Limits and planned work
 
-- Issue tags follow the summary. The static release page does not show the summary yet.
+- Issue tags follow the summary.
 - The summary step is off by default. The owner runs a paid measure of 20 documents with `executive-actions text measure`, then sets the daily token limit.
 - A prompt change does not redraft a record that has a summary. No stale redraft exists for this task yet.
 - Text over 60,000 characters keeps only the first window. A long order is read in part, and `chars_total` says so.

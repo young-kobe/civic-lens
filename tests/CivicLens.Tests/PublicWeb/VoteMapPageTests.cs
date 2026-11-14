@@ -28,21 +28,9 @@ public sealed class VoteMapPageTests
 
     private static VotePageData House(params VoteMemberData[] members) => Vote() with { Members = members };
 
-    private static async Task<IDocument> RenderPageAsync(VotePageData data)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<VoteMapPage>(ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                [nameof(VoteMapPage.Data)] = data,
-                [nameof(VoteMapPage.RootPath)] = Root
-            }));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderPageAsync(VotePageData data) =>
+        ListPageRender.RenderAsync<VoteMapPage>(data, nameof(VoteMapPage.Data));
+
 
     [Fact]
     public async Task TheMapPageNamesTheVoteLinksBackToItAndEndsTheTrailWithMap()

@@ -403,21 +403,12 @@ public sealed class HomePageTests
         AiLabelAssert.DrawnByAiLabel(page.QuerySelector(".home-votes")!, AiLabelWords.ModelWording);
     }
 
-    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+    private static Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null) =>
+        ListPageRender.RenderPageAsync<HomePage>(new Dictionary<string, object?>
         {
-            var output = await renderer.RenderComponentAsync<HomePage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?>
-                {
-                    [nameof(HomePage.Data)] = data,
-                    [nameof(HomePage.RootPath)] = Root,
-                    [nameof(HomePage.BrowserApiUrl)] = browserApiUrl
-                }));
-            return output.ToHtmlString();
+            [nameof(HomePage.Data)] = data,
+            [nameof(HomePage.RootPath)] = Root,
+            [nameof(HomePage.BrowserApiUrl)] = browserApiUrl
         });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+
 }

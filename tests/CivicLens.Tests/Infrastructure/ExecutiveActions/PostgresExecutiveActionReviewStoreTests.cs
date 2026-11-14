@@ -300,28 +300,27 @@ public sealed class PostgresExecutiveActionReviewStoreTests(PostgresCollection p
     }
 
     [Fact]
-    public async Task ARecordPublishesWithItsRealPageThenLeavesTheReadyListAndWithdrawsFromTheSite()
+    public async Task ARecordPublishesWithItsRealRecordFileThenLeavesTheReadyListAndWithdrawsFromTheSite()
     {
         var recordId = await executiveActions.AdmitAsync(FederalRegisterFixtures.TrumpOrder, "donald-trump");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var clock = new FakeClock(DateTimeOffset.UtcNow);
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
-        var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null), new PublishedRecordLoaders(
+        var publisher = new PublishRelease(publications, releases, new PublishedRecordLoaders(
                 PostgresDocumentChangeReviewStore.FromConnectionString(connectionString), PostgresStatementReviewStore.FromConnectionString(connectionString),
                 PostgresActionReviewStore.FromConnectionString(connectionString), PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)), store),
-            new PublicationCatalog(new Dictionary<string, string> { ["donald-trump"] = "Donald Trump" }, IssueConfiguration.None, IssueIconConfiguration.None),
+            new PublicationCatalog(new Dictionary<string, string> { ["donald-trump"] = "Donald Trump" }, IssueConfiguration.None),
             FixedRosters.NamedOnly(["donald-trump"]), PhotoCaptures.None(), clock, new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
         var reference = new PublishedRecordReference(PublishedRecordKind.ExecutiveAction, recordId);
 
         var summary = await publisher.ExecuteAsync(new ReviewActor(ReviewAuthor.CodeSubject, ReviewRole.Owner), PublicationScenario.Request("publish", reference));
 
-        var page = System.Text.Encoding.UTF8.GetString(await releases.ReadFileAsync(summary.DirectoryName, PublicationProtocol.RecordPagePath(recordId),
-            PublicationProtocol.MaximumManifestBytes, default));
-        Assert.Contains("Ending the Weaponization of the Federal Government", page);
-        Assert.Contains("title from the Federal Register", page);
-        Assert.Contains("https://www.federalregister.gov/documents/2025/01/28/2025-01900/", page);
+        var record = JsonSerializer.Deserialize<PublishedExecutiveAction>(await releases.ReadFileAsync(summary.DirectoryName,
+            PublicationProtocol.RecordDataPath(recordId), PublicationProtocol.MaximumManifestBytes, default), PublicationProtocol.JsonOptions)!;
+        Assert.Contains("Ending the Weaponization of the Federal Government", record.Headline);
+        Assert.StartsWith("https://www.federalregister.gov/documents/2025/01/28/2025-01900/", record.DocumentUrl);
         Assert.Empty(await store.ListUnpublishedApprovedAsync(10, [], default));
 
         var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), recordId, 1, 2, ReviewDecisionKind.WithdrawApproval, "auth0|owner",

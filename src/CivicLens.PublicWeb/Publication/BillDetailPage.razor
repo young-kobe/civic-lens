@@ -18,7 +18,10 @@
                 <p class="bill-line-row"><PublishedBillLine Line="@Data.BillLine" /></p>
                 <PublishedBillLineNote />
             }
-            <p class="bill-lede">@Lede()</p>
+            @if (Lede() is { Length: > 0 } lede)
+            {
+                <p class="bill-lede">@lede</p>
+            }
         </header>
         <PublishedCorrectionBanner Kind="PublishedRecordKind.Action" Corrections="Data.Corrections" />
         @if (Data.Steps.Length > 0)
@@ -176,7 +179,8 @@
         var parts = new List<string>();
         if (Data.Sponsors.FirstOrDefault() is { } sponsor)
             parts.Add(sponsor.Party is { } party ? $"Sponsored by {sponsor.Name}, {Article(party)} {party}." : $"Sponsored by {sponsor.Name}.");
-        parts.Add($"Introduced {Moment.Day(Data.Introduced)}.");
+        if (Data.Introduced is { } introduced)
+            parts.Add($"Introduced {Moment.Day(introduced)}.");
         if (Data.PublicLaw is { } law)
             parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
         return string.Join(' ', parts);

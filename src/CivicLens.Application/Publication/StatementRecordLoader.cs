@@ -33,11 +33,6 @@ internal sealed class StatementRecordLoader(IStatementReviewStore statements)
             ?? throw new ArgumentException($"Statement {recordId} has no revision.", "recordIds");
         RequirePublishable(recordId, revision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var record = new PublishedStatementBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, revision.RevisionNumber, review.Decisions), build.Now);
-        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections,
-            (related, _, cancellationToken) => build.Renderer.RenderStatementAsync(record, related, build.Catalog, cancellationToken));
+        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections);
     }
-
-    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
-        CancellationToken cancellationToken) =>
-        build.Renderer.RenderStatementAsync(Parse<PublishedStatement>(json), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 }

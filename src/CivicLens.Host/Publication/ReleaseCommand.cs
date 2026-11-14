@@ -10,7 +10,6 @@ public static class ReleaseCommand
     private const string WithdrawOption = "--withdraw";
     private const string RewriteOfficialsOption = "--rewrite-officials";
     private const string RewriteEntriesOption = "--rewrite-entries";
-    private const string RewritePagesOption = "--rewrite-pages";
 
     public static bool Matches(string[] args) => args is ["releases", ..];
 
@@ -111,7 +110,7 @@ public static class ReleaseCommand
                         CommandOutput.Write(output, publishedVerification);
                         return publishedVerification.Failed == 0 ? 0 : 1;
                     default:
-                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] [--rewrite-pages] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, releases vote-bills verify, or releases entries verify.");
+                        error.WriteLine($"Use releases publish <idempotency-key> [<kind>:<id>...] [--withdraw <kind>:<id> <text>]... [--rewrite-officials] [--rewrite-entries] (kind is one of: {PublishedRecordReference.KindNames}), releases list [limit], releases blocked, releases activate <release-number>, releases first-published backfill, releases entries backfill <limit>, releases corrections backfill <limit> [cursor], releases corrections verify <limit> [cursor], releases counts backfill <limit> [cursor], releases counts verify <limit> [cursor], releases lineups backfill <limit> [cursor], releases lineups verify <limit> [cursor], releases tallies verify <limit> [cursor], releases columns backfill, releases vote-bills verify, or releases entries verify.");
                         return 2;
                 }
             }
@@ -128,7 +127,6 @@ public static class ReleaseCommand
         List<RecordNote> withdrawals = [];
         var rewriteOfficials = false;
         var rewriteEntries = false;
-        var rewritePages = false;
         for (var index = 0; index < arguments.Length; index++)
         {
             var option = arguments[index];
@@ -142,11 +140,6 @@ public static class ReleaseCommand
                 rewriteEntries = true;
                 continue;
             }
-            if (option == RewritePagesOption)
-            {
-                rewritePages = true;
-                continue;
-            }
             if (option != WithdrawOption)
             {
                 records.Add(PublishedRecordReference.Parse(option));
@@ -158,7 +151,7 @@ public static class ReleaseCommand
             withdrawals.Add(new(reference.Kind, reference.RecordId, arguments[index + 2]));
             index += 2;
         }
-        return new PublishReleaseRequest([.. records], key) { Withdrawals = [.. withdrawals], RewriteOfficials = rewriteOfficials, RewriteEntries = rewriteEntries, RewritePages = rewritePages };
+        return new PublishReleaseRequest([.. records], key) { Withdrawals = [.. withdrawals], RewriteOfficials = rewriteOfficials, RewriteEntries = rewriteEntries };
     }
 
     private static bool TryParseBackfillCursor(string[] arguments, out ReleaseBillCountVerificationCursor? cursor)

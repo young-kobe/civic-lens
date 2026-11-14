@@ -9,9 +9,6 @@ public static class PublishedCountRules
     /// <summary>Records an official needs before a page shows a share.</summary>
     public const int MinimumRecordsForShare = 5;
 
-    /// <summary>Days that end on the release day, in which the closest vote is picked.</summary>
-    public const int ClosestVoteWindowDays = 7;
-
     /// <summary>Substantive votes of each chamber in the latest list of the home page.</summary>
     public const int HomeVotesPerChamber = 2;
 

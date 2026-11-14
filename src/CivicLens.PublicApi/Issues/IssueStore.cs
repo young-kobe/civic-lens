@@ -7,7 +7,7 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Issues;
 
-/// <summary>Reads the views <c>public_api.release_issues</c>, <c>active_release</c>, <c>issue_votes</c>, <c>bill_issues</c>, and <c>issue_sponsors</c> for one issue.
+/// <summary>Reads the views <c>public_api.release_issues</c>, <c>active_release</c>, <c>issue_votes</c>, <c>bill_issues</c>, <c>bill_keys</c>, <c>bills</c>, and <c>issue_sponsors</c> for one issue.
 /// One snapshot serves both statements, so every count comes from one release, as in <c>ZipDistrictStore</c>.
 /// The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>. A sponsor is a sponsorship with the role <c>Sponsor</c>, as in <c>bills.sponsor_count</c>.
 /// The current Congress is the Congress of the publication day of the release, from <see cref="CongressCalendar"/>.
@@ -44,14 +44,13 @@ public sealed class IssueStore(NpgsqlDataSource views)
                OFFSET 0) v
         """;
 
-    private const string PageBillSet = """
-          FROM public_api.bills b
-         WHERE EXISTS (SELECT 1 FROM public_api.bill_issues i
-                        WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number AND i.issue_id = @issue)
-           AND (@congress::integer IS NULL OR b.congress = @congress)
+    // The bill keys of the page: the bills of the issue in the Congress of the release. A null Congress means that the release stores none, so the set is not narrowed.
+    private static readonly string PageBillSet = $"""
+          {BillStore.IssueKeysSql}
+         WHERE (@congress::integer IS NULL OR b.congress = @congress)
         """;
 
-    private const string PageTotalsSql = $"""
+    private static readonly string PageTotalsSql = $"""
         SELECT (SELECT count(*) {PageVoteSet}),
                (SELECT count(*) {PageVoteSet} WHERE v.alignment = 'Split'),
                (SELECT count(*) {PageBillSet})
@@ -77,10 +76,11 @@ public sealed class IssueStore(NpgsqlDataSource views)
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
 
-    private const string BillsSql = $"""
+    private static readonly string BillsSql = $"""
         SELECT b.record_id, b.headline, b.label, b.event_date, b.bill_line, {BillStore.SponsorNameSql}, b.text_origin
-          {PageBillSet}
-         ORDER BY b.event_date DESC, b.record_id LIMIT @take
+          FROM (SELECT b.record_id, b.revision_number {PageBillSet} ORDER BY b.event_date DESC, b.record_id LIMIT @take) k
+          {BillStore.BillsOfKeysSql}
+         ORDER BY b.event_date DESC, b.record_id
         """;
 
     private const string SponsorsSql = """

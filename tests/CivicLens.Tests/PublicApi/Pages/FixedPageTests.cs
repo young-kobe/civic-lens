@@ -44,13 +44,6 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         return (response.StatusCode, new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync()));
     }
 
-    /// <summary>The text of the page body without the freshness line, which only a server page shows.</summary>
-    private static string MainText(IDocument page)
-    {
-        page.QuerySelector(".public-freshness")?.Remove();
-        return page.QuerySelector("main")!.TextContent;
-    }
-
     private static string Freshness(IDocument page) => string.Join(" | ", page.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
 
     [Fact]
@@ -92,27 +85,24 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheGlossaryIsServedInTheServerShellWithTheTextOfTheStaticGlossaryAndItsCanonicalPath()
+    public async Task TheGlossaryIsServedInTheServerShellWithItsCanonicalPath()
     {
         await using var host = await StartAsync();
-        var staticPage = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null, PublicBaseUrl.Parse(Root, "test")).RenderGlossaryAsync(CancellationToken.None));
 
         var (status, page) = await GetAsync(host, PublicationProtocol.GlossaryPagePath);
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal(Root + PublicationProtocol.GlossaryPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
         Assert.Equal("Glossary", page.QuerySelector("h1")!.TextContent);
-        Assert.Equal(MainText(staticPage), MainText(page));
         Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
         Assert.Equal("page", page.QuerySelectorAll(".public-footer a").Single(link => link.GetAttribute("href") == Root + PublicationProtocol.GlossaryPagePath).GetAttribute("aria-current"));
         Assert.All(page.QuerySelectorAll("link[rel=stylesheet]"), link => Assert.StartsWith(Root, link.GetAttribute("href")));
     }
 
     [Fact]
-    public async Task TheReportPageIsServedInTheServerShellWithTheTextOfTheStaticReportPageAndRootedLinks()
+    public async Task TheReportPageIsServedInTheServerShellWithRootedLinks()
     {
         await using var host = await StartWithReportAsync(ApiOrigin, SiteKey);
-        var staticPage = new HtmlParser().ParseDocument(await new ReleaseRenderer(ApiOrigin, SiteKey, PublicBaseUrl.Parse(Root, "test")).RenderReportAsync(CancellationToken.None));
 
         var (status, page) = await GetAsync(host, PublicationProtocol.ReportPagePath);
 
@@ -120,7 +110,6 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(Root + PublicationProtocol.ReportPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
         Assert.Equal("noindex", page.QuerySelector("meta[name=robots]")!.GetAttribute("content"));
         Assert.Equal("Report a problem", page.QuerySelector("h1")!.TextContent);
-        Assert.Equal(MainText(staticPage), MainText(page));
         Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
         Assert.Equal(Root + PublicationProtocol.RecordPagePath("{id}"), page.QuerySelector("form[data-report-api]")!.GetAttribute("data-record-page"));
         Assert.All(page.QuerySelectorAll("main a[href]:not([href^='mailto:'])"), link => Assert.StartsWith(Root, link.GetAttribute("href")));
