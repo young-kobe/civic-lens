@@ -18,6 +18,7 @@ using CivicLens.PublicApi.Relationships;
 using CivicLens.PublicApi.Reports;
 using CivicLens.PublicApi.Schema;
 using CivicLens.PublicApi.Search;
+using CivicLens.PublicApi.Sitemap;
 using CivicLens.PublicApi.Statements;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicApi.ZipDistricts;
@@ -102,6 +103,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton<ExecutiveActionListReader>();
         builder.Services.AddSingleton<BoardsPageReader>();
         builder.Services.AddSingleton<SearchPageReader>();
+        builder.Services.AddSingleton(new SitemapReader(views));
         builder.Services.AddSingleton(new OfficialPageReader(views));
         builder.Services.AddSingleton(new OfficialRecordPageReader(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));

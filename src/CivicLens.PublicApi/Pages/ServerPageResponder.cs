@@ -8,7 +8,7 @@ namespace CivicLens.PublicApi.Pages;
 /// <summary>The pipeline of every server page: find the active release, answer 304 for a matching successful page, or render before setting cache headers.
 /// A successful page gets the shared validator and freshness. Any other page, such as the not found page, gets no validator and no-store.
 /// One read gives the release number and the freshness line that the shell of every page shows. A 304 skips the render, and a caller that already holds
-/// its release number skips that read until it renders. A caller that already holds the freshness, such as Home, skips that read. One private core holds the 304 rule.</summary>
+/// its release number skips that read until it renders. A caller that already holds the freshness, such as Home, skips that read. One private method holds the 304 rule.</summary>
 public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache cache, PageRenderer renderer)
 {
     public async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, IReadOnlyDictionary<string, object?> parameters,
@@ -30,16 +30,28 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
     private async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
         Func<Task<IReadOnlyDictionary<string, object?>>> parameters, ReleaseFreshness? read, CancellationToken cancellationToken) where TComponent : IComponent
     {
-        if (IsSuccess(statusCode) && cache.IsNotModified(context, releaseNumber))
-        {
-            cache.Apply(context, releaseNumber);
-            return Results.StatusCode(StatusCodes.Status304NotModified);
-        }
+        if (IsSuccess(statusCode) && NotModified(context, releaseNumber) is { } notModified) return notModified;
         if ((read ?? await releases.FindFreshnessAsync(cancellationToken)) is not { } freshness) return ApiResults.NoRelease();
         var html = await renderer.RenderPageAsync<TComponent>(await parameters(), freshness.PageContextFor(releaseNumber));
         if (IsSuccess(statusCode)) cache.Apply(context, releaseNumber);
         else PageCache.ApplyFailure(context);
         return Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
+    }
+
+    /// <summary>For a successful server file that is not a page, such as the sitemap. It has no shell, so it needs no freshness read. The content is built only when the file is sent.</summary>
+    public IResult RespondFile(HttpContext context, int releaseNumber, Func<string> content, string contentType)
+    {
+        if (NotModified(context, releaseNumber) is { } notModified) return notModified;
+        var text = content();
+        cache.Apply(context, releaseNumber);
+        return Results.Content(text, contentType);
+    }
+
+    private IResult? NotModified(HttpContext context, int releaseNumber)
+    {
+        if (!cache.IsNotModified(context, releaseNumber)) return null;
+        cache.Apply(context, releaseNumber);
+        return Results.StatusCode(StatusCodes.Status304NotModified);
     }
 
     private static bool IsSuccess(int statusCode) => statusCode is >= 200 and < 300;

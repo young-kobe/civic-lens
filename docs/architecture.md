@@ -468,6 +468,7 @@ This is the only navigation index.
 | Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
 | Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Canonical addresses, sitemap, robots file, and not found page | [Publication](architecture/publication.md#public-base-url) | `src/CivicLens.Application/Publication/ReleaseSite.cs` |
+| Server sitemap and robots file from the views | [Public site](architecture/public-site.md#invariants) | `src/CivicLens.PublicApi/Sitemap/SitemapEndpoints.cs` |
 | Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

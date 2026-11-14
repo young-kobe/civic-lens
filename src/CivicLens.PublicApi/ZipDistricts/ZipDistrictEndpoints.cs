@@ -84,7 +84,7 @@ public static class ZipDistrictEndpoints
                 [nameof(ZipMemberCards.NewVoteCount)] = lookup.NewVoteCount,
                 [nameof(ZipMemberCards.ComparePageUrl)] = view != string.Empty || options.BrowserApiUrl is null
                     ? null
-                    : options.PublicBaseUrl?.Join("compare.html")
+                    : options.PublicBaseUrl?.Join(PublicationProtocol.ComparePagePath)
             });
             return Results.Content(html, "text/html; charset=utf-8");
         });

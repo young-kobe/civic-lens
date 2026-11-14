@@ -10,6 +10,7 @@ using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Relationships;
 using CivicLens.PublicApi.Search;
+using CivicLens.PublicApi.Sitemap;
 using CivicLens.PublicApi.Statements;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
@@ -25,7 +26,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/" + PublicSections.PreviewFolder;
 
-    /// <summary>Maps the gated home, Compare, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -47,6 +48,7 @@ public static class ServerPageEndpoints
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
         routes.MapFixedPages(baseUrl);
+        routes.MapSitemap(baseUrl);
         routes.MapGet(PublicSections.ListOf(PublishedRecordKind.Vote).Href, ListPageEndpoints.VotesAsync);
         routes.MapGet(PublicSections.ListOf(PublishedRecordKind.Action).Href, ListPageEndpoints.BillsAsync);
         routes.MapGet(PublicSections.ListOf(PublishedRecordKind.Statement).Href, ListPageEndpoints.StatementsAsync);
