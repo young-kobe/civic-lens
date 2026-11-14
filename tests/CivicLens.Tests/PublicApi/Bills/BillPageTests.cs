@@ -170,6 +170,37 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Null(page.QuerySelector(".bill-votes"));
     }
 
+    /// <summary>The event date of the view is the latest sponsorship, here a cosponsor who joined in July. The sponsor entry holds the introduced date of the
+    /// Congress.gov bill page, so the page prints that date, and no cosponsor who joined later has a date before it.</summary>
+    [Fact]
+    public async Task ABillWhoseLatestSponsorshipFollowsItsIntroductionShowsTheIntroductionDateAndNoLaterCosponsorPrecedesIt()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('c', "2026-07-09")
+        {
+            Sponsorships =
+            [
+                new("p1", "Sponsor", "2026-04-06"), new("p2", "Cosponsor", "2026-04-06"), new("p3", "Cosponsor", "2026-04-23", null, false),
+                new("p4", "Cosponsor", "2026-07-09", null, false)
+            ]
+        });
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"), Official("p2", "Ann Two", "Democrat"),
+            Official("p3", "Bob Three", "Republican"), Official("p4", "Cy Four", "Republican"));
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
+
+        var page = await ReadPageAsync(host, new string('c', 64));
+
+        Assert.Equal("Sponsored by Pat One, a Democrat. Introduced 6 Apr 2026.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
+        Assert.Equal("6 Apr 2026, by Pat One", page.QuerySelector(".bill-stepper .bill-step-detail")!.TextContent);
+        var backers = page.QuerySelector("[aria-labelledby=bill-backers-title] .bill-kv")!;
+        Assert.Equal(["Added on 6 Apr 2026", "Added later"], backers.QuerySelectorAll("dt").Select(term => term.TextContent));
+        var laterDates = System.Text.RegularExpressions.Regex.Matches(backers.QuerySelectorAll("dd")[1].TextContent, @"\((?<day>[^)]+)\)")
+            .Select(match => DateOnly.ParseExact(match.Groups["day"].Value, "d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        Assert.Equal([new DateOnly(2026, 4, 23), new DateOnly(2026, 7, 9)], laterDates);
+        Assert.All(laterDates, day => Assert.True(day >= new DateOnly(2026, 4, 6)));
+    }
+
     [Fact]
     public async Task TheSourceFoldShowsTheStoredApprovalTimeAndTheFirstPublicationTime()
     {

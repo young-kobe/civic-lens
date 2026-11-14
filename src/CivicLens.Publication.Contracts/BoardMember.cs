@@ -6,6 +6,4 @@ public sealed record BoardMember(OfficialListing Official, int Cast, int Breaks,
     public int Matched => Cast - Breaks;
 
     public double BreakShare => Breaks / (double)Cast;
-
-    public double MatchShare => Matched / (double)Cast;
 }

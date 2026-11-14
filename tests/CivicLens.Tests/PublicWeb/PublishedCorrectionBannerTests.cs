@@ -84,13 +84,22 @@ public sealed class PublishedCorrectionBannerTests
     }
 
     [Fact]
-    public async Task ACorrectionWithNoStoredNoteGivesNoWhatChangedText()
+    public async Task ARoutineCodeUpdateFromTheSourceShowsNoBannerBecauseItIsNotACorrection()
     {
-        var banner = (await RenderAsync(PublishedRecordKind.Vote, Newest with { Note = null }, Older)).QuerySelector(".correction-banner")!;
+        var page = await RenderAsync(PublishedRecordKind.Action, Newest with { Note = null }, Older with { Note = null });
 
-        Assert.Null(banner.QuerySelector("dl"));
-        Assert.DoesNotContain("What changed", banner.TextContent);
-        Assert.DoesNotContain(Older.Note!, banner.TextContent);
+        Assert.Null(page.QuerySelector(".correction-banner"));
+    }
+
+    [Fact]
+    public async Task ANewerCodeUpdateLeavesTheBannerOnTheNewestPersonCorrectionWithItsDateAndNote()
+    {
+        var update = Newest with { ReplacedRevisionNumber = 3, PublishedAtUtc = Newest.PublishedAtUtc.AddDays(8), Note = null };
+
+        var banner = (await RenderAsync(PublishedRecordKind.Vote, update, Newest, Older)).QuerySelector(".correction-banner")!;
+
+        Assert.Equal("Civic Lens corrected this vote on 6 Nov 2026, 12:30 UTC.", banner.QuerySelector("p")!.TextContent);
+        Assert.Equal([Newest.Note], banner.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
     }
 
     [Fact]

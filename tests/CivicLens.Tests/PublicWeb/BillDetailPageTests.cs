@@ -53,6 +53,24 @@ public sealed class BillDetailPageTests
         Assert.Equal("Sponsored by Pat One, a Democrat. Introduced 11 Sep 2025. Became law on 18 Sep 2026 as Public Law 119-111.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
     }
 
+    /// <summary>A bill with no tracked sponsor has no known introduction date, so the page prints no date for it rather than another date.</summary>
+    [Fact]
+    public async Task ABillWithNoKnownIntroductionDatePrintsNoIntroductionDateInTheLedeTheStepperOrTheCosponsorList()
+    {
+        var page = await RenderAsync(Bill with
+        {
+            Introduced = null,
+            Sponsors = [],
+            Steps = [new("Introduced in the House", "")],
+            PublicLaw = null
+        });
+
+        Assert.Null(page.QuerySelector(".bill-head .bill-lede"));
+        Assert.Null(page.QuerySelector(".bill-stepper .bill-step-detail"));
+        Assert.Equal(["Added on the day it was introduced", "Added later"],
+            page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .bill-kv dt").Select(term => term.TextContent));
+    }
+
     [Fact]
     public async Task TheReportLinkInTheFooterNamesTheBillRecordAndItsRevision()
     {
@@ -477,26 +495,21 @@ public sealed class BillDetailPageTests
         AiLabelAssert.DrawnByAiLabel(model, Bill.Votes[0].Label!);
     }
 
-    private static async Task<IDocument> RenderAsync(BillPageData data)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<BillDetailPage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(BillDetailPage.Data)] = data, [nameof(BillDetailPage.RootPath)] = Root }));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAsync(BillPageData data) =>
+        ListPageRender.RenderAsync<BillDetailPage>(data, nameof(BillDetailPage.Data));
+
 
     [Fact]
-    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyForAPersonCorrectionAndARoutineUpdateShowsTheMutedLineInTheHeader()
     {
         var corrected = await RenderAsync(Bill with { Corrections = [PublishedCorrectionBannerTests.Newest] });
         var plain = await RenderAsync(Bill);
+        var updated = await RenderAsync(Bill with { Corrections = [PublishedUpdateLineTests.SourceUpdate] });
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+        Assert.Null(corrected.QuerySelector(".update-line"));
+        Assert.Null(plain.QuerySelector(".update-line"));
+        PublishedUpdateLineTests.AssertTheLineIsInTheRecordHeader(updated);
     }
 }

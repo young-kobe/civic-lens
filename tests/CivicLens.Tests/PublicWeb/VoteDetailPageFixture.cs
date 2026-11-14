@@ -67,20 +67,12 @@ internal static class VoteDetailPageFixture
         [new() { Text = Lines[1], Citation = Cite(Lines[1]) }, new() { Text = Lines[2], Citation = Cite(Lines[2]) }, new() { Text = Lines[3], Citation = Cite(Lines[3]) }],
         [Source], Members, new("b".PadRight(64, 'b'), "Sanctioning Russia and Iran Act of 2026", "A bill line."), [new("tax", "Taxes")], "hr", 5334);
 
-    public static async Task<IDocument> RenderAsync(VotePageData data, VoteMemberFilter? filter = null)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+    public static Task<IDocument> RenderAsync(VotePageData data, VoteMemberFilter? filter = null) =>
+        ListPageRender.RenderPageAsync<VoteDetailPage>(new Dictionary<string, object?>
         {
-            var output = await renderer.RenderComponentAsync<VoteDetailPage>(ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                [nameof(VoteDetailPage.Data)] = data,
-                [nameof(VoteDetailPage.RootPath)] = Root,
-                [nameof(VoteDetailPage.Filter)] = filter ?? new VoteMemberFilter()
-            }));
-            return output.ToHtmlString();
+            [nameof(VoteDetailPage.Data)] = data,
+            [nameof(VoteDetailPage.RootPath)] = Root,
+            [nameof(VoteDetailPage.Filter)] = filter ?? new VoteMemberFilter()
         });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+
 }

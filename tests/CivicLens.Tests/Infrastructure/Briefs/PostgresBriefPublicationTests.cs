@@ -166,7 +166,7 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
     }
 
     [Fact]
-    public async Task APublishOfAnApprovedBriefWritesItsRecordAndItsPageAndRecordsItInTheRelease()
+    public async Task APublishOfAnApprovedBriefWritesItsRecordAndRecordsItInTheRelease()
     {
         await ApproveAsync();
         var publish = await PublisherAsync();
@@ -179,9 +179,6 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
             await files.ReadFileAsync(summary.DirectoryName, PublicationProtocol.RecordDataPath(RecordId), 1_000_000, default),
             PublicationProtocol.JsonOptions)!;
         Assert.Equal(["Rent cap", "A rule changed", "Bill 7"], record.Citations.Select(citation => citation.Headline));
-        Assert.Contains("citation-R3", Encoding.UTF8.GetString(
-            await files.ReadFileAsync(summary.DirectoryName, PublicationProtocol.RecordPagePath(RecordId), 1_000_000, default)),
-            StringComparison.Ordinal);
         Assert.Equal(4, summary.RecordCount);
     }
 
@@ -296,13 +293,12 @@ public sealed class PostgresBriefPublicationTests(PostgresCollection postgres) :
         foreach (var entry in entries)
         {
             File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.RecordDataPath(entry.RecordId)), []);
-            File.WriteAllBytes(Path.Combine(folder, PublicationProtocol.RecordPagePath(entry.RecordId)), []);
         }
         var directory = new FileReleaseDirectory(releaseRoot);
-        return new PublishRelease(publications, directory, new ReleaseRenderer(null, null),
+        return new PublishRelease(publications, directory,
             new PublishedRecordLoaders(new FakeReviewStore(), new FakeStatementReviewStore(), new FakeActionReviewStore(), new FakeVoteReviewStore(),
                 new FakeRelationshipReviewStore(), reviews, new FakeExecutiveActionReviewStore()),
-            new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NoOfficials(), PhotoCaptures.None(), new FakeClock(InWeek.AddDays(10)),
+            new PublicationCatalog(new Dictionary<string, string>(), IssueConfiguration.None), FixedRosters.NoOfficials(), PhotoCaptures.None(), new FakeClock(InWeek.AddDays(10)),
             new PruneReleases(publications, directory, NullLogger<PruneReleases>.Instance));
     }
 }

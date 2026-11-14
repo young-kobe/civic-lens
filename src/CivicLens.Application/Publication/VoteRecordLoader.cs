@@ -42,8 +42,7 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
             Corrections = build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions, textRewritten)
         };
         PublishedCorrection.ValidateAll(record.Corrections, record.RevisionNumber, Kind);
-        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections,
-            (related, billLines, cancellationToken) => build.Renderer.RenderVoteAsync(record, billLines.BillOfVote(recordId), related, build.Catalog, cancellationToken));
+        return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections);
     }
 
     public Task<IReadOnlyList<VoteMembership>> MembersAsync(IEnumerable<PublishedRecordEntry> entries, CancellationToken cancellationToken) =>
@@ -53,8 +52,4 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
     public Task<IReadOnlyDictionary<string, ImmutableArray<string>>> BillActionRecordIdsAsync(ImmutableArray<PublishedRevisionBinding> revisions,
         CancellationToken cancellationToken) =>
         votes.FindBillActionRecordIdsOfVotesAsync(revisions, cancellationToken);
-
-    public override Task<string> RenderCarriedAsync(string recordId, byte[] json, ReleaseLinks links, PublicationBuild build,
-        CancellationToken cancellationToken) =>
-        build.Renderer.RenderVoteAsync(Parse<PublishedVote>(json), build.BillLines.BillOfVote(recordId), links.Citing(Kind, recordId), build.Catalog, cancellationToken);
 }

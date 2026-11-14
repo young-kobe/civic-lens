@@ -1,10 +1,10 @@
 @if (Header)
 {
-    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class" data-sort="@SortName" data-sort-key="@SortKey" data-sort-label="@SortLabel" data-sort-default="@(DefaultSort ? "" : null)">@ChildContent</th>
+    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class" data-sort="@SortName">@ChildContent</th>
 }
 else
 {
-    <td role="@(Roles ? (Main ? "rowheader" : "cell") : null)" class="@BodyClass" data-label="@Label" data-sort-value="@SortValue">@ChildContent</td>
+    <td role="@(Roles ? (Main ? "rowheader" : "cell") : null)" class="@BodyClass" data-label="@Label">@ChildContent</td>
 }
 
 @code {
@@ -17,10 +17,6 @@ else
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Label { get; set; }
     [Parameter] public SortKind Sort { get; set; }
-    [Parameter] public string? SortKey { get; set; }
-    [Parameter] public string? SortLabel { get; set; }
-    [Parameter] public bool DefaultSort { get; set; }
-    [Parameter] public string? SortValue { get; set; }
 
     private string? SortName => Sort == SortKind.None ? null : Sort.ToString().ToLowerInvariant();
     private string? BodyClass => Main ? Class is null ? "cell-main" : $"cell-main {Class}" : Class;

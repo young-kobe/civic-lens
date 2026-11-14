@@ -83,29 +83,26 @@ public sealed class PublishReleaseTests
 
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
-        Assert.Equal(PublicationProtocol.HomePath, order[^2]);
-        Assert.Equal(PublicationProtocol.OfficialsPagePath, order[^3]);
-        Assert.Equal(OfficialBoard.All.Select(board => board.PagePath), order.Skip(order.Count - 7).Take(4));
-        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^8]);
-        Assert.Equal(PublicationProtocol.CatalogPath, order[^9]);
-        Assert.Equal(PublicationProtocol.OfficialsPath, order[^10]);
-        Assert.Equal(PublicationProtocol.BillStatusPath, order[^11]);
-        Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf("assets/site.css"));
+        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^2]);
+        Assert.Equal(PublicationProtocol.OfficialsPath, order[^3]);
+        Assert.Equal(PublicationProtocol.BillStatusPath, order[^4]);
+        Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf(PublicationProtocol.BillStatusPath));
     }
 
     [Fact]
-    public async Task EveryReleaseHoldsASearchPageThatIsWrittenBeforeTheManifestAndListsTheReleaseRecords()
+    public async Task AReleaseHoldsDataFilesOnlyAndNoPageSiteFileOrAsset()
     {
         var scenario = new PublicationScenario();
-        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(2, withFiles: true);
-        var draft = scenario.AddDraft('a');
+        var vote = scenario.AddVote('a');
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
+        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
 
-        var order = scenario.Releases.WriteOrder;
-        Assert.InRange(order.IndexOf(PublicationProtocol.SearchPagePath), 0, order.IndexOf(PublicationProtocol.ManifestPath) - 1);
-        Assert.Contains("<html>search 3 1</html>", System.Text.Encoding.UTF8.GetString(
-            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.SearchPagePath]));
+        var paths = scenario.Releases.Directories[summary.DirectoryName].Keys;
+        Assert.DoesNotContain(paths, path => path.EndsWith(".html", StringComparison.Ordinal));
+        Assert.DoesNotContain(paths, path => path.StartsWith("assets/", StringComparison.Ordinal));
+        Assert.DoesNotContain(paths, path => path is "catalog.json" or "sitemap.xml" or "robots.txt" or "404.html");
+        Assert.Contains(PublicationProtocol.RecordDataPath(vote), paths);
+        Assert.Contains(PublicationProtocol.OfficialVotesPath("mayor", 119), paths);
     }
 
     [Fact]
@@ -121,33 +118,6 @@ public sealed class PublishReleaseTests
         var manifest = files[PublicationProtocol.ManifestPath];
         Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestGzipPath], stream => new GZipStream(stream, CompressionMode.Decompress)));
         Assert.Equal(manifest, Decompress(files[PublicationProtocol.ManifestBrotliPath], stream => new BrotliStream(stream, CompressionMode.Decompress)));
-    }
-
-    [Fact]
-    public async Task EveryIndexPageIsWrittenBeforeTheManifestSoALongReleaseIsNeverTruncated()
-    {
-        var scenario = new PublicationScenario();
-        await scenario.SeedReleaseWithEmptyCorrectionHistoriesAsync(119, withFiles: true);
-        var draft = scenario.AddDraft('a');
-        scenario.Releases.WriteOrder.Clear();
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", draft));
-
-        Assert.Equal(120, summary.RecordCount);
-        var order = scenario.Releases.WriteOrder;
-        Assert.Equal(
-            [PublicationProtocol.AllRecordsPagePath(1), "all-2.html", "all-3.html", PublicationProtocol.BriefsPagePath(1),
-                PublicationProtocol.IssuePagePath("housing", 1), PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath,
-                PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath, PublicationProtocol.AboutPagePath, PublicationProtocol.GlossaryPagePath,
-                PublicationProtocol.BillStatusPath, PublicationProtocol.OfficialsPath, PublicationProtocol.CatalogPath, PublicationProtocol.OfficialSummariesPath,
-                PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Democrat), PublicationProtocol.BoardPagePath(PublishedChamber.House, PublishedPartyMajority.Republican),
-                PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Democrat), PublicationProtocol.BoardPagePath(PublishedChamber.Senate, PublishedPartyMajority.Republican),
-                PublicationProtocol.OfficialsPagePath, PublicationProtocol.HomePath, PublicationProtocol.ManifestPath],
-            order.TakeLast(22));
-        Assert.Equal("all.html", PublicationProtocol.AllRecordsPagePath(1));
-        Assert.DoesNotContain("all-4.html", order);
-        Assert.Contains("<html>index 3 120</html>", System.Text.Encoding.UTF8.GetString(
-            scenario.Releases.Directories[summary.DirectoryName]["all-3.html"]));
     }
 
     [Fact]
@@ -423,7 +393,7 @@ public sealed class PublishReleaseTests
         Assert.Equal([third, first], manifest.Records.Select(entry => entry.RecordId));
         Assert.Equal(firstTime, manifest.Records[1].FirstPublishedAtUtc);
         Assert.All(scenario.Releases.Links, link => Assert.Equal(one.DirectoryName, link.SourceDirectory));
-        Assert.Equal(2, scenario.Releases.Links.Count);
+        Assert.Single(scenario.Releases.Links);
     }
 
     [Fact]
@@ -481,13 +451,9 @@ public sealed class PublishReleaseTests
         Assert.Equal([second, first], manifest.Records.Select(entry => entry.RecordId));
         Assert.Equal(firstTime, manifest.Records[1].FirstPublishedAtUtc);
         Assert.Equal(originalJson, scenario.Releases.Directories[two.DirectoryName][PublicationProtocol.RecordDataPath(first)]);
-        Assert.Equal(
-            [(one.DirectoryName, PublicationProtocol.RecordDataPath(first)), (one.DirectoryName, PublicationProtocol.RecordPagePath(first))],
-            scenario.Releases.Links.TakeLast(2));
+        Assert.Contains((one.DirectoryName, PublicationProtocol.RecordDataPath(first)), scenario.Releases.Links);
         Assert.DoesNotContain(PublicationProtocol.RecordDataPath(first), scenario.Releases.WriteOrder);
-        Assert.DoesNotContain(PublicationProtocol.RecordPagePath(first), scenario.Releases.WriteOrder);
         Assert.Contains(PublicationProtocol.RecordDataPath(second), scenario.Releases.WriteOrder);
-        Assert.Contains(PublicationProtocol.RecordPagePath(second), scenario.Releases.WriteOrder);
         Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.BillStatusPath], scenario.Releases.ReadPaths);
         Assert.Equal(new ReviewStateExpectation(PublishedRecordKind.DocumentChange, second, 1, 1), Assert.Single(scenario.Publications.LastCommit!.AddedRecords));
         Assert.Equal(2, scenario.Publications.LastCommit.Records.Length);

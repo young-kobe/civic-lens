@@ -11,40 +11,84 @@ namespace CivicLens.PublicApi.Ingest;
 /// </summary>
 public sealed class TypedTextReader(NpgsqlTransaction snapshot)
 {
-    private static readonly string StatementSummary = $"SELECT x.record_id, x.summary FROM public_api.statements x WHERE {RevisionKeys.Filter}";
-    private static readonly string StatementSource = $"SELECT x.record_id, x.text FROM public_api.statement_sources x WHERE {RevisionKeys.Filter}";
+    private static readonly string StatementSummary = $"""
+        SELECT x.record_id, x.summary
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.statements x WHERE {RevisionKeys.Match} OFFSET 0) x
+        """;
+
+    private static readonly string StatementSource = $"""
+        SELECT x.record_id, x.text
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.statement_sources x WHERE {RevisionKeys.Match} OFFSET 0) x
+        """;
 
     private static readonly string StatementQuotations = $"""
-        SELECT x.record_id, x.quotation_start, x.quotation_length FROM public_api.statement_quotations x WHERE {RevisionKeys.Filter}
+        SELECT x.record_id, x.quotation_start, x.quotation_length
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.statement_quotations x WHERE {RevisionKeys.Match} OFFSET 0) x
          ORDER BY x.record_id, x."position"
         """;
 
-    private static readonly string DocumentChangeSummary = $"SELECT x.record_id, x.summary FROM public_api.document_changes x WHERE {RevisionKeys.Filter}";
+    private static readonly string DocumentChangeSummary = $"""
+        SELECT x.record_id, x.summary
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.document_changes x WHERE {RevisionKeys.Match} OFFSET 0) x
+        """;
 
     // The new version comes first, as it does in the record file.
     private static readonly string DocumentChangeSources = $"""
-        SELECT x.record_id, left(x.text, @limit) FROM public_api.document_change_sources x WHERE {RevisionKeys.Filter}
+        SELECT x.record_id, left(x.text, @limit)
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.document_change_sources x WHERE {RevisionKeys.Match} OFFSET 0) x
          ORDER BY x.record_id, CASE x.source_side WHEN 'After' THEN 0 ELSE 1 END
         """;
 
-    private static readonly string ActionSummary = $"SELECT x.record_id, x.summary, x.bill_title FROM public_api.bills x WHERE {RevisionKeys.Filter}";
-
-    private static readonly string ActionSources = $"""
-        SELECT x.record_id, left(x.text, @limit) FROM public_api.action_sources x WHERE {RevisionKeys.Filter} ORDER BY x.record_id, x."position"
+    private static readonly string ActionSummary = $"""
+        SELECT x.record_id, x.summary, x.bill_title
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.bills x WHERE {RevisionKeys.Match} OFFSET 0) x
         """;
 
-    private static readonly string VoteSummary = $"SELECT x.record_id, x.summary FROM public_api.votes x WHERE {RevisionKeys.Filter}";
+    private static readonly string ActionSources = $"""
+        SELECT x.record_id, left(x.text, @limit)
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.action_sources x WHERE {RevisionKeys.Match} OFFSET 0) x
+         ORDER BY x.record_id, x."position"
+        """;
+
+    private static readonly string VoteSummary = $"""
+        SELECT x.record_id, x.summary
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.votes x WHERE {RevisionKeys.Match} OFFSET 0) x
+        """;
 
     private static readonly string VoteSources = $"""
-        SELECT x.record_id, left(x.text, @limit) FROM public_api.vote_sources x WHERE {RevisionKeys.Filter} ORDER BY x.record_id, x."position"
+        SELECT x.record_id, left(x.text, @limit)
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.vote_sources x WHERE {RevisionKeys.Match} OFFSET 0) x
+         ORDER BY x.record_id, x."position"
         """;
 
     private static readonly string ExecutiveActionSources = $"""
-        SELECT x.record_id, left(x.text, @limit) FROM public_api.executive_action_sources x WHERE {RevisionKeys.Filter} ORDER BY x.record_id, x."position"
+        SELECT x.record_id, left(x.text, @limit)
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.executive_action_sources x WHERE {RevisionKeys.Match} OFFSET 0) x
+         ORDER BY x.record_id, x."position"
+        """;
+
+    private static readonly string ExecutiveActionSummarySentences = $"""
+        SELECT x.record_id, x.sentence
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.executive_action_summary_sentences x WHERE {RevisionKeys.Match} OFFSET 0) x
+         ORDER BY x.record_id, x."position"
         """;
 
     private static readonly string BriefParagraphs = $"""
-        SELECT x.record_id, x.paragraph_text FROM public_api.brief_paragraphs x WHERE {RevisionKeys.Filter} ORDER BY x.record_id, x."position"
+        SELECT x.record_id, x.paragraph_text
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.brief_paragraphs x WHERE {RevisionKeys.Match} OFFSET 0) x
+         ORDER BY x.record_id, x."position"
         """;
 
     // The statement half of record_links names the relationship as link_record_id. The quote spans the source text of that statement.
@@ -109,13 +153,22 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
     private async Task<Dictionary<string, RecordTexts>> ReadExecutiveActionsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var sources = await RowsAsync(keys, ExecutiveActionSources, cancellationToken);
-        return sources.ToDictionary(item => item.Key, item => RecordTexts.Of(() => new([], [.. item.Value.Select(row => Text(row))])));
+        var sentences = await RowsAsync(keys, ExecutiveActionSummarySentences, cancellationToken);
+        return sources.ToDictionary(item => item.Key, item => RecordTexts.Of(() =>
+        {
+            string[] summary = [.. sentences.GetValueOrDefault(item.Key, []).Select(row => Text(row))];
+            return new(summary, [.. item.Value.Select(row => Text(row))], summary.Length == 0 ? null : string.Join(' ', summary));
+        }));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadBriefsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var paragraphs = await RowsAsync(keys, BriefParagraphs, cancellationToken);
-        return paragraphs.ToDictionary(item => item.Key, item => RecordTexts.Of(() => new([.. item.Value.Select(row => Text(row))], [])));
+        return paragraphs.ToDictionary(item => item.Key, item => RecordTexts.Of(() =>
+        {
+            string[] text = [.. item.Value.Select(row => Text(row))];
+            return new(text, [], string.Join('\n', text));
+        }));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadRelationshipsAsync(RevisionKeys keys, CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Analysis;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Analysis;
 

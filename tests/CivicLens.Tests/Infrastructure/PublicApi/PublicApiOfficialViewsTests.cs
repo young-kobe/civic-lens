@@ -1,7 +1,5 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
-using AngleSharp.Html.Parser;
-using CivicLens.Host.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
@@ -12,8 +10,8 @@ using Npgsql;
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
 /// <summary>
-/// The officials views against the C# rules of the static pages, on the same rows. Each test seeds rows, reads the view as the public role,
-/// and compares the numbers with <see cref="MissedVotes"/>, <see cref="TalkAndActionProfile"/>, <see cref="PublishedAction.ToEntry"/>, and the rendered officials card.
+/// The officials views against the C# rules of the release, on the same rows. Each test seeds rows, reads the view as the public role,
+/// and compares the numbers with <see cref="MissedVotes"/> and <see cref="PublishedAction.ToEntry"/>.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
@@ -49,7 +47,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task AttendanceEqualsMissedVotesOfTheStaticPageForEachChamberAndCongressBecauseOneRuleMustGiveBothAnswers()
+    public async Task AttendanceEqualsMissedVotesForEachChamberAndCongressBecauseOneRuleMustGiveBothAnswers()
     {
         await ViewsSeed.AddVotesAsync(database, Votes);
         for (var index = 0; index < 5; index++)
@@ -67,13 +65,14 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task VoteIssueCountsEqualTheVotesColumnOfTheProfileBecauseOnlyACastSubstantiveVoteCounts()
+    public async Task VoteIssueCountsEqualTheCastSubstantiveVotesOfTheOfficialBecauseOnlyACastSubstantiveVoteCounts()
     {
         await ViewsSeed.AddVotesAsync(database, Votes);
         for (var index = 0; index < 5; index++)
         {
-            var column = TalkAndActionProfile.Of(119, [], OfficialVotes(index).Where(vote => vote.Congress == 119)).Votes;
-            var expected = column.RecordIdsByIssue.Select(issue => $"{issue.Key} {issue.Value.Length}").Order(StringComparer.Ordinal).ToArray();
+            var expected = OfficialVotes(index).Where(vote => vote.Congress == 119 && vote.Kind.IsSubstantive() && vote.IsCast)
+                .SelectMany(vote => vote.IssueIds).GroupBy(issue => issue, StringComparer.Ordinal)
+                .Select(issue => $"{issue.Key} {issue.Count()}").Order(StringComparer.Ordinal).ToArray();
             var actual = await QueryAsync($"""
                 SELECT issue_id || ' ' || sum(records) FROM public_api.official_issue_counts
                  WHERE official_id = 'p{index}' AND congress = 119 AND source = 'vote' AND vote_kind = ANY(ARRAY['{string.Join("','", Substantive)}'])
@@ -84,7 +83,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
     }
 
     [Fact]
-    public async Task BillIssueCountsEqualTheEntriesOfTheStaticPageBecauseOnlySponsoredBillsOfATrackedIssueCount()
+    public async Task BillIssueCountsEqualTheSponsoredBillEntriesBecauseOnlySponsoredBillsOfATrackedIssueCount()
     {
         var bills = new[]
         {
@@ -98,9 +97,9 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         foreach (var official in new[] { "p0", "p1", "p2" })
         {
             var named = entries.Where(entry => entry.Officials.Any(person => person.Id == official)).ToArray();
-            var profile = TalkAndActionProfile.Of(119, named, []);
+            var sponsored = named.Where(entry => entry.Kind == PublishedRecordKind.Action && ReleaseRecordOrder.CongressOf(entry) == 119).ToArray();
             foreach (var issue in new[] { "health", "tax" })
-                Assert.Equal([profile.SponsoredOn(issue).Length.ToString(CultureInfo.InvariantCulture)], await QueryAsync($"""
+                Assert.Equal([sponsored.Count(entry => entry.IssueIds.Contains(issue)).ToString(CultureInfo.InvariantCulture)], await QueryAsync($"""
                     SELECT coalesce(sum(records), 0) FROM public_api.official_issue_counts
                      WHERE official_id = '{official}' AND congress = 119 AND source = 'bill' AND issue_id = '{issue}'
                     """));
@@ -124,7 +123,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         Assert.Equal(["p0 3", "p1 1", "p2 0"], expected);
     }
 
-    // The static page counts a sponsored bill in the Congress of its last event date. The view counts it in the Congress of the bill number.
+    // The release entry counts a sponsored bill in the Congress of its last event date. The view counts it in the Congress of the bill number.
     [Fact]
     public async Task ABillIssueCountIsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()
     {
@@ -134,28 +133,6 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         Assert.Equal(["118 health 1"], await QueryAsync("SELECT congress || ' ' || issue_id || ' ' || records FROM public_api.official_issue_counts WHERE official_id = 'p0' AND source = 'bill'"));
     }
 
-    // The page picks the term. The test renders the officials page with the real renderer and reads the card, so the page rule stays the one owner.
-    [Fact]
-    public async Task TheLatestTermIsTheNewestTermStartedOnTheReleaseDayAsTheOfficialsCardChoosesIt()
-    {
-        SeededTerm[] terms =
-        [
-            new("Senator", "Senator", "2015-01-03") { State = "MA", Party = "Democrat", EndsOn = "2019-01-03" },
-            new("Senator", "Senator", "2019-01-03") { State = "NY", Party = "Democrat", EndsOn = "2025-01-03" },
-            new("Representative", "Representative", "2025-01-03") { State = "CA", District = 2, Party = "Democrat", EndsOn = "2027-01-03" },
-            new("Representative", "Representative", "2025-01-03") { State = "TX", District = 3, Party = "Republican", EndsOn = "2027-01-03" },
-            new("President", "Executive", "2026-06-03") { Party = "Other" }
-        ];
-        await OfficialsSeed.AddOfficialsAsync(database, new SeededOfficial("p0", "Ann Able", terms));
-        var profile = new PublishedOfficialProfile { Id = "p0", Name = "Ann Able", Terms = [.. terms.Select(OfficeTerm)] };
-        var html = await new ReleaseRenderer(null, null).RenderOfficialsAsync([new OfficialListing(profile, 0)], ReleaseTime, CancellationToken.None);
-        var card = new HtmlParser().ParseDocument(html).QuerySelector("li.official-card")!;
-
-        Assert.Equal("TX", card.GetAttribute("data-state"));
-        Assert.Equal([$"{card.GetAttribute("data-office")} {card.GetAttribute("data-state")} Republican 2027-01-03"],
-            await QueryAsync("SELECT lower(kind) || ' ' || state || ' ' || party || ' ' || to_char(term_end_on, 'YYYY-MM-DD') FROM public_api.officials"));
-        Assert.Contains("Republican", card.TextContent, StringComparison.Ordinal);
-    }
 
     [Fact]
     public async Task ExecutiveActionCountsFollowTheDocumentTypeOfTheActiveEntriesAndLeaveOutOtherKindsAndOtherReleases()
@@ -259,17 +236,6 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         IssueIds = [],
         PolicyAreaIds = [],
         DocumentType = entry.DocumentType is null ? null : Enum.Parse<PublishedExecutiveActionKind>(entry.DocumentType)
-    };
-
-    private static PublishedOfficeTerm OfficeTerm(SeededTerm term) => new()
-    {
-        Office = term.Office,
-        Kind = Enum.Parse<PublishedOfficeKind>(term.Kind),
-        State = term.State,
-        Party = term.Party,
-        Caucus = term.Caucus,
-        Start = DateOnly.Parse(term.StartsOn, CultureInfo.InvariantCulture),
-        End = term.EndsOn is null ? null : DateOnly.Parse(term.EndsOn, CultureInfo.InvariantCulture)
     };
 
     private async Task<NpgsqlConnection> OpenPublicAsync()

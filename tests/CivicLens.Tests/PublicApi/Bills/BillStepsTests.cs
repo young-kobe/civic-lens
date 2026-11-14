@@ -1,5 +1,6 @@
 using CivicLens.PublicApi.Bills;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Tests.PublicApi.Bills;
 
@@ -29,8 +30,21 @@ public sealed class BillStepsTests
     [Fact]
     public void ABillAlwaysStartsWithItsIntroductionInTheChamberOfItsTypeAndNamesTheSponsor()
     {
-        Assert.Equal(new("Introduced in the House", "11 Sep 2025, by Pat One") { Chamber = PublishedChamber.House }, Assert.Single(BillSteps.Of(HouseBill, "Pat One", [])));
-        Assert.Equal(new("Introduced in the Senate", "11 Sep 2025") { Chamber = PublishedChamber.Senate }, Assert.Single(BillSteps.Of(Row("sjres"), null, [])));
+        var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2025, 9, 11));
+        Assert.Equal(new("Introduced in the House", "11 Sep 2025, by Pat One") { Chamber = PublishedChamber.House }, Assert.Single(BillSteps.Of(HouseBill, sponsor, [])));
+        Assert.Equal(new("Introduced in the Senate", "") { Chamber = PublishedChamber.Senate }, Assert.Single(BillSteps.Of(Row("sjres"), null, [])));
+    }
+
+    /// <summary>The bill event date is the latest sponsorship. The sponsor entry holds the introduced date of the Congress.gov bill page.</summary>
+    [Fact]
+    public void TheIntroductionStepShowsTheSponsorDateAndNeverTheLaterLatestSponsorshipDate()
+    {
+        var bill = HouseBill with { EventDate = new(2026, 7, 9) };
+        var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2026, 4, 6));
+
+        Assert.Equal(new DateOnly(2026, 4, 6), BillSteps.IntroducedOn(sponsor));
+        Assert.Null(BillSteps.IntroducedOn(null));
+        Assert.Equal("6 Apr 2026, by Pat One", BillSteps.Of(bill, sponsor, [])[0].Detail);
     }
 
     [Fact]

@@ -6,9 +6,9 @@ using CivicLens.Publication.Contracts;
 namespace CivicLens.Application.Publication;
 
 /// <summary>
-/// Owns the bill status line of a release. Each publish reads the stored status of every action record in the release and writes the status file.
+/// Owns the bill status line of a release. Each publish reads the stored status of every action record in the release, writes the status file, and commits the rows.
 /// The rule for the read time: a status keeps the time of the release that first showed its text and date. A later read of the same action
-/// changes no row and no page, so the file and the page never show two times. A carried action page is written again only when its row differs.
+/// changes no row, so a reader never sees two times for one status. The next publish reads the file back to keep the time and to find a changed status.
 /// </summary>
 internal static class ReleaseBillStatuses
 {

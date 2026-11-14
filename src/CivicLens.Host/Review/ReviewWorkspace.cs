@@ -55,14 +55,11 @@ internal static class ReviewWorkspace
                 ?? throw new ArgumentException("CIVIC_LENS_DATABASE is required.");
             _ = PostgresDocumentComparisonStore.FromConnectionString(connectionString);
             if (Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY") is not null)
-            {
                 PublicationComposition.RequireArtifactRoot();
-                _ = ReleaseRenderer.PublicBaseUrlFromEnvironment();
-            }
         }
         catch (ArgumentException)
         {
-            Console.Error.WriteLine("Invalid review workspace configuration. Configure the database, HTTPS origin, Auth0 credentials, authorized subjects, persistent key directory, the artifact directory when the release directory is set, and a valid public base URL when it is set. See docs/operations.md.");
+            Console.Error.WriteLine("Invalid review workspace configuration. Configure the database, HTTPS origin, Auth0 credentials, authorized subjects, persistent key directory, and the artifact directory when the release directory is set. See docs/operations.md.");
             return 2;
         }
 
@@ -353,13 +350,12 @@ internal static class ReviewWorkspace
         if (releaseRoot is null) return;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var releases = new FileReleaseDirectory(releaseRoot);
-        var icons = PublicationComposition.RequireIssueIcons(ConfigurationFile.ReadIssueIconsFromEnvironment(issues));
         services.AddScoped(_ => new ListPublicationReleases(publications, releases));
         services.AddScoped(_ => new ListBlockedPublished(publications, releases, new BlockedPublishedRecords(publications, releases)));
         services.AddSingleton(provider =>
         {
             var parts = PublicationComposition.Create(connectionString, codeVersion, publications, releases, collection, issues,
-                icons, PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>());
+                PublicationComposition.RequireArtifactRoot(), provider.GetRequiredService<ILoggerFactory>());
             return new TakeOffSite(parts.Publish, publications, releases, parts.Loaders, provider.GetRequiredService<ILogger<TakeOffSite>>());
         });
     }

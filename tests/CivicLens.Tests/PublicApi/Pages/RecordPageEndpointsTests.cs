@@ -397,26 +397,27 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
             new PublishedCorrection { ReplacedRevisionNumber = 2, PublishedAtUtc = CorrectedAt, Note = "The House Clerk changed one cast." },
             new PublishedCorrection { ReplacedRevisionNumber = 1, PublishedAtUtc = CorrectedAt.AddDays(-1), Note = "An older note." });
 
-        var banner = (await GetPageAsync(host, Path(vote.RecordId))).QuerySelector(".correction-banner")!;
+        var page = await GetPageAsync(host, Path(vote.RecordId));
+        var banner = page.QuerySelector(".correction-banner")!;
 
+        Assert.Null(page.QuerySelector(".update-line"));
         Assert.Equal("Civic Lens corrected this vote on 1 Jun 2026, 12:30 UTC.", banner.QuerySelector("p")!.TextContent);
         Assert.Equal([PublishedCorrectionBanner.WhatChanged], banner.QuerySelectorAll("dt").Select(term => term.TextContent));
         Assert.Equal(["The House Clerk changed one cast."], banner.QuerySelectorAll("dd").Select(value => value.TextContent.Trim()));
     }
 
     [Fact]
-    public async Task ACodeUpdateOfAnExecutiveActionShowsTheBannerWithNoWhatChangedText()
+    public async Task ACodeUpdateOfAnExecutiveActionShowsTheMutedUpdateLineWithItsDayAndNoBannerBecauseARoutineUpdateIsNotACorrection()
     {
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + PublicRecordPageRows.ExecutiveAction(ActionId));
         await CorrectionHistorySeed.BindAsync(host.OperationalDatabase, 1, PublishedRecordKind.ExecutiveAction, ActionId,
             new PublishedCorrection { ReplacedRevisionNumber = 1, PublishedAtUtc = CorrectedAt });
 
-        var banner = (await GetPageAsync(host, Path(ActionId))).QuerySelector(".correction-banner")!;
+        var page = await GetPageAsync(host, Path(ActionId));
 
-        Assert.Equal("Civic Lens corrected this executive action on 1 Jun 2026, 12:30 UTC.", banner.QuerySelector("p")!.TextContent);
-        Assert.Null(banner.QuerySelector("dl"));
-        Assert.DoesNotContain(PublishedCorrectionBanner.WhatChanged, banner.TextContent);
+        Assert.Equal("Updated from the source, 1 Jun 2026.", page.QuerySelector("header .update-line")!.TextContent);
+        Assert.Null(page.QuerySelector(".correction-banner"));
     }
 
     public static TheoryData<PublishedRecordKind> PageKinds => new()
@@ -441,8 +442,10 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         using var missing = await host.Client.GetAsync(Path(id));
 
         Assert.NotNull(page.QuerySelector("h1"));
+        Assert.Null(page.QuerySelector(".update-line"));
         Assert.Null(page.QuerySelector(".correction-banner"));
         Assert.Equal(HttpStatusCode.InternalServerError, missing.StatusCode);
+        Assert.Contains($"<h1>{PublishedServerErrorPage.Title}</h1>", await missing.Content.ReadAsStringAsync());
     }
 
     /// <summary>Seeds one record of the kind with all that its page needs, and returns its ID.</summary>

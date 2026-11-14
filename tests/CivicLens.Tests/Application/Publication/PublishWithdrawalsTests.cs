@@ -25,7 +25,6 @@ public sealed class PublishWithdrawalsTests
 
         var files = scenario.Releases.Directories[third.DirectoryName];
         Assert.DoesNotContain(PublicationProtocol.RecordDataPath(action), files.Keys);
-        Assert.Equal($"<html>withdrawn {action} Wrong bill.</html>", Page(files, PublicationProtocol.RecordPagePath(action)));
         var manifest = ReadManifest(scenario, third.DirectoryName);
         Assert.Empty(manifest.Records);
         var withdrawal = Assert.Single(manifest.Withdrawals);
@@ -68,21 +67,19 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task ALaterPublishWritesTheNoticeAgainSoItHasTheCurrentHeadAndNeverBringsTheWithdrawnFileBack()
+    public async Task ALaterPublishKeepsTheNoticeInTheManifestAndNeverBringsTheWithdrawnFileBack()
     {
         var (scenario, action) = await PublishedActionAsync();
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
         scenario.Releases.Links.Clear();
-        scenario.BaseUrl = PublicBaseUrl.Parse("https://civic.example", "V");
         var statement = scenario.AddStatement('b');
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("k3", new PublishedRecordReference(PublishedRecordKind.Statement, statement)));
 
         Assert.Equal(action, Assert.Single(ReadManifest(scenario, third.DirectoryName).Withdrawals).RecordId);
-        Assert.DoesNotContain((second.DirectoryName, PublicationProtocol.RecordPagePath(action)), scenario.Releases.Links);
-        Assert.Equal($"<html>withdrawn {action} Wrong bill.https://civic.example/</html>",
-            Encoding.UTF8.GetString(scenario.Releases.Directories[third.DirectoryName][PublicationProtocol.RecordPagePath(action)]));
+        Assert.DoesNotContain((second.DirectoryName, PublicationProtocol.RecordDataPath(action)), scenario.Releases.Links);
+        Assert.DoesNotContain(PublicationProtocol.RecordDataPath(action), scenario.Releases.Directories[third.DirectoryName].Keys);
         Assert.DoesNotContain(PublicationProtocol.RecordDataPath(action), scenario.Releases.Directories[third.DirectoryName].Keys);
     }
 
@@ -294,7 +291,6 @@ public sealed class PublishWithdrawalsTests
         var manifest = ReadManifest(scenario, returned.DirectoryName);
         Assert.Equal(action, Assert.Single(manifest.Records).RecordId);
         Assert.Empty(manifest.Withdrawals);
-        Assert.StartsWith($"<html>action {action}", Page(files, PublicationProtocol.RecordPagePath(action)));
         var corrections = ReadAction(files, action).Corrections;
         Assert.Equal([(2, "Bill fixed."), (1, "Fix.")], corrections.Select(correction => (correction.ReplacedRevisionNumber, correction.Note)));
         Assert.Equal(scenario.Clock.Now, corrections[0].PublishedAtUtc);
@@ -393,37 +389,20 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task AReturnedActionWritesAgainTheCarriedVotePagesOfItsBillSoTheyLinkItAgain()
+    public async Task AReturnedActionLinksTheCarriedVotesOfItsBillAgain()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('d');
         var vote = scenario.AddVote('a', billActionRecordIds: [action]);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             Reference(action), Reference(vote, PublishedRecordKind.Vote)));
-        var withdrawn = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
-        Assert.Equal($"<html>vote {vote} bill </html>", Page(scenario.Releases.Directories[withdrawn.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
+        Assert.Empty(scenario.Publications.LastCommit!.VoteBills);
         scenario.ReviseAction(action, 2, correctionNote: "Back.");
 
-        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action));
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Correct("k3", action));
 
-        Assert.Equal($"<html>vote {vote} bill {action}</html>", Page(scenario.Releases.Directories[returned.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
-    }
-
-    [Fact]
-    public async Task ACarriedVotePageWrittenAgainBecauseItsBillActionWasWithdrawnStillListsItsRelatedRecords()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('b');
-        var action = scenario.AddAction('d');
-        var vote = scenario.AddVote('a', billActionRecordIds: [action]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            new PublishedRecordReference(PublishedRecordKind.Statement, statement), Reference(action), Reference(vote, PublishedRecordKind.Vote)));
-        var link = scenario.AddRelationship('e', statement, vote, PublishedRecordKind.Vote);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2", Reference(link, PublishedRecordKind.Relationship)));
-
-        var withdrawn = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k3", Reference(action), "Wrong bill."));
-
-        Assert.Equal($"<html>vote {vote} bill  related {link[..1]}</html>", Page(scenario.Releases.Directories[withdrawn.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
+        Assert.Equal(new ReleaseVoteBill(vote, action), Assert.Single(scenario.Publications.LastCommit!.VoteBills));
     }
 
     [Fact]
@@ -486,7 +465,7 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task WithdrawingTheCitingRelationshipInTheSameRequestPassesAndEachCitedPageDropsTheLink()
+    public async Task WithdrawingTheCitingRelationshipInTheSameRequestPasses()
     {
         var (scenario, statement, action, relationship) = await PublishedLinkAsync();
 
@@ -495,27 +474,25 @@ public sealed class PublishWithdrawalsTests
             Withdrawals = [Note(action, "Wrong."), Note(relationship, "Follows the action.", PublishedRecordKind.Relationship)]
         });
 
-        var files = scenario.Releases.Directories[third.DirectoryName];
-        Assert.Equal($"<html>statement {statement}</html>", Page(files, PublicationProtocol.RecordPagePath(statement)));
         Assert.Equal(2, ReadManifest(scenario, third.DirectoryName).Withdrawals.Length);
     }
 
     [Fact]
-    public async Task AWithdrawnRelationshipRemovesItsLinkFromThePagesOfBothRecordsItCited()
+    public async Task AWithdrawnRelationshipLeavesTheReleaseAndTheRecordsItCitedStay()
     {
         var (scenario, statement, action, relationship) = await PublishedLinkAsync();
-        Assert.Contains(" related e", Page(scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName], PublicationProtocol.RecordPagePath(action)));
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             Withdraw("k3", Reference(relationship, PublishedRecordKind.Relationship), "Wrong link."));
 
         var files = scenario.Releases.Directories[third.DirectoryName];
-        Assert.Equal($"<html>statement {statement}</html>", Page(files, PublicationProtocol.RecordPagePath(statement)));
-        Assert.Equal($"<html>action {action}</html>", Page(files, PublicationProtocol.RecordPagePath(action)));
+        Assert.DoesNotContain(PublicationProtocol.RecordDataPath(relationship), files.Keys);
+        Assert.Contains(PublicationProtocol.RecordDataPath(statement), files.Keys);
+        Assert.Contains(PublicationProtocol.RecordDataPath(action), files.Keys);
     }
 
     [Fact]
-    public async Task AnotherLinkOfACitedRecordStaysOnItsPageWhenOneRelationshipIsWithdrawn()
+    public async Task AnotherLinkOfACitedRecordStaysInTheReleaseWhenOneRelationshipIsWithdrawn()
     {
         var (scenario, statement, action, relationship) = await PublishedLinkAsync();
         var otherStatement = scenario.AddStatement('f');
@@ -527,8 +504,10 @@ public sealed class PublishWithdrawalsTests
         var fourth = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             Withdraw("k4", Reference(relationship, PublishedRecordKind.Relationship), "Wrong link."));
 
-        Assert.Equal($"<html>action {action} related 1</html>", Page(scenario.Releases.Directories[fourth.DirectoryName], PublicationProtocol.RecordPagePath(action)));
-        Assert.Equal($"<html>statement {statement}</html>", Page(scenario.Releases.Directories[fourth.DirectoryName], PublicationProtocol.RecordPagePath(statement)));
+        var files = scenario.Releases.Directories[fourth.DirectoryName];
+        Assert.DoesNotContain(PublicationProtocol.RecordDataPath(relationship), files.Keys);
+        Assert.Contains(PublicationProtocol.RecordDataPath(other), files.Keys);
+        Assert.Contains(PublicationProtocol.RecordDataPath(statement), files.Keys);
     }
 
     [Fact]
@@ -568,46 +547,6 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task AWithdrawnStatementLeavesTheOfficialPageAndAnOfficialWithNoRecordLeftLosesThePage()
-    {
-        var scenario = new PublicationScenario();
-        var kept = scenario.AddStatement('a');
-        var withdrawn = scenario.AddStatement('b');
-        var chairOnly = scenario.AddStatement('c', speakerIds: ["chair"]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            new PublishedRecordReference(PublishedRecordKind.Statement, kept), new PublishedRecordReference(PublishedRecordKind.Statement, withdrawn),
-            new PublishedRecordReference(PublishedRecordKind.Statement, chairOnly)));
-
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            new PublishReleaseRequest([], "k2") { Withdrawals = [Note(withdrawn, "Wrong.", PublishedRecordKind.Statement), Note(chairOnly, "Wrong.", PublishedRecordKind.Statement)] });
-
-        var files = scenario.Releases.Directories[second.DirectoryName];
-        Assert.Equal($"<html>official mayor tracked current  congresses [] records [{kept}] votes []</html>", Page(files, PublicationProtocol.OfficialPagePath("mayor")));
-        Assert.DoesNotContain(PublicationProtocol.OfficialPagePath("chair"), files.Keys);
-    }
-
-    [Fact]
-    public async Task AWithdrawnStatementNoLongerCountsInTheTalkAndActionProfile()
-    {
-        var scenario = new PublicationScenario();
-        var kept = scenario.AddStatement('a', statementDate: new DateOnly(2026, 1, 1));
-        var withdrawn = scenario.AddStatement('b', statementDate: new DateOnly(2026, 1, 1));
-        var vote = scenario.AddVote('c');
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            new PublishedRecordReference(PublishedRecordKind.Statement, kept), new PublishedRecordReference(PublishedRecordKind.Statement, withdrawn),
-            new PublishedRecordReference(PublishedRecordKind.Vote, vote)));
-        Assert.Equal(2, MayorProfile(scenario).Statements.CountOf("housing"));
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            new PublishReleaseRequest([], "k2") { Withdrawals = [Note(withdrawn, "Wrong.", PublishedRecordKind.Statement)] });
-
-        Assert.Equal(1, MayorProfile(scenario).Statements.CountOf("housing"));
-    }
-
-    private static TalkAndActionProfile MayorProfile(PublicationScenario scenario) =>
-        scenario.OfficialPages.Last(page => page.Profile.Id == "mayor" && page.IsCurrent).TalkAndAction!;
-
-    [Fact]
     public async Task AWithdrawnVoteLeavesTheVoteFilesOfItsMembersAndACongressWithNoRowDisappears()
     {
         var scenario = new PublicationScenario();
@@ -629,7 +568,7 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task AVotePageThatLinkedTheWithdrawnActionOfItsBillIsWrittenAgainWithoutTheLink()
+    public async Task AVoteThatLinkedTheWithdrawnActionOfItsBillLosesTheLinkAndTheOtherVotesAreCarried()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('d');
@@ -639,15 +578,15 @@ public sealed class PublishWithdrawalsTests
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             Reference(action), Reference(vote, PublishedRecordKind.Vote), Reference(unrelated, PublishedRecordKind.Vote),
             Reference(otherBill, PublishedRecordKind.Vote)));
-        Assert.Equal($"<html>vote {vote} bill {action}</html>", Page(scenario.Releases.Directories[first.DirectoryName], PublicationProtocol.RecordPagePath(vote)));
+        Assert.Equal(new ReleaseVoteBill(vote, action), Assert.Single(scenario.Publications.LastCommit!.VoteBills));
         scenario.Releases.Links.Clear();
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(action), "Wrong bill."));
 
-        var files = scenario.Releases.Directories[second.DirectoryName];
-        Assert.Equal($"<html>vote {vote} bill </html>", Page(files, PublicationProtocol.RecordPagePath(vote)));
-        Assert.Contains((first.DirectoryName, PublicationProtocol.RecordPagePath(unrelated)), scenario.Releases.Links);
-        Assert.Contains((first.DirectoryName, PublicationProtocol.RecordPagePath(otherBill)), scenario.Releases.Links);
+        Assert.Empty(scenario.Publications.LastCommit!.VoteBills);
+        Assert.Contains((first.DirectoryName, PublicationProtocol.RecordDataPath(unrelated)), scenario.Releases.Links);
+        Assert.Contains((first.DirectoryName, PublicationProtocol.RecordDataPath(otherBill)), scenario.Releases.Links);
+        Assert.Contains(PublicationProtocol.RecordDataPath(vote), scenario.Releases.Directories[second.DirectoryName].Keys);
     }
 
     [Fact]
@@ -695,8 +634,6 @@ public sealed class PublishWithdrawalsTests
 
     private static PublishedAction ReadAction(Dictionary<string, byte[]> files, string recordId) =>
         JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(recordId)], PublicationProtocol.JsonOptions)!;
-
-    private static string Page(Dictionary<string, byte[]> files, string path) => Encoding.UTF8.GetString(files[path]);
 
     private static PublishedOfficialVote[] VoteRows(Dictionary<string, byte[]> files, string path) =>
         JsonSerializer.Deserialize<PublishedOfficialVotes>(files[path], PublicationProtocol.JsonOptions)!.Votes;
