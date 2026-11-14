@@ -23,7 +23,7 @@
                         <li>
                             @if (Data.FactLabel is not null)
                             {
-                                <CitationQuote Label="@RelationshipPageView.FactLabel(Data.Target.Kind)" Quote="@Data.Fact"><AiLabel Text="@Data.FactLabel" /></CitationQuote>
+                                <CitationQuote Label="@RelationshipPageView.FactLabel(Data.Target.Kind)" Quote="@Data.Fact"><AiLabel Text="@Data.FactLabel" Origin="Data.FactTextOrigin" /></CitationQuote>
                             }
                             else
                             {

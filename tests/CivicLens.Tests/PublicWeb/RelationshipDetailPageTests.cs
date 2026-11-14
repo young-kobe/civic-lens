@@ -34,10 +34,21 @@ public sealed class RelationshipDetailPageTests
         Assert.Null(page.QuerySelectorAll(".detail-quotes li")[0].QuerySelector(".row"));
     }
 
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model, AiLabelWords.ModelWording, "model")]
+    [InlineData(PublishedTextOrigin.Code, AiLabelWords.CodeWording, "code")]
+    public async Task TheFactLabelTakesTheOriginOfTheFactSoOnlyAModelFactShowsInTheAiInk(PublishedTextOrigin origin, string label, string drawnOrigin)
+    {
+        var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship() with { FactLabel = label, FactTextOrigin = origin });
+
+        var factLabel = page.QuerySelectorAll(".detail-quotes li")[1].QuerySelector(".ai-label")!;
+        Assert.Equal((label, drawnOrigin), (factLabel.TextContent, factLabel.GetAttribute("data-origin")));
+    }
+
     [Fact]
     public async Task APersonReasonHasNoAiLabel()
     {
-        var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship(PublishedTextOrigin.Person) with { FactLabel = null });
+        var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship(PublishedTextOrigin.Person) with { FactLabel = null, FactTextOrigin = null });
 
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
         Assert.Null(page.QuerySelector(".ai-summary .ai-label"));
