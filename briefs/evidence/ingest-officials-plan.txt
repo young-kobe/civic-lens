@@ -1,0 +1,67 @@
+BEGIN
+SET
+SET
+ statement_timeout 
+-------------------
+ 0
+(1 row)
+
+ count 
+-------
+ 21944
+(1 row)
+
+                                                                                                   QUERY PLAN                                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2512.47..2512.48 rows=3 width=98) (actual time=6093.078..6095.956 rows=20159.00 loops=1)
+   Sort Key: s.record_id, s.revision_number, c."position"
+   Sort Method: quicksort  Memory: 3089kB
+   Buffers: shared hit=365824
+   InitPlan 1
+     ->  Limit  (cost=0.12..8.15 rows=1 width=4) (actual time=0.022..0.025 rows=1.00 loops=1)
+           Buffers: shared hit=2
+           ->  Subquery Scan on active_release  (cost=0.12..8.15 rows=1 width=4) (actual time=0.019..0.021 rows=1.00 loops=1)
+                 Buffers: shared hit=2
+                 ->  Index Scan using "IX_publication_releases_is_active" on publication_releases  (cost=0.12..8.14 rows=1 width=12) (actual time=0.017..0.017 rows=1.00 loops=1)
+                       Index Searches: 1
+                       Buffers: shared hit=2
+   ->  Nested Loop Left Join  (cost=915.36..2504.30 rows=3 width=98) (actual time=16.126..6047.487 rows=20159.00 loops=1)
+         Join Filter: ((o.official_id)::text = (c.official_id)::text)
+         Rows Removed by Join Filter: 10906019
+         Buffers: shared hit=365815
+         ->  Hash Join  (cost=914.94..1702.56 rows=1 width=167) (actual time=15.731..68.754 rows=20159.00 loops=1)
+               Hash Cond: (((s.kind)::text = (c.kind)::text) AND ((s.record_id)::text = (c.record_id)::text) AND (s.revision_number = c.revision_number))
+               Buffers: shared hit=2951
+               ->  Nested Loop  (cost=0.41..568.45 rows=7637 width=88) (actual time=0.045..19.144 rows=21944.00 loops=1)
+                     Buffers: shared hit=2622
+                     ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.015..0.018 rows=1.00 loops=1)
+                           Index Searches: 1
+                           Buffers: shared hit=2
+                     ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..483.94 rows=7637 width=84) (actual time=0.025..14.493 rows=21944.00 loops=1)
+                           Index Cond: (first_release <= r.release_number)
+                           Filter: ((last_release IS NULL) OR (last_release >= r.release_number))
+                           Rows Removed by Filter: 2911
+                           Index Searches: 1
+                           Buffers: shared hit=2620
+               ->  Hash  (cost=541.92..541.92 rows=21292 width=92) (actual time=15.225..15.227 rows=21332.00 loops=1)
+                     Buckets: 32768  Batches: 1  Memory Usage: 2898kB
+                     Buffers: shared hit=329
+                     ->  Seq Scan on published_entry_officials c  (cost=0.00..541.92 rows=21292 width=92) (actual time=0.038..5.898 rows=21332.00 loops=1)
+                           Buffers: shared hit=329
+         ->  Nested Loop  (cost=0.41..788.64 rows=582 width=578) (actual time=0.008..0.233 rows=542.00 loops=20159)
+               Buffers: shared hit=362864
+               ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_1  (cost=0.12..8.14 rows=1 width=4) (actual time=0.002..0.002 rows=1.00 loops=20159)
+                     Filter: (release_number = (InitPlan 1).col1)
+                     Index Searches: 20159
+                     Buffers: shared hit=40320
+               ->  Index Scan using "PK_release_officials" on release_officials o  (cost=0.29..774.68 rows=582 width=30) (actual time=0.006..0.120 rows=542.00 loops=20159)
+                     Index Cond: (release_number = (InitPlan 1).col1)
+                     Index Searches: 20159
+                     Buffers: shared hit=322544
+ Planning:
+   Buffers: shared hit=188 read=7
+ Planning Time: 2.735 ms
+ Execution Time: 6100.688 ms
+(49 rows)
+
+ROLLBACK
