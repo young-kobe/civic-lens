@@ -56,6 +56,14 @@ public sealed class AiTextRulesTests
     }
 
     [Fact]
+    public void ThePassageGradeIsTheRoundedGradeThatTheCheckComparesAndBlankPiecesDoNotCount()
+    {
+        Assert.Equal(14.1, AiTextRules.PassageGrade([FailingHeadline, null, " ", Summary]));
+        Assert.Equal(13.5, AiTextRules.PassageGrade([PassingHeadline, Summary]));
+        Assert.Equal(0, AiTextRules.PassageGrade([null, ""]));
+    }
+
+    [Fact]
     public void EveryAnalysisRunChecksTheFirstAnswerAndOneRepair()
     {
         Assert.Equal(2, AiTextRules.MaximumValidationPasses);

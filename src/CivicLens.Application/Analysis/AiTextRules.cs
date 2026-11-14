@@ -66,6 +66,9 @@ public static class AiTextRules
             throw new ArgumentException($"The text reads at grade {ReadingGrade.Format(grade)} as one passage. The limit is grade {ReadingGrade.Format(MaximumGrade)}.");
     }
 
+    /// <summary>The rounded grade of the pieces read as one passage. Blank pieces do not count. The check and a review page show this value.</summary>
+    public static double PassageGrade(IEnumerable<string?> pieces) => ReadingGrade.RoundedPassage(PassageOf(pieces));
+
     /// <summary>The rounded grade is the value that the check compares and the message prints, so a grade that prints as the limit passes.</summary>
     private static bool IsPassageReadable(ImmutableArray<string> passage, out double grade)
     {
