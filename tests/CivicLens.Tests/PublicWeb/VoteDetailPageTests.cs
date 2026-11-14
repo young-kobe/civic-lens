@@ -93,15 +93,14 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task UnknownPartyCountsShowNoPartyCardAndNoBreakersInsteadOfZeros()
+    public async Task UnknownPartyCountsShowNoPartyCardInsteadOfZerosAndTheBreakersStillComeFromTheirPartyLines()
     {
         var page = await RenderAsync(Vote() with { PartyTallies = null });
 
         Assert.Null(page.QuerySelector(".vote-parties"));
-        Assert.Null(page.QuerySelector(".vote-breakers"));
+        Assert.Equal(["Ada Able", "Di Dole"], page.QuerySelectorAll(".vote-breakers li a").Select(link => link.TextContent));
         Assert.Equal("This record does not show party counts.", page.QuerySelector(".vote-parties-unknown")!.TextContent.Trim());
         Assert.Single(page.QuerySelectorAll(".party-bar"));
-        Assert.DoesNotContain("Democrats", page.QuerySelector("main")!.TextContent);
     }
 
     [Fact]
@@ -114,7 +113,7 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task BreakersAreTrackedMembersWhoCastYesOrNoAgainstTheirPartyMajorityAndEachPartyHeadingLinksToItsFullBoard()
+    public async Task BreakersAreTheTrackedMembersWhosePartyLineBreaksAndEachPartyHeadingLinksToItsFullBoard()
     {
         var page = await RenderAsync(Vote());
 
@@ -130,7 +129,7 @@ public sealed class VoteDetailPageTests
     public async Task AGroupWithNoBreakerShowsOneLineWithItsBoardLinkAndNoHeading()
     {
         var vote = Vote();
-        var page = await RenderAsync(vote with { Members = [.. vote.Members.Where(member => member.Party != "Republican")] });
+        var page = await RenderAsync(vote with { Members = [.. vote.Members.Where(member => member.Name != "Di Dole")] });
 
         var groups = page.QuerySelectorAll(".vote-breaker-group");
         Assert.Equal(2, groups.Length);
@@ -145,7 +144,8 @@ public sealed class VoteDetailPageTests
     [Fact]
     public async Task AVoteWhereThePartiesAgreedHasNoBreakersAndShowsItsBadge()
     {
-        var page = await RenderAsync(Vote() with { Alignment = PublishedVoteAlignment.PartiesAgree });
+        var vote = Vote();
+        var page = await RenderAsync(vote with { Alignment = PublishedVoteAlignment.PartiesAgree, Members = [.. vote.Members.Select(member => member with { BreaksParty = null })] });
 
         Assert.Null(page.QuerySelector(".vote-breakers"));
         Assert.Equal(VoteWords.PartiesAgreedBadge, page.QuerySelector(".vote-result .badge")!.TextContent);
