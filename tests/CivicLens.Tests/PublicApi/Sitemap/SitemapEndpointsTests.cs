@@ -11,7 +11,7 @@ using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.Sitemap;
 
-/// <summary>The gated sitemap and robots file that the server builds from the public views in place of the release files.</summary>
+/// <summary>The sitemap and robots file that the server builds from the public views in place of the release files.</summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
 public sealed class SitemapEndpointsTests(PostgresCollection postgres)
@@ -32,7 +32,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
 
     private static Task<HttpResponseMessage> GetAsync(ApiHost host, string path, string? etag = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{ServerPageEndpoints.Prefix}/{path}");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/{path}");
         if (etag is not null) request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Parse(etag));
         return host.Client.SendAsync(request);
     }
@@ -81,7 +81,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
             $"records/{Vote}.html", $"records/{Statement}.html", $"records/{Relationship}.html", $"records/{Vote}/map.html"
         ];
         Assert.Equal(pages.Select(page => Root + page), urls);
-        Assert.DoesNotContain(urls, url => url.Contains(Withdrawn, StringComparison.Ordinal) || url.Contains("/web/", StringComparison.Ordinal));
+        Assert.DoesNotContain(urls, url => url.Contains(Withdrawn, StringComparison.Ordinal) || url.Contains("/web", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -29,6 +29,9 @@ status_of() { awk 'NR == 1 { print $2 }' <<< "$1"; }
 
 header_of() { { grep -i "^$2:" <<< "$1" || true; } | head -n 1 | cut -d: -f2- | sed 's/^ *//'; }
 
+# Joins every line of one header with ", ", as a cache reads a header that a proxy sent on several lines.
+header_values_of() { { grep -i "^$2:" <<< "$1" || true; } | cut -d: -f2- | sed 's/^ *//' | paste -sd, - | sed 's/,/, /g'; }
+
 noindex_expected() { grep -Eq '^[[:space:]]*import noindex[[:space:]]*$' "$caddyfile"; }
 
 # update.sh recreates cloudflared, and Cloudflare answers 530 until the new tunnel connects. Wait a bounded time, then let the checks judge.
@@ -68,15 +71,15 @@ check_noindex() {
 check_missing_page() {
   local headers cache
   headers=$(fetch "$site/no-such-page-$RANDOM")
-  cache=$(header_of "$headers" cache-control)
+  cache=$(header_values_of "$headers" cache-control)
   if [[ $(status_of "$headers") != 404 ]]; then
-    fail "Missing page: expected status 404 from $site, got '$(status_of "$headers")'. Check that the active release has files: sudo deploy/scripts/compose.sh run --rm cli releases list"
-  elif ! grep -qi '<html' "$body_file"; then
-    fail "Missing page: expected the release 404 page (HTML), got a plain body. Check that the active release has 404.html."
+    fail "Missing page: expected status 404 from $site, got '$(status_of "$headers")'. Check that the search service runs and has an active release: sudo deploy/scripts/compose.sh ps"
+  elif ! grep -q '<body class="public">' "$body_file" || ! grep -q '<h1>Page not found</h1>' "$body_file"; then
+    fail "Missing page: expected the server not found page (the public shell with the heading 'Page not found'), got another body. Check that Caddy sends page paths to the search service."
   elif [[ $cache != 'no-store, no-transform' ]]; then
-    fail "Missing page: expected Cache-Control: no-store, no-transform, got '${cache:-no header}'. Check the handle_errors block of the Caddyfile."
+    fail "Missing page: expected Cache-Control: no-store, no-transform, got '${cache:-no header}'. Check the page handle block of the Caddyfile."
   else
-    pass "Missing page: status 404, release 404 page, Cache-Control no-store, no-transform"
+    pass "Missing page: status 404, server not found page, Cache-Control no-store, no-transform"
   fi
 }
 

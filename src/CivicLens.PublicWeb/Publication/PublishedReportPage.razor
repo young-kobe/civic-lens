@@ -7,7 +7,7 @@
         <Panel Label="Report a problem" Padded="true">
             <EmptyState Level="2" Title="Reporting is not available"
                         Text="This release has no report service. Browse the published records instead.">
-                <Action><Button Href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</Button></Action>
+                <Action><Button Href="@(RootPath + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote))">All records</Button></Action>
             </EmptyState>
         </Panel>
     }
@@ -56,11 +56,11 @@
                     <span>This page needs JavaScript to run the check that you are not a robot. Without JavaScript, you cannot send a report here.</span>
                 </div>
             </noscript>
-            <p><a data-report-record href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</a></p>
+            <p><a data-report-record href="@(RootPath + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote))">All records</a></p>
         </Panel>
     }
     <Panel Title="A problem with the site" Padded="true">
-        <p>For a problem with the site, such as a broken page, send an email to <a href="mailto:@PublishedRecordLabels.ContactEmail">@PublishedRecordLabels.ContactEmail</a>.</p>
+        <p>For a broken page or another site problem, write to the site contact on the <a href="@(RootPath + PublicationProtocol.AboutPagePath)">About page</a>.</p>
     </Panel>
 </PublicPage>
 

@@ -7,7 +7,7 @@
     {
         <Panel Label="Weekly briefs" Padded="true">
             <EmptyState Level="2" Title="No weekly briefs yet" Text="Civic Lens has not published a weekly brief. Browse the published records instead.">
-                <Action><Button Href="@VotesList.Href">@VotesList.Label</Button></Action>
+                <Action><Button Href="@(RootPath + VotesList.Path)">@VotesList.Label</Button></Action>
             </EmptyState>
         </Panel>
     }

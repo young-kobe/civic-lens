@@ -1,10 +1,9 @@
 @using CivicLens.Publication.Contracts
 
 <PublicPage Section="null" CanonicalPath="@null" NoIndex="true" Title="Page not found" Description="This page does not exist on Civic Lens." RootPath="@RootPath">
+    <PageHeader Title="Page not found" Lede="This page does not exist on Civic Lens. The address may be wrong, or the page may have moved." />
     <Panel Label="Page not found" Padded="true">
-        <EmptyState Title="Page not found" Text="This page does not exist on Civic Lens. The address may be wrong, or the page may have moved.">
-            <Action><Button Href="@(RootPath + PublicationProtocol.HomePath)">Go to the home page</Button></Action>
-        </EmptyState>
+        <div class="row"><Button Href="@(RootPath + PublicationProtocol.HomePath)">Go to the home page</Button></div>
         <p>You can also browse the <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">officials</a> or <a href="@(RootPath + PublicationProtocol.SearchPagePath)">search the records</a>.</p>
     </Panel>
 </PublicPage>

@@ -40,7 +40,7 @@
     <a class="skip" href="#main">Skip to content</a>
     <header class="public-header">
         <a class="public-brand" href="@(RootPath + PublicationProtocol.HomePath)"><BrandMark />Civic Lens</a>
-        <nav class="public-nav" aria-label="Site">@NavLinks(headerLinks)</nav>
+        <nav class="public-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
         <form class="public-search" role="search" aria-label="Search the site" action="@(RootPath + PublicationProtocol.SearchPagePath)" method="get">
             <label class="visually-hidden" for="site-search">Search the site</label>
             <Icon Name="IconName.Search" />
@@ -54,7 +54,7 @@
             <PublicThemeMenu />
             <details class="public-menu">
                 <summary>Menu</summary>
-                <nav class="public-menu-nav" aria-label="Site">@NavLinks(headerLinks)</nav>
+                <nav class="public-menu-nav" aria-label="Site">@NavLinks(PublicSections.Header)</nav>
             </details>
         </div>
     </header>
@@ -87,10 +87,9 @@
     private string? canonicalUrl;
     private PublicTrail? trail;
     private MembersStripSlot? membersStrip;
-    private IReadOnlyList<PublicSections.NavLink> headerLinks = PublicSections.Header;
     private readonly GlossaryPageUse glossaryUse = new();
 
-    /// <summary>Set by the server page frame, so a page rendered by the server shows the freshness line and the header links of the preview.</summary>
+    /// <summary>Set by the server page frame, so a page rendered by the server shows the freshness line. A static page has none.</summary>
     [CascadingParameter] private ServerPageContext? Context { get; set; }
 
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
@@ -107,8 +106,6 @@
     [Parameter] public PublicBreadcrumbItem? TrailParent { get; set; }
     [Parameter] public bool IsArticle { get; set; }
     [Parameter] public bool NoIndex { get; set; }
-    /// <summary>True for a server page that the public site already serves on its own path, such as Compare. It keeps the public header links, because the preview links reach only the API host.</summary>
-    [Parameter] public bool OnPublicRoute { get; set; }
     [Parameter, EditorRequired] public string? CanonicalPath { get; set; }
     [Parameter] public string? ExternalScript { get; set; }
     [Parameter] public string RootPath { get; set; } = string.Empty;
@@ -118,7 +115,7 @@
     private RenderFragment NavLinks(IReadOnlyList<PublicSections.NavLink> links) => @<text>
         @foreach (var link in links)
         {
-            <a href="@(link.Path.StartsWith('/') ? link.Path : RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text@if (link.HiddenText is not null){<span class="visually-hidden">: @link.HiddenText</span>}</a>
+            <a href="@(RootPath + link.Path)" aria-current="@(link.Section is { } section && section == Section ? "page" : null)">@link.Text@if (link.HiddenText is not null){<span class="visually-hidden">: @link.HiddenText</span>}</a>
         }
     </text>;
 
@@ -126,7 +123,6 @@
 
     protected override void OnParametersSet()
     {
-        headerLinks = Context is null || OnPublicRoute ? PublicSections.Header : PublicSections.PreviewHeader;
         documentTitle = PublicHead.DocumentTitle(Title, Page, PageCount);
         description = PublicHead.Description(Description);
         trail = CanonicalPath == string.Empty ? null : PublicSections.Trail(Section, Title, CanonicalPath, Record?.Kind ?? TrailKind, Record?.ShortName ?? TrailName);

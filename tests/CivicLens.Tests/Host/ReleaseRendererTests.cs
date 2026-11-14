@@ -87,7 +87,7 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("not published", html, StringComparison.Ordinal);
         Assert.Contains("href=\"../assets/css/theme.css\"", html, StringComparison.Ordinal);
         Assert.Contains("src=\"../assets/js/app.js\"", html, StringComparison.Ordinal);
-        Assert.Contains($"href=\"../{PublicSections.StaticBoardsPath}\"", html, StringComparison.Ordinal);
+        Assert.Contains($"href=\"../{PublicationProtocol.BoardsPagePath}\"", html, StringComparison.Ordinal);
         Assert.DoesNotMatch(new Regex("(?:href|src)=\"(?:/|//)"), html);
         Assert.Contains("rel=\"noopener noreferrer nofollow\"", html, StringComparison.Ordinal);
     }
@@ -286,7 +286,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndGivesTheSiteContactAddressInEveryState()
+    public async Task TheReportPageWithNoRecordSaysWhichLinkToUseAndSendsSiteProblemsToTheAboutPageInEveryState()
     {
         var html = await new ReleaseRenderer("https://api.example.test", "site-key-1").RenderReportAsync(CancellationToken.None);
 
@@ -296,9 +296,9 @@ public sealed class ReleaseRendererTests
         Assert.Equal("Find the record first", panel.QuerySelector("h2")!.TextContent);
         Assert.Equal([PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath], panel.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
         Assert.Contains($"has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\"", panel.TextContent, StringComparison.Ordinal);
-        Assert.Equal($"mailto:{PublishedRecordLabels.ContactEmail}", document.QuerySelector("main a[href^='mailto:']")!.GetAttribute("href"));
-        AssertMailtoPanelIsAlwaysShown(document);
-        AssertMailtoPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
+        Assert.Null(document.QuerySelector("main a[href^='mailto:']"));
+        AssertSiteProblemPanelIsAlwaysShown(document);
+        AssertSiteProblemPanelIsAlwaysShown(new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderReportAsync(CancellationToken.None)));
     }
 
     [Fact]
@@ -342,9 +342,11 @@ public sealed class ReleaseRendererTests
         Assert.DoesNotContain("\"", href, StringComparison.Ordinal);
     }
 
-    private static void AssertMailtoPanelIsAlwaysShown(AngleSharp.Dom.IDocument document)
+    private static void AssertSiteProblemPanelIsAlwaysShown(AngleSharp.Dom.IDocument document)
     {
-        var panel = document.QuerySelector($"main a[href='mailto:{PublishedRecordLabels.ContactEmail}']")!.Closest("section")!;
+        var link = document.QuerySelector($"main a[href='{PublicationProtocol.AboutPagePath}']")!;
+        var panel = link.Closest("section")!;
+        Assert.Equal("For a broken page or another site problem, write to the site contact on the About page.", link.ParentElement!.TextContent);
         Assert.False(panel.HasAttribute("hidden"));
         Assert.False(panel.HasAttribute("data-report-missing"));
     }
@@ -2856,6 +2858,13 @@ public sealed class ReleaseRendererTests
         .. OfficialBoard.All.Select(board => board.PagePath)
     ];
 
+    /// <summary>The pages that the header links and only the server serves: the boards page and the list pages. <c>PublicRouteMapTests</c> proves the server answers each one.</summary>
+    private static readonly string[] ServedRootPages =
+    [
+        .. WrittenRootPages, PublicationProtocol.BoardsPagePath,
+        .. new[] { PublishedRecordKind.Vote, PublishedRecordKind.Action, PublishedRecordKind.ExecutiveAction }.Select(PublicationProtocol.ListPagePath)
+    ];
+
     [Fact]
     public async Task EveryPageTypeMarksItsSectionInTheNavigationOrNoneWhenItBelongsToNoSection()
     {
@@ -2893,7 +2902,7 @@ public sealed class ReleaseRendererTests
     }
 
     [Fact]
-    public async Task EveryNavigationAndFooterLinkOfEveryPageTypeLeadsToAPageTheReleaseWritesSoNoReaderReachesA404()
+    public async Task EveryNavigationAndFooterLinkOfEveryPageTypeLeadsToAPageTheReleaseWritesOrTheServerServesSoNoReaderReachesA404()
     {
         foreach (var (name, pagePath, html, _) in await RenderEveryPageTypeAsync())
         {
@@ -2902,7 +2911,7 @@ public sealed class ReleaseRendererTests
                 .Select(link => link.GetAttribute("href")!).ToList();
 
             Assert.Equal(PublicSections.Header.Count * 2 + PublicSections.Footer.Count, links.Count);
-            Assert.All(links, href => Assert.True(WrittenRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
+            Assert.All(links, href => Assert.True(ServedRootPages.Contains(ReleasePath(pagePath, href)), $"{name}: {href}"));
         }
     }
 

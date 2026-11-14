@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Boards;
 
-/// <summary>The gated party boards page and the full page of each board. Its ETag uses the release of the board snapshot, so the page and its validator agree.</summary>
+/// <summary>The party boards page and the full page of each board. Its ETag uses the release of the board snapshot, so the page and its validator agree.</summary>
 public static class BoardsPageEndpoint
 {
     public static Task<IResult> RespondAsync(HttpContext context, BoardsPageReader reader, ServerPageResponder responder,

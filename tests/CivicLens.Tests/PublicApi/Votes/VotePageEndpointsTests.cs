@@ -22,7 +22,7 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
 {
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly SeededVote House = new('a', "2026-03-02") { Casts = ["Yea", "Nay", "Nay", "Not Voting"], PersonIds = ["p0", "p1", "p2", "p3"], Issues = ["health"] };
-    private static readonly string Path = $"{ServerPageEndpoints.Prefix}/records/{House.RecordId}.html";
+    private static readonly string Path = $"/records/{House.RecordId}.html";
 
     private async Task<ApiHost> StartAsync(bool withTallies = true)
     {
@@ -70,14 +70,14 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheFilterFormAndClearLinkStayOnTheOriginThatServedThePageEvenWhenThePublicBaseUrlNamesAnotherOrigin()
+    public async Task TheFilterFormAndClearLinkPointAtThePublicAddressOfTheVotePage()
     {
         await using var host = await StartAsync();
 
         var page = await GetPageAsync(host, Path + "?cast=Nay");
 
-        Assert.Equal(Path + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
-        Assert.Equal(Path + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(House.RecordId)) + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(House.RecordId)) + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
     }
 
     [Fact]
@@ -207,8 +207,8 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/records/{new string('f', 64)}.html", HttpStatusCode.NotFound);
-        await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/records/not-a-record.html", HttpStatusCode.NotFound);
+        await GetPageAsync(host, $"/records/{new string('f', 64)}.html", HttpStatusCode.NotFound);
+        await GetPageAsync(host, $"/records/not-a-record.html", HttpStatusCode.NotFound);
     }
 
     [Fact]

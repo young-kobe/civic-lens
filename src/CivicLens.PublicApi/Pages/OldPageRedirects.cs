@@ -10,8 +10,8 @@ namespace CivicLens.PublicApi.Pages;
 
 /// <summary>
 /// The permanent redirects of the old static paths that have no server page: the pages of older Congresses of an official, the policy area pages,
-/// the all records list, and the later issue pages. Each keeps the query of the old URL. A path that the static site never wrote answers the not found page.
-/// The routes serve under the server-page prefix until the cutover PR maps the public paths.
+/// the all records list, and the later issue pages. Each keeps the query of the old URL and names the public address of its target.
+/// A path that the static site never wrote answers the not found page.
 /// </summary>
 public static class OldPageRedirects
 {
@@ -20,21 +20,22 @@ public static class OldPageRedirects
     public static void MapOldPageRedirects(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         var rootPath = baseUrl.Join(string.Empty);
-        routes.MapGet(ServerPageEndpoints.Prefix + "/officials/{id}/{congress:int:min(1)}.html", (string id, HttpContext context, ServerPageResponder responder,
+        // The votes list replaces the old all records list, as the plan of the cutover decided.
+        var allRecordsTarget = rootPath + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote);
+        routes.MapGet(ServerPageEndpoints.Route("officials/{id}/{congress:int:min(1)}.html"), (string id, HttpContext context, ServerPageResponder responder,
             CancellationToken cancellationToken) => RedirectAsync(context, responder, rootPath,
-                PublicationProtocol.IsPathSegment(id) ? ServerPageEndpoints.OfficialRoute(id) : null, cancellationToken));
-        routes.MapGet(ServerPageEndpoints.Prefix + "/policy-areas/{file}.html", (string file, HttpContext context, ServerPageResponder responder,
+                PublicationProtocol.IsPathSegment(id) ? rootPath + PublicationProtocol.OfficialPagePath(id) : null, cancellationToken));
+        routes.MapGet(ServerPageEndpoints.Route("policy-areas/{file}.html"), (string file, HttpContext context, ServerPageResponder responder,
             CancellationToken cancellationToken) => RedirectAsync(context, responder, rootPath,
-                PolicyAreaOf(file) is { } id ? QueryHelpers.AddQueryString(ServerPageEndpoints.SearchRoute, PolicyAreaFilter, id) : null, cancellationToken));
-        routes.MapGet(ServerPageEndpoints.Prefix + "/" + PublicationProtocol.AllRecordsPagePath(1), (HttpContext context) => Moved(AllRecordsTarget, context.Request.Query));
-        routes.MapGet(ServerPageEndpoints.Prefix + "/all-{page:int:min(2)}.html", (HttpContext context) => Moved(AllRecordsTarget, context.Request.Query));
-        routes.MapGet(ServerPageEndpoints.Prefix + "/issues/{id}.page-{page:int:min(2)}.html", (string id, HttpContext context, ServerPageResponder responder,
+                PolicyAreaOf(file) is { } id ? QueryHelpers.AddQueryString(rootPath + PublicationProtocol.SearchPagePath, PolicyAreaFilter, id) : null, cancellationToken));
+        routes.MapGet(ServerPageEndpoints.Route(PublicationProtocol.AllRecordsPagePath(1)), (HttpContext context) => Moved(allRecordsTarget, context.Request.Query));
+        routes.MapGet(ServerPageEndpoints.Route("all-{page:int:min(2)}.html"), (HttpContext context) => Moved(allRecordsTarget, context.Request.Query));
+        // The issue page route also matches a later page, with the whole file name as the issue. The lower order makes this route win when both match.
+        routes.MapGet(ServerPageEndpoints.Route("issues/{id}.page-{page:int:min(2)}.html"), (string id, HttpContext context, ServerPageResponder responder,
             CancellationToken cancellationToken) => RedirectAsync(context, responder, rootPath,
-                PublicationProtocol.IsPathSegment(id) ? IssueRecordWords.ListHref(PublishedRecordKind.Vote, id) : null, cancellationToken));
+                PublicationProtocol.IsPathSegment(id) ? rootPath + IssueRecordWords.ListPath(PublishedRecordKind.Vote, id) : null, cancellationToken))
+            .WithOrder(-1);
     }
-
-    /// <summary>The votes list replaces the old all records list, as the plan of the cutover decided.</summary>
-    private static string AllRecordsTarget => PublicSections.ListOf(PublishedRecordKind.Vote).Href;
 
     /// <summary>The policy area of an old file name, "{id}" for the first page or "{id}.page-{n}" for a later page. Null when the static site never wrote that name.
     /// One route takes both names, because two routes of these shapes match the same later page and routing cannot choose between them.</summary>

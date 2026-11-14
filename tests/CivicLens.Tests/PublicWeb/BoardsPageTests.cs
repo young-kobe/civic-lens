@@ -139,7 +139,7 @@ public sealed class BoardsPageTests
     }
 
     [Fact]
-    public async Task EachPanelLinksTheFullListOfItsBoardOnThePreview()
+    public async Task EachPanelLinksTheFullListOfItsBoard()
     {
         var page = await RenderAsync(Data([
             Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, 30, 10)),
@@ -150,7 +150,7 @@ public sealed class BoardsPageTests
         var links = page.QuerySelectorAll(".board-panel a").Where(link => link.TextContent.StartsWith("See the full list", StringComparison.Ordinal)).ToArray();
         Assert.Equal(["See the full list of the House Democrats", "See the full list of the House Republicans", "See the full list of the Senate Democrats", "See the full list of the Senate Republicans"],
             links.Select(link => link.TextContent));
-        Assert.Equal(["/web/board-house-democrat.html", "/web/board-house-republican.html", "/web/board-senate-democrat.html", "/web/board-senate-republican.html"],
+        Assert.Equal(new[] { "board-house-democrat.html", "board-house-republican.html", "board-senate-democrat.html", "board-senate-republican.html" }.Select(path => ListPageRender.Root + path),
             links.Select(link => link.GetAttribute("href")));
     }
 

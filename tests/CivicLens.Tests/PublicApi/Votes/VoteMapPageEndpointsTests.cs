@@ -17,7 +17,7 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
 {
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly SeededVote House = new('a', "2026-03-02") { Casts = ["Yea", "Nay", "Nay", "Not Voting"], PersonIds = ["p0", "p1", "p2", "p3"] };
-    private static readonly string MapPath = $"{ServerPageEndpoints.Prefix}/{PublicationProtocol.VoteMapPagePath(House.RecordId)}";
+    private static readonly string MapPath = $"/{PublicationProtocol.VoteMapPagePath(House.RecordId)}";
 
     private static SeededTerm Term(string state, int district) => new("Representative", "Representative", "2025-01-03") { State = state, District = district };
 
@@ -79,7 +79,7 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        await GetPageAsync(host, $"{ServerPageEndpoints.Prefix}/{PublicationProtocol.VoteMapPagePath(recordId)}", HttpStatusCode.NotFound);
+        await GetPageAsync(host, $"/{PublicationProtocol.VoteMapPagePath(recordId)}", HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -96,15 +96,16 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheHomeRouteDrawsTheFeaturedMapFromTheSameReleaseAndLinksToTheMapPage()
+    public async Task TheHomeRouteDrawsTheFeaturedMapFromTheSameReleaseAndLinksToThePublicAddressOfTheMapPage()
     {
         await using var host = await StartAsync();
 
-        var page = await GetPageAsync(host, ServerPageEndpoints.Prefix);
+        var page = await GetPageAsync(host, "/");
 
         Assert.Equal(1, page.QuerySelectorAll(".home-featured .vote-map[data-compact]").Length);
-        Assert.Equal(MapPath, page.QuerySelector(".home-featured-map-link")!.GetAttribute("href"));
-        using var map = await host.Client.GetAsync(page.QuerySelector(".home-featured-map-link")!.GetAttribute("href"));
+        var href = page.QuerySelector(".home-featured-map-link")!.GetAttribute("href")!;
+        Assert.Equal(Root(PublicationProtocol.VoteMapPagePath(House.RecordId)), href);
+        using var map = await host.Client.GetAsync(new Uri(href).PathAndQuery);
         Assert.Equal(HttpStatusCode.OK, map.StatusCode);
         Assert.Contains("1 Yes, 2 No, 1 Not voting, 431 No member in the record", page.QuerySelector(".home-featured .vote-map-shapes")!.GetAttribute("aria-label"));
         Assert.Null(page.QuerySelector(".home-breakers"));
@@ -115,7 +116,7 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync(withSeats: false);
 
-        var page = await GetPageAsync(host, ServerPageEndpoints.Prefix);
+        var page = await GetPageAsync(host, "/");
 
         Assert.NotNull(page.QuerySelector(".home-featured h2"));
         Assert.Null(page.QuerySelector(".home-featured .vote-map"));
@@ -128,7 +129,7 @@ public sealed class VoteMapPageEndpointsTests(PostgresCollection postgres)
         var logs = new CapturedLogs();
         await using var host = await StartAsync(logs: logs, everyMemberNamed: false);
 
-        var page = await GetPageAsync(host, ServerPageEndpoints.Prefix);
+        var page = await GetPageAsync(host, "/");
 
         Assert.NotNull(page.QuerySelector(".home-featured h2"));
         Assert.Null(page.QuerySelector(".home-featured .vote-map"));

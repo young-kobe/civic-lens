@@ -59,7 +59,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{BillId}.html");
+        var response = await host.Client.GetAsync($"/records/{BillId}.html");
         var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -93,7 +93,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
         foreach (var member in new[] { noTermOnThatDay, twoPartiesOnThatDay })
         {
             await using var host = await StartAsync(member);
-            var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{BillId}.html");
+            var response = await host.Client.GetAsync($"/records/{BillId}.html");
             var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
             var legend = page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim());
 
@@ -284,7 +284,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
 
         foreach (var id in new[] { new string('9', 64), "not-an-id" })
         {
-            var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{id}.html");
+            var response = await host.Client.GetAsync($"/records/{id}.html");
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
     }
@@ -293,7 +293,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
     public async Task ThePageAnswers304ForTheETagOfItsRelease()
     {
         await using var host = await StartAsync();
-        var path = $"{ServerPageEndpoints.Prefix}/records/{BillId}.html";
+        var path = $"/records/{BillId}.html";
         var first = await host.Client.GetAsync(path);
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.IfNoneMatch.Add(first.Headers.ETag!);
@@ -305,7 +305,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
 
     private static async Task<AngleSharp.Html.Dom.IHtmlDocument> ReadPageAsync(ApiHost host, string recordId)
     {
-        var response = await host.Client.GetAsync($"{ServerPageEndpoints.Prefix}/records/{recordId}.html");
+        var response = await host.Client.GetAsync($"/records/{recordId}.html");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
     }
