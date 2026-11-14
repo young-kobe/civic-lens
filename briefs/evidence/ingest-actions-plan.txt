@@ -1,0 +1,202 @@
+BEGIN
+SET
+SET
+SET
+Timing is on.
+summary500
+                                                                                                         QUERY PLAN                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=2784.28..3702.11 rows=31 width=381) (actual time=113.959..149.850 rows=500.00 loops=1)
+   Buffers: shared hit=9528 read=1410
+   ->  Limit  (cost=2782.91..2782.99 rows=31 width=101) (actual time=113.493..113.841 rows=500.00 loops=1)
+         Buffers: shared hit=3811 read=468
+         ->  Sort  (cost=2782.91..2782.99 rows=31 width=101) (actual time=113.490..113.744 rows=500.00 loops=1)
+               Sort Key: (md5((record_entries.record_id)::text))
+               Sort Method: top-N heapsort  Memory: 137kB
+               Buffers: shared hit=3811 read=468
+               ->  Subquery Scan on record_entries  (cost=2098.43..2782.14 rows=31 width=101) (actual time=36.153..103.469 rows=19627.00 loops=1)
+                     Buffers: shared hit=3808 read=468
+                     ->  Hash Join  (cost=2098.43..2781.75 rows=31 width=1879) (actual time=22.349..55.611 rows=19627.00 loops=1)
+                           Hash Cond: (((s.record_id)::text = (e.record_id)::text) AND (s.revision_number = e.revision_number))
+                           Buffers: shared hit=3808 read=468
+                           ->  Nested Loop  (cost=0.41..580.49 rows=6770 width=88) (actual time=1.625..16.264 rows=19627.00 loops=1)
+                                 Buffers: shared hit=2622
+                                 ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.028..0.032 rows=1.00 loops=1)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                                 ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..504.65 rows=6770 width=84) (actual time=1.590..12.752 rows=19627.00 loops=1)
+                                       Index Cond: (first_release <= r.release_number)
+                                       Filter: (((kind)::text = 'action'::text) AND ((last_release IS NULL) OR (last_release >= r.release_number)))
+                                       Rows Removed by Filter: 5228
+                                       Index Searches: 1
+                                       Buffers: shared hit=2620
+                           ->  Hash  (cost=1794.51..1794.51 rows=20234 width=76) (actual time=20.542..20.543 rows=20611.00 loops=1)
+                                 Buckets: 32768  Batches: 1  Memory Usage: 2430kB
+                                 Buffers: shared hit=1186 read=468
+                                 ->  Index Only Scan using "PK_published_entries" on published_entries e  (cost=0.41..1794.51 rows=20234 width=76) (actual time=0.672..11.487 rows=20611.00 loops=1)
+                                       Index Cond: (kind = 'action'::text)
+                                       Heap Fetches: 1907
+                                       Index Searches: 1
+                                       Buffers: shared hit=1186 read=468
+   ->  Nested Loop Semi Join  (cost=1.37..29.61 rows=1 width=1940) (actual time=0.068..0.071 rows=1.00 loops=500)
+         Buffers: shared hit=5717 read=942
+         ->  Nested Loop  (cost=0.95..25.07 rows=1 width=381) (actual time=0.048..0.051 rows=1.00 loops=500)
+               Buffers: shared hit=4517 read=639
+               ->  Nested Loop  (cost=0.95..25.04 rows=1 width=450) (actual time=0.047..0.050 rows=1.00 loops=500)
+                     Buffers: shared hit=4517 read=639
+                     ->  Nested Loop  (cost=0.54..16.59 rows=1 width=163) (actual time=0.018..0.019 rows=1.00 loops=500)
+                           Join Filter: ((s_1.first_release <= r_2.release_number) AND ((s_1.last_release IS NULL) OR (s_1.last_release >= r_2.release_number)))
+                           Buffers: shared hit=2989 read=65
+                           ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_2  (cost=0.12..8.14 rows=1 width=4) (actual time=0.003..0.003 rows=1.00 loops=500)
+                                 Index Searches: 500
+                                 Buffers: shared hit=1000
+                           ->  Index Scan using "PK_publication_record_states" on publication_record_states s_1  (cost=0.41..8.43 rows=1 width=77) (actual time=0.014..0.015 rows=1.00 loops=500)
+                                 Index Cond: (((kind)::text = 'action'::text) AND ((record_id)::text = (record_entries.record_id)::text))
+                                 Filter: (revision_number = record_entries.revision_number)
+                                 Rows Removed by Filter: 0
+                                 Index Searches: 500
+                                 Buffers: shared hit=1989 read=65
+                     ->  Index Scan using "IX_action_revisions_record_id_source_id_congress_bill_type_bil~" on action_revisions r_1  (cost=0.41..8.43 rows=1 width=542) (actual time=0.028..0.030 rows=1.00 loops=500)
+                           Index Cond: ((record_id)::text = (record_entries.record_id)::text)
+                           Filter: ((headline IS NOT NULL) AND (event_on IS NOT NULL) AND (revision_number = record_entries.revision_number))
+                           Rows Removed by Filter: 0
+                           Index Searches: 500
+                           Buffers: shared hit=1528 read=574
+               ->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.000..0.000 rows=1.00 loops=500)
+         ->  Index Only Scan using "PK_action_revision_sponsorships" on action_revision_sponsorships eligible  (cost=0.42..4.52 rows=5 width=69) (actual time=0.019..0.019 rows=1.00 loops=500)
+               Index Cond: ((record_id = (record_entries.record_id)::text) AND (revision_number = record_entries.revision_number))
+               Heap Fetches: 2
+               Index Searches: 500
+               Buffers: shared hit=1200 read=303
+ Planning:
+   Buffers: shared hit=961 read=140
+ Planning Time: 12.858 ms
+ Execution Time: 150.919 ms
+(66 rows)
+
+Time: 190.537 ms
+sources500
+                                                                                                                    QUERY PLAN                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=7157.02..7157.72 rows=279 width=101) (actual time=206.216..206.361 rows=1078.00 loops=1)
+   Sort Key: s_1.record_id, (((row_number() OVER w1 - 1))::integer)
+   Sort Method: quicksort  Memory: 640kB
+   Buffers: shared hit=19039 read=1513 written=6
+   ->  Nested Loop  (cost=2811.18..7145.69 rows=279 width=101) (actual time=90.083..203.275 rows=1078.00 loops=1)
+         Buffers: shared hit=19036 read=1513 written=6
+         ->  Limit  (cost=2782.91..2782.99 rows=31 width=101) (actual time=89.381..89.757 rows=500.00 loops=1)
+               Buffers: shared hit=4276
+               ->  Sort  (cost=2782.91..2782.99 rows=31 width=101) (actual time=89.376..89.650 rows=500.00 loops=1)
+                     Sort Key: (md5((record_entries.record_id)::text))
+                     Sort Method: top-N heapsort  Memory: 137kB
+                     Buffers: shared hit=4276
+                     ->  Subquery Scan on record_entries  (cost=2098.43..2782.14 rows=31 width=101) (actual time=15.035..79.835 rows=19627.00 loops=1)
+                           Buffers: shared hit=4276
+                           ->  Hash Join  (cost=2098.43..2781.75 rows=31 width=1879) (actual time=14.982..46.330 rows=19627.00 loops=1)
+                                 Hash Cond: (((s.record_id)::text = (e.record_id)::text) AND (s.revision_number = e.revision_number))
+                                 Buffers: shared hit=4276
+                                 ->  Nested Loop  (cost=0.41..580.49 rows=6770 width=88) (actual time=1.409..15.257 rows=19627.00 loops=1)
+                                       Buffers: shared hit=2622
+                                       ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r  (cost=0.12..8.14 rows=1 width=4) (actual time=0.018..0.021 rows=1.00 loops=1)
+                                             Index Searches: 1
+                                             Buffers: shared hit=2
+                                       ->  Index Scan using "IX_publication_record_states_first_release" on publication_record_states s  (cost=0.29..504.65 rows=6770 width=84) (actual time=1.386..11.918 rows=19627.00 loops=1)
+                                             Index Cond: (first_release <= r.release_number)
+                                             Filter: (((kind)::text = 'action'::text) AND ((last_release IS NULL) OR (last_release >= r.release_number)))
+                                             Rows Removed by Filter: 5228
+                                             Index Searches: 1
+                                             Buffers: shared hit=2620
+                                 ->  Hash  (cost=1794.51..1794.51 rows=20234 width=76) (actual time=13.420..13.446 rows=20611.00 loops=1)
+                                       Buckets: 32768  Batches: 1  Memory Usage: 2430kB
+                                       Buffers: shared hit=1654
+                                       ->  Index Only Scan using "PK_published_entries" on published_entries e  (cost=0.41..1794.51 rows=20234 width=76) (actual time=0.034..5.825 rows=20611.00 loops=1)
+                                             Index Cond: (kind = 'action'::text)
+                                             Heap Fetches: 1907
+                                             Index Searches: 1
+                                             Buffers: shared hit=1654
+         ->  Nested Loop Left Join  (cost=28.27..140.43 rows=9 width=809) (actual time=0.183..0.217 rows=2.16 loops=500)
+               Buffers: shared hit=14760 read=1513 written=6
+               ->  Nested Loop  (cost=27.85..64.49 rows=9 width=161) (actual time=0.157..0.163 rows=2.16 loops=500)
+                     Buffers: shared hit=11069 read=892 written=2
+                     ->  Nested Loop  (cost=1.78..38.06 rows=1 width=329) (actual time=0.044..0.047 rows=1.00 loops=500)
+                           Buffers: shared hit=8741 read=20
+                           ->  Nested Loop Semi Join  (cost=1.37..29.61 rows=1 width=2172) (actual time=0.039..0.042 rows=1.00 loops=500)
+                                 Buffers: shared hit=6640 read=19
+                                 ->  Nested Loop  (cost=0.95..25.07 rows=1 width=69) (actual time=0.027..0.030 rows=1.00 loops=500)
+                                       Buffers: shared hit=5138 read=18
+                                       ->  Nested Loop  (cost=0.95..25.04 rows=1 width=138) (actual time=0.027..0.028 rows=1.00 loops=500)
+                                             Buffers: shared hit=5138 read=18
+                                             ->  Nested Loop  (cost=0.54..16.59 rows=1 width=163) (actual time=0.015..0.016 rows=1.00 loops=500)
+                                                   Join Filter: ((s_1.first_release <= r_3.release_number) AND ((s_1.last_release IS NULL) OR (s_1.last_release >= r_3.release_number)))
+                                                   Buffers: shared hit=3054
+                                                   ->  Index Scan using "IX_publication_releases_is_active" on publication_releases r_3  (cost=0.12..8.14 rows=1 width=4) (actual time=0.003..0.003 rows=1.00 loops=500)
+                                                         Index Searches: 500
+                                                         Buffers: shared hit=1000
+                                                   ->  Index Scan using "PK_publication_record_states" on publication_record_states s_1  (cost=0.41..8.43 rows=1 width=77) (actual time=0.011..0.011 rows=1.00 loops=500)
+                                                         Index Cond: (((kind)::text = 'action'::text) AND ((record_id)::text = (record_entries.record_id)::text))
+                                                         Filter: (revision_number = record_entries.revision_number)
+                                                         Rows Removed by Filter: 0
+                                                         Index Searches: 500
+                                                         Buffers: shared hit=2054
+                                             ->  Index Scan using "IX_action_revisions_record_id_source_id_congress_bill_type_bil~" on action_revisions r_2  (cost=0.41..8.43 rows=1 width=226) (actual time=0.011..0.012 rows=1.00 loops=500)
+                                                   Index Cond: ((record_id)::text = (record_entries.record_id)::text)
+                                                   Filter: ((headline IS NOT NULL) AND (event_on IS NOT NULL) AND (revision_number = record_entries.revision_number))
+                                                   Rows Removed by Filter: 0
+                                                   Index Searches: 500
+                                                   Buffers: shared hit=2084 read=18
+                                       ->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.000..0.000 rows=1.00 loops=500)
+                                 ->  Index Only Scan using "PK_action_revision_sponsorships" on action_revision_sponsorships eligible  (cost=0.42..4.52 rows=5 width=69) (actual time=0.011..0.011 rows=1.00 loops=500)
+                                       Index Cond: ((record_id = (record_entries.record_id)::text) AND (revision_number = record_entries.revision_number))
+                                       Heap Fetches: 2
+                                       Index Searches: 500
+                                       Buffers: shared hit=1502 read=1
+                           ->  Index Scan using "IX_action_revisions_record_id_source_id_congress_bill_type_bil~" on action_revisions r_1  (cost=0.41..8.43 rows=1 width=264) (actual time=0.004..0.005 rows=1.00 loops=500)
+                                 Index Cond: ((record_id)::text = (record_entries.record_id)::text)
+                                 Filter: (revision_number = record_entries.revision_number)
+                                 Rows Removed by Filter: 0
+                                 Index Searches: 500
+                                 Buffers: shared hit=2101 read=1
+                     ->  WindowAgg  (cost=26.07..26.25 rows=9 width=128) (actual time=0.112..0.114 rows=2.16 loops=500)
+                           Window: w1 AS (ORDER BY (min((ARRAY[0, (p.sponsorship_position)::integer, (p."position")::integer]))) ROWS UNBOUNDED PRECEDING)
+                           Storage: Memory  Maximum Storage: 17kB
+                           Buffers: shared hit=2328 read=872 written=2
+                           ->  Sort  (cost=26.05..26.07 rows=9 width=124) (actual time=0.109..0.109 rows=2.16 loops=500)
+                                 Sort Key: (min((ARRAY[0, (p.sponsorship_position)::integer, (p."position")::integer])))
+                                 Sort Method: quicksort  Memory: 25kB
+                                 Buffers: shared hit=2328 read=872 written=2
+                                 ->  GroupAggregate  (cost=25.75..25.91 rows=9 width=124) (actual time=0.100..0.104 rows=2.16 loops=500)
+                                       Group Key: p.citation_extraction_id
+                                       Buffers: shared hit=2323 read=872 written=2
+                                       ->  Sort  (cost=25.75..25.77 rows=9 width=124) (actual time=0.095..0.096 rows=15.28 loops=500)
+                                             Sort Key: p.citation_extraction_id
+                                             Sort Method: quicksort  Memory: 27kB
+                                             Buffers: shared hit=2320 read=872 written=2
+                                             ->  Append  (cost=0.42..25.61 rows=9 width=124) (actual time=0.061..0.087 rows=15.28 loops=500)
+                                                   Buffers: shared hit=2320 read=872 written=2
+                                                   ->  Index Scan using "PK_action_revision_sponsorship_citations" on action_revision_sponsorship_citations p  (cost=0.42..17.24 rows=5 width=97) (actual time=0.060..0.075 rows=13.34 loops=500)
+                                                         Index Cond: (((record_id)::text = (r_1.record_id)::text) AND (revision_number = r_1.revision_number))
+                                                         Index Searches: 500
+                                                         Buffers: shared hit=1325 read=866 written=2
+                                                   ->  Result  (cost=0.00..0.01 rows=1 width=178) (actual time=0.000..0.000 rows=0.36 loops=500)
+                                                         One-Time Filter: (r_1.summary_citation_extraction_id IS NOT NULL)
+                                                   ->  Result  (cost=0.00..0.01 rows=1 width=178) (actual time=0.000..0.000 rows=0.99 loops=500)
+                                                         One-Time Filter: (r_1.policy_area_citation_extraction_id IS NOT NULL)
+                                                   ->  Result  (cost=0.00..0.01 rows=1 width=178) (actual time=0.000..0.000 rows=0.58 loops=500)
+                                                         One-Time Filter: (r_1.bill_citation_extraction_id IS NOT NULL)
+                                                   ->  Index Scan using "PK_action_revision_text_citations" on action_revision_text_citations x  (cost=0.27..8.29 rows=1 width=97) (actual time=0.007..0.007 rows=0.01 loops=500)
+                                                         Index Cond: (((record_id)::text = (r_1.record_id)::text) AND (revision_number = r_1.revision_number))
+                                                         Index Searches: 500
+                                                         Buffers: shared hit=995 read=6
+               ->  Index Scan using "PK_document_extractions" on document_extractions extraction  (cost=0.42..8.44 rows=1 width=648) (actual time=0.024..0.024 rows=1.00 loops=1078)
+                     Index Cond: ((extraction_id)::text = (p.citation_extraction_id)::text)
+                     Index Searches: 1078
+                     Buffers: shared hit=3691 read=621 written=4
+ Planning:
+   Buffers: shared hit=334 read=69
+ Planning Time: 8.076 ms
+ Execution Time: 207.925 ms
+(117 rows)
+
+Time: 223.014 ms
+ROLLBACK
+Time: 0.200 ms
