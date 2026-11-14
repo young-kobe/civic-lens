@@ -156,13 +156,13 @@ public sealed partial class PostgresBillStreamTests
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
-        var publisher = new PublishRelease(store, releases, new ReleaseRenderer(null, null),
+        var publisher = new PublishRelease(store, releases,
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current)),
-            new PublicationCatalog(names, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(store, releases, NullLogger<PruneReleases>.Instance));
 
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
@@ -240,13 +240,13 @@ public sealed partial class PostgresBillStreamTests
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
-        var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null),
+        var publisher = new PublishRelease(publications, releases,
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
                 new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)), new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
                 PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, TestCodeVersion.Current)),
-            new PublicationCatalog(names, IssueConfiguration.None, IssueIconConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
+            new PublicationCatalog(names, IssueConfiguration.None), FixedRosters.NamedOnly(names.Keys), PhotoCaptures.None(), TimeProvider.System,
             new PruneReleases(publications, releases, NullLogger<PruneReleases>.Instance));
         var summary = await publisher.ExecuteAsync(PublicationScenario.Owner,
             PublicationScenario.Request("publish", new PublishedRecordReference(PublishedRecordKind.Action, RecordId)));

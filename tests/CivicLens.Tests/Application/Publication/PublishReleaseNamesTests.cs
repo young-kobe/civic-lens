@@ -8,7 +8,7 @@ namespace CivicLens.Tests.Application.Publication;
 public sealed class PublishReleaseNamesTests
 {
     [Fact]
-    public async Task TheNamesOfTheCommitAreTheOfficialsAndTheCatalogOfTheReleaseFilesBecauseTheApiMustShowWhatTheReleaseShowed()
+    public async Task TheOfficialNamesOfTheCommitAreTheOfficialsOfTheReleaseFileBecauseTheApiMustShowWhatTheReleaseShowed()
     {
         var scenario = await ScenarioWithDefinedIssueAsync();
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
@@ -16,11 +16,8 @@ public sealed class PublishReleaseNamesTests
 
         var names = scenario.Publications.LastCommit!.Names;
         var officials = Read<PublishedOfficials>(scenario, summary.DirectoryName, PublicationProtocol.OfficialsPath);
-        var catalog = Read<PublishedCatalog>(scenario, summary.DirectoryName, PublicationProtocol.CatalogPath);
         Assert.Equal(JsonSerializer.Serialize(officials.Officials, PublicationProtocol.JsonOptions),
             JsonSerializer.Serialize(names.Officials, PublicationProtocol.JsonOptions));
-        Assert.Equal(catalog.Issues.Select(entry => (entry.Id, entry.Name)), names.Facets.Issues.Select(issue => (issue.Id, issue.Name)));
-        Assert.Equal(catalog.PolicyAreas.Select(entry => (entry.Id, entry.Name)), names.Facets.PolicyAreas.Select(area => (area.Id, area.Name)));
     }
 
     [Fact]

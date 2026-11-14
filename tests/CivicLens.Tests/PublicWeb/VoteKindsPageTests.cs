@@ -143,13 +143,7 @@ public sealed class VoteKindsPageTests
 
     private static Task<IDocument> RenderIndexAsync() => RenderAtRootAsync<VoteKindsPage>();
 
-    private static async Task<IDocument> RenderAtRootAsync<TPage>() where TPage : IComponent
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-            (await renderer.RenderComponentAsync<TPage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = IndexRoot }))).ToHtmlString());
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAtRootAsync<TPage>() where TPage : IComponent =>
+        ListPageRender.RenderPageAsync<TPage>(new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = IndexRoot });
+
 }

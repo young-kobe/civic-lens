@@ -12,11 +12,6 @@ public static class PublishedCorrectionView
     public static string AfterTitle(PublishedCorrection correction) =>
         $", {Moment.Day(correction.PublishedAtUtc)}. {Replaces(correction)}{(correction.FactsUnchanged ? " " + FactsUnchangedText : "")}";
 
-    public static string TimelineText(PublishedCorrection correction) =>
-        $"{Title(correction)}, replaces revision {correction.ReplacedRevisionNumber}";
-
-    public static string TimelineEnd(PublishedCorrection correction) => correction.FactsUnchanged ? ". " + FactsUnchangedText : "";
-
     public static string Title(PublishedCorrection correction) =>
         correction.Note is not null ? "Correction" : correction.FactsUnchanged ? TextRewrittenTitle : "Updated from the source";
 

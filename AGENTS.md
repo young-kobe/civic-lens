@@ -8,7 +8,7 @@ Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.
 
 ## Product and ownership
 
-Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published data only: published releases today, and the `public_api` views when they exist.
+Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published data only: the `public_api` views, the search database, and the release photos. An operational database outage stops live read routes while cached pages stay up.
 
 Keep these dependencies acyclic and exact (enforced by tests):
 
@@ -19,7 +19,7 @@ Keep these dependencies acyclic and exact (enforced by tests):
 - Host: Application, Infrastructure, PublicWeb.
 - Collector: Collection.Contracts only. No database, AI, editorial, or publishing dependencies.
 - PublicWeb: Publication.Contracts only, plus the ASP.NET shared framework for Razor components. No package. It holds the public Razor components.
-- PublicApi: Publication.Contracts, PublicWeb, and Npgsql only. It renders PublicWeb components as static server pages. It reads published releases and its own search database; public read routes use the operational database only through the role `civic_lens_public`, which can read only `public_api` views. It never reads any other operational storage. An operational database outage stops live read routes while cached pages stay up.
+- PublicApi: Publication.Contracts, PublicWeb, and Npgsql only. It renders PublicWeb components as static server pages. It reads its own search database; public read routes use the operational database only through the role `civic_lens_public`, which can read only `public_api` views. It never reads any other operational storage. An operational database outage stops live read routes while cached pages stay up.
 
 Local CLI, review UI, and local MCP will call shared application handlers. Public MCP must live in a separate deployment and consume published contracts only. It must never reach operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence.
 

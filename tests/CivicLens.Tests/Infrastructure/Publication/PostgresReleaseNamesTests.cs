@@ -147,8 +147,8 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
                 new() { Office = "Senator", Kind = PublishedOfficeKind.Senator, State = "WA", Party = "Democratic", Start = new(2020, 1, 3), End = new(2023, 1, 3) }
             ]
         };
-        var issue = new ReleaseFacet(FacetKind.Issue, "housing", "Housing costs", [], null, new IssueDefinition(definition, [.. includes], [.. excludes]));
-        var area = new ReleaseFacet(FacetKind.PolicyArea, "land-use", "Land use", [], null, null);
+        var issue = new ReleaseFacet("housing", "Housing costs", new IssueDefinition(definition, [.. includes], [.. excludes]));
+        var area = new ReleaseFacet("land-use", "Land use", null);
         return new ReleaseNames([official], new ReleaseFacets([issue], [area]));
     }
 
