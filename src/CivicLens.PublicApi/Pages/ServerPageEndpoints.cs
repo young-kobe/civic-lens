@@ -26,7 +26,7 @@ public static class ServerPageEndpoints
     /// <summary>The path prefix of the server pages. No live route uses it, so the static pages stay the production path until a route moves.</summary>
     public const string Prefix = "/" + PublicSections.PreviewFolder;
 
-    /// <summary>Maps the gated home, Compare, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, and the not found page under the server-page prefix.</summary>
+    /// <summary>Maps the gated home, Compare, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record previews, the vote map page, the redirects of old paths, and the not found page under the server-page prefix.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         routes.MapGet(Prefix, (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
@@ -58,7 +58,7 @@ public static class ServerPageEndpoints
         foreach (var board in OfficialBoard.All)
             routes.MapGet(PublicSections.PreviewBoardPath(board.Chamber, board.Party), (HttpContext context, BoardsPageReader reader, ServerPageResponder responder,
                 CancellationToken cancellationToken) => BoardsPageEndpoint.RespondBoardAsync(board, context, reader, responder, baseUrl, cancellationToken));
-        routes.MapGet(Prefix + "/search", SearchPageEndpoint.RespondAsync);
+        routes.MapGet(SearchRoute, SearchPageEndpoint.RespondAsync);
         routes.MapGet(Prefix + "/issues/{issueId}", (string issueId, HttpContext context, IssuePageReader issues, HomePageReader home, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => await issues.ReadAsync(issueId, cancellationToken) is { } data
@@ -73,7 +73,7 @@ public static class ServerPageEndpoints
         routes.MapGet(Prefix + "/" + PublicationProtocol.VoteKindsPagePath, (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(() => responder.RespondAsync<VoteKindsPage>(context, StatusCodes.Status200OK,
                 new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken)));
-        routes.MapGet(Prefix + "/officials/{id}", (string id, HttpContext context, OfficialPageReader officials, HomePageReader home, ServerPageResponder responder,
+        routes.MapGet(OfficialRoute("{id}"), (string id, HttpContext context, OfficialPageReader officials, HomePageReader home, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, home.BrowserApiRoot, cancellationToken)
@@ -160,9 +160,16 @@ public static class ServerPageEndpoints
                     return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
             }
         }));
+        routes.MapOldPageRedirects(baseUrl);
         routes.MapGet(Prefix + "/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             NotFoundAsync(context, responder, baseUrl, cancellationToken));
     }
+
+    /// <summary>The route of the server search page. <see cref="OldPageRedirects"/> sends the old policy area pages to it.</summary>
+    internal const string SearchRoute = Prefix + "/search";
+
+    /// <summary>The route of the server official page. <see cref="OldPageRedirects"/> sends the old pages of older Congresses to it.</summary>
+    internal static string OfficialRoute(string officialId) => $"{Prefix}/officials/{officialId}";
 
     /// <summary>The route of the server-rendered record page. One route serves every kind, because a record ID does not name its kind. The vote page uses it as an origin-relative form action, so a filter stays on the origin that served the page. The public base URL can name another origin.</summary>
     private static string RecordRoute(string recordId) => $"{Prefix}/{PublicationProtocol.RecordPagePath(recordId)}";

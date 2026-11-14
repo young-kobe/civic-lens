@@ -160,7 +160,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBriefsListShowsTheEmptyStateWhenNoBriefIsPublished()
+    public async Task TheBriefsListShowsTheEmptyStateWithALinkToTheVotesListWhenNoBriefIsPublished()
     {
         await using var host = await StartAsync();
 
@@ -168,6 +168,9 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal("No weekly briefs yet", page.QuerySelector(".empty h2")!.TextContent);
+        var action = Assert.Single(page.QuerySelectorAll(".empty a"));
+        Assert.Equal(PublicSections.ListOf(PublishedRecordKind.Vote).Href, action.GetAttribute("href"));
+        Assert.Equal("Votes", action.TextContent.Trim());
         Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
         Assert.Contains("Release 4, published 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
     }
