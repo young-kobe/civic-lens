@@ -113,6 +113,21 @@ public sealed class RelationshipReviewWorkspaceTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task TheSavedRevisionShowsTheReadingGradeOfTheReasonAsAdviceAndAGradeAboveTheCodeLimitStillApproves()
+    {
+        await seeder.StatementAsync(Statement());
+        await seeder.ActionAsync(Action());
+        await seeder.RevisionAsync(Revision() with { StatementQuote = Span(BillWords), Reason = $"{GradePassages.FailingHeadline} {GradePassages.Summary}" });
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+
+        var editor = await host.GetDocumentAsync(url);
+        Assert.Equal("14.1. Prompts aim for 12. Code does not check this text.", FactValue(editor.QuerySelector("#saved-approval-target")!, "Reading grade"));
+
+        await PostDecisionAsync("Approve");
+        Assert.Contains("Approved, private", (await host.GetDocumentAsync(url)).QuerySelector(".page-header")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ASaveChangesTheTypeReasonQuoteAndFactFromTheOfferedChoicesAndAForgedQuoteIsABadRequest()
     {
         await SeedAsync();

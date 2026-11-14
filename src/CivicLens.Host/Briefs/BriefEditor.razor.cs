@@ -131,7 +131,8 @@ public sealed partial class BriefEditor
     [
         new("Week of", Moment.Iso(revision.Window.WeekStart)),
         new("Cutoff release", revision.Window.CutoffReleaseNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-        new("Coverage", CoverageText(revision.Coverage))
+        new("Coverage", CoverageText(revision.Coverage)),
+        ReadingGradeFact.Of([revision.Headline, .. revision.Paragraphs.Select(paragraph => paragraph.Text)])
     ];
 
     private IReadOnlyList<(string Label, string Value)> TechnicalItems =>

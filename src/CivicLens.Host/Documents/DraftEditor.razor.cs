@@ -240,8 +240,11 @@ public sealed partial class DraftEditor
         new("Issues", JoinOrNone(issues))
     ];
 
-    private IReadOnlyList<Fact> SavedFacts => RecordFacts(Revision.Institution,
-        Revision.ChangeDate is { } date ? Moment.Iso(date) : "Not established", Revision.OfficialIds, Revision.IssueIds);
+    private IReadOnlyList<Fact> SavedFacts =>
+    [
+        .. RecordFacts(Revision.Institution, Revision.ChangeDate is { } date ? Moment.Iso(date) : "Not established", Revision.OfficialIds, Revision.IssueIds),
+        ReadingGradeFact.Of([Revision.Headline, Revision.Summary, Revision.Significance, Revision.Limits])
+    ];
 
     private IReadOnlyList<Fact> UnsavedFacts => RecordFacts(Input!.Institution,
         string.IsNullOrWhiteSpace(Input.ChangeDate) ? "Not established" : Input.ChangeDate, Input.OfficialIds, Input.IssueIds);

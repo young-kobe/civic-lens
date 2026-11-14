@@ -125,7 +125,8 @@ public sealed partial class RelationshipEditor
     [
         new("Type", RelationshipLabels.Type(revision.Type)),
         new("Quote", QuoteText(revision.StatementQuote)),
-        new("Fact", detail!.CitedTarget.Facts.Single(fact => fact.Id == revision.TargetFactId).Text)
+        new("Fact", detail!.CitedTarget.Facts.Single(fact => fact.Id == revision.TargetFactId).Text),
+        ReadingGradeFact.Of([revision.Reason])
     ];
 
     private IReadOnlyList<Fact> InputFacts(RelationshipInput input) =>

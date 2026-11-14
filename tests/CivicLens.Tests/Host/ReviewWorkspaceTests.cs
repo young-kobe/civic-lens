@@ -304,6 +304,28 @@ public sealed class ReviewWorkspaceTests(PostgresCollection postgres) : IAsyncLi
     }
 
     [Fact]
+    public async Task TheSavedRevisionShowsItsReadingGradeAsAdviceAndAGradeAboveTheCodeLimitStillApprovesAsync()
+    {
+        await SaveComparisonAsync("Hours: 9 to 5.\n", "Hours: 10 to 4.\n");
+        SignIn(Owner);
+        var editorUrl = await StartFirstDraftAsync();
+        var fields = Fields((await host.GetDocumentAsync(editorUrl)).QuerySelector("#draft-form")!);
+        Set(fields, "Input.Headline", GradePassages.FailingHeadline);
+        Set(fields, "Input.Summary", GradePassages.Summary);
+        Set(fields, "Input.Significance", "");
+        Set(fields, "Input.Limits", "");
+        Set(fields, "Input.Institution", "Example Office");
+        using var saved = await host.Client.PostAsync(editorUrl, new FormUrlEncodedContent(fields));
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+
+        var editor = await host.GetDocumentAsync(editorUrl);
+        Assert.Equal("14.1. Prompts aim for 12. Code does not check this text.", FactValue(editor.QuerySelector("#saved-approval-target")!, "Reading grade"));
+
+        await ApproveAsync(editorUrl);
+        Assert.Equal("Approved, private", (await host.GetDocumentAsync(editorUrl)).QuerySelector(".page-header .badge")!.TextContent);
+    }
+
+    [Fact]
     public async Task RejectingNeedsAReasonFromTheListAndTheEditorShowsTheRejectionAndAPersonCanStillApproveItAsync()
     {
         await SaveComparisonAsync("Hours: 9 to 5.\n", "Hours: 10 to 4.\n");
