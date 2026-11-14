@@ -46,9 +46,19 @@ Data work below is approved and remains part of R-68. Land each dependency befor
 AI text and vocabulary remain required work, not optional follow-ups.
 
 - [ ] Keep the page text gate whole as R-68 adds pages. Fixed page text targets grade 10 to 14, and the test fails above grade 14. For AI text, prompts aim for 12; code rejects above 14. `PublicPageReadingGradeTests` grades the fixed text of every server page and fragment on main. Add each new page to that test. AI-text checks beyond the draft check, and first-use popovers for exact terms, remain. The approved vote wording table, captured-evidence gates, unknown-input fallbacks, and glossary corrections are implemented; retain them during the route migration.
-- [ ] After static rendering is removed, build the held model bill line and the vote summary work. Their earlier draft PRs were closed as stale. The line reuses the existing CRS summary call, stays within 200 characters, and cites an exact CRS quote of at least four words. The vote summary uses the line and supporting quote from the current approved action revision. The vote freshness workflow reuses the queue, run context, requeue, and input-version checks. It adds no schema or model call. Never acquire `ActionReview` while holding `VoteAnalysis`.
 - [ ] Measure each changed prompt on fixed records within an explicit budget, check its evidence, and obtain the required sample approval. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
 - [ ] Finish up to five bill key terms, defined only by exact quotations from the definitions section. Code finds the section, checks each quote, stores the terms, serves them in the bill detail API, and reports them in `actions text measure`, all behind `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS`, which is off. Open: the owner reads the measured sample and turns it on. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
+
+The production review of 2026-11-14 found trust, content, and craft defects. The owner made their fixes part of R-68. Return-visit features are parked and are not part of R-68.
+
+- [ ] Fix the trust defects. Done: the bill introduction date from the sponsor record (#568), the search ingest timeout (#569), and the server error page with a person-only correction banner (#570). Remaining: the stored introduction date for every bill, the "Updated from the source" line, bill list filter timeouts, Senate party bars, and clean search snippets with a total.
+- [ ] Cut AI text that only restates facts. Code writes vote titles and a "what this is about" line, and the model only picks issues. Bills show the CRS text under the code bill line, with no AI rewrite and no summary from the title alone. A short press release shows its own text. Bill text summaries, key terms, and statement and executive summaries stay. The held model bill line and the AI vote summary are dropped.
+- [ ] Rank delegates and the Resident Commissioner in their own board list, and never print district 0.
+- [ ] Show "Your members on this vote" and the "what this is about" line on vote pages.
+- [ ] Show one short AI chip on lists and cards. Record pages keep the full approved labels.
+- [ ] Fix navigation and lists. Add Statements and Search to the menu, keep one Compare page, and hide the briefs page until a brief exists. Redirect addresses without .html. Add record filters, result counts, and filter chips. Sort bills by latest action and officials by last name.
+- [ ] Fix unclear numbers and copy. Every count names who, what, and when. ZIP results lead with how the members voted.
+- [ ] Run one visual cohesion pass after the content work. It sets one type role map, one title link style, and one card style. It adds 44 px tap targets, folded long lists, and the mockup stat grid.
 
 Complete these gates before closing R-68.
 
@@ -60,7 +70,6 @@ Complete these gates before closing R-68.
 - [ ] After retirement, remove all unused legacy code, tests, and references in one prune pass. Then squash the EF migrations into one baseline.
   - In the prune pass, remove the `/v1/home` freshness fields and their SQL in `HomeStore`. No page reads them.
 - [ ] Remove public `release.json` at the retirement gate. Search ingestion reads typed published data, but the readers of the publisher still read the file. Keep private snapshots while verification or recovery use them, and remove code after its last caller leaves. Future public MCP uses the public API in a separate deployment.
-- [ ] Complete the held AI work. The bill text and key terms measures run right after the deploy. Only the model bill line and "What this vote decides" (#410, #411) wait for the retirement gate.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
 
 ### Accepted plans
