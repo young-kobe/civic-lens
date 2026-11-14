@@ -35,6 +35,11 @@ public static class PublicSections
         new(PublicSection.Boards, "Compare parties", PublicationProtocol.BoardsPagePath)
     ];
 
+    /// <summary>The header link of the section that holds a public path: the link of the page itself, or of the folder that holds its pages,
+    /// such as <c>officials/{id}.html</c> under Officials. Null when no header section holds the path, such as a record page.</summary>
+    public static NavLink? SectionOf(string publicPath) => Header.FirstOrDefault(link =>
+        publicPath == link.Path || publicPath.StartsWith(System.IO.Path.GetFileNameWithoutExtension(link.Path) + "/", StringComparison.Ordinal));
+
     /// <summary>The old all records list. It is outside the header, and it names its own page in the trail.</summary>
     private static readonly NavLink AllRecords = new(PublicSection.AllRecords, "Votes and bills", PublicationProtocol.AllRecordsPagePath(1));
 

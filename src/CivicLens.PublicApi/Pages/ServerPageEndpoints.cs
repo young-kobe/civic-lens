@@ -30,9 +30,11 @@ public static class ServerPageEndpoints
     internal static string Route(string publicPath) => "/" + publicPath;
 
     /// <summary>Maps the home, Compare, sitemap, robots file, officials, boards, the four full board lists, search, the four per-kind lists, vote kind index, official, issue, and record pages,
-    /// the vote map page, the redirects of old paths, and the not found page, each at its public path.</summary>
+    /// the vote map page, the redirects of old paths, and the not found page, each at its public path. A server failure of any of them answers the server error page.</summary>
     public static void MapServerPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
+        var pages = routes.MapGroup(string.Empty);
+        pages.AddEndpointFilter<ServerErrorPageFilter>();
         var homePage = (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } read
                 ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, read.Freshness,
@@ -43,28 +45,28 @@ public static class ServerPageEndpoints
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot
                     }, cancellationToken)
                 : ApiResults.NoRelease());
-        routes.MapGet("/", homePage);
-        routes.MapGet(Route(PublicationProtocol.HomePath), homePage);
-        routes.MapGet(Route(PublicationProtocol.ComparePagePath), (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
+        pages.MapGet("/", homePage);
+        pages.MapGet(Route(PublicationProtocol.HomePath), homePage);
+        pages.MapGet(Route(PublicationProtocol.ComparePagePath), (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(() => responder.RespondAsync<ComparePage>(context, StatusCodes.Status200OK,
                 new Dictionary<string, object?>
                 {
                     [nameof(ComparePage.RootPath)] = baseUrl.Join(string.Empty),
                     [nameof(ComparePage.BrowserApiUrl)] = home.BrowserApiRoot
                 }, cancellationToken)));
-        routes.MapFixedPages(baseUrl);
-        routes.MapSitemap(baseUrl);
-        routes.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Vote)), ListPageEndpoints.VotesAsync);
-        routes.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Action)), ListPageEndpoints.BillsAsync);
-        routes.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Statement)), ListPageEndpoints.StatementsAsync);
-        routes.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.ExecutiveAction)), ListPageEndpoints.ExecutiveActionsAsync);
-        routes.MapGet(Route(PublicationProtocol.OfficialsPagePath), OfficialsPageEndpoint.RespondAsync);
-        routes.MapGet(Route(PublicationProtocol.BoardsPagePath), BoardsPageEndpoint.RespondAsync);
+        pages.MapFixedPages(baseUrl);
+        pages.MapSitemap(baseUrl);
+        pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Vote)), ListPageEndpoints.VotesAsync);
+        pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Action)), ListPageEndpoints.BillsAsync);
+        pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Statement)), ListPageEndpoints.StatementsAsync);
+        pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.ExecutiveAction)), ListPageEndpoints.ExecutiveActionsAsync);
+        pages.MapGet(Route(PublicationProtocol.OfficialsPagePath), OfficialsPageEndpoint.RespondAsync);
+        pages.MapGet(Route(PublicationProtocol.BoardsPagePath), BoardsPageEndpoint.RespondAsync);
         foreach (var board in OfficialBoard.All)
-            routes.MapGet(Route(board.PagePath), (HttpContext context, BoardsPageReader reader, ServerPageResponder responder,
+            pages.MapGet(Route(board.PagePath), (HttpContext context, BoardsPageReader reader, ServerPageResponder responder,
                 CancellationToken cancellationToken) => BoardsPageEndpoint.RespondBoardAsync(board, context, reader, responder, baseUrl, cancellationToken));
-        routes.MapGet(Route(PublicationProtocol.SearchPagePath), SearchPageEndpoint.RespondAsync);
-        routes.MapGet(Route(PublicationProtocol.IssuePagePath("{issueId}", 1)), (string issueId, HttpContext context, IssuePageReader issues, HomePageReader home, ServerPageResponder responder,
+        pages.MapGet(Route(PublicationProtocol.SearchPagePath), SearchPageEndpoint.RespondAsync);
+        pages.MapGet(Route(PublicationProtocol.IssuePagePath("{issueId}", 1)), (string issueId, HttpContext context, IssuePageReader issues, HomePageReader home, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => await issues.ReadAsync(issueId, cancellationToken) is { } data
                 ? await responder.RespondAsync<IssuePage>(context, StatusCodes.Status200OK, data.Release,
@@ -75,16 +77,16 @@ public static class ServerPageEndpoints
                         [nameof(IssuePage.BrowserApiUrl)] = home.BrowserApiRoot
                     }, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
-        routes.MapGet(Route(PublicationProtocol.VoteKindsPagePath), (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
+        pages.MapGet(Route(PublicationProtocol.VoteKindsPagePath), (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(() => responder.RespondAsync<VoteKindsPage>(context, StatusCodes.Status200OK,
                 new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = baseUrl.Join(string.Empty) }, cancellationToken)));
-        routes.MapGet(Route(PublicationProtocol.OfficialPagePath("{id}")), (string id, HttpContext context, OfficialPageReader officials, HomePageReader home, ServerPageResponder responder,
+        pages.MapGet(Route(PublicationProtocol.OfficialPagePath("{id}")), (string id, HttpContext context, OfficialPageReader officials, HomePageReader home, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () => PublicationProtocol.IsPathSegment(id) && await officials.ReadAsync(id, cancellationToken) is { } page
                 ? await RespondOfficialAsync(context, responder, page, baseUrl, home.BrowserApiRoot, cancellationToken)
                 : await NotFoundAsync(context, responder, baseUrl, cancellationToken)));
-        routes.MapGet(Route(PublicationProtocol.VoteMapPagePath("{recordId}")), VoteMapPageEndpoint.RespondAsync);
-        routes.MapGet(Route(PublicationProtocol.OfficialRecordPagePath("{id}")), (string id, HttpContext context, OfficialRecordPageReader records, ServerPageResponder responder,
+        pages.MapGet(Route(PublicationProtocol.VoteMapPagePath("{recordId}")), VoteMapPageEndpoint.RespondAsync);
+        pages.MapGet(Route(PublicationProtocol.OfficialRecordPagePath("{id}")), (string id, HttpContext context, OfficialRecordPageReader records, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
         {
@@ -100,7 +102,7 @@ public static class ServerPageEndpoints
                 [nameof(OfficialRecordPage.RootPath)] = baseUrl.Join(string.Empty)
             }, cancellationToken);
         }));
-        routes.MapGet(Route(PublicationProtocol.RecordPagePath("{recordId}")), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
+        pages.MapGet(Route(PublicationProtocol.RecordPagePath("{recordId}")), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, RelationshipPageReader relationships, WithdrawalStore withdrawals, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
@@ -164,8 +166,8 @@ public static class ServerPageEndpoints
                     return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
             }
         }));
-        routes.MapOldPageRedirects(baseUrl);
-        routes.MapGet("/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
+        pages.MapOldPageRedirects(baseUrl);
+        pages.MapGet("/{**path}", (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             context.Request.Path.StartsWithSegments(ApiPath, StringComparison.Ordinal)
                 ? Task.FromResult(Results.NotFound())
                 : NotFoundAsync(context, responder, baseUrl, cancellationToken));
