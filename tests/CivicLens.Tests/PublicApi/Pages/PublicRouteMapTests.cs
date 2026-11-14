@@ -22,7 +22,10 @@ public sealed class PublicRouteMapTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
+        // The search page answers 503 until the ingest has made a release active in the search database, so a sample release is published first.
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") },
+            publish: site => site.PublishAsync(1, PublishedSamples.Statement('c', "Sample statement", official: OfficialId)));
+        await host.WaitForReleaseAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, House);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial(OfficialId, "Ann Able", [Term("CA", 12)]), new SeededOfficial("p1", "Ben Baker", [Term("TX", 1)]));
