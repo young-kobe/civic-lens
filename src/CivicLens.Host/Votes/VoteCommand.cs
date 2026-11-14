@@ -1,15 +1,17 @@
 using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
+using CivicLens.Core;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
 
 namespace CivicLens.Host.Votes;
 
 internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem> drafts, GetVoteDraftStatus status,
-    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, ReviewActor owner)
+    RequeueBlockedVoteDrafts requeueBlocked, RequeueRefusedVoteDrafts requeueRefused, Func<BackfillVoteCodeText> codeText, ReviewActor owner)
 {
     private const string Usage = "Use votes draft status, votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit], " +
-        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, or votes draft requeue --refused.";
+        "votes draft requeue <candidate-id|--all>, votes draft requeue --blocked --code <block-code>, votes draft requeue --refused, " +
+        "or votes text backfill <limit> [cursor].";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["votes", ..];
@@ -46,11 +48,23 @@ internal sealed class VoteCommand(AnalysisQueueCommands<VoteDraftRun, VoteDraftV
                 case ["votes", "draft", "requeue", var candidateId]:
                     CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;
+                case ["votes", "text", "backfill", var limit, .. var cursor] when cursor.Length <= 1:
+                    var moved = await codeText().ExecuteAsync(owner, OwnerCommand.ParseLimit(limit, Usage), ParseCursor(cursor), cancellationToken);
+                    CommandOutput.Write(moved);
+                    return moved.Skipped == 0 ? 0 : 1;
                 default:
                     Console.Error.WriteLine(Usage);
                     return 2;
             }
         });
+
+    // The cursor is the record ID of the last examined vote, as the previous page printed it.
+    private static string? ParseCursor(string[] cursor) => cursor switch
+    {
+        [] => null,
+        [var recordId] when LowercaseHex.Is(recordId, 64) => recordId,
+        _ => throw new ArgumentException(Usage)
+    };
 
     private static VoteDraftView ParseView(string text) => text switch
     {

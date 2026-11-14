@@ -4,6 +4,7 @@ using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
+using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.BillStream;
@@ -24,20 +25,25 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
 
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue;
+    private readonly Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision;
+    private readonly CodeVersion codeVersion;
 
     public PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion)
-        : this(contextFactory, NewQueue(contextFactory, codeVersion)) { }
+        : this(contextFactory, AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Vote, PublishedRecordKind.Vote), codeVersion) { }
 
     private PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue) : base(queue)
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CodeVersion codeVersion)
+        : this(contextFactory, new(contextFactory, new VoteDraftQueueMapping(afterDecision, codeVersion)), afterDecision, codeVersion) { }
+
+    private PostgresVoteDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+        PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> queue,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CodeVersion codeVersion) : base(queue)
     {
         this.contextFactory = contextFactory;
         this.queue = queue;
+        this.afterDecision = afterDecision;
+        this.codeVersion = codeVersion;
     }
-
-    private static PostgresAnalysisQueue<VoteAnalysisRow, VoteAnalysisBudgetRow, VoteDraftRun> NewQueue(
-        IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion) =>
-        new(contextFactory, new VoteDraftQueueMapping(AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Vote, PublishedRecordKind.Vote), codeVersion));
 
     public async Task<VoteDraftRun?> GetRunAsync(string runId, CancellationToken cancellationToken)
     {
@@ -90,6 +96,36 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             var stale = await StaleCandidateIdsAsync(db, ids, token);
             return settled.Where(row => stale.Contains(row.CandidateId));
         }, cancellationToken);
+
+    public async Task<IReadOnlyList<VoteCodeTextTarget>> ListPublishedModelTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Database.SqlQuery<VoteCodeTextTarget>($"""
+            SELECT d.record_id AS "RecordId", r.candidate_id AS "CandidateId"
+            FROM vote_drafts d
+            JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
+            WHERE r.text_origin = 'Model' AND (CAST({afterRecordId} AS text) IS NULL OR d.record_id COLLATE "C" > {afterRecordId})
+              AND EXISTS (SELECT 1 FROM publication_record_states s
+                          WHERE s.kind = 'vote' AND s.record_id = d.record_id AND s.last_release IS NULL)
+            ORDER BY d.record_id COLLATE "C"
+            LIMIT {limit}
+            """).ToListAsync(cancellationToken);
+    }
+
+    // The queue entry is locked first, as a worker settlement does, so the lock order stays the queue row and then the vote review key.
+    public Task<string?> AppendCodeTextAsync(VoteDraftRevision revision, VoteDraftRun run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        if (revision is not { AuthorKind: ReviewAuthorKind.Code, TextOrigin: ReviewTextOrigin.Code })
+            throw new ArgumentException("Only a code revision with code text is appended outside the worker.", nameof(revision));
+        return queue.AddBypassedRunAsync(run, VoteCodeTextSkip.DraftPending, async (db, token) =>
+        {
+            var refusal = await VoteDraftRows.AppendWorkerRevisionAsync(db, revision, run.Run.RunId, codeVersion, token);
+            if (refusal is null) await VoteDraftRows.Records.AfterCodeApprovalAsync(db, revision.RecordId, revision.RevisionNumber, afterDecision, token);
+            return refusal;
+        }, cancellationToken);
+    }
 
     public async Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken)
     {
