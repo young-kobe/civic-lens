@@ -6,7 +6,7 @@ public sealed record ActionDraftSettings : AnalysisSettings
 {
     public ActionDraftSettings(long dailyTokenLimit, int concurrency = DefaultConcurrency, bool draftsFromBillText = false,
         IEnumerable<string>? keyTermGlossary = null)
-        : base(dailyTokenLimit, concurrency, ActionDraftPrompt.MinimumReservation)
+        : base(dailyTokenLimit, concurrency, ActionIssuePrompt.MinimumReservation)
     {
         DraftsFromBillText = draftsFromBillText;
         KeyTermGlossary = keyTermGlossary?.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -21,7 +21,8 @@ public sealed record ActionDraftSettings : AnalysisSettings
 
     public bool DraftsKeyTerms => KeyTermGlossary is not null;
 
-    public int PromptByteCap => (int)Math.Min(ActionDraftTask.MaximumPromptBytes, CallTokenLimit - ActionDraftTask.MaximumOutputTokens);
+    /// <summary>The byte cap of the issue prompt. Its reservation holds the output limit of the issue call, so it never passes the call limit.</summary>
+    public int PromptByteCap => (int)Math.Min(ActionDraftTask.MaximumPromptBytes, CallTokenLimit - ActionDraftTask.MaximumIssueOutputTokens);
 
     /// <summary>The byte cap of the text prompt. Its reservation holds the larger output limit of the text call, so it never passes the call limit.</summary>
     public int TextPromptByteCap => (int)Math.Min(ActionDraftTask.MaximumPromptBytes, CallTokenLimit - ActionDraftTask.MaximumTextOutputTokens);

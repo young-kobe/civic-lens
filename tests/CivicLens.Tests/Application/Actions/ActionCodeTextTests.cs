@@ -15,6 +15,19 @@ public sealed class ActionCodeTextTests
         ["markey"] = "Edward Markey"
     }.ToImmutableDictionary();
 
+    [Fact]
+    public void ATitleTooLongForTheHeadlineIsCutOnAWordBoundaryWithAnEllipsisAndTheSummaryKeepsItWhole()
+    {
+        var title = "To amend title 10 " + string.Join(' ', Enumerable.Repeat("word", 80));
+
+        var text = ActionCodeText.Of(Snapshot(title, "hr", 0, ("warren", ActionSponsorshipRole.Sponsor)));
+
+        Assert.InRange(text.Headline.Length, ActionDraftRevision.MaximumHeadlineLength - 5, ActionDraftRevision.MaximumHeadlineLength);
+        Assert.StartsWith("H.R. 3567: To amend title 10 word", text.Headline, StringComparison.Ordinal);
+        Assert.EndsWith(" word\u2026", text.Headline, StringComparison.Ordinal);
+        Assert.Contains(title, text.Summary, StringComparison.Ordinal);
+    }
+
     private static ActionBillSnapshot Snapshot(string title, string type = "hr", int summaryCount = 0, params (string Id, ActionSponsorshipRole Role)[] sponsorships)
     {
         var span = new SourceSpan(new string('a', 64), 0, 5);
@@ -30,11 +43,11 @@ public sealed class ActionCodeTextTests
     }
 
     [Fact]
-    public void ABillWithOneTrackedSponsorNamesTheSponsorInTheHeadlineAndTheSummary()
+    public void TheHeadlineNamesTheBillByNumberAndTitleAndOnlyTheSummaryNamesTheSponsor()
     {
         var text = ActionCodeText.Of(Snapshot("Put School Counselors Where They're Needed Act", "hr", 0, ("warren", ActionSponsorshipRole.Sponsor)));
 
-        Assert.Equal("H.R. 3567: introduced by Elizabeth Warren", text.Headline);
+        Assert.Equal("H.R. 3567: Put School Counselors Where They're Needed Act", text.Headline);
         Assert.Equal("H.R. 3567, Put School Counselors Where They're Needed Act. Sponsor: Elizabeth Warren. Introduced 21 May 2025. " +
             "Congress.gov has no summary of this bill yet.", text.Summary);
         Assert.Equal(ReviewTextOrigin.Code, text.Origin);
@@ -45,7 +58,7 @@ public sealed class ActionCodeTextTests
     {
         var text = ActionCodeText.Of(Snapshot("A bill.", "hr", 0, ("markey", ActionSponsorshipRole.Cosponsor)));
 
-        Assert.Equal("H.R. 3567: introduced in Congress", text.Headline);
+        Assert.Equal("H.R. 3567: A bill.", text.Headline);
         Assert.Equal("H.R. 3567, A bill. Introduced 21 May 2025. Congress.gov has no summary of this bill yet.", text.Summary);
         Assert.DoesNotContain("Markey", text.Headline + text.Summary, StringComparison.Ordinal);
     }
@@ -56,7 +69,7 @@ public sealed class ActionCodeTextTests
         var text = ActionCodeText.Of(Snapshot("A bill", "s", 0, ("warren", ActionSponsorshipRole.Sponsor), ("markey", ActionSponsorshipRole.Sponsor),
             ("warren", ActionSponsorshipRole.Cosponsor)));
 
-        Assert.Equal("S. 3567: introduced by Elizabeth Warren, Edward Markey", text.Headline);
+        Assert.Equal("S. 3567: A bill", text.Headline);
         Assert.Contains(" Sponsors: Elizabeth Warren, Edward Markey. Introduced", text.Summary, StringComparison.Ordinal);
     }
 

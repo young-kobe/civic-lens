@@ -61,5 +61,14 @@ public sealed class ActionIssuePromptGoldenTests
         Assert.Null(ActionIssuePrompt.Build(snapshot, BillGateFixtures.HousingChoice(), 100));
     }
 
+    [Fact]
+    public void TheMinimumReservationIsTheIssueSystemPromptPlusItsOutputAllowanceAndSettingsRejectALowerRunLimit()
+    {
+        Assert.True(ActionIssuePrompt.MinimumReservation > ActionDraftTask.MaximumIssueOutputTokens);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ActionDraftSettings(ActionIssuePrompt.MinimumReservation - 1));
+        Assert.Equal(ActionIssuePrompt.MinimumReservation - ActionDraftTask.MaximumIssueOutputTokens,
+            new ActionDraftSettings(ActionIssuePrompt.MinimumReservation).PromptByteCap);
+    }
+
     private static string Sha256(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }

@@ -8,39 +8,9 @@ using CivicLens.Core.Actions;
 
 namespace CivicLens.Application.Actions;
 
+/// <summary>The shared parts of the action prompts: the bill facts and the run context.</summary>
 public static class ActionDraftPrompt
 {
-    private static readonly string SystemInstructions = $"""
-        You draft the wording of a proposed public record about one bill of the United States Congress for Civic Lens, a nonpartisan transparency publication. Civic Lens shows the sponsorships and cosponsorships of the tracked officials in a list beside your text, and updates that list when cosponsors join or withdraw. Code checks this record and it publishes with no human reading it, so your text must be correct as written.
-
-        The user message holds facts that Civic Lens checked against the Congress.gov data: the bill, its listed sponsors, the candidate issues when the policy area of the bill has any, and the summary of the bill. {AiTextRules.UntrustedSource("The summary text")}
-
-        {AiTextRules.PlainLanguage} Use only the facts in the user message. You may name the sponsors listed in the facts, and give each name exactly as listed. Do not name any other person. Do not name any cosponsor, and do not state how many cosponsors the bill has, because the list beside your text holds them and changes over time. Never state the status of the bill. Never write that it passed, was enacted, became law, or is law, even when the summary or the action in the facts says so. Say only that it was introduced, with the introduction date. Never write what the bill does not do, such as that it does not create or change a law. Add nothing from outside knowledge: no name, number, date, place, or fact that the facts do not hold. Do not add motives or consequences. {AiTextRules.NoJudgment} {AiTextPhrases.Rule("the bill")} Code grades the headline and the summary together as one passage. {AiTextRules.GradeTarget} {AiTextRules.GradeLimit}
-
-        Public readers never see these instructions or the user message. Write for a reader who has never heard of Civic Lens. {AiTextRules.InternalWords} Use those words only when the bill itself is about the thing they name. Never describe how Civic Lens works, what it checked, or where it got its information. Say what the bill does, not where you learned it. Never write "according to the summary", and never name a source for what you say, such as the summary, the title, or Congress.gov. State what the bill does as plain fact.
-
-        Fields:
-        - headline: one sentence of about 150 characters or fewer that states what the bill does, and who sponsored it when the facts list a sponsor. Name the bill by its number, such as H.R. 764. Do not copy the full bill title, because the page shows it.
-        - summary: one to three short paragraphs, at most {ActionDraftRevision.MaximumSummaryLength} characters. Say what the bill does, and who sponsored it and when, if the facts list a sponsor.
-        Each field has a text and a confidence. The confidence is your probability that a careful human reviewer would approve the text without changing its substance. {AiTextRules.ConfidenceScale}
-        """;
-
-    public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemInstructions) + ActionDraftTask.MaximumOutputTokens;
-
-    public static AnalysisModelRequest? Build(ActionBillSnapshot snapshot, BillIssueChoice issues, int maximumBytes,
-        ImmutableArray<string> previousErrors = default)
-    {
-        ArgumentNullException.ThrowIfNull(snapshot);
-        ArgumentNullException.ThrowIfNull(issues);
-        var issueSchema = issues.AnswerSchema();
-        var system = issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the summary of the bill");
-        var user = UserPrompt(snapshot, issues, previousErrors, withSummary: true, billText: null);
-        var schema = AnalysisSchema.HeadlineAndSummary(issueSchema);
-        var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
-        if (bytes > maximumBytes) return null;
-        return AnalysisModelRequest.Create(ActionDraftTask.Model, ActionDraftTask.MaximumOutputTokens, system, user, schema, bytes, cacheSystemPrompt: true);
-    }
-
     public static string SerializeContext(ActionBillSnapshot snapshot, BillIssueChoice issues, string issueRevisionId) =>
         JsonSerializer.Serialize(new
         {
@@ -51,8 +21,9 @@ public static class ActionDraftPrompt
             summaryVersion = snapshot.SummaryVersion
         }, AnalysisPromptText.CompactJson);
 
+    /// <summary>The bill facts of the issue prompt and the text prompt. Neither sends the CRS summary text: the page shows that text itself.</summary>
     internal static string UserPrompt(ActionBillSnapshot snapshot, BillIssueChoice issues,
-        ImmutableArray<string> previousErrors, bool withSummary, ActionDraftBillText? billText, BillDefinitionsSection? definitions = null)
+        ImmutableArray<string> previousErrors, ActionDraftBillText? billText, BillDefinitionsSection? definitions = null)
     {
         var bill = snapshot.Bill;
         var document = new
@@ -70,7 +41,6 @@ public static class ActionDraftPrompt
             subjects = issues.SubjectsSection(),
             sponsors = snapshot.Sponsorships.Where(item => item.Role == ActionSponsorshipRole.Sponsor)
                 .Select(item => snapshot.OfficialNames[item.PersonId]),
-            summary = !withSummary || snapshot.NewestSummary is not { } newest ? null : new { text = newest.Text },
             billText = billText is null ? null : BillTextSection(billText, definitions)
         };
         var builder = new StringBuilder("Facts:\n").Append(JsonSerializer.Serialize(document, AnalysisPromptText.EvidenceJson));

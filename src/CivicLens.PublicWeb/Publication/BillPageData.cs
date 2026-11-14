@@ -42,4 +42,8 @@ public sealed record BillPageData(
     public DateTimeOffset? CheckedAtUtc { get; init; }
     public DateTimeOffset? FirstPublishedAtUtc { get; init; }
     public required string CongressGovUrl { get; init; }
+
+    /// <summary>Code text restates the title, the sponsor and the date that the page head shows, so the page shows it nowhere. The CRS text or the
+    /// no summary note takes its place.</summary>
+    public bool ShowsSummary => TextOrigin != PublishedTextOrigin.Code && !string.IsNullOrWhiteSpace(Summary);
 }

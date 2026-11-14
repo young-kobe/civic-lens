@@ -5,6 +5,7 @@ using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Issues;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
+using CivicLens.Core.Review;
 using State = CivicLens.Application.Analysis.AnalysisState;
 
 namespace CivicLens.Application.Actions;
@@ -70,8 +71,9 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
     private async Task<bool> DraftOrWriteAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context, ActionChange change,
         CancellationToken cancellationToken)
     {
-        var request = context.Snapshot.NewestSummary is null ? null : BuildTextRequest(context, default);
-        if (request is not null) return await RunLoopAsync(attempt, context, TextLoop(attempt, context, request), cancellationToken);
+        // The page shows the CRS summary itself, so a bill with summary text gets code text. Text that a person wrote stays.
+        if (context.Snapshot.NewestSummary is not null && context.Evidence.Current?.TextOrigin != ReviewTextOrigin.Person)
+            return await WriteByCodeAsync(attempt, context, cancellationToken);
         if (context.KeepsCurrentText)
             return change == ActionChange.StaleOnly
                 ? await SettleWithoutCallAsync(attempt, context.Snapshot.Fingerprint, ActionDraftErrorCodes.Unchanged, cancellationToken)
@@ -82,11 +84,15 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
             if (BuildBillTextRequest(context, billText, keyTerms, default) is { } billTextRequest)
                 return await RunLoopAsync(attempt, context, BillTextLoop(attempt, context, billText, keyTerms, billTextRequest), cancellationToken);
         }
-        return context.Issues.CandidateIds.IsEmpty
+        return await WriteByCodeAsync(attempt, context, cancellationToken);
+    }
+
+    /// <summary>Code writes the text. One issue-only call chooses the issues when the policy area has candidates.</summary>
+    private async Task<bool> WriteByCodeAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context, CancellationToken cancellationToken) =>
+        context.Issues.CandidateIds.IsEmpty
             ? await SettleRevisionWithoutCallAsync(attempt, context, ActionDraftErrorCodes.CodeWritten,
                 (draft, createdAtUtc) => ActionDraftResolver.WriteByCode(draft, createdAtUtc), cancellationToken)
             : await RunLoopAsync(attempt, context, IssueLoop(attempt, context), cancellationToken);
-    }
 
     private static Task<bool> SettleRevisionWithoutCallAsync(IAnalysisAttempt<ActionDraftRun> attempt, ActionDraftContext context,
         string reason, Func<ActionDraftContext, DateTimeOffset, ActionDraftRevision> write, CancellationToken cancellationToken)
@@ -96,15 +102,6 @@ public sealed class ActionDraftStep(IActionDraftStore store, ActionBillReader re
         return attempt.SettleAsync(new ActionDraftRun(run, reason),
             ActionDraftCheckpoint.From(attempt.Claim, revision, context.Evidence.ReviewStateVersion), cancellationToken);
     }
-
-    private AnalysisModelRequest? BuildTextRequest(ActionDraftContext context, ImmutableArray<string> errors) =>
-        context.Issues.BuildDroppingSubjectsWhenOverTheCap(choice => ActionDraftPrompt.Build(context.Snapshot, choice, settings.PromptByteCap, errors));
-
-    private AnalysisValidationLoop<ActionDraftRun, ActionDraftRevision> TextLoop(IAnalysisAttempt<ActionDraftRun> attempt,
-        ActionDraftContext context, AnalysisModelRequest firstRequest) =>
-        new(Wrap, attempt, AnalysisRunOutcome.Drafted, AiTextRules.MaximumValidationPasses,
-            errors => errors.IsDefaultOrEmpty ? firstRequest : BuildTextRequest(context, errors), model.DraftAsync,
-            (json, run) => ActionDraftResolver.Resolve(json, context, run.RunId, run.FinishedAtUtc), ReadRunAsync);
 
     private AnalysisModelRequest? BuildBillTextRequest(ActionDraftContext context, ActionDraftBillText billText, ActionKeyTermScope? keyTerms,
         ImmutableArray<string> errors) =>
