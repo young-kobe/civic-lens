@@ -42,19 +42,18 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task ACutBillLineNeverShowsSoTheSourceDescriptionTakesItsPlaceWordForWord()
+    public async Task ABillWithNoLineGivesTheSourceDescriptionWordForWordInItsPlace()
     {
         const string description = "Vote title: To strike section 2 of the bill.";
         var vote = Vote() with
         {
-            Bill = Vote().Bill! with { Line = "Requires the Department to report on sanctions that are" + PublishedRecordEntry.BillLineCutMarker },
+            Bill = Vote().Bill! with { Line = null },
             Facts = [.. Vote().Facts, new() { Text = description, Citation = Cite(Lines[1]) }]
         };
 
         var page = await RenderAsync(vote);
 
         Assert.Equal("To strike section 2 of the bill.", page.QuerySelector(".vote-about")!.TextContent);
-        Assert.DoesNotContain(PublishedRecordEntry.BillLineCutMarker, page.Body!.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

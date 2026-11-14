@@ -1072,7 +1072,7 @@ The bill line needs one rollout command, because a plain publish does not give c
 sudo deploy/scripts/compose.sh run --rm cli releases publish <idempotency-key> --rewrite-entries
 ```
 
-The rewrite needs a stored entry row for every carried action, and a missing row stops it. So do these steps in this order. Deploy. Run the [entries backfill](#entries-backfill) until it exits with 0 and `openRangesWithoutRow` is 0. Run the rewrite publish, which fills the bill line of the rows of the open ranges at once. Then run `releases entries verify`. The backfill creates the rows that are still missing. Rows of closed ranges from before the line keep a null line. `public_api.bills` and the bills routes show a null `bill_line` for a row until it is filled.
+The rewrite needs a stored entry row for every carried action, and a missing row stops it. So do these steps in this order. Deploy. Run the [entries backfill](#entries-backfill) until it exits with 0 and `openRangesWithoutRow` is 0. Run the rewrite publish, which fills the bill line of the rows of the open ranges at once. Then run `releases entries verify`. The backfill creates the rows that are still missing. Rows of closed ranges from before the line keep a null line. `public_api.bills` and the bills routes show a null `bill_line` for a row until it is filled. A first sentence over 200 characters gives no line, so such a row keeps a null line. A stored line that ends with `…` is a line that earlier code cut. Do not rewrite it. The views show null for it.
 
 Every publish now reads all release vote revisions. Before the deploy, run `votes revisions verify` and expect exit code 0. One vote revision that is not stored or not backfilled stops every publish.
 

@@ -152,6 +152,18 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredBillLineThatEndsWithTheCutMarkShowsNoLineAndNoSourceNote()
+    {
+        var bill = new SeededBill('a', "2026-03-01") { BillNumber = 1, Issues = ["tax"], BillLine = PublishedSamples.CutBillLine };
+        await using var host = await StartAsync([], [bill]);
+
+        var row = Assert.Single((await GetPageAsync(host)).QuerySelectorAll("#bills .record-row"));
+
+        Assert.Null(row.QuerySelector(".bill-line"));
+        Assert.DoesNotContain(PublishedWording.BillLineSource, row.TextContent);
+    }
+
+    [Fact]
     public async Task AVoteRowAndABillRowColorTheirLabelAsAiOnlyWhenTheViewSaysAModelWroteTheText()
     {
         var votes = new[]

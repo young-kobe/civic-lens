@@ -8,6 +8,9 @@ internal sealed record SampleRecord(PublishedRecordEntry Entry, object Body);
 /// <summary>Small valid records of every kind. Each takes the texts that a search test needs.</summary>
 internal static class PublishedSamples
 {
+    /// <summary>A bill line that earlier code cut at a word boundary. A stored row can still hold it. No page shows it.</summary>
+    public const string CutBillLine = "Requires the Department to report on sanctions that are\u2026";
+
     private static readonly DateTimeOffset Published = new(2026, 5, 11, 8, 0, 0, TimeSpan.Zero);
     private static readonly string SourceId = new('b', 64);
 

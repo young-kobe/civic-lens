@@ -6,12 +6,6 @@ public sealed record PublishedRecordEntry
     public const int MaximumFilterValueLength = 256;
     public const int MaximumBillLineLength = 200;
 
-    /// <summary>The mark at the end of a bill line that code cut at a word boundary. Such a line ends inside a sentence.</summary>
-    public const string BillLineCutMarker = "\u2026";
-
-    /// <summary>True when the bill line holds its whole first sentence, so a page can show it where it may never cut a sentence.</summary>
-    public static bool IsWholeBillLine(string line) => !line.EndsWith(BillLineCutMarker, StringComparison.Ordinal);
-
     public required PublishedRecordKind Kind { get; init; }
     public required string RecordId { get; init; }
     public required int RevisionNumber { get; init; }
