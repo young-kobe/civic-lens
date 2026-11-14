@@ -60,7 +60,7 @@ public sealed class SearchResultsPageTests
         Assert.Contains("S. 5334, a Senate bill introduced by John Cornyn, is also in the list. A number match can find another bill with the same number.",
             string.Join(' ', others.TextContent.Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries)));
         Assert.Equal(Root + $"records/{new string('s', 64)}.html", others.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Equal("1 result for \"5334\" in release 1028.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal("1 result for \"5334\".", page.QuerySelector(".list-status")!.TextContent);
     }
 
     [Fact]
@@ -229,8 +229,8 @@ public sealed class SearchResultsPageTests
         var page = await RenderAsync(Data(hits: [Hit('a', "x"), Hit('b', "y")], next: "r.1.abc", total: 1_250));
         var filtered = await RenderAsync(Data(Query(null) with { Kind = "vote" }, hits: [Hit('a', "x")]));
 
-        Assert.Equal("1,250 results for \"5334\" in release 1028. Showing 2 on this page.", page.QuerySelector(".list-status")!.TextContent);
-        Assert.Equal("1 result in release 1028.", filtered.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal("1,250 results for \"5334\". Showing 2 on this page.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal("1 result.", filtered.QuerySelector(".list-status")!.TextContent);
         Assert.Single(page.QuerySelectorAll(".pager a, .pager button"));
     }
 

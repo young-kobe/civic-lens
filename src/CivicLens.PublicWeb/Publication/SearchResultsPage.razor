@@ -137,7 +137,7 @@
 
     private string NoRecords => Data.Query.Text is { } text ? $"No records match \"{text}\"." : "No records match these filters.";
 
-    /// <summary>Names the total of the release that the request matches. When the page shows fewer, it says how many it shows.</summary>
+    /// <summary>Names the total that the request matches. When the page shows fewer, it says how many it shows.</summary>
     private string StatusLine
     {
         get
@@ -145,7 +145,7 @@
             var total = $"{PublishedWording.Count(Data.Total)} {(Data.Total == 1 ? "result" : "results")}";
             var text = Data.Query.Text is { } query ? $" for \"{query}\"" : string.Empty;
             var shown = Data.Total > Data.Hits.Count ? $" Showing {PublishedWording.Count(Data.Hits.Count)} on this page." : string.Empty;
-            return $"{total}{text} in release {Data.Release}.{shown}";
+            return $"{total}{text}.{shown}";
         }
     }
 
