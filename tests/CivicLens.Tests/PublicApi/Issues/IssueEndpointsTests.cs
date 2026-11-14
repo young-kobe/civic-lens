@@ -15,7 +15,7 @@ public sealed class IssueEndpointsTests(PostgresCollection postgres)
 {
     private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[] bills, params string[] issues)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
             string.Concat(issues.Select(issue => $"INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, '{issue}', '{issue}', 'd');")));

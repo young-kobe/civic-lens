@@ -119,7 +119,7 @@
                         <p class="muted small">@VoteWords.BreakMeaning</p>
                         @foreach (var group in breakers)
                         {
-                            var board = RootPath + PublicationProtocol.BoardPagePath(Data.Chamber, group.Party);
+                            var board = PublicSections.PreviewBoardPath(Data.Chamber, group.Party);
                             <div class="vote-breaker-group">
                                 @if (group.Members.Length == 0)
                                 {

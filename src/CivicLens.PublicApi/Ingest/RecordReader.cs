@@ -1,31 +1,12 @@
 using System.Text;
-using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi.Ingest;
 
-/// <summary>Reads one record file under the contract rules and picks the text that search indexes for its kind.</summary>
+/// <summary>Bounds the texts that search indexes for a record and refuses a text that Postgres cannot store.</summary>
 public static class RecordReader
 {
-    public static IndexedRecord Read(PublishedRecordEntry listed, ReadOnlySpan<byte> json)
-    {
-        var indexed = listed.Kind switch
-        {
-            PublishedRecordKind.DocumentChange => Index(Parse<PublishedDocumentChange>(json)),
-            PublishedRecordKind.Statement => Index(Parse<PublishedStatement>(json)),
-            PublishedRecordKind.Action => Index(Parse<PublishedAction>(json)),
-            PublishedRecordKind.Vote => Index(Parse<PublishedVote>(json)),
-            PublishedRecordKind.Brief => Index(Parse<PublishedBrief>(json)),
-            PublishedRecordKind.Relationship => Index(Parse<PublishedRelationship>(json)),
-            PublishedRecordKind.ExecutiveAction => Index(Parse<PublishedExecutiveAction>(json)),
-            _ => throw new InvalidDataException("The record kind is unknown.")
-        };
-        if (indexed.Entry.RecordId != listed.RecordId || indexed.Entry.RevisionNumber != listed.RevisionNumber)
-            throw new InvalidDataException("The record file does not match its manifest entry.");
-        return Finish(indexed, listed.BillLine);
-    }
-
-    /// <summary>Refuses a NUL character and gives an action its bill line, which is also its snippet text. The record files hold no bill line, so the manifest entry or the entry view gives it.</summary>
+    /// <summary>Refuses a NUL character and gives an action its bill line, which is also its snippet text. The entry view gives the bill line.</summary>
     public static IndexedRecord Finish(IndexedRecord indexed, string? billLine)
     {
         RequireNoNul(indexed);
@@ -41,51 +22,6 @@ public static class RecordReader
                 .. entry.IssueIds, .. entry.PolicyAreaIds];
         if (texts.Any(text => text?.Contains('\0', StringComparison.Ordinal) == true))
             throw new InvalidDataException("A record text holds a NUL character.");
-    }
-
-    private static T Parse<T>(ReadOnlySpan<byte> json) where T : class =>
-        JsonSerializer.Deserialize<T>(json, PublicationProtocol.JsonOptions) ?? throw new InvalidDataException("A record file is empty.");
-
-    private static IndexedRecord Index(PublishedDocumentChange record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [record.Summary], [record.After.Text, record.Before.Text], record.Summary);
-    }
-
-    private static IndexedRecord Index(PublishedStatement record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [record.Summary, .. record.Quotations.Select(quotation => quotation.Quote)], [record.Source.Text], record.Summary);
-    }
-
-    private static IndexedRecord Index(PublishedAction record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [record.Summary, record.BillTitle], [.. record.Sources.Select(source => source.Text)], record.Summary);
-    }
-
-    private static IndexedRecord Index(PublishedVote record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [record.Summary], [.. record.Sources.Select(source => source.Text)], record.Summary);
-    }
-
-    private static IndexedRecord Index(PublishedExecutiveAction record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [], [.. record.Sources.Select(source => source.Text)]);
-    }
-
-    private static IndexedRecord Index(PublishedBrief record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [.. record.Paragraphs.Select(paragraph => paragraph.Text)], []);
-    }
-
-    private static IndexedRecord Index(PublishedRelationship record)
-    {
-        record.Validate();
-        return Create(record.ToEntry(), [record.Reason, record.Quote], []);
     }
 
     /// <summary>Applies the one text bound rule to the summary and source parts of a record, in order.</summary>

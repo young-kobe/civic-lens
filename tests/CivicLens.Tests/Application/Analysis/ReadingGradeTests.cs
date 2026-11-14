@@ -1,6 +1,6 @@
-using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
 
-namespace CivicLens.Tests.Application.Actions;
+namespace CivicLens.Tests.Application.Analysis;
 
 public sealed class ReadingGradeTests
 {
@@ -69,8 +69,8 @@ public sealed class ReadingGradeTests
         const string text = "H.R. 1 pays landlords for tenants with low income. The Secretary administers supplementary rental assistance for eligible beneficiaries each year. " +
             "The Secretary administers supplementary rental assistance for eligible beneficiaries in the program. The Secretary pays landlords for tenants with low income.";
 
-        Assert.True(ReadingGrade.Of(text) > ReadingGrade.MaximumGrade);
-        Assert.Equal(ReadingGrade.MaximumGrade, ReadingGrade.Rounded(text));
+        Assert.True(ReadingGrade.Of(text) > AiTextRules.MaximumGrade);
+        Assert.Equal(AiTextRules.MaximumGrade, ReadingGrade.Rounded(text));
         Assert.Equal("14.0", ReadingGrade.Format(ReadingGrade.Rounded(text)));
     }
 
@@ -78,16 +78,16 @@ public sealed class ReadingGradeTests
     public void LongLegalWordsPassOnlyBelowTheLimitAndPlainWordsPass()
     {
         Assert.True(ReadingGrade.Of("Notwithstanding the aforementioned administrative requirements, eligible beneficiaries receive compensatory disbursements.") >
-            ReadingGrade.MaximumGrade);
-        Assert.True(ReadingGrade.Of("The bill pays rent for people with low pay.") <= ReadingGrade.MaximumGrade);
-        Assert.Equal("14.0", ReadingGrade.Format(ReadingGrade.MaximumGrade));
+            AiTextRules.MaximumGrade);
+        Assert.True(ReadingGrade.Of("The bill pays rent for people with low pay.") <= AiTextRules.MaximumGrade);
+        Assert.Equal("14.0", ReadingGrade.Format(AiTextRules.MaximumGrade));
     }
 
     [Fact]
     public void ThePromptsAimBelowTheGradeThatCodeChecks()
     {
-        Assert.Equal("12.0", ReadingGrade.Format(ReadingGrade.TargetGrade));
-        Assert.True(ReadingGrade.TargetGrade < ReadingGrade.MaximumGrade);
+        Assert.Equal("12.0", ReadingGrade.Format(AiTextRules.TargetGrade));
+        Assert.True(AiTextRules.TargetGrade < AiTextRules.MaximumGrade);
     }
 
     [Fact]

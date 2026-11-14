@@ -279,6 +279,20 @@ public sealed class HomePageTests
         Assert.Contains(".home-featured-map + .home-featured-parties { margin-top: 0; }", WebStyleSheets.Read("public.css"));
 
     [Fact]
+    public void TheHomePageUsesTheSharedFrameGutterSoItsContentLinesUpWithTheTrailTheHeaderAndTheFooter()
+    {
+        var css = WebStyleSheets.Read("public.css");
+        var rule = System.Text.RegularExpressions.Regex.Match(css, @"(?m)^\.public-main:has\(> \.content > \.home-grid\) \{ padding: (\S+) (\S+) (\S+); \}");
+
+        var hero = System.Text.RegularExpressions.Regex.Match(css, @"(?m)^\.public-hero:has\(> \.home-preview-hero\) \{ padding: (\S+) (\S+) (\S+);");
+
+        Assert.True(rule.Success, "The home page frame rule sets one padding shorthand with top, inline and bottom values.");
+        Assert.Equal("var(--frame-pad)", rule.Groups[2].Value);
+        Assert.True(hero.Success, "The home hero frame rule sets one padding shorthand with top, inline and bottom values.");
+        Assert.Equal("var(--frame-pad)", hero.Groups[2].Value);
+    }
+
+    [Fact]
     public async Task WithoutTheFeaturedPageDataOrSeatsTheHeroShowsNoMapAndNoMapLink()
     {
         var withoutDetail = await RenderAsync(new(7, Featured, [], null));

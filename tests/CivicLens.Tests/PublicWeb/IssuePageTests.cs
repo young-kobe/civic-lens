@@ -1,6 +1,6 @@
 using AngleSharp.Dom;
-using CivicLens.Application.Actions;
 using AngleSharp.Html.Parser;
+using CivicLens.Application.Analysis;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -265,7 +265,7 @@ public sealed class IssuePageTests
         {
             var passage = page.QuerySelector(selector)!;
             var grade = PassageGrade(passage);
-            Assert.True(grade <= ReadingGrade.MaximumGrade, $"{selector} reads at grade {ReadingGrade.Format(grade)}.");
+            Assert.True(grade <= AiTextRules.MaximumGrade, $"{selector} reads at grade {ReadingGrade.Format(grade)}.");
         }
     }
 

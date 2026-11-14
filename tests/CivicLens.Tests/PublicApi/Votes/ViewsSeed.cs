@@ -40,12 +40,16 @@ internal static class ViewsSeed
 {
 
     /// <summary>Makes the release the only active one. It adds the release row when none exists.</summary>
-    public static Task ActivateReleaseAsync(string database, int release, DateTimeOffset publishedAt, int recordCount = 1) => ExecuteAsync(database, $"""
+    public static Task ActivateReleaseAsync(string database, int release, DateTimeOffset publishedAt, int recordCount = 1) =>
+        ExecuteAsync(database, ActivateReleaseSql(release, publishedAt, recordCount));
+
+    /// <summary>The statements of <see cref="ActivateReleaseAsync"/>, for a seed that activates the release in the same implicit transaction as its other rows.</summary>
+    public static string ActivateReleaseSql(int release, DateTimeOffset publishedAt, int recordCount) => $"""
         UPDATE publication_releases SET is_active = false;
         INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
         VALUES ({release}, '{release:000000}-{new string('0', 31)}1', 'test', {publishedAt.UtcTicks.ToString(CultureInfo.InvariantCulture)}, {recordCount}, true)
         ON CONFLICT (release_number) DO UPDATE SET is_active = true;
-        """);
+        """;
 
     /// <summary>Pins the bill action that each vote links in the release, as the commit of the release does. The release row must exist.</summary>
     public static Task LinkVoteBillsAsync(string database, int release, params (char Vote, char Bill)[] links) => ExecuteAsync(database, $"""

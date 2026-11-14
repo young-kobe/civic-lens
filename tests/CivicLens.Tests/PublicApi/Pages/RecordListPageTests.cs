@@ -28,7 +28,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync()
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         return host;
     }
@@ -77,7 +77,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     [Fact]
     public async Task ANoReleaseAnswers503AndACursorOfAnotherReleaseRedirectsToTheFirstPage()
     {
-        await using var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
         foreach (var path in new[] { "/web/votes", "/web/bills", "/web/statements", "/web/executive-actions" })
             await GetPageAsync(host, path, HttpStatusCode.ServiceUnavailable);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);

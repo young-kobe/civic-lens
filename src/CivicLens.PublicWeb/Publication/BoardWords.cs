@@ -3,10 +3,20 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>The one owner of the time frame, agreement and caucus words that the static board pages and the server boards page share.</summary>
+/// <summary>The one owner of the time frame, agreement and caucus words that the static board pages, the server boards page and the full board pages share.</summary>
 public static class BoardWords
 {
     public const string ListsEyebrow = "Four lists, one for each chamber and party";
+
+    public const string TabsLabel = "Party lists";
+
+    public const string CodeBuilt = "Code builds every number from roll call votes on this site. No model is used.";
+
+    /// <summary>The title of one board list: a panel of the boards page and the full board page.</summary>
+    public static string ListTitle(PublishedChamber chamber, string party) => $"{PublishedPartyNames.PartyOf(chamber, party)}: voted against most of their party";
+
+    public static string ListDescription(PublishedChamber chamber, string party) =>
+        $"{PublishedPartyNames.PartyOf(chamber, party)} ranked by their share of split votes cast against most {PublishedPartyNames.Members(party)}, with the count and base of each.";
 
     public static string Eyebrow(int congress) => $"{CongressCalendar.Ordinal(congress)} Congress | {ListsEyebrow}";
 

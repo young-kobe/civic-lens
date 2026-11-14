@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Analysis;
 using static CivicLens.Application.Analysis.AnalysisAnswerRules;
 
 namespace CivicLens.Application.Actions;
@@ -48,14 +49,14 @@ public sealed class ActionKeyTermScope
         var quote = item?.Quote ?? string.Empty;
         if (term.Length == 0 || term.Length > ActionKeyTerm.MaximumTermLength)
             errors.Add($"A key term has {term.Length} characters. Write 1 to {ActionKeyTerm.MaximumTermLength}.");
-        else if (quote.Length > ActionDraftRevision.MaximumTextQuoteLength)
-            errors.Add($"The quote of the key term \"{Shorten(term)}\" has {quote.Length} characters. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
-        else if (ActionTextCitation.WordCount(quote) < ActionDraftRevision.MinimumTextQuoteWords)
-            errors.Add($"The quote of the key term \"{Shorten(term)}\" has fewer than {ActionDraftRevision.MinimumTextQuoteWords} words. Quote at least {ActionDraftRevision.MinimumTextQuoteWords}.");
+        else if (quote.Length > QuotedSentenceLimits.MaximumQuoteLength)
+            errors.Add($"The quote of the key term \"{Shorten(term)}\" has {quote.Length} characters. Quote at most {QuotedSentenceLimits.MaximumQuoteLength}.");
+        else if (ActionTextCitation.WordCount(quote) < QuotedSentenceLimits.MinimumQuoteWords)
+            errors.Add($"The quote of the key term \"{Shorten(term)}\" has fewer than {QuotedSentenceLimits.MinimumQuoteWords} words. Quote at least {QuotedSentenceLimits.MinimumQuoteWords}.");
         else if (quotes.FindInDefinitions(quote, Section) is not { } span)
             errors.Add($"The quote of the key term \"{Shorten(term)}\" is not an exact quote of the definitions section. Copy it exactly from that section.");
-        else if (span.Length > ActionDraftRevision.MaximumTextQuoteLength)
-            errors.Add($"The quote of the key term \"{Shorten(term)}\" spans {span.Length} characters of the stored text. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
+        else if (span.Length > QuotedSentenceLimits.MaximumQuoteLength)
+            errors.Add($"The quote of the key term \"{Shorten(term)}\" spans {span.Length} characters of the stored text. Quote at most {QuotedSentenceLimits.MaximumQuoteLength}.");
         else return Defined(new ActionKeyTerm(term, span, quote, Section.Cuts(billText.Body, span.Start + span.Length - billText.BodyStart)), errors);
         return null;
     }

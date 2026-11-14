@@ -28,7 +28,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
     private const string Source = "Intro. Ann said \"exact quote\" on Friday. End.";
     private const string ExtractionId = "1111111111111111111111111111111111111111111111111111111111111111";
 
-    private Task<ApiHost> StartAsync() => ApiHost.StartAsync(postgres, new FakeReleaseSite(), options => options with { PublicBaseUrl = BaseUrl });
+    private Task<ApiHost> StartAsync() => ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
 
     private static async Task<IDocument> GetPageAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
     {

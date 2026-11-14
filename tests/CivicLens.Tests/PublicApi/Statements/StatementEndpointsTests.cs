@@ -149,7 +149,7 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task StatementDetailDistinguishesMissingRecordFromMissingActiveRelease()
     {
-        await using (var unavailable = await ApiHost.StartAsync(postgres, new FakeReleaseSite()))
+        await using (var unavailable = await ApiHost.StartAsync(postgres))
         using (var noRelease = await unavailable.Client.GetAsync("/v1/statements/" + new string('a', 64)))
             Assert.Equal(HttpStatusCode.ServiceUnavailable, noRelease.StatusCode);
 
@@ -175,7 +175,7 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(params SeededStatement[] statements)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         try
         {
             await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));

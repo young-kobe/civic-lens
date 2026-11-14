@@ -1,15 +1,27 @@
 using System.Security.Cryptography;
 using System.Text;
 using CivicLens.Application.Actions;
+using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Actions;
 
 public sealed class ActionTextPromptGoldenTests
 {
-    private const string SystemSha256 = "24ad3f4f1833a60613a2af9b467526f300635ef721f8c54e26e9eb168acf7372";
+    private const string SystemSha256 = "6a7846282ff43c18313c603111ebb5fde044822812ce25477e90fa3f3b43060f";
     private const string SchemaSha256 = "1842aea9479adba4bd6244a32833f17e655bb8083b18fb5c87380619258bc9e8";
-    private const string InputHash = "57116b358ea1c1f64fbcac68872d92c4b3ca5ce194e73f6b89ce1c9057b9e605";
+    private const string InputHash = "cf3007077fb2872e82e45323fe2385d043c821a3cc8e4e1994f02e153240a149";
+
+    [Fact]
+    public async Task ThePromptHoldsTheSharedAiTextSentencesAndStatesTheCodeGradeLimit()
+    {
+        var world = ActionBillWorld.Create(summaries: []);
+        var snapshot = (await world.Reader().ReadAsync(world.Evidence() with { BillText = ActionBillTexts.Of() }, default)).Snapshot!;
+
+        var request = ActionTextPrompt.Build(snapshot, ActionBillTexts.Of(), BillGateFixtures.HousingChoice(), ActionDraftTask.MaximumPromptBytes)!;
+
+        AiTextPromptRules.AssertHoldsSharedSentences(request.SystemPrompt, codeApproves: true);
+    }
 
     [Fact]
     public async Task TheTextPromptAndSchemaMatchTheirPinnedVersions()
@@ -21,11 +33,11 @@ public sealed class ActionTextPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(ActionDraftTask.TextPromptVersion)} ({ActionDraftTask.TextPromptVersion}) or " +
             $"{nameof(ActionDraftTask.TextSchemaVersion)} ({ActionDraftTask.TextSchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("action-text-prompt-v6", "action-text-schema-v1", "claude-haiku-5-5"),
+        Assert.Equal(("action-text-prompt-v8", "action-text-schema-v1", "claude-haiku-5-5"),
             (ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion, ActionDraftTask.Model));
         Assert.Equal((ActionDraftTask.TextPromptVersion, ActionDraftTask.TextSchemaVersion), (request.PromptVersion, request.SchemaVersion));
         Assert.Contains(ActionDraftTask.TextPromptVersion, ActionDraftTask.CurrentVersions(draftsKeyTerms: false).PromptVersions);
-        Assert.Equal("action-draft-prompt-v5", ActionDraftTask.PromptVersion);
+        Assert.Equal("action-draft-prompt-v6", ActionDraftTask.PromptVersion);
         Assert.True(request.CacheSystemPrompt);
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");

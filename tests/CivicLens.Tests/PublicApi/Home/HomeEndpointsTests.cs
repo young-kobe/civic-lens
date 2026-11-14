@@ -37,7 +37,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[]? bills = null, SeededBrief[]? briefs = null, SeededExecutiveAction[]? executiveActions = null)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         try
         {
             await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, Published);
@@ -742,7 +742,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     public async Task NoAnswerSetsACacheHeaderBecauseTheOtherVoteRoutesSetNone()
     {
         await using var host = await StartAsync([House('1', "2026-05-01", 1)]);
-        await using var empty = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var empty = await ApiHost.StartAsync(postgres);
 
         using var ok = await host.Client.GetAsync("/v1/home");
         using var none = await empty.Client.GetAsync("/v1/home");
@@ -756,7 +756,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task ANewServiceGives503AndAReleaseWithABriefAndNoVotesGivesAnEmptyVoteList()
     {
-        await using var empty = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        await using var empty = await ApiHost.StartAsync(postgres);
         await GetAsync(empty, HttpStatusCode.ServiceUnavailable);
         await using var blankRelease = await StartAsync([]);
         await ViewsSeed.ExecuteAsync(blankRelease.OperationalDatabase, "UPDATE publication_releases SET record_count = 0 WHERE release_number = 1");

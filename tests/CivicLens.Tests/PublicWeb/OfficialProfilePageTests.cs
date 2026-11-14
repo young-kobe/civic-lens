@@ -1,6 +1,6 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
-using CivicLens.Application.Actions;
+using CivicLens.Application.Analysis;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Publication.Contracts;
@@ -389,7 +389,7 @@ public sealed class OfficialProfilePageTests
         ];
 
         foreach (var passage in passages)
-            Assert.True(ReadingGrade.RoundedPassage([passage]) <= ReadingGrade.MaximumGrade, $"\"{passage}\" reads above the limit.");
+            Assert.True(ReadingGrade.RoundedPassage([passage]) <= AiTextRules.MaximumGrade, $"\"{passage}\" reads above the limit.");
     }
 
     [Fact]

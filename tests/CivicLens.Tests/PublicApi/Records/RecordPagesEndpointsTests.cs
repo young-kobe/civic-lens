@@ -20,7 +20,7 @@ public sealed class RecordPagesEndpointsTests(PostgresCollection postgres)
 
     private async Task<ApiHost> StartAsync(string? sql = null)
     {
-        var host = await ApiHost.StartAsync(postgres, new FakeReleaseSite());
+        var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         if (sql is not null) await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + sql);
         return host;

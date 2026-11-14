@@ -31,7 +31,7 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
         attempt.ContextJson = StatementDraftPrompt.SerializeContext(officials, evidence.CarryOver);
 
         var loop = new AnalysisValidationLoop<StatementDraftRun, StatementDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            StatementDraftTask.MaximumValidationPasses, errors => StatementDraftPrompt.Build(evidence, officials, settings.PromptByteCap, errors),
+            AiTextRules.MaximumValidationPasses, errors => StatementDraftPrompt.Build(evidence, officials, settings.PromptByteCap, errors),
             model.DraftAsync, (json, run) => Resolve(json, evidence, officials, run), async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
         var result = await loop.RunAsync(cancellationToken);
         return result.End switch

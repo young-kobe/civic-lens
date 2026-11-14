@@ -22,8 +22,11 @@ internal static class ViewColumns
     public static DateTimeOffset? Utc(DbDataReader reader, int ordinal) =>
         reader.IsDBNull(ordinal) ? null : new DateTimeOffset(reader.GetInt64(ordinal), TimeSpan.Zero);
 
-    public static T Enum<T>(DbDataReader reader, int ordinal) where T : struct, Enum =>
-        System.Enum.TryParse<T>(reader.GetString(ordinal), out var value) && System.Enum.IsDefined(value)
+    public static T Enum<T>(DbDataReader reader, int ordinal) where T : struct, Enum => Enum<T>(reader.GetString(ordinal));
+
+    /// <summary>An enum name that a view holds, such as one element of an array column.</summary>
+    public static T Enum<T>(string name) where T : struct, Enum =>
+        System.Enum.TryParse<T>(name, out var value) && System.Enum.IsDefined(value)
             ? value
             : throw new InvalidDataException($"The view holds an unknown {typeof(T).Name}.");
 

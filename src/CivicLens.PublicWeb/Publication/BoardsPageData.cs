@@ -21,3 +21,6 @@ public sealed record BoardAgreementData(PublishedChamber Chamber, int Congress, 
     int Agreed, int Split, int Mixed, int Total, int Nominations);
 
 public sealed record BoardAgreementKindData(PublishedVoteKind Kind, int Agreed, int Total);
+
+/// <summary>The full list of one board of the active release.</summary>
+public sealed record BoardListPageData(int Release, BoardPanelData Board);

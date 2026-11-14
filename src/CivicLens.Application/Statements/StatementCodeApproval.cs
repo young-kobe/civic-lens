@@ -1,6 +1,7 @@
-using CivicLens.Publication.Contracts;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
 using CivicLens.Core.Statements;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Statements;
 
@@ -19,8 +20,11 @@ public static class StatementCodeApproval
         if (!evidence.CarryOver.GatePassed) return new(GateNotPassed);
         if (!revision.IssueIds.All(issueId => evidence.CarryOver.IssueIds.Contains(issueId))) return new(IssueNotInGate);
         if (!IsOnlySpokenBy(officeOf, revision)) return new(SpeakerIsNotOfficeOwner);
-        return ApprovalCheck.Of(() => allowed.RequireApprovable(revision, evidence.Article.Extraction,
-            IsDateReadByCode(revision.StatementDate, evidence.Article.FirstCapturedOn)));
+        return ApprovalCheck.Of(() =>
+        {
+            allowed.RequireApprovable(revision, evidence.Article.Extraction, IsDateReadByCode(revision.StatementDate, evidence.Article.FirstCapturedOn));
+            AiTextRules.RequireReadablePassage([revision.Headline, revision.Summary]);
+        });
     }
 
     private static bool IsOnlySpokenBy(string? officeOwner, StatementDraftRevision revision) =>

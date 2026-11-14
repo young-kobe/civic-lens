@@ -138,6 +138,22 @@ public sealed class BoardsPageTests
         Assert.All(tabs, tab => Assert.Null(tab.GetAttribute("aria-current")));
     }
 
+    [Fact]
+    public async Task EachPanelLinksTheFullListOfItsBoardOnThePreview()
+    {
+        var page = await RenderAsync(Data([
+            Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, 30, 10)),
+            Panel(PublishedChamber.House, "Republican", 119, Row("b", "Bob", null, 30, 5)),
+            Panel(PublishedChamber.Senate, "Democrat", 119, Row("c", "Cy", null, 30, 4)),
+            Panel(PublishedChamber.Senate, "Republican", 119, Row("d", "Di", null, 30, 3))]));
+
+        var links = page.QuerySelectorAll(".board-panel a").Where(link => link.TextContent.StartsWith("See the full list", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(["See the full list of the House Democrats", "See the full list of the House Republicans", "See the full list of the Senate Democrats", "See the full list of the Senate Republicans"],
+            links.Select(link => link.TextContent));
+        Assert.Equal(["/web/board-house-democrat.html", "/web/board-house-republican.html", "/web/board-senate-democrat.html", "/web/board-senate-republican.html"],
+            links.Select(link => link.GetAttribute("href")));
+    }
+
     [Theory]
     [InlineData(1, 1000, "under 1%")]
     [InlineData(999, 1000, "over 99%")]

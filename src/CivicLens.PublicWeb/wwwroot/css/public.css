@@ -146,7 +146,7 @@ table[data-paged]:focus { outline: none; }
 
 .public-hero { padding: 0 var(--frame-pad); border-bottom: 1px solid var(--bar-edge); background: var(--hero-ground); color: var(--bar-ink); }
 .home-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--s6); align-items: center; padding-block: var(--s6) var(--s7); }
-.public-hero:has(> .home-preview-hero) { padding: 16px 16px 0; border: 0; background: none; }
+.public-hero:has(> .home-preview-hero) { padding: 16px var(--frame-pad) 0; border: 0; background: none; }
 .home-preview-hero { grid-template-columns: minmax(0, 1fr); align-items: start; gap: var(--s6); padding: 40px; border-radius: 28px; background: var(--hero-ground); font-size: 1rem; }
 .home-hero h1 { margin: 0; font-size: var(--t-display); line-height: 1; }
 .home-preview-hero h1 { line-height: .92; text-wrap: balance; }
@@ -158,7 +158,7 @@ table[data-paged]:focus { outline: none; }
 .home-preview-hero .zip-form .field input:not([type="checkbox"]):not([type="radio"]) { height: 48px; padding: 0 12px; border-radius: 12px; font-size: 1.125rem; }
 .home-preview-hero .zip-form .btn { min-height: 48px; padding: 0 20px; border-radius: 12px; font-size: 1rem; }
 .home-preview-hero .zip-error { grid-column: 1 / -1; }
-.public-main:has(> .content > .home-grid) { padding: 24px 16px 48px; }
+.public-main:has(> .content > .home-grid) { padding: 24px var(--frame-pad) 48px; }
 .public-breadcrumbs + .public-hero:has(> .home-preview-hero) { padding-top: 0; }
 .public-breadcrumbs + .public-hero > .home-preview-hero { padding-top: var(--s6); }
 .home-lead { max-width: 30em; margin: var(--s4) 0 var(--s5); color: var(--bar-muted); font-size: var(--t-lg); line-height: 1.5; }
@@ -475,7 +475,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
     .home-preview-hero .home-intro { position: sticky; top: 120px; align-self: start; padding: 40px 32px 0 0; }
     .home-preview-hero h1 { font-size: clamp(4.5rem, 5.6vw, 6.25rem); }
     .home-preview-hero:not(:has(.home-featured)) .home-intro { position: static; grid-column: 1 / -1; max-width: 48rem; padding: 0; }
-    .public-main:has(> .content > .home-grid) { padding: var(--s6) var(--frame-pad) var(--s7); }
+    .public-main:has(> .content > .home-grid) { padding-top: var(--s6); }
     .home-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
     .home-grid > * { grid-column: 1 / -1; }
     .home-grid > .home-votes, .home-grid > .home-executive { grid-column: span 8; }

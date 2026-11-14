@@ -66,7 +66,7 @@ public sealed class RelationshipDraftStep(IRelationshipDraftStore store, IRelati
         CancellationToken cancellationToken)
     {
         var loop = new AnalysisValidationLoop<RelationshipDraftRun, RelationshipRevision?>(Wrap, attempt, AnalysisRunOutcome.Drafted,
-            RelationshipDraftTask.MaximumValidationPasses,
+            AiTextRules.MaximumValidationPasses,
             errors => RelationshipDraftPrompt.Build(context, officialNames, settings.PromptByteCap, errors), model.DraftAsync,
             (json, run) => RelationshipDraftResolver.Resolve(json, context, run.FinishedAtUtc),
             async (runId, token) => (await store.GetRunAsync(runId, token))?.Run);
