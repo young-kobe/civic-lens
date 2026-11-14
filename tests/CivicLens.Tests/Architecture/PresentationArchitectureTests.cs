@@ -67,6 +67,17 @@ public sealed class PresentationArchitectureTests
     }
 
     [Fact]
+    public void ANarrowOnlyHeaderLinkHidesFromTheWideHeaderBreakpointWhereTheHeaderSearchBoxShows()
+    {
+        var css = WebStyleSheets.Read("public.css");
+
+        Assert.Single(Regex.Matches(css, @"\[data-narrow-only\]"));
+        Assert.Matches(@"(?m)^@media \(min-width: 1280px\) \{ \.public-header \[data-narrow-only\] \{ display: none; \} \}$", css);
+        Assert.Matches(@"@media \(max-width: 1279px\) \{[^@]*\.public-nav \{ display: none; \}", css);
+        Assert.DoesNotMatch(@"\.public-search\s*\{[^}]*display: none", css);
+    }
+
+    [Fact]
     public void ASavedZipShowsOneMembersBarBecauseTheHeaderChipStepsAsideWhileTheStripHoldsItsOwnForgetControl()
     {
         var css = WebStyleSheets.Read("public.css");

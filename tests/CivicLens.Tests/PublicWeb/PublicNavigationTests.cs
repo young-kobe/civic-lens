@@ -35,7 +35,7 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task TheHeaderAndTheMenuSheetLinkEachSectionInTheMockupOrderWithStatementsAndThenSearchAndNoLinkForTheOldAllRecordsList()
+    public async Task TheHeaderAndTheMenuSheetLinkEachSectionInTheMockupOrderWithStatementsAndThenANarrowOnlySearchAndNoLinkForTheOldAllRecordsList()
     {
         var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicationProtocol.BoardsPagePath);
 
@@ -48,7 +48,9 @@ public sealed class PublicNavigationTests
                 nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
             Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
             Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);
+            Assert.Equal("Search", Assert.Single(nav.QuerySelectorAll("a[data-narrow-only]")).TextContent);
         }
+        Assert.Empty(page.QuerySelectorAll(".public-footer [data-narrow-only]"));
         Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
     }
 
