@@ -17,7 +17,7 @@ VIEWS = [
             ("analysis", "Selective analysis", "AI drafting of document-change accounts, bill action records, weekly briefs, and the statement issue gate are implemented through separate durable queues and shared model-call plumbing. Deterministic records first; evaluated classification and evidence extraction only where useful remain planned."),
             ("review", "Private review and MCP", "Auth0-protected draft/review workspace implemented. Human decisions bind to exact immutable revisions; the worker publishes approved revisions as versioned data releases; MCP remains planned."),
             ("release", "Versioned release", "Implemented: approved records as immutable release data, verified before an atomic switch of the active release. PublicApi serves the pages, and its search service ingests each release."),
-            ("public", "Website and public MCP", "Read published releases only. Never crawl, call models or access private operational data."),
+            ("public", "Website and public MCP", "Read published data only: the public_api views, the search database, and the release photos. Never crawl, call models or access private operational data."),
         ],
         "edges": [("config", "app"), ("app", "collector"), ("collector", "evidence"), ("evidence", "analysis"), ("analysis", "review"), ("review", "release"), ("release", "public")],
     },
