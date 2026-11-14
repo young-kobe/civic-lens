@@ -56,6 +56,10 @@
                     }
                 </section>
             }
+            @if (group.Title == Glossary.KindsOfVotes)
+            {
+                <p><a href="@(RootPath + PublicationProtocol.VoteKindsPagePath)">@Glossary.VoteKindsLink</a></p>
+            }
             @if (group == Glossary.PartyCountGroup)
             {
                 <section class="glossary-term" aria-labelledby="@Glossary.PartyCountAnchorId">

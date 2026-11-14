@@ -1,6 +1,5 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
-using CivicLens.Host.Publication;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -120,29 +119,36 @@ public sealed class VoteKindsPageTests
     }
 
     [Fact]
-    public async Task TheGlossaryPageHoldsNoLinkToTheIndexUntilCutover()
+    public async Task TheKindsOfVotesPanelOfTheGlossaryLinksTheIndexAtItsPublicPathWithTheApprovedText()
     {
-        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderGlossaryAsync(CancellationToken.None));
+        var page = await RenderAtRootAsync<PublishedGlossaryPage>();
+        var kindsPanel = Glossary.Groups.Single(group => group.Title == Glossary.KindsOfVotes).AnchorId;
 
-        Assert.Empty(document.QuerySelectorAll($"a[href='{PublicationProtocol.VoteKindsPagePath}']"));
+        var link = Assert.Single(page.QuerySelectorAll($"a[href$='{PublicationProtocol.VoteKindsPagePath}']"));
+
+        Assert.Equal(("See what a Yes vote means for each kind of vote", IndexRoot + "vote-kinds.html"), (link.TextContent, link.GetAttribute("href")));
+        Assert.Equal(kindsPanel, link.Closest("section[aria-labelledby]")!.GetAttribute("aria-labelledby"));
     }
 
     [Fact]
-    public async Task TheVotePageHoldsNoLinkToTheIndexUntilCutover()
+    public async Task TheVotePageLinksTheIndexAtItsPublicPathWithTheApprovedTextUnderItsYesMeaning()
     {
         var page = await RenderAsync(Vote());
 
-        var link = page.QuerySelector($".vote-explain a[href='{Root}{PublicationProtocol.VoteKindsPagePath}']");
+        var link = Assert.Single(page.QuerySelectorAll($"a[href$='{PublicationProtocol.VoteKindsPagePath}']"));
 
-        Assert.Null(link);
+        Assert.Equal(("See what a Yes vote means for each kind of vote", Root + "vote-kinds.html"), (link.TextContent, link.GetAttribute("href")));
+        Assert.NotNull(link.Closest(".vote-explain"));
     }
 
-    private static async Task<IDocument> RenderIndexAsync()
+    private static Task<IDocument> RenderIndexAsync() => RenderAtRootAsync<VoteKindsPage>();
+
+    private static async Task<IDocument> RenderAtRootAsync<TPage>() where TPage : IComponent
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
-            (await renderer.RenderComponentAsync<VoteKindsPage>(ParameterView.FromDictionary(
+            (await renderer.RenderComponentAsync<TPage>(ParameterView.FromDictionary(
                 new Dictionary<string, object?> { [nameof(VoteKindsPage.RootPath)] = IndexRoot }))).ToHtmlString());
         return await new HtmlParser().ParseDocumentAsync(html);
     }
