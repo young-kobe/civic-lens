@@ -1,0 +1,37 @@
+@using CivicLens.Publication.Contracts
+
+@* One ranked member of a board: name, party, the seat of a delegate, then the count of the base and the share. The board lists and the Home delegate list show it. *@
+<li class="list-row">
+    <div>
+        <a class="list-row-title" href="@(RootPath + Row.PagePath)">@Row.Name</a>
+        <div class="list-row-meta">
+            <span>@PublishedPartyNames.PartyOf(Chamber, Party)</span>
+            @if (Row.Seat is not null)
+            {
+                <span>@Row.Seat</span>
+            }
+        </div>
+    </div>
+    <div class="list-row-side">
+        <span class="list-row-figure"><b>@Row.Breaks</b> of @Row.Cast split votes@(Congress is { } congress ? $", {CongressCalendar.Ordinal(congress)} Congress" : "")</span>
+        <span class="badge">@Share(Row.Breaks, Row.Cast)</span>
+    </div>
+</li>
+
+@code {
+    [Parameter, EditorRequired] public BoardRowData Row { get; set; } = default!;
+    [Parameter, EditorRequired] public PublishedChamber Chamber { get; set; }
+    [Parameter, EditorRequired] public string Party { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    /// <summary>The Congress of the count, when no heading above the row names it.</summary>
+    [Parameter] public int? Congress { get; set; }
+
+    private static string Share(int breaks, int cast)
+    {
+        var percent = 100.0 * breaks / cast;
+        if (breaks > 0 && percent < 0.5) return "under 1%";
+        if (breaks < cast && percent >= 99.5) return "over 99%";
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{percent:0}%");
+    }
+}

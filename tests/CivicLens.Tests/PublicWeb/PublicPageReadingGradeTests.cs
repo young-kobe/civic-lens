@@ -296,7 +296,8 @@ public sealed class PublicPageReadingGradeTests
             new(chamber, party, 119, null, new DateOnly(2026, 9, 16), true, [new(PublicationProtocol.OfficialPagePath(name), name, null, cast, breaks)]);
         BoardPanelData[] fourBoards =
         [
-            Board(PublishedChamber.House, "Democrat", "Henry Cuellar", 254, 160), Board(PublishedChamber.House, "Republican", "James Moylan", 51, 26),
+            Board(PublishedChamber.House, "Democrat", "Henry Cuellar", 254, 160), Board(PublishedChamber.House, "Republican", "Brian Fitzpatrick", 250, 40) with
+            { Delegates = [new(PublicationProtocol.OfficialPagePath("james-moylan"), "James Moylan", "Delegate for Guam", 51, 26)] },
             Board(PublishedChamber.Senate, "Democrat", "John Fetterman", 337, 66), Board(PublishedChamber.Senate, "Republican", "Lisa Murkowski", 341, 58)
         ];
         var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief))
@@ -347,7 +348,8 @@ public sealed class PublicPageReadingGradeTests
             [new PublishedBriefCitation { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = DetailPageFixture.StatementId, RevisionNumber = 2, Headline = "Kelly announces a bill" }],
             9, new PublishedBriefCoverage { Considered = 12, SentToModel = 8, Cited = 1 }, new DateTimeOffset(2026, 11, 6, 13, 5, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero));
         var boards = new BoardsPageData(7, [new(PublishedChamber.House, "Democrat", 119, null, new DateOnly(2026, 9, 16), true,
-            [new(PublicationProtocol.OfficialPagePath("cuellar"), "Henry Cuellar", null, 254, 160)])],
+            [new(PublicationProtocol.OfficialPagePath("cuellar"), "Henry Cuellar", null, 254, 160)])
+            { Delegates = [new(PublicationProtocol.OfficialPagePath("moylan"), "James Moylan", "Delegate for Guam", 51, 26)] }],
             [new(PublishedChamber.House, 119, [new(PublishedVoteKind.Passage, 15, 201)], 196, 254, 0, 450, 0)]);
         var zip = new ZipMemberCardsData(8, 119, "36009", 2,
             [new("Representative for Alabama, district 2", new ZipMemberIdentityData("pat", "Pat Member", "Democratic", new(2029, 1, 3), null, [], [])), new("Senator for Alabama", null)], []);

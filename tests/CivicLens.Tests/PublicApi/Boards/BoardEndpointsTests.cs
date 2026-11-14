@@ -94,7 +94,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task EachFullBoardPageListsEveryMemberWithABreakInShareOrderAndTheBoardsPageLinksIt()
+    public async Task EachFullBoardPageListsEveryVotingMemberWithABreakInShareOrderRanksDelegatesApartAndTheBoardsPageLinksIt()
     {
         string[] houseDemocrats = [.. Enumerable.Range(0, 11).Select(index => $"hd{index:00}")];
         string[] house = [.. houseDemocrats, "p0", "p7", "p1"];
@@ -127,22 +127,34 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
             Assert.StartsWith("W/\"r1-", response.Headers.ETag!.ToString());
             return new AngleSharp.Html.Parser.HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync());
         }
-        static string[] Names(AngleSharp.Dom.IDocument page) => [.. page.QuerySelectorAll(".board-panel .list-row-title").Select(link => link.TextContent)];
+        static string[] Names(AngleSharp.Dom.IDocument page) => [.. page.QuerySelectorAll(".board-panel .list-row-title").Where(link => link.Closest(".board-delegates") is null).Select(link => link.TextContent)];
 
         var houseDemocratPage = await PageAsync("/board-house-democrat.html");
-        Assert.Equal(["Hal Hale", .. Enumerable.Range(0, 11).Reverse().Select(index => $"House Dem {index:00}")], Names(houseDemocratPage));
+        Assert.Equal([.. Enumerable.Range(0, 11).Reverse().Select(index => $"House Dem {index:00}")], Names(houseDemocratPage));
         Assert.Equal("https://civic-lens.test/board-house-democrat.html", houseDemocratPage.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
-        Assert.Equal("Delegate for DC", houseDemocratPage.QuerySelectorAll(".board-panel .list-row-meta span")[1].TextContent);
-        Assert.Equal("12 of 25 split votes", houseDemocratPage.QuerySelector(".board-panel .list-row-figure")!.TextContent);
+        Assert.Equal("11 of 25 split votes", houseDemocratPage.QuerySelector(".board-panel .list-row-figure")!.TextContent);
+        AssertDelegateListHoldsHalHale(houseDemocratPage);
         Assert.Equal(["Ben Baker"], Names(await PageAsync("/board-house-republican.html")));
         Assert.Equal(["Dee Dole"], Names(await PageAsync("/board-senate-democrat.html")));
         Assert.Equal(["Fox Finn", "Eli Ellis"], Names(await PageAsync("/board-senate-republican.html")));
 
         var boards = await PageAsync("/boards.html");
         var panel = boards.QuerySelectorAll(".board-panel")[0];
-        Assert.Equal(Names(houseDemocratPage).Take(10), panel.QuerySelectorAll(".list-row-title").Select(link => link.TextContent));
+        Assert.Equal(Names(houseDemocratPage).Take(10), panel.QuerySelectorAll(".list-row-title").Where(link => link.Closest(".board-delegates") is null).Select(link => link.TextContent));
+        AssertDelegateListHoldsHalHale(boards);
+        Assert.DoesNotContain("district 0", boards.Body!.TextContent);
         Assert.Equal("https://civic-lens.test/board-house-democrat.html",
             panel.QuerySelectorAll("a").Single(link => link.TextContent == "See the full list of the House Democrats").GetAttribute("href"));
+    }
+
+    /// <summary>The DC delegate breaks most often, so a shared list would rank him first. He shows only in the delegate list of the House Democrats, with the seat words of the one owner.</summary>
+    private static void AssertDelegateListHoldsHalHale(AngleSharp.Dom.IDocument page)
+    {
+        var list = Assert.Single(page.QuerySelectorAll(".board-delegates"));
+        Assert.Equal("Delegates and the Resident Commissioner", list.QuerySelector("h3")!.TextContent);
+        Assert.Equal(["Hal Hale"], list.QuerySelectorAll(".list-row-title").Select(link => link.TextContent));
+        Assert.Equal(["House Democrats", "Delegate for District of Columbia"], list.QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
+        Assert.Equal("12 of 25 split votes", list.QuerySelector(".list-row-figure")!.TextContent);
     }
 
     [Fact]
