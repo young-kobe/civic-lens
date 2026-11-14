@@ -189,6 +189,10 @@ public sealed class ReviewWorkspaceHost(PostgresCollection postgres)
         .Select(element => new KeyValuePair<string, string>(element.GetAttribute("name")!,
             element.LocalName == "textarea" ? element.TextContent : element.GetAttribute("value") ?? "")).ToList();
 
+    /// <summary>The value of the one fact row with this label inside the record.</summary>
+    public static string FactValue(IElement record, string label) =>
+        record.QuerySelectorAll("dt").Single(term => term.TextContent == label).NextElementSibling!.TextContent.Trim();
+
     public static void Set(List<KeyValuePair<string, string>> fields, string name, string value)
     {
         fields.RemoveAll(field => field.Key == name);

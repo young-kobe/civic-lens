@@ -94,6 +94,23 @@ public sealed class BriefReviewWorkspaceTests(PostgresCollection postgres) : IAs
     }
 
     [Fact]
+    public async Task TheSavedRevisionShowsItsReadingGradeAsAdviceAndAGradeAboveTheCodeLimitStillApproves()
+    {
+        await seeder.ReleaseCitedRecordsAsync();
+        await seeder.ReviewableBriefAsync(ReviewableRevision() with { Headline = GradePassages.FailingHeadline, Paragraphs = [new(GradePassages.Summary, ["R1", "R2", "R3"])] });
+        host.Client.DefaultRequestHeaders.Add("Cookie", host.CreateCookie("auth0|friend"));
+        var editor = await host.GetDocumentAsync($"/Review/Briefs/{RecordId}");
+
+        Assert.Equal("14.1. Prompts aim for 12. Code does not check this text.", FactValue(editor.QuerySelector("#saved-approval-target")!, "Reading grade"));
+
+        var decision = Fields(editor.QuerySelector("#decision-form")!);
+        decision.Add(new("kind", "Approve"));
+        using var approved = await host.Client.PostAsync($"/Review/Briefs/{RecordId}", new FormUrlEncodedContent(decision));
+        Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+        Assert.Contains("Approved, private", (await host.GetDocumentAsync($"/Review/Briefs/{RecordId}")).QuerySelector(".page-header")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AnApprovalRefusedBecauseACitationChangedShowsTheStepsThatFixItOnThePage()
     {
         await seeder.ReleaseCitedRecordsAsync();
