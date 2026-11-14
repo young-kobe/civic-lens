@@ -75,6 +75,6 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
     }
 
     internal static SharedVoteRowData Vote(string officialId, MemberVote vote) =>
-        new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label, vote.KindWords, vote.ResultWords,
+        new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label, vote.TextOrigin, vote.KindWords, vote.ResultWords,
             [new(officialId, vote.CastWords, vote.Side)]);
 }

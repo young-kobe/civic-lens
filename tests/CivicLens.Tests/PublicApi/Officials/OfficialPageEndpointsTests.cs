@@ -217,6 +217,21 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
     }
 
+    [Fact]
+    public async Task ARecentVoteRowColorsItsLabelAsAiOnlyWhenTheViewSaysAModelWroteTheHeadline()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('e', "2026-02-07") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 5, TextOrigin = "Code" });
+
+        var labels = (await GetPageAsync(host, "/web/officials/p0")).QuerySelectorAll("#votes .shared-vote-meta .ai-label").ToArray();
+
+        Assert.Equal(AiLabelWords.CodeWording, labels[0].TextContent.Trim());
+        Assert.Equal("code", labels[0].GetAttribute("data-origin"));
+        Assert.NotEmpty(labels[1..]);
+        Assert.All(labels[1..], label => Assert.Equal("model", label.GetAttribute("data-origin")));
+    }
+
     [Theory]
     [InlineData("Code", "Code checked this link")]
     [InlineData("Person", "A reviewer checked this link")]

@@ -101,7 +101,7 @@ internal static class ZipMemberCardsMapper
         if (members.Length >= 2 && casts.Length == members.Length && sides.All(side => side is not null))
             membersVotedTheSame = sides.Distinct(StringComparer.Ordinal).Count() == 1;
         return new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label,
-            vote.KindWords, vote.ResultWords, casts)
+            vote.TextOrigin, vote.KindWords, vote.ResultWords, casts)
         {
             MembersVotedTheSame = membersVotedTheSame
         };

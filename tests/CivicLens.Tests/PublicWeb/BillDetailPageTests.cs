@@ -38,7 +38,7 @@ public sealed class BillDetailPageTests
         Issues = [new("foreign-policy", "Foreign policy and war")],
         PolicyArea = "International Affairs",
         BillLine = "This bill imposes sanctions.",
-        Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", "AI summary. Drafted by an AI model from reviewed records.", "Vote to pass or agree to", "Passed", [])]
+        Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", "AI summary. Drafted by an AI model from reviewed records.", PublishedTextOrigin.Model, "Vote to pass or agree to", "Passed", [])]
     };
 
     [Fact]

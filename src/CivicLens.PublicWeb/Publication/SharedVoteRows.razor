@@ -27,7 +27,7 @@
                         @RowHeading(vote)
                         <p class="shared-vote-meta">
                             <time datetime="@vote.VotedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@Moment.Day(vote.VotedOn)</time>, @(vote.Chamber is { } chamber ? VoteWords.RollCall(chamber, vote.RollCall) : $"roll call {vote.RollCall}"), @CongressCalendar.Ordinal(vote.Congress) Congress, session @vote.Session. @(vote.KindWords). Result: @vote.ResultWords
-                            <AiLabel Text="@vote.Label" />
+                            <AiLabel Text="@vote.Label" Origin="vote.TextOrigin" />
                             @if (!SingleMember && vote.MembersVotedTheSame is { } membersVotedTheSame)
                             {
                                 <span class="shared-vote-comparison">@(membersVotedTheSame ? "Same vote" : "Voted differently")</span>

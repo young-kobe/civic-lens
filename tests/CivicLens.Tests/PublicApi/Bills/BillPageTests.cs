@@ -102,6 +102,19 @@ public sealed class BillPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AVoteRowColorsItsLabelAsAiOnlyWhenTheViewSaysAModelWroteTheHeadline()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('c', "2026-03-05") { BillNumber = 7, RollCall = 50, TextOrigin = "Code" });
+
+        var rows = (await ReadPageAsync(host, BillId)).QuerySelectorAll(".bill-votes .shared-vote-row");
+
+        var origins = rows.ToDictionary(row => row.QuerySelector("a")!.GetAttribute("href")!.Split('/')[^1],
+            row => row.QuerySelector(".shared-vote-meta .ai-label")!.GetAttribute("data-origin"));
+        Assert.Equal(new Dictionary<string, string?> { [new string('c', 64) + ".html"] = "code", [new string('e', 64) + ".html"] = "model" }, origins);
+    }
+
+    [Fact]
     public async Task AVoteRowShowsTheSplitBadgeFromTheStoredAlignment()
     {
         await using var host = await StartAsync();

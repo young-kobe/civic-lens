@@ -122,7 +122,7 @@ public sealed class ZipMemberCardsTests
     public async Task SharedRowsRenderInsideTheSingleZipMemberFragment()
     {
         var vote = new SharedVoteRowData(new string('c', 64), new(2026, 9, 16), 119, 2, 314,
-            "House passes a bill", null, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea")]);
+            "House passes a bill", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea")]);
         var shared = new SharedVoteRowsData(PublishedChamber.House, [new("pat", "Pat Member")], [vote]);
         var member = new ZipMemberIdentityData("pat", "Pat Member", null, null, null, [], []);
         var document = await RenderAsync(new ZipMemberCardsData(9, 119, "36009", 1, [new("Representative for Alabama, district 2", member)], [])
@@ -141,7 +141,7 @@ public sealed class ZipMemberCardsTests
     {
         var member = new ZipMemberIdentityData("pat", "Pat Member", "Democratic", null, null, [House], [HouseDemocrat]);
         var vote = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 2, 314,
-            "House members differ", null, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea"), new("other", "No (Nay)", "Nay")])
+            "House members differ", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea"), new("other", "No (Nay)", "Nay")])
         {
             MembersVotedTheSame = false
         };

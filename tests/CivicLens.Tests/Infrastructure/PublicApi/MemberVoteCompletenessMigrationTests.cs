@@ -19,6 +19,7 @@ public sealed class MemberVoteCompletenessMigrationTests(PostgresCollection post
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
+            await ApplyAsync(database, new PublicApiMemberVoteTextOrigin().DownOperations);
             await ApplyAsync(database, new PublicApiMemberVoteBreaksParty().DownOperations);
             var migration = new PublicApiMemberVoteCompleteness();
             await UpgradeAsync(database, migration);

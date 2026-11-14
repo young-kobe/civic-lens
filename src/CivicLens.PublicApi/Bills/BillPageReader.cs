@@ -104,7 +104,7 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
 
     /// <summary>The chamber bar uses the shared cast bar of the vote page with no half line. The source gives no counts for a vote for a candidate, so that row has no bar.</summary>
     private static SharedVoteRowData VoteRowOf(VoteRow vote) => new(vote.RecordId, vote.VotedOn, vote.Congress, vote.Session, vote.RollCall, vote.Headline, vote.Label,
-        PlainVoteWords.Kind(vote.Kind), PlainVoteWords.Result(vote.Result), [])
+        vote.TextOrigin, PlainVoteWords.Kind(vote.Kind), PlainVoteWords.Result(vote.Result), [])
     {
         Alignment = vote.Alignment,
         Totals = vote is { Yea: { } yes, Nay: { } no, Present: { } present, NotVoting: { } notVoting }

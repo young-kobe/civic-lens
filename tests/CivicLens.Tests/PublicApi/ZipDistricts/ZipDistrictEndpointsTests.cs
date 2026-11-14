@@ -317,6 +317,24 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ASharedVoteRowColorsItsLabelAsAiOnlyWhenTheViewSaysAModelWroteTheHeadline()
+    {
+        await using var host = await StartAsync(withNames: false, DistrictFixtures.Row("1301", "12345", 50));
+        await ZipSeed.AddNamesAsync(host.OperationalDatabase, 1, new SeededSeat("p4", "Alabama Representative", Representative, "AL", 2));
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('1', "2026-02-02") { RecordId = 1.ToString("x64"), RollCall = 1, Casts = ["Yea"], PersonIds = ["p4"], TextOrigin = "Model" },
+            new SeededVote('2', "2026-02-01") { RecordId = 2.ToString("x64"), RollCall = 2, Casts = ["Nay"], PersonIds = ["p4"], TextOrigin = "Code" });
+
+        using var response = await host.Client.GetAsync("/v1/zip-districts/12345/members");
+        var document = new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var labels = document.QuerySelectorAll("section.shared-vote-rows[data-chamber='house'] .shared-vote-meta .ai-label");
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
+        Assert.All(labels, label => Assert.NotEmpty(label.TextContent));
+    }
+
+    [Fact]
     public async Task CrossStateComparisonsRequireEveryListedMembersBinaryCast()
     {
         await using var host = await StartAsync(withNames: false, DistrictFixtures.Row("1301", "12345", 50));

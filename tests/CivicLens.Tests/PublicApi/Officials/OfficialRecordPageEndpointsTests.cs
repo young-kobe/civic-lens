@@ -80,6 +80,20 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task TheVotesTabColorsALabelAsAiOnlyWhenTheViewSaysAModelWroteTheHeadline()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-02-01") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 1, TextOrigin = "Code" },
+            new SeededVote('c', "2026-02-05") { Casts = ["Yea"], PersonIds = ["p0"], RollCall = 3, TextOrigin = "Model" });
+
+        var labels = (await GetPageAsync(host, "/web/officials/p0/record.html")).QuerySelectorAll(".shared-vote-meta .ai-label");
+
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
+        Assert.Equal([AiLabelWords.ModelWording, AiLabelWords.CodeWording], labels.Select(label => label.TextContent.Trim()));
+    }
+
+    [Fact]
     public async Task TheListPagesForwardByTwentyFiveWithOneCursorAndTheLastPageHasNoNextLink()
     {
         await using var host = await StartAsync();

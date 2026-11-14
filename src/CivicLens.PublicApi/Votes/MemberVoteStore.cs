@@ -14,7 +14,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
     public const int MaximumSharedVotesPerChamber = 10;
 
     /// <summary>The columns of one vote with the cast of the official, in the order of <see cref="ReadVote"/>. A query that selects the release and the official before them can use it.</summary>
-    internal const string VoteColumns = "v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast, v.side, v.party_majority_cast";
+    internal const string VoteColumns = "v.record_id, v.chamber, v.congress, v.session_number, v.roll_call_number, v.voted_on, v.kind, v.bill_type, v.bill_number, v.headline, v.label, v.result, v.vote_cast, v.side, v.party_majority_cast, v.text_origin";
 
     // Each official gets a lateral read of its own, so the person index drives the plan. The issue filter reads the column issue_ids of the same view.
     // A filter on public_api.vote_issues made Postgres build the active records again for each row.
@@ -37,11 +37,12 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
 
     private static string SharedSql(MemberVoteRequest request) => $"""
         SELECT a.release_number, selected.record_id, selected.voted_on, selected.chamber, selected.congress, selected.session_number,
-               selected.roll_call_number, selected.kind, selected.bill_type, selected.bill_number, selected.headline, selected.label, selected.result
+               selected.roll_call_number, selected.kind, selected.bill_type, selected.bill_number, selected.headline, selected.label, selected.result,
+               selected.text_origin
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT chosen.record_id, chosen.voted_on, chosen.chamber, chosen.congress, chosen.session_number, chosen.roll_call_number,
-                      chosen.kind, chosen.bill_type, chosen.bill_number, chosen.headline, chosen.label, chosen.result
+                      chosen.kind, chosen.bill_type, chosen.bill_number, chosen.headline, chosen.label, chosen.result, chosen.text_origin
                  FROM unnest(@chambers) AS chambers(chamber)
                  CROSS JOIN LATERAL ({SharedSelection(request)}) chosen
                 ) selected ON TRUE
@@ -52,17 +53,17 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
 
     private static string SharedSelection(MemberVoteRequest request) => request.Issue is null ? $"""
         SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number, v.kind, v.bill_type, v.bill_number,
-               v.headline, v.label, v.result
+               v.headline, v.label, v.result, v.text_origin
           FROM public_api.votes v
          WHERE v.chamber = chambers.chamber AND v.kind = ANY(@kinds)
          ORDER BY {VoteStore.Order} LIMIT @take
         """ : $"""
         SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number, v.kind, v.bill_type, v.bill_number,
-               v.headline, v.label, v.result
+               v.headline, v.label, v.result, v.text_origin
           FROM (SELECT DISTINCT record_id, revision_number FROM public_api.vote_issues WHERE issue_id = @issue) issue_keys
          CROSS JOIN LATERAL (
               SELECT v.record_id, v.voted_on, v.chamber, v.congress, v.session_number, v.roll_call_number, v.kind, v.bill_type, v.bill_number,
-                     v.headline, v.label, v.result
+                     v.headline, v.label, v.result, v.text_origin
                 FROM public_api.votes v
                WHERE v.record_id = issue_keys.record_id AND v.revision_number = issue_keys.revision_number
                  AND v.chamber = chambers.chamber AND v.kind = ANY(@kinds){CongressFilter(request)}
@@ -202,7 +203,7 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
         return new(reader.GetString(1), reader.GetFieldValue<DateOnly>(reader.GetOrdinal("voted_on")),
             ViewColumns.Enum<PublishedChamber>(reader, 3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6), kind,
             PlainVoteWords.Kind(kind), ViewColumns.Text(reader, 8), ViewColumns.Number(reader, 9), reader.GetString(10), ViewColumns.Text(reader, 11),
-            result, PlainVoteWords.Result(result), []);
+            ViewColumns.Enum<PublishedTextOrigin>(reader, 13), result, PlainVoteWords.Result(result), []);
     }
 
     /// <summary>Reads one vote. The columns start at the third ordinal, after the release and the official.</summary>
@@ -213,6 +214,6 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
         var cast = reader.GetString(14);
         return new(reader.GetString(2), reader.GetFieldValue<DateOnly>(7), ViewColumns.Enum<PublishedChamber>(reader, 3), reader.GetInt32(4), reader.GetInt32(5),
             reader.GetInt32(6), kind, PlainVoteWords.Kind(kind), ViewColumns.Text(reader, 9), ViewColumns.Number(reader, 10), reader.GetString(11),
-            ViewColumns.Text(reader, 12), result, PlainVoteWords.Result(result), cast, PlainVoteWords.Cast(cast), ViewColumns.Text(reader, 15), ViewColumns.Text(reader, 16));
+            ViewColumns.Text(reader, 12), ViewColumns.Enum<PublishedTextOrigin>(reader, 17), result, PlainVoteWords.Result(result), cast, PlainVoteWords.Cast(cast), ViewColumns.Text(reader, 15), ViewColumns.Text(reader, 16));
     }
 }
