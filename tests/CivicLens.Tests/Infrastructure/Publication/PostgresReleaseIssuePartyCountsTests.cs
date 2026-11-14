@@ -53,6 +53,20 @@ public sealed class PostgresReleaseIssuePartyCountsTests(PostgresCollection post
     }
 
     [Fact]
+    public async Task AMemberWhoChangedPartyBetweenTermsIsCountedByTheTermPartyOnTheSponsorshipDateAsTheBillPageShowsIt()
+    {
+        await AddOfficialAsync(1, "p1",
+            Term("Republican", "Republican", "2025-01-03", "2025-12-31"), Term("Democratic", "Democratic", "2026-01-01", null));
+        await BillsSeed.AddBillsAsync(connectionString, Bill('1', "p1", "2025-03-01"), Bill('2', "p1", "2025-12-31"), Bill('3', "p1", "2026-03-01"));
+
+        await FillAsync(1, 119);
+
+        Assert.Equal(["health|Democratic|1", "health|Republican|2"], await PartiesAsync(1));
+        Assert.Equal(await PartiesAsync(1), await ReadAsync(
+            "SELECT 'health|' || party || '|' || count(*) FROM public_api.bill_sponsorship_parties GROUP BY party ORDER BY party"));
+    }
+
+    [Fact]
     public async Task ABillWhoseSponsorPartyNoTermFixesIsCountedAsUnknownBecauseThePartsMustAddUpToTheBase()
     {
         await AddOfficialAsync(1, "p1", Term("Republican", "Republican", "2025-01-03", null));

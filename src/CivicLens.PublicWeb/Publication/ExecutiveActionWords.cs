@@ -13,7 +13,7 @@ public static class ExecutiveActionWords
 
     /// <summary>The check line under an AI summary. It is the line of the approved mockup. The label of the summary is in the view.</summary>
     public const string SummaryCheck =
-        "The title, dates, citation and numbers on this page come from the Federal Register, checked by code. A model wrote only this summary.";
+        "The title, dates, citation and numbers on this page come from the Federal Register, checked by code. " + AiLabelWords.ModelWroteOnlyThisSummary;
 
     /// <summary>The Wording line of the source fold of a page with an AI summary. It is the line of the approved mockup, with "document" for "order".</summary>
     public const string SummaryWording = "The headline is the official title. The summary is an AI summary of the document text.";
@@ -101,7 +101,7 @@ public static class ExecutiveActionWords
         Fact.LinkList("Official document", [new FactLink($"Federal Register document {data.DocumentNumber}", data.DocumentUrl)]),
         new("Federal Register citation", data.FederalRegisterCitation),
         new Fact("Document type", PublishedRecordLabels.ExecutiveActionKind(data.Kind)) { TermKey = PublishedRecordLabels.ExecutiveActionTermKey(data.Kind) },
-        .. data.Summary is { Label: not null } ? [new Fact("Wording", SummaryWording)] : Array.Empty<Fact>()
+        .. data.Summary is { Label: not null } ? [new Fact(PublishedRecordLabels.WordingFact, SummaryWording)] : Array.Empty<Fact>()
     ];
 
     /// <summary>The heading over the quotes of the summary sentences in the source fold.</summary>

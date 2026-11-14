@@ -135,13 +135,10 @@
                             <dt>Checked</dt>
                             <dd>@Moment.Full(checkedAt). First published @Moment.Full(firstPublished).</dd>
                         }
-                        @if (!string.IsNullOrWhiteSpace(Data.Summary))
+                        @if (!string.IsNullOrWhiteSpace(Data.Summary) && Data.Label is not null)
                         {
-                            @foreach (var fact in PublishedRecordLabels.Wording(Data.TextOrigin, Data.BillText is null ? PublishedRecordLabels.ModelWording : BillTextWords.Label))
-                            {
-                                <dt>@fact.Label</dt>
-                                <dd>@fact.Value</dd>
-                            }
+                            <dt>@PublishedRecordLabels.WordingFact</dt>
+                            <dd><AiLabel Text="@Data.Label" Origin="Data.TextOrigin" /></dd>
                         }
                         <dt>Official bill page</dt>
                         <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">Bill on Congress.gov</a></dd>

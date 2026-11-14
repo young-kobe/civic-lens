@@ -21,7 +21,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task SearchReturnsTheManifestEntryFieldsTheSnippetAndTheRecordPaths()
+    public async Task SearchReturnsTheManifestEntryFieldsTheSnippetAndThePagePathButNoDataPath()
     {
         await using var host = await StartWithReleasesAsync();
 
@@ -36,7 +36,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
         Assert.Equal("one.gov", hit.GetProperty("sourceHost").GetString());
         Assert.Equal("2026-03-01", hit.GetProperty("eventDate").GetString());
         Assert.Equal($"records/{new string('a', 64)}.html", hit.GetProperty("pagePath").GetString());
-        Assert.Equal($"records/{new string('a', 64)}.json", hit.GetProperty("dataPath").GetString());
+        Assert.False(hit.TryGetProperty("dataPath", out _));
         Assert.False(string.IsNullOrEmpty(hit.GetProperty("snippet").GetString()));
     }
 
@@ -184,7 +184,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ARecordLookupReturnsTheIndexRowAndAnUnknownRecordAnswers404()
+    public async Task ARecordLookupReturnsTheIndexRowWithoutADataPathAndAnUnknownRecordAnswers404()
     {
         await using var host = await StartWithReleasesAsync();
 
@@ -193,6 +193,7 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Rent cap", found.GetProperty("headline").GetString());
         Assert.Equal(1, found.GetProperty("firstRelease").GetInt32());
         Assert.False(found.TryGetProperty("snippet", out _));
+        Assert.False(found.TryGetProperty("dataPath", out _));
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync($"/v1/records/{new string('b', 64)}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await host.Client.GetAsync("/v1/records/" + new string('b', 65))).StatusCode);
     }

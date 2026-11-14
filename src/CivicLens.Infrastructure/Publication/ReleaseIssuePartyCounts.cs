@@ -1,5 +1,6 @@
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.Migrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Publication;
@@ -16,9 +17,13 @@ internal static class ReleaseIssuePartyCounts
         DROP TABLE IF EXISTS pg_temp.expected_release_issue_party_bills;
         """;
 
+    /// <summary>The terms of the release that is being published. Each release holds its own names, so the line-up never reads the active release.</summary>
+    private const string ReleaseTerms = "(SELECT * FROM release_official_terms WHERE release_number = {0})";
+
     /// <summary>The rule of the line-up, once. One row for each issue and party with the count of bills. A null party is the unknown count.
-    /// It counts only issues that hold counts for the Congress, because every party row needs its header row. It reads the eligible bills by the name <see cref="ReleaseIssueCounts.EligibleBillsTable"/>, which is a temp table in the commit and a CTE in the verifier.</summary>
-    private const string ExpectedBillsSelect = $$"""
+    /// It counts only issues that hold counts for the Congress, because every party row needs its header row. It reads the eligible bills by the name <see cref="ReleaseIssueCounts.EligibleBillsTable"/>, which is a temp table in the commit and a CTE in the verifier.
+    /// The term party of each sponsor comes from <see cref="PublicApiStatementSpeakerTerms.TermPartyOn"/>, the one owner of that rule.</summary>
+    private static readonly string ExpectedBillsSelect = $$"""
         WITH bill_parties AS (
             SELECT e.issue_id, bill.party
               FROM {{ReleaseIssueCounts.EligibleBillsTable}} e
@@ -28,12 +33,7 @@ internal static class ReleaseIssuePartyCounts
                                   AND count(DISTINCT sponsor.party) = 1 THEN min(sponsor.party) END AS party
                   FROM (SELECT p.position, term.party
                           FROM action_revision_sponsorships p
-                          LEFT JOIN LATERAL (
-                              SELECT CASE WHEN count(DISTINCT held.party) = 1 AND count(held.party) = count(*) THEN min(held.party) END AS party
-                                FROM (SELECT CASE WHEN btrim(t.party) <> '' THEN t.party END AS party
-                                        FROM release_official_terms t
-                                       WHERE t.release_number = {0} AND t.official_id = p.person_id
-                                         AND t.start_on <= p.sponsored_on AND (t.end_on IS NULL OR t.end_on >= p.sponsored_on)) held) term ON TRUE
+                        {{PublicApiStatementSpeakerTerms.TermPartyOn(ReleaseTerms, "p.person_id", "p.sponsored_on")}}
                          WHERE p.record_id = e.record_id AND p.revision_number = e.revision_number AND p.role = 'Sponsor') sponsor) bill
         )
         SELECT issue_id, party, count(*)::integer AS bills FROM bill_parties GROUP BY issue_id, party
@@ -48,7 +48,7 @@ internal static class ReleaseIssuePartyCounts
          GROUP BY i.issue_id
         """;
 
-    private const string ExpectedSql = $"""
+    private static readonly string ExpectedSql = $"""
         CREATE TEMP TABLE expected_release_issue_party_bills ON COMMIT DROP AS
         {ExpectedBillsSelect};
 
@@ -100,7 +100,7 @@ internal static class ReleaseIssuePartyCounts
 
     /// <summary>The read-only check. It computes the expected rows as CTEs, because a read-only transaction cannot create tables with a query.
     /// It returns 0 for a verified release, 1 when expected rows are not saved, 2 when saved rows differ, and 3 when the release expects no rows and holds none.</summary>
-    private const string VerifyStatusSql = $$"""
+    private static readonly string VerifyStatusSql = $$"""
         WITH {{ReleaseIssueCounts.EligibleBillsTable}} AS ({{ReleaseIssueCounts.EligibleBillsSelectSql}}),
              expected_release_issue_party_bills AS ({{ExpectedBillsSelect}}),
              expected_release_issue_party_lineups AS ({{ExpectedLineupsSelect}})

@@ -14,10 +14,17 @@ public sealed class IssuePageTests
 {
     private const string Root = "https://civic-lens.test/";
     private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, PublishedTextOrigin.Person, "Passed", 52, 48);
-    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", PublishedRecordLabels.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
+    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", AiLabelWords.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
 
     private static IssuePageData Data(IssueLineUpData? lineUp = null, IssueVoteData[]? votes = null, IssueBillData[]? bills = null) =>
         new(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
+
+    [Fact]
+    public async Task EachRecordRowLabelIsDrawnByAiLabel()
+    {
+        AiLabelAssert.DrawnByAiLabel((await RenderAsync(Data())).QuerySelector("#bills")!, AiLabelWords.ModelWording);
+        AiLabelAssert.DrawnByAiLabel((await RenderAsync(Data(bills: [Bill with { Label = AiLabelWords.CodeWording, TextOrigin = PublishedTextOrigin.Code }]))).QuerySelector("#bills")!, AiLabelWords.CodeWording);
+    }
 
     [Fact]
     public async Task TheCountLineNamesTheWhatTheTagAndTheReleaseAndTheTagCaveatFollowsIt()
@@ -142,7 +149,7 @@ public sealed class IssuePageTests
         var page = await RenderAsync(Data());
         var row = page.QuerySelector("#bills .record-row")!;
 
-        Assert.Contains(PublishedRecordLabels.ModelWording, row.QuerySelector("a")!.TextContent);
+        Assert.Contains(AiLabelWords.ModelWording, row.QuerySelector("a")!.TextContent);
         Assert.Contains("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
     }
@@ -184,7 +191,7 @@ public sealed class IssuePageTests
         var page = await RenderAsync(Data(bills: [Bill with { Label = null, BillLine = null, Sponsor = null }]));
 
         Assert.Equal(2, page.QuerySelectorAll("#bills .record-row a > span").Length);
-        Assert.DoesNotContain(PublishedRecordLabels.ModelWording, page.QuerySelector("#bills")!.TextContent);
+        Assert.DoesNotContain(AiLabelWords.ModelWording, page.QuerySelector("#bills")!.TextContent);
         Assert.Null(page.QuerySelector("#bills .bill-line"));
     }
 
