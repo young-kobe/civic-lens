@@ -10,8 +10,11 @@ public static class AiLabelWords
     /// <summary>The label of a bill or vote summary that a model wrote.</summary>
     public const string ModelWording = "An AI summary of the official record";
 
-    /// <summary>The label of a bill or vote summary that code wrote from the Congress.gov data.</summary>
+    /// <summary>The label of a bill, an action or a House vote summary that code wrote from the Congress.gov data.</summary>
     public const string CodeWording = "Written automatically from Congress.gov data, with no AI";
+
+    /// <summary>The label of a Senate vote summary that code wrote from the Senate roll call data.</summary>
+    public const string SenateCodeWording = "Written automatically from Senate roll call data, with no AI";
 
     /// <summary>The label of a statement summary that a model wrote and code approved.</summary>
     public const string StatementModelWording = "An AI summary of this press release.";

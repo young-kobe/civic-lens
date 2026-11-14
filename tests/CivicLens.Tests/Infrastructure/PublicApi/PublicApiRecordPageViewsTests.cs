@@ -290,8 +290,13 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         Assert.Empty(await PublicAsync("SELECT related_headline FROM public_api.record_links WHERE kind = 'action'"));
     }
 
-    // The C# rule for an action or a vote is PublishedRecordLabels.Wording.
-    private static string LabelOfRecord(PublishedTextOrigin origin) => PublishedRecordLabels.Wording(origin).SingleOrDefault()?.Value ?? "none";
+    // The label of an action or a House vote. ChamberVoteCodeLabelMigrationTests covers the Senate label.
+    private static string LabelOfRecord(PublishedTextOrigin origin) => origin switch
+    {
+        PublishedTextOrigin.Model => AiLabelWords.ModelWording,
+        PublishedTextOrigin.Code => AiLabelWords.CodeWording,
+        _ => "none"
+    };
 
     // The C# rule for a statement is PublishedRecordLabels.StatementWording. It gives the code label when code approved a model statement, the person-checked label when a person did, and none for person text.
     private static string LabelOfStatement(PublishedTextOrigin origin, PublishedApprover approver) =>

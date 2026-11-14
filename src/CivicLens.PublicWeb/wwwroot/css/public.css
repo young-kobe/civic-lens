@@ -625,7 +625,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .ai-summary > :last-child { margin-bottom: 0; }
 .ai-summary-ai { border: 1.5px solid var(--ai-line); background: var(--ai-surface); color: var(--ai-ink); box-shadow: none; }
 .ai-summary-ai a { color: inherit; font-weight: 700; }
-.ai-label-line { color: var(--ai-ink); font-size: var(--t-xs); }
+.ai-label-line { color: var(--ai-ink); font-size: var(--t-xs); text-wrap: pretty; }
 .ai-label-line[data-origin="code"] { color: var(--muted); }
 .ai-label-tag { display: inline-block; margin-bottom: var(--s2); padding: 5px 10px; border-radius: 999px; background: var(--ai-line); color: var(--ai-label-ink); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
 .ai-label-tag[data-origin="code"] { padding: 0; border-radius: 0; background: none; color: var(--muted); text-transform: none; }

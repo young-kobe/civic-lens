@@ -31,6 +31,14 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
+    public async Task ASenateVoteWithCodeTextShowsTheSenateLabelOfTheView()
+    {
+        var page = await RenderAsync(Vote() with { Chamber = PublishedChamber.Senate, TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.SenateCodeWording });
+
+        Assert.Equal(AiLabelWords.SenateCodeWording, page.QuerySelector(".vote-head .ai-label")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheAboutLineIsTheWholeBillLineWithItsSourceNoteRightUnderTheHeadline()
     {
         var page = await RenderAsync(Vote());

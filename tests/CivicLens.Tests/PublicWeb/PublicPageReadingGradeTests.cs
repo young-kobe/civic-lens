@@ -116,7 +116,7 @@ public sealed class PublicPageReadingGradeTests
         var featured = new HomeFeaturedVoteData("d5bb27866c52e5e9e1b4f8b5e3801dc6ca8b129d7e584746f92dad470e25b337", new(2026, 9, 28),
             PublishedChamber.Senate,
             "Senate passes the Protect College Sports Act of 2026, a bill on student athlete name, image, and likeness rights and fair competition in college athletics",
-            null,
+            AiLabelWords.ModelWording,
             "The Senate voted on passage of the Protect College Sports Act of 2026. The question was whether the bill should pass, and the Senate answered yes, so the bill passed. The bill's stated purpose is to protect the name, image, and likeness rights of student athletes, to provide protections for them, and to promote fair competition among intercollegiate athletics, along with other purposes. The bill falls under the policy area of sports and recreation.",
             PublishedTextOrigin.Model, "Passed", 77, 22, null, null);
         var page = await RenderAsync<HomePage>(new Dictionary<string, object?>
@@ -134,7 +134,7 @@ public sealed class PublicPageReadingGradeTests
     public async Task EasyCopyOutsideTheFeaturedModelPassageCannotLowerItsGrade()
     {
         var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3),
-            PublishedChamber.House, "A clear headline", null, DifficultSummary,
+            PublishedChamber.House, "A clear headline", AiLabelWords.ModelWording, DifficultSummary,
             PublishedTextOrigin.Model, "Passed", 216, 214, null, null);
         var page = await RenderAsync<HomePage>(new Dictionary<string, object?>
         {

@@ -273,7 +273,7 @@
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Vote, Data.Headline, Data.ShortName);
         anchors = new VoteCitationAnchors(Data);
         wording = VoteWording.Of(Data.WordingSource);
-        summaryLabel = VotePageView.Label(Data);
+        summaryLabel = Data.Label;
         about = VotePageView.About(Data);
         chamberBar = VotePageView.ChamberBar(Data);
         partyBars = VotePageView.PartyBars(Data);
