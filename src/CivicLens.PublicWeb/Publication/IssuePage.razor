@@ -67,7 +67,7 @@
                     {
                         <p class="small muted">The @Data.Votes.Length newest of @Data.SubstantiveVotes.</p>
                     }
-                    <p class="small"><a href="@IssueRecordWords.ListHref(PublishedRecordKind.Vote, Data.IssueId)">@IssueRecordWords.AllVotesLink(Data.Name)</a>@IssueRecordWords.AllVotesScope</p>
+                    <p class="small"><a href="@(RootPath + IssueRecordWords.ListPath(PublishedRecordKind.Vote, Data.IssueId))">@IssueRecordWords.AllVotesLink(Data.Name)</a>@IssueRecordWords.AllVotesScope</p>
                 }
             </section>
             <section class="issue-section" id="bills" aria-labelledby="issue-bills-title">
@@ -90,7 +90,7 @@
                     {
                         <p class="small muted">The @Data.Bills.Length newest of @Data.BillCount.</p>
                     }
-                    <p class="small"><a href="@IssueRecordWords.ListHref(PublishedRecordKind.Action, Data.IssueId)">@IssueRecordWords.AllBillsLink(Data.BillCount)</a>@IssueRecordWords.AllBillsScope</p>
+                    <p class="small"><a href="@(RootPath + IssueRecordWords.ListPath(PublishedRecordKind.Action, Data.IssueId))">@IssueRecordWords.AllBillsLink(Data.BillCount)</a>@IssueRecordWords.AllBillsScope</p>
                 }
             </section>
             @if (Data.LineUp is { Bills: > 0 } lineUp)

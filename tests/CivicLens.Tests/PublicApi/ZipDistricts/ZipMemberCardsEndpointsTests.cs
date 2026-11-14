@@ -51,7 +51,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
             new SeededVote('b', "2026-06-01") { FirstRelease = 2, Kind = "Rule", Casts = ["Not Voting"], PersonIds = ["al2"] });
 
-        var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web"));
+        var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/"));
         var slot = home.QuerySelector("#members-strip")!;
         Assert.Equal("https://api.civic-lens.test", slot.GetAttribute("data-members-api"));
         Assert.Equal("https://civic-lens.test/officials.html", slot.GetAttribute("data-officials-page"));
@@ -98,7 +98,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         var photo = "photos/" + new string('b', 64) + ".jpg";
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE release_officials SET photo_path = '{photo}' WHERE release_number = 1 AND official_id = 'al2';");
 
-        var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/web"));
+        var home = new HtmlParser().ParseDocument(await host.Client.GetStringAsync("/"));
         Assert.Equal("https://api.civic-lens.test", home.QuerySelector("[data-zip-api]")!.GetAttribute("data-zip-api"));
         Assert.Equal("https://civic-lens.test/compare.html", home.QuerySelectorAll(".home-browse a").Single(link => link.TextContent == "Compare your members").GetAttribute("href"));
         var fragment = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");

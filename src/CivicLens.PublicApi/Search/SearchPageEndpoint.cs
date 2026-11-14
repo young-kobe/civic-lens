@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Search;
 
-/// <summary>The gated search page. The page holds the words that a reader typed, so it skips the shared page cache. It sends no validator and asks every cache not to keep it.</summary>
+/// <summary>The search page. The page holds the words that a reader typed, so it skips the shared page cache. It sends no validator and asks every cache not to keep it.</summary>
 public static class SearchPageEndpoint
 {
     public const string CacheControl = "private, no-store";

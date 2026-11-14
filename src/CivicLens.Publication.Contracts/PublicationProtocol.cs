@@ -31,6 +31,7 @@ public static class PublicationProtocol
     public const string GlossaryPagePath = "glossary.html";
     public const string VoteKindsPagePath = "vote-kinds.html";
     public const string ComparePagePath = "compare.html";
+    public const string BoardsPagePath = "boards.html";
     public const string SitemapPath = "sitemap.xml";
     public const string RobotsPath = "robots.txt";
     public const string NotFoundPagePath = "404.html";
@@ -40,6 +41,15 @@ public static class PublicationProtocol
 
     public static string KindText(PublishedRecordKind kind) => JsonSerializer.Serialize(kind, JsonOptions).Trim('"');
     public static string SearchByKindPath(PublishedRecordKind kind) => $"{SearchPagePath}?kind={KindText(kind)}";
+    /// <summary>The list page of one kind. Only votes, bills, statements, and executive actions have a list page.</summary>
+    public static string ListPagePath(PublishedRecordKind kind) => kind switch
+    {
+        PublishedRecordKind.Vote => "votes.html",
+        PublishedRecordKind.Action => "bills.html",
+        PublishedRecordKind.Statement => "statements.html",
+        PublishedRecordKind.ExecutiveAction => "executive-actions.html",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The kind has no list page.")
+    };
     public static string AllRecordsPagePath(int page) => page == 1 ? "all.html" : $"all-{page}.html";
     /// <summary>One file of a sitemap index. A site with more addresses than one sitemap holds splits them over these files.</summary>
     public static string SitemapPagePath(int page) => $"sitemap-{page}.xml";

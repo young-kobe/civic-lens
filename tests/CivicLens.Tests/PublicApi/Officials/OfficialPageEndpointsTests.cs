@@ -87,8 +87,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; UPDATE release_officials SET website = 'https://able.house.gov/about' WHERE official_id = 'p0';");
 
-        var withSite = await GetPageAsync(host, "/web/officials/p0");
-        var withoutSite = await GetPageAsync(host, "/web/officials/p1");
+        var withSite = await GetPageAsync(host, "/officials/p0.html");
+        var withoutSite = await GetPageAsync(host, "/officials/p1.html");
 
         var link = withSite.QuerySelector(".official-head a[href='https://able.house.gov/about']")!;
         Assert.Equal("able.house.gov", link.TextContent);
@@ -103,7 +103,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica; UPDATE release_officials SET website = 'javascript:alert(1)' WHERE official_id = 'p0';");
 
-        using var response = await host.Client.GetAsync("/web/officials/p0");
+        using var response = await host.Client.GetAsync("/officials/p0.html");
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
@@ -113,8 +113,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var member = await GetPageAsync(host, "/web/officials/p0");
-        var justice = await GetPageAsync(host, "/web/officials/justice");
+        var member = await GetPageAsync(host, "/officials/p0.html");
+        var justice = await GetPageAsync(host, "/officials/justice.html");
 
         Assert.Equal("Democratic representative for Massachusetts, district 7. In the House since January 2025. Current term ends 3 Jan 2027.",
             member.QuerySelector(".official-lede")!.TextContent);
@@ -127,8 +127,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await using var host = await StartAsync(withBrowserApi: true);
         await using var withoutApi = await StartAsync();
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
-        var plain = await GetPageAsync(withoutApi, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
+        var plain = await GetPageAsync(withoutApi, "/officials/p0.html");
 
         var section = page.QuerySelector("section#your-members")!;
         Assert.True(section.HasAttribute("hidden"));
@@ -145,7 +145,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var marks = page.QuerySelectorAll(".official-strip a").Select(link => (link.GetAttribute("href")!, link.ClassList.Contains("missed"))).ToArray();
         Assert.Equal([(BaseUrl.Join($"records/{new string('b', 64)}.html"), true), (BaseUrl.Join($"records/{new string('a', 64)}.html"), false)], marks);
@@ -161,7 +161,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var headlines = page.QuerySelectorAll("#votes .shared-vote-row h3 a").Select(link => link.TextContent).ToArray();
         Assert.NotEmpty(headlines);
@@ -189,7 +189,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
               WHERE record_id = '{new string('f', 64)}';
             """);
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         Assert.Equal(2, page.QuerySelectorAll(".official-strip a").Length);
         Assert.Equal(1, page.QuerySelectorAll(".official-strip a.against").Length);
@@ -202,7 +202,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         Assert.Equal(4, page.QuerySelectorAll("#votes .shared-vote-row").Length);
         Assert.Contains("No (Nay)", page.QuerySelector("#votes .shared-vote-row")!.TextContent);
@@ -224,7 +224,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
             new SeededVote('e', "2026-02-07") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 5, TextOrigin = "Code" });
 
-        var labels = (await GetPageAsync(host, "/web/officials/p0")).QuerySelectorAll("#votes .shared-vote-meta .ai-label").ToArray();
+        var labels = (await GetPageAsync(host, "/officials/p0.html")).QuerySelectorAll("#votes .shared-vote-meta .ai-label").ToArray();
 
         Assert.Equal(AiLabelWords.CodeWording, labels[0].TextContent.Trim());
         Assert.Equal("code", labels[0].GetAttribute("data-origin"));
@@ -245,7 +245,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
                 UPDATE published_entries SET approved_by = '{approver}' WHERE kind = 'relationship' AND record_id = '{new string('7', 64)}';
                 """);
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var row = Assert.Single(page.QuerySelectorAll("#statements .official-rows li"));
         Assert.Equal(label, row.QuerySelector(".link-checker")?.TextContent);
@@ -258,7 +258,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var rows = page.QuerySelectorAll("#bills .official-rows li");
         Assert.Equal(2, rows.Length);
@@ -285,7 +285,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
             {PublicRecordPageRows.PinnedStatus(1, new string('9', 64), "Received in the Senate.", "2026-04-04", 1)}
             """);
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var rows = page.QuerySelectorAll("#bills .official-rows li").ToArray();
         Assert.Equal([.. "821".Select(id => BaseUrl.Join($"records/{new string(id, 64)}.html"))],
@@ -302,7 +302,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await BillsSeed.AddBillsAsync(host.OperationalDatabase,
             new SeededBill('4', "2024-05-01") { Congress = 118, BillNumber = 4, Sponsorships = [new("p0", "Sponsor", "2024-05-01")] });
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         Assert.Equal(2, page.QuerySelectorAll("#bills .official-rows li").Length);
         var link = page.QuerySelector("#bills .official-more a")!;
@@ -324,7 +324,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("bills").ValueKind);
         Assert.NotEmpty(detail.RootElement.GetProperty("issues").GetProperty("issues").EnumerateArray());
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var issues = page.QuerySelector("#issues");
         Assert.NotNull(issues);
@@ -339,7 +339,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync(storeBillCounts: false);
 
-        var page = await GetPageAsync(host, "/web/officials/justice");
+        var page = await GetPageAsync(host, "/officials/justice.html");
 
         Assert.Equal("Jo Judge", page.QuerySelector("h1")!.TextContent);
         Assert.DoesNotContain(OfficialPageText.BillCountsUnavailable, page.Body!.TextContent);
@@ -352,7 +352,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
             $"UPDATE published_entries SET approved_by = 'Person' WHERE kind = 'statement' AND record_id = '{Linked}'");
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         var labels = page.QuerySelectorAll("#statements .ai-label[data-origin=model]");
         Assert.Equal(2, labels.Length);
@@ -367,7 +367,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase,
             $"UPDATE vote_revisions SET text_origin = 'Code' WHERE record_id = '{new string('c', 64)}'");
 
-        var page = await GetPageAsync(host, "/web/officials/p0");
+        var page = await GetPageAsync(host, "/officials/p0.html");
 
         Assert.Single(page.QuerySelectorAll("#statements .ai-label[data-origin=model]"));
         Assert.Equal(AiLabelWords.CodeWording,
@@ -379,7 +379,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        var page = await GetPageAsync(host, "/web/officials/p2");
+        var page = await GetPageAsync(host, "/officials/p2.html");
 
         Assert.Null(page.QuerySelector("#statements"));
         Assert.Equal(OfficialPageText.NoLinks, page.QuerySelector(".official-jump p")!.TextContent);
@@ -397,7 +397,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
             {PublicRecordPageRows.RelationshipRevision(new string('8', 64), 1, new string('4', 64), new string('1', 64), "action", "StatesPositionOn", "The statement names this bill.")}
             """);
 
-        var page = await GetPageAsync(host, "/web/officials/p2");
+        var page = await GetPageAsync(host, "/officials/p2.html");
 
         Assert.Null(page.QuerySelector("#statements"));
         Assert.Null(page.QuerySelector(".official-jump p"));
@@ -408,7 +408,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        using var response = await host.Client.GetAsync("/web/officials/p0");
+        using var response = await host.Client.GetAsync("/officials/p0.html");
         var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
 
         Assert.Matches("^W/\"r1-", response.Headers.ETag!.ToString());
@@ -432,7 +432,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
               VALUES ('executiveAction', '{new string(action.Item1, 64)}', 1, 0, 'president');
             """)));
 
-        var page = await GetPageAsync(host, "/web/officials/president");
+        var page = await GetPageAsync(host, "/officials/president.html");
 
         Assert.Equal("President Eve East", page.QuerySelector("h1")!.TextContent);
         Assert.Contains("3 executive actions", page.QuerySelector(".official-lede")!.TextContent);
@@ -444,8 +444,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Theory]
-    [InlineData("/web/officials/nobody")]
-    [InlineData("/web/officials/bad%20id")]
+    [InlineData("/officials/nobody.html")]
+    [InlineData("/officials/bad%20id.html")]
     public async Task AnUnknownOfficialAnswersWithTheNotFoundPage(string path)
     {
         await using var host = await StartAsync();

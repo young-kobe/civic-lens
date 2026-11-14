@@ -16,7 +16,7 @@ namespace CivicLens.Tests.PublicApi.Issues;
 [Trait("Category", "Postgres")]
 public sealed class IssuePageTests(PostgresCollection postgres)
 {
-    private const string Path = ServerPageEndpoints.Prefix + "/issues/tax";
+    private const string Path = "/issues/tax.html";
 
     private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[] bills)
     {
@@ -240,8 +240,8 @@ public sealed class IssuePageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync([], []);
 
-        using var unknown = await host.Client.GetAsync(ServerPageEndpoints.Prefix + "/issues/nothing");
-        using var oversized = await host.Client.GetAsync(ServerPageEndpoints.Prefix + "/issues/" + new string('x', 300));
+        using var unknown = await host.Client.GetAsync("/issues/nothing.html");
+        using var oversized = await host.Client.GetAsync("/issues/" + new string('x', 300) + ".html");
 
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, oversized.StatusCode);

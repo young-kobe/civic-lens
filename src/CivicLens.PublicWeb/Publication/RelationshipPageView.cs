@@ -5,7 +5,7 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>The one owner of the words and facts of the relationship page. The static relationship page of the Host uses the same words until the cutover.</summary>
+/// <summary>The one owner of the words and facts of the relationship page. The static relationship page of the Host uses the same words until the static pages retire.</summary>
 public static class RelationshipPageView
 {
     public const string Caveat = "A person approved this link between a statement and a record. It states no verdict. It does not say that the statement is true or that it agrees with the record.";

@@ -29,25 +29,25 @@ public sealed class BoardListPageTests
     }
 
     [Fact]
-    public async Task TheTitleAndTrailNameTheBoardAndTheTrailHasNoLinkToTheStaticBoard()
+    public async Task TheTitleAndTrailNameTheBoardAndTheTrailLinksTheBoardsPage()
     {
         var page = await RenderAsync(Data(PublishedChamber.Senate, "Republican", Row("a", "Ann", 30, 5)));
 
         Assert.Equal("Senate Republicans: voted against most of their party", page.QuerySelector("h1")!.TextContent);
         var trail = page.QuerySelector("main nav[aria-label=Breadcrumb]")!;
-        Assert.Equal(["Home"], trail.QuerySelectorAll("a").Select(link => link.TextContent));
+        Assert.Equal(["Home", "Compare parties"], trail.QuerySelectorAll("a").Select(link => link.TextContent));
+        Assert.Equal(ListPageRender.Root + PublicationProtocol.BoardsPagePath, trail.QuerySelectorAll("a")[1].GetAttribute("href"));
         Assert.Equal("Senate Republicans: voted against most of their party", trail.QuerySelector("[aria-current=page]")!.TextContent);
-        Assert.DoesNotContain(PublicSections.StaticBoardsPath, trail.InnerHtml);
     }
 
     [Fact]
-    public async Task EachTabLinksTheFullBoardOnThePreviewAndOnlyTheTabOfThisBoardIsCurrent()
+    public async Task EachTabLinksTheFullBoardAndOnlyTheTabOfThisBoardIsCurrent()
     {
         var page = await RenderAsync(Data(PublishedChamber.House, "Republican", Row("a", "Ann", 30, 5)));
 
         var tabs = page.QuerySelectorAll(".segmented a");
         Assert.Equal(["House Democrats", "House Republicans", "Senate Democrats", "Senate Republicans"], tabs.Select(tab => tab.TextContent.Trim()));
-        Assert.Equal(["/web/board-house-democrat.html", "/web/board-house-republican.html", "/web/board-senate-democrat.html", "/web/board-senate-republican.html"],
+        Assert.Equal(new[] { "board-house-democrat.html", "board-house-republican.html", "board-senate-democrat.html", "board-senate-republican.html" }.Select(path => ListPageRender.Root + path),
             tabs.Select(tab => tab.GetAttribute("href")));
         Assert.Equal([null, "true", null, null], tabs.Select(tab => tab.GetAttribute("aria-current")));
     }

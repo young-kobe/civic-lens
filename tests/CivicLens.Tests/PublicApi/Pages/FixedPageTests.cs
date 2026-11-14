@@ -40,7 +40,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
     private static async Task<(HttpStatusCode Status, IDocument Page)> GetAsync(ApiHost host, string path)
     {
-        using var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix + (path.Length == 0 ? string.Empty : "/" + path));
+        using var response = await host.Client.GetAsync("/" + path);
         return (response.StatusCode, new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync()));
     }
 
@@ -103,7 +103,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(Root + PublicationProtocol.GlossaryPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
         Assert.Equal("Glossary", page.QuerySelector("h1")!.TextContent);
         Assert.Equal(MainText(staticPage), MainText(page));
-        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
         Assert.Equal("page", page.QuerySelectorAll(".public-footer a").Single(link => link.GetAttribute("href") == Root + PublicationProtocol.GlossaryPagePath).GetAttribute("aria-current"));
         Assert.All(page.QuerySelectorAll("link[rel=stylesheet]"), link => Assert.StartsWith(Root, link.GetAttribute("href")));
     }
@@ -121,10 +121,10 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal("noindex", page.QuerySelector("meta[name=robots]")!.GetAttribute("content"));
         Assert.Equal("Report a problem", page.QuerySelector("h1")!.TextContent);
         Assert.Equal(MainText(staticPage), MainText(page));
-        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
         Assert.Equal(Root + PublicationProtocol.RecordPagePath("{id}"), page.QuerySelector("form[data-report-api]")!.GetAttribute("data-record-page"));
         Assert.All(page.QuerySelectorAll("main a[href]:not([href^='mailto:'])"), link => Assert.StartsWith(Root, link.GetAttribute("href")));
-        foreach (var path in new[] { PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.AllRecordsPagePath(1) })
+        foreach (var path in new[] { PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.ListPagePath(PublishedRecordKind.Vote), PublicationProtocol.AboutPagePath })
             Assert.Contains(page.QuerySelectorAll("main a"), link => link.GetAttribute("href") == Root + path);
     }
 
@@ -156,7 +156,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Null(page.QuerySelector("main form"));
         Assert.Null(page.QuerySelector(".cf-turnstile"));
         Assert.Empty(page.QuerySelectorAll("script[src^='https://challenges.cloudflare.com/']"));
-        Assert.Equal(Root + PublicationProtocol.AllRecordsPagePath(1), page.QuerySelector(".empty a")!.GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote), page.QuerySelector(".empty a")!.GetAttribute("href"));
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal("No weekly briefs yet", page.QuerySelector(".empty h2")!.TextContent);
         var action = Assert.Single(page.QuerySelectorAll(".empty a"));
-        Assert.Equal(PublicSections.ListOf(PublishedRecordKind.Vote).Href, action.GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote), action.GetAttribute("href"));
         Assert.Equal("Votes", action.TextContent.Trim());
         Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
         Assert.Contains("Release 4, published 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
@@ -248,7 +248,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Contains("119th Congress", tiles[1].TextContent);
         Assert.Equal("Air", tiles[0].TextContent.Trim());
         Assert.Null(page.QuerySelector(".home-issue-list")!.Closest(".panel"));
-        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
     }
 
     [Fact]

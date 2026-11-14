@@ -29,10 +29,7 @@
                     {
                         <div class="home-featured-map">
                             <VoteMap Data="featuredMap" RollCall="Data.FeaturedVoteDetail!.RollCall" RootPath="@RootPath" Compact="true" />
-                            @if (FeaturedMapHref is not null)
-                            {
-                                <a class="home-featured-map-link" href="@FeaturedMapHref">@VoteMapWords.OpenFullMap</a>
-                            }
+                            <a class="home-featured-map-link" href="@(RootPath + PublicationProtocol.VoteMapPagePath(featured.RecordId))">@VoteMapWords.OpenFullMap</a>
                         </div>
                     }
                     @if (featuredParties.Count > 0)
@@ -148,7 +145,7 @@
                             </li>
                         }
                     </ul>
-                    <p class="small home-breakers-more">A vote against the party is not a mistake. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we choose these members</a> | <a href="@(RootPath + PublicSections.StaticBoardsPath)">See all four party boards</a></p>
+                    <p class="small home-breakers-more">A vote against the party is not a mistake. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we choose these members</a> | <a href="@(RootPath + PublicationProtocol.BoardsPagePath)">See all four party boards</a></p>
                 </section>
             }
             @if (Data.ExecutiveActions.Length > 0)
@@ -203,8 +200,6 @@
     [Parameter, EditorRequired] public HomePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
     [Parameter] public string? BrowserApiUrl { get; set; }
-    /// <summary>The address of the full map page of the featured vote. The route that serves Home sets it, because the map page lives under the server-page prefix until the cutover.</summary>
-    [Parameter] public string? FeaturedMapHref { get; set; }
 
     /// <summary>The map and the party bars come from the page data of the featured vote. Each card of the break board is the first member of one board.
     /// The lede names the Congress when every shown board keeps the same one. Otherwise each card names its own.</summary>

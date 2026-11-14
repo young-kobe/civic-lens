@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Votes;
 
-/// <summary>The gated full map page of one vote. It reads the same vote page snapshot as the vote page, so the map and the vote agree. Its ETag uses that release.</summary>
+/// <summary>The full map page of one vote. It reads the same vote page snapshot as the vote page, so the map and the vote agree. Its ETag uses that release.</summary>
 public static class VoteMapPageEndpoint
 {
     public static Task<IResult> RespondAsync(string recordId, HttpContext context, VotePageReader reader, ServerPageResponder responder,

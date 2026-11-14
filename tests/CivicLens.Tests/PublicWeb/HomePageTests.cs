@@ -233,8 +233,7 @@ public sealed class HomePageTests
     [Fact]
     public async Task TheFeaturedVoteShowsTheCompactMapItsCountsAndTheLinkToTheFullMap()
     {
-        const string mapHref = "/web/records/map.html";
-        var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) }, featuredMapHref: mapHref);
+        var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) });
         var featured = page.QuerySelector(".home-featured")!;
 
         var map = featured.QuerySelector(".vote-map[data-compact]")!;
@@ -245,8 +244,7 @@ public sealed class HomePageTests
         Assert.Null(map.QuerySelector("h2, table, [data-vote-map-views], [data-vote-map-colors]"));
         var link = featured.QuerySelector(".home-featured-map-link")!;
         Assert.Equal(VoteMapWords.OpenFullMap, link.TextContent);
-        Assert.Equal(mapHref, link.GetAttribute("href"));
-        Assert.Null((await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) })).QuerySelector(".home-featured-map-link"));
+        Assert.Equal(Root + PublicationProtocol.VoteMapPagePath(Featured.RecordId), link.GetAttribute("href"));
     }
 
     [Fact]
@@ -352,7 +350,7 @@ public sealed class HomePageTests
         var lede = section.QuerySelector(".home-section-lede")!;
         Assert.Contains("most often in the 119th Congress. A member needs at least", lede.TextContent);
         Assert.Equal("split vote", lede.QuerySelector("button.term")!.TextContent);
-        Assert.Equal(Root + PublicSections.StaticBoardsPath, section.QuerySelectorAll(".home-breakers-more a").Single(link => link.TextContent == "See all four party boards").GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.BoardsPagePath, section.QuerySelectorAll(".home-breakers-more a").Single(link => link.TextContent == "See all four party boards").GetAttribute("href"));
         Assert.Equal(Root + PublicationProtocol.MethodPagePath, section.QuerySelectorAll(".home-breakers-more a").Single(link => link.TextContent == "How we choose these members").GetAttribute("href"));
     }
 
@@ -404,7 +402,7 @@ public sealed class HomePageTests
         AiLabelAssert.DrawnByAiLabel(page.QuerySelector(".home-votes")!, AiLabelWords.ModelWording);
     }
 
-    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null, string? featuredMapHref = null)
+    private static async Task<IDocument> RenderAsync(HomePageData data, string? browserApiUrl = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -415,8 +413,7 @@ public sealed class HomePageTests
                 {
                     [nameof(HomePage.Data)] = data,
                     [nameof(HomePage.RootPath)] = Root,
-                    [nameof(HomePage.BrowserApiUrl)] = browserApiUrl,
-                    [nameof(HomePage.FeaturedMapHref)] = featuredMapHref
+                    [nameof(HomePage.BrowserApiUrl)] = browserApiUrl
                 }));
             return output.ToHtmlString();
         });

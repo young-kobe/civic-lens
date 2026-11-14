@@ -16,7 +16,7 @@ using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
-/// <summary>The gated per-kind list pages under /web: votes, bills, statements, and executive actions.</summary>
+/// <summary>The per-kind list pages: votes, bills, statements, and executive actions.</summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
 public sealed class RecordListPageTests(PostgresCollection postgres)
@@ -56,21 +56,22 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     // ---- shared frame: tabs, header, count line ----
 
     [Fact]
-    public async Task EveryListPageNamesItsKindInTheTabsAndTheHeaderLinksOfThePreviewLeadToTheLists()
+    public async Task EveryListPageNamesItsKindInTheTabsAndTheHeaderLinksLeadToTheLists()
     {
         await using var host = await StartAsync();
-        string[] paths = ["/web/votes", "/web/bills", "/web/statements", "/web/executive-actions"];
+        string[] paths = ["/votes.html", "/bills.html", "/statements.html", "/executive-actions.html"];
 
         foreach (var path in paths)
         {
             var page = await GetPageAsync(host, path);
             var tabs = page.QuerySelectorAll("nav[aria-label='Lists of records'] a").Select(tab => (tab.TextContent.Trim(), tab.GetAttribute("href"))).ToArray();
-            Assert.Equal([("Votes", "/web/votes"), ("Bills", "/web/bills"), ("Statements", "/web/statements"), ("Executive actions", "/web/executive-actions")], tabs);
-            Assert.Equal(path, page.QuerySelector("nav[aria-label='Lists of records'] a[aria-current]")!.GetAttribute("href"));
+            Assert.Equal([("Votes", BaseUrl.Join("votes.html")), ("Bills", BaseUrl.Join("bills.html")), ("Statements", BaseUrl.Join("statements.html")),
+                ("Executive actions", BaseUrl.Join("executive-actions.html"))], tabs);
+            Assert.Equal(BaseUrl.Join(path[1..]), page.QuerySelector("nav[aria-label='Lists of records'] a[aria-current]")!.GetAttribute("href"));
             var header = page.QuerySelectorAll("nav.public-nav a").ToDictionary(link => link.TextContent.Trim(), link => link.GetAttribute("href"));
-            Assert.Equal("/web/votes", header["Votes"]);
-            Assert.Equal("/web/bills", header["Bills"]);
-            Assert.Equal("/web/executive-actions", header["Executive actions"]);
+            Assert.Equal(BaseUrl.Join("votes.html"), header["Votes"]);
+            Assert.Equal(BaseUrl.Join("bills.html"), header["Bills"]);
+            Assert.Equal(BaseUrl.Join("executive-actions.html"), header["Executive actions"]);
         }
     }
 
@@ -78,16 +79,16 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     public async Task ANoReleaseAnswers503AndACursorOfAnotherReleaseRedirectsToTheFirstPage()
     {
         await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
-        foreach (var path in new[] { "/web/votes", "/web/bills", "/web/statements", "/web/executive-actions" })
+        foreach (var path in new[] { "/votes.html", "/bills.html", "/statements.html", "/executive-actions.html" })
             await GetPageAsync(host, path, HttpStatusCode.ServiceUnavailable);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
 
         var stale = new VoteCursor(99, new DateOnly(2026, 3, 1), PublishedChamber.House, 1, 1, new string('a', 64)).Encode();
         using var noRedirect = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress };
-        var response = await noRedirect.GetAsync($"/web/votes?chamber=house&cursor={stale}");
+        var response = await noRedirect.GetAsync($"/votes.html?chamber=house&cursor={stale}");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.Equal("/web/votes?chamber=house", response.Headers.Location!.OriginalString);
+        Assert.Equal(BaseUrl.Join("votes.html?chamber=house"), response.Headers.Location!.OriginalString);
     }
 
     [Fact]
@@ -97,12 +98,12 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote('a', "2026-03-02", 1));
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('a', "2026-03-02"));
 
-        var bill = await GetPageAsync(host, "/web/bills?bill=5334a&sponsor=Ann", HttpStatusCode.BadRequest);
-        var conflict = await GetPageAsync(host, "/web/bills?type=s&bill=H.R.%201002", HttpStatusCode.BadRequest);
-        var date = await GetPageAsync(host, "/web/votes?from=2026-13-45&chamber=house", HttpStatusCode.BadRequest);
-        var order = await GetPageAsync(host, "/web/statements?from=2026-02-01&to=2026-01-01", HttpStatusCode.BadRequest);
-        var voteOrder = await GetPageAsync(host, "/web/votes?from=2026-03-03&to=2026-03-01", HttpStatusCode.BadRequest);
-        var choice = await GetPageAsync(host, "/web/executive-actions?type=law", HttpStatusCode.BadRequest);
+        var bill = await GetPageAsync(host, "/bills.html?bill=5334a&sponsor=Ann", HttpStatusCode.BadRequest);
+        var conflict = await GetPageAsync(host, "/bills.html?type=s&bill=H.R.%201002", HttpStatusCode.BadRequest);
+        var date = await GetPageAsync(host, "/votes.html?from=2026-13-45&chamber=house", HttpStatusCode.BadRequest);
+        var order = await GetPageAsync(host, "/statements.html?from=2026-02-01&to=2026-01-01", HttpStatusCode.BadRequest);
+        var voteOrder = await GetPageAsync(host, "/votes.html?from=2026-03-03&to=2026-03-01", HttpStatusCode.BadRequest);
+        var choice = await GetPageAsync(host, "/executive-actions.html?type=law", HttpStatusCode.BadRequest);
 
         var number = bill.QuerySelector("input[name=bill]")!;
         Assert.Equal(("5334a", "true"), (number.GetAttribute("value"), number.GetAttribute("aria-invalid")));
@@ -145,8 +146,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
         foreach (var (path, line) in new[]
                  {
-                     ("/web/votes", "No votes are published yet."), ("/web/bills", "No bills or resolutions are published yet."),
-                     ("/web/statements", "No statements are published yet."), ("/web/executive-actions", "No executive actions are published yet.")
+                     ("/votes.html", "No votes are published yet."), ("/bills.html", "No bills or resolutions are published yet."),
+                     ("/statements.html", "No statements are published yet."), ("/executive-actions.html", "No executive actions are published yet.")
                  })
         {
             var page = await GetPageAsync(host, path);
@@ -166,8 +167,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote('a', "2026-03-02", 1));
 
-        var page = await GetPageAsync(host, "/web/votes");
-        var empty = await GetPageAsync(host, "/web/votes?chamber=senate");
+        var page = await GetPageAsync(host, "/votes.html");
+        var empty = await GetPageAsync(host, "/votes.html?chamber=senate");
         var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
 
         Assert.NotNull(page.QuerySelector("details.list-fold[data-wide-open]:not([open])"));
@@ -186,8 +187,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, new SeededVote('a', "2026-03-02") { TextOrigin = "Model" }, Vote('b', "2026-03-03", 2));
 
-        var response = await host.Client.GetAsync("/web/votes");
-        var page = await GetPageAsync(host, "/web/votes");
+        var response = await host.Client.GetAsync("/votes.html");
+        var page = await GetPageAsync(host, "/votes.html");
 
         Assert.Equal(PageCache.CacheControl, string.Join(", ", response.Headers.GetValues("Cache-Control")));
         Assert.Equal(["Headline b", "Headline a"], Titles(page));
@@ -215,17 +216,17 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             Vote('b', "2026-03-02", 2) with { Chamber = "Senate", Kind = "Cloture", BillType = "s", BillNumber = 5 },
             Vote('c', "2026-03-03", 3) with { Kind = "Amendment" });
 
-        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/web/votes?chamber=senate")));
-        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/web/votes?kind=cloture")));
-        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/web/votes?bill=S.%205")));
-        Assert.Equal(["Headline c"], Titles(await GetPageAsync(host, "/web/votes?kind=amendment&from=2026-03-03")));
-        Assert.Equal(["Headline c", "Headline a"], Titles(await GetPageAsync(host, "/web/votes?bill=1")));
-        var page = await GetPageAsync(host, "/web/votes?chamber=senate&from=2026-03-01");
+        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/votes.html?chamber=senate")));
+        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/votes.html?kind=cloture")));
+        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/votes.html?bill=S.%205")));
+        Assert.Equal(["Headline c"], Titles(await GetPageAsync(host, "/votes.html?kind=amendment&from=2026-03-03")));
+        Assert.Equal(["Headline c", "Headline a"], Titles(await GetPageAsync(host, "/votes.html?bill=1")));
+        var page = await GetPageAsync(host, "/votes.html?chamber=senate&from=2026-03-01");
         Assert.Equal("Showing 1 vote on this page.", page.QuerySelector(".list-status")!.TextContent);
         Assert.Equal(["Senate", "On or after 1 Mar 2026"], Chips(page));
         Assert.StartsWith("3 votes are in this release.", Lede(page));
-        Assert.Equal(["Bill S. 5", "From 1 Mar 2026 to 2 Mar 2026"], Chips(await GetPageAsync(host, "/web/votes?bill=S.%205&from=2026-03-01&to=2026-03-02")));
-        Assert.Equal(["Vote to end debate", "On or before 9 Mar 2026"], Chips(await GetPageAsync(host, "/web/votes?kind=cloture&to=2026-03-09")));
+        Assert.Equal(["Bill S. 5", "From 1 Mar 2026 to 2 Mar 2026"], Chips(await GetPageAsync(host, "/votes.html?bill=S.%205&from=2026-03-01&to=2026-03-02")));
+        Assert.Equal(["Vote to end debate", "On or before 9 Mar 2026"], Chips(await GetPageAsync(host, "/votes.html?kind=cloture&to=2026-03-09")));
         Assert.Equal("senate", page.QuerySelector("select[name=chamber] option[selected]")!.GetAttribute("value"));
         Assert.Equal("2026-03-01", page.QuerySelector("input[name=from]")!.GetAttribute("value"));
         Assert.NotNull(page.QuerySelector(".list-fold[open]"));
@@ -239,16 +240,16 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. Enumerable.Range(1, 26).Select(index =>
             Vote((char)('A' + index), $"2026-03-{index:00}", index) with { RecordId = new string((char)('a' + index % 6), 60) + index.ToString("0000") })]);
 
-        var first = await GetPageAsync(host, "/web/votes?chamber=house");
+        var first = await GetPageAsync(host, "/votes.html?chamber=house");
         var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
-        var second = await GetPageAsync(host, "/web/votes" + next);
+        var second = await GetPageAsync(host, "/votes.html" + next);
 
         Assert.Equal(VoteListReader.PageSize, Rows(first).Length);
         Assert.StartsWith("?chamber=house&cursor=", next);
         Assert.Single(Rows(second));
         Assert.Null(second.QuerySelector(".pager"));
         Assert.Empty(Titles(first).Intersect(Titles(second)));
-        var empty = await GetPageAsync(host, "/web/votes?chamber=senate");
+        var empty = await GetPageAsync(host, "/votes.html?chamber=senate");
         Assert.Contains("No vote matches these filters.", empty.QuerySelector(".empty")!.TextContent);
         Assert.Empty(Rows(empty));
         Assert.Equal("Showing 0 votes on this page.", empty.QuerySelector(".list-status")!.TextContent);
@@ -288,7 +289,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             + StoredStatus('a', "Referred to the House Committee on Energy and Commerce.", "InCommittee") + "\n"
             + StoredStatus('c', "Placed on the Union Calendar, Calendar No. 12.", "Other"));
 
-        var page = await GetPageAsync(host, "/web/bills");
+        var page = await GetPageAsync(host, "/bills.html");
 
         var (other, person, model) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
         Assert.Null(Label(person));
@@ -315,8 +316,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             new SeededBill('c', "2026-03-03") { BillNumber = 9, PolicyAreaId = "tax" },
             new SeededBill('b', "2024-03-02") { Congress = 118, BillNumber = 8, PolicyAreaId = "energy" });
 
-        var page = await GetPageAsync(host, "/web/bills");
-        var filtered = await GetPageAsync(host, "/web/bills?policyArea=tax");
+        var page = await GetPageAsync(host, "/bills.html");
+        var filtered = await GetPageAsync(host, "/bills.html?policyArea=tax");
 
         Assert.Equal(["c", "a"], Ids(page));
         Assert.Equal("2 bills and resolutions of the 119th Congress are in this release. "
@@ -342,7 +343,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             + StoredStatus('b', "Received in the Senate.", "PassedHouse") + "\n"
             + StoredStatus('d', "Became Public Law No: 118-1.", "BecameLaw"));
 
-        var page = await GetPageAsync(host, "/web/bills");
+        var page = await GetPageAsync(host, "/bills.html");
 
         Assert.Equal(["b", "c", "a"], Ids(page));
         Assert.StartsWith("3 bills and resolutions of the 119th Congress are in this release.", Lede(page), StringComparison.Ordinal);
@@ -353,14 +354,14 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Null(unknown.QuerySelector(".badge"));
         Assert.Contains("Sponsor: Ann Able", Text(committee));
         Assert.Equal("In committee", committee.QuerySelector(".badge")!.TextContent.Trim());
-        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/web/bills?status=passedHouse")));
-        Assert.Equal(["c", "a"], Ids(await GetPageAsync(host, "/web/bills?sponsor=ann")));
-        Assert.Empty(Ids(await GetPageAsync(host, "/web/bills?status=becameLaw")));
+        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?status=passedHouse")));
+        Assert.Equal(["c", "a"], Ids(await GetPageAsync(host, "/bills.html?sponsor=ann")));
+        Assert.Empty(Ids(await GetPageAsync(host, "/bills.html?status=becameLaw")));
 
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE release_bill_counts SET bills = 40 WHERE congress = 119;");
-        Assert.StartsWith("40 bills and resolutions of the 119th Congress", Lede(await GetPageAsync(host, "/web/bills")), StringComparison.Ordinal);
+        Assert.StartsWith("40 bills and resolutions of the 119th Congress", Lede(await GetPageAsync(host, "/bills.html")), StringComparison.Ordinal);
 
-        var unstored = await GetPageAsync(unstoredHost, "/web/bills");
+        var unstored = await GetPageAsync(unstoredHost, "/bills.html");
         Assert.Equal("Bills and resolutions, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(unstored));
         Assert.Empty(Rows(unstored));
     }
@@ -373,8 +374,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await StoreBillCountsAsync(emptyHost);
         await AddBillsAsync(host, new SeededBill('a', "2026-03-02"));
 
-        var empty = await GetPageAsync(emptyHost, "/web/bills");
-        var one = await GetPageAsync(host, "/web/bills");
+        var empty = await GetPageAsync(emptyHost, "/bills.html");
+        var one = await GetPageAsync(host, "/bills.html");
 
         Assert.Equal("Bills and resolutions, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(empty));
         Assert.StartsWith("1 bill or resolution of the 119th Congress is in this release. Bills and resolutions in the 119th Congress", Lede(one), StringComparison.Ordinal);
@@ -389,17 +390,17 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
             + "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
 
-        var votes = await GetPageAsync(host, "/web/votes?issue=health");
-        var bills = await GetPageAsync(host, "/web/bills?issue=health");
+        var votes = await GetPageAsync(host, "/votes.html?issue=health");
+        var bills = await GetPageAsync(host, "/bills.html?issue=health");
 
         Assert.Equal(IssueRecordWords.VotesHeading("Health care"), votes.QuerySelector("h1")!.TextContent);
         Assert.Equal(["Headline a"], Titles(votes));
         Assert.StartsWith("Roll call votes on Health care", votes.Title);
         Assert.Equal((IssueRecordWords.BillsHeading("Health care"), 1), (bills.QuerySelector("h1")!.TextContent, Rows(bills).Length));
         Assert.StartsWith("Bills tagged Health care", bills.Title);
-        Assert.Equal("Votes", (await GetPageAsync(host, "/web/votes")).QuerySelector("h1")!.TextContent);
-        Assert.Equal("Votes", (await GetPageAsync(host, "/web/votes?issue=nothing")).QuerySelector("h1")!.TextContent);
-        Assert.Equal("Bills", (await GetPageAsync(host, "/web/bills?issue=nothing")).QuerySelector("h1")!.TextContent);
+        Assert.Equal("Votes", (await GetPageAsync(host, "/votes.html")).QuerySelector("h1")!.TextContent);
+        Assert.Equal("Votes", (await GetPageAsync(host, "/votes.html?issue=nothing")).QuerySelector("h1")!.TextContent);
+        Assert.Equal("Bills", (await GetPageAsync(host, "/bills.html?issue=nothing")).QuerySelector("h1")!.TextContent);
     }
 
     [Fact]
@@ -415,32 +416,32 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             + StoredStatus('a', "Received in the Senate.", "PassedHouse") + "\n" + StoredStatus('c', "Became Public Law No: 119-1.", null) + "\n"
             + "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');");
 
-        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/web/bills?issue=health")));
-        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/web/bills?policyArea=tax")));
-        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/web/bills?bill=S.%204")));
-        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/web/bills?type=s")));
-        Assert.Equal(["a", "b"], Ids(await GetPageAsync(host, "/web/bills?bill=4")).Order());
-        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/web/bills?bill=4&type=hr")));
-        Assert.Equal(["c"], Ids(await GetPageAsync(host, "/web/bills?from=2026-03-03")));
-        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/web/bills?status=passedHouse")));
-        Assert.Empty(Ids(await GetPageAsync(host, "/web/bills?status=becameLaw")));
-        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/web/bills?sponsor=ab")));
-        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/web/bills?sponsor=ZED")));
-        await GetPageAsync(host, "/web/bills?type=law", HttpStatusCode.BadRequest);
-        await GetPageAsync(host, "/web/bills?status=passed", HttpStatusCode.BadRequest);
-        var filtered = await GetPageAsync(host, "/web/bills?type=s&sponsor=Bo&policyArea=tax&bill=4&status=passedHouse&issue=health&to=2026-03-09");
+        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?issue=health")));
+        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?policyArea=tax")));
+        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?bill=S.%204")));
+        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?type=s")));
+        Assert.Equal(["a", "b"], Ids(await GetPageAsync(host, "/bills.html?bill=4")).Order());
+        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?bill=4&type=hr")));
+        Assert.Equal(["c"], Ids(await GetPageAsync(host, "/bills.html?from=2026-03-03")));
+        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?status=passedHouse")));
+        Assert.Empty(Ids(await GetPageAsync(host, "/bills.html?status=becameLaw")));
+        Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?sponsor=ab")));
+        Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?sponsor=ZED")));
+        await GetPageAsync(host, "/bills.html?type=law", HttpStatusCode.BadRequest);
+        await GetPageAsync(host, "/bills.html?status=passed", HttpStatusCode.BadRequest);
+        var filtered = await GetPageAsync(host, "/bills.html?type=s&sponsor=Bo&policyArea=tax&bill=4&status=passedHouse&issue=health&to=2026-03-09");
         var taxArea = filtered.QuerySelector("select[name=policyArea] option[value=tax]")!.TextContent;
         Assert.Equal(["S. (Senate bill)", "Number S. 4", "Sponsor: Bo", "Passed the House", "Health care", taxArea, "On or before 9 Mar 2026"], Chips(filtered));
         Assert.Equal("tax", filtered.QuerySelector("select[name=policyArea] option[selected]")!.GetAttribute("value"));
         Assert.Equal("Bo", filtered.QuerySelector("input[name=sponsor]")!.GetAttribute("value"));
         Assert.Contains(filtered.QuerySelectorAll("select[name=policyArea] option").Select(option => option.GetAttribute("value")), value => value == "health");
-        Assert.Contains("No bill matches these filters.", (await GetPageAsync(host, "/web/bills?issue=nothing")).QuerySelector(".empty")!.TextContent);
+        Assert.Contains("No bill matches these filters.", (await GetPageAsync(host, "/bills.html?issue=nothing")).QuerySelector(".empty")!.TextContent);
 
         await AddBillsAsync(host, [.. Enumerable.Range(0, 25).Select(index =>
             new SeededBill((char)('d' + index % 20), $"2026-02-{index + 1:00}") { RecordId = new string('d', 60) + index.ToString("0000"), BillNumber = 100 + index })]);
-        var first = await GetPageAsync(host, "/web/bills");
+        var first = await GetPageAsync(host, "/bills.html");
         var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
-        var second = await GetPageAsync(host, "/web/bills" + next);
+        var second = await GetPageAsync(host, "/bills.html" + next);
         Assert.Equal(BillListReader.PageSize, Rows(first).Length);
         Assert.Equal(3, Rows(second).Length);
         Assert.Empty(Titles(first).Intersect(Titles(second)));
@@ -474,7 +475,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
             + PublicRecordPageRows.Link(new string('7', 64), new string('a', 64), new string('f', 64), "vote", "StatementAboutVote", "2026-03-02"));
 
-        var page = await GetPageAsync(host, "/web/statements");
+        var page = await GetPageAsync(host, "/statements.html");
 
         Assert.Equal(["Headline a", "Headline c", "Headline b"], Titles(page));
         var (model, earlier, person) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
@@ -502,17 +503,17 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             new('b', "2026-03-05", ["official-a"], [], "Person", "Person"),
             new('c', null, ["official-a"], [], "Person", "Person"));
 
-        Assert.Equal(["Headline b", "Headline c"], Titles(await GetPageAsync(host, "/web/statements?official=Ann")));
-        Assert.Equal(["Headline b", "Headline c"], Titles(await GetPageAsync(host, "/web/statements?official=able")));
-        Assert.Empty(Titles(await GetPageAsync(host, "/web/statements?official=nn")));
-        Assert.Equal(["Headline a"], Titles(await GetPageAsync(host, "/web/statements?issue=health")));
-        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/web/statements?from=2026-03-03")));
-        var page = await GetPageAsync(host, "/web/statements?official=Zed&issue=health&from=2026-03-01&to=2026-03-02");
+        Assert.Equal(["Headline b", "Headline c"], Titles(await GetPageAsync(host, "/statements.html?official=Ann")));
+        Assert.Equal(["Headline b", "Headline c"], Titles(await GetPageAsync(host, "/statements.html?official=able")));
+        Assert.Empty(Titles(await GetPageAsync(host, "/statements.html?official=nn")));
+        Assert.Equal(["Headline a"], Titles(await GetPageAsync(host, "/statements.html?issue=health")));
+        Assert.Equal(["Headline b"], Titles(await GetPageAsync(host, "/statements.html?from=2026-03-03")));
+        var page = await GetPageAsync(host, "/statements.html?official=Zed&issue=health&from=2026-03-01&to=2026-03-02");
         Assert.Equal(["Headline a"], Titles(page));
         Assert.Equal(["Official: Zed", "Health care", "From 1 Mar 2026 to 2 Mar 2026"], Chips(page));
         Assert.Equal("Zed", page.QuerySelector("input[name=official]")!.GetAttribute("value"));
         Assert.Equal("Health care", page.QuerySelector("select[name=issue] option[value=health]")!.TextContent);
-        Assert.Contains("No statement matches these filters.", (await GetPageAsync(host, "/web/statements?official=nobody")).QuerySelector(".empty")!.TextContent);
+        Assert.Contains("No statement matches these filters.", (await GetPageAsync(host, "/statements.html?official=nobody")).QuerySelector(".empty")!.TextContent);
     }
 
     [Fact]
@@ -523,8 +524,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await AddStatementsAsync(host, [.. Enumerable.Range(1, 26).Select(index =>
             new SeededStatement('a', index <= 24 ? $"2026-03-{index:00}" : null, ["official-a"], [], "Person", "Person") { RecordId = new string('a', 60) + index.ToString("0000") })]);
 
-        var first = await GetPageAsync(host, "/web/statements");
-        var second = await GetPageAsync(host, "/web/statements" + first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
+        var first = await GetPageAsync(host, "/statements.html");
+        var second = await GetPageAsync(host, "/statements.html" + first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
 
         Assert.Equal(25, Rows(first).Length);
         Assert.Single(Rows(second));
@@ -551,7 +552,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await SeedExecutiveActionsAsync(host, (ExecutiveId(1), "ExecutiveOrder", "Order one", "2026-01-20"), (ExecutiveId(2), "Proclamation", "Proclamation two", "2026-02-02"));
 
-        var page = await GetPageAsync(host, "/web/executive-actions");
+        var page = await GetPageAsync(host, "/executive-actions.html");
 
         Assert.Equal(["Proclamation two", "Order one"], Titles(page));
         Assert.Contains("Proclamation, Signed 2 Feb 2026", Text(Rows(page)[0]));
@@ -570,21 +571,21 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         await SeedExecutiveActionsAsync(host, [(ExecutiveId(0), "Notice", "Notice zero", "2025-12-31"),
             .. Enumerable.Range(1, 25).Select(index => (ExecutiveId(index), "ExecutiveOrder", $"Order {index:00}", $"2026-01-{index:00}"))]);
 
-        var notices = await GetPageAsync(host, "/web/executive-actions?type=notice");
+        var notices = await GetPageAsync(host, "/executive-actions.html?type=notice");
         Assert.Equal(["Notice zero"], Titles(notices));
         Assert.Equal(["Presidential notices"], Chips(notices));
         Assert.StartsWith("26 executive actions are in this release.", Lede(notices));
         var typeChips = new List<string>();
         foreach (var type in new[] { "executiveOrder", "proclamation", "notice", "memorandum" })
-            typeChips.AddRange(Chips(await GetPageAsync(host, $"/web/executive-actions?type={type}")));
+            typeChips.AddRange(Chips(await GetPageAsync(host, $"/executive-actions.html?type={type}")));
         Assert.Equal(["Executive orders", "Proclamations", "Presidential notices", "Memorandums"], typeChips);
-        Assert.Equal(["Order 25"], Titles(await GetPageAsync(host, "/web/executive-actions?type=executiveOrder&from=2026-01-25")));
-        var first = await GetPageAsync(host, "/web/executive-actions");
+        Assert.Equal(["Order 25"], Titles(await GetPageAsync(host, "/executive-actions.html?type=executiveOrder&from=2026-01-25")));
+        var first = await GetPageAsync(host, "/executive-actions.html");
         var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
-        var second = await GetPageAsync(host, "/web/executive-actions" + next);
+        var second = await GetPageAsync(host, "/executive-actions.html" + next);
         Assert.Equal(25, Rows(first).Length);
         Assert.Equal(["Notice zero"], Titles(second));
-        Assert.Contains("Memorandum", (await GetPageAsync(host, "/web/executive-actions")).QuerySelectorAll("select[name=type] option").Select(option => option.TextContent));
-        Assert.Contains("No executive action matches these filters.", (await GetPageAsync(host, "/web/executive-actions?type=memorandum")).QuerySelector(".empty")!.TextContent);
+        Assert.Contains("Memorandum", (await GetPageAsync(host, "/executive-actions.html")).QuerySelectorAll("select[name=type] option").Select(option => option.TextContent));
+        Assert.Contains("No executive action matches these filters.", (await GetPageAsync(host, "/executive-actions.html?type=memorandum")).QuerySelector(".empty")!.TextContent);
     }
 }
