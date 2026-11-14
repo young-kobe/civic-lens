@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,7 +18,7 @@ public sealed class SharedVoteRowsTests
     public async Task RowsLinkVotesAndShowOnlyRecordedCastsInRequestedMemberOrder()
     {
         var row = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314,
-            "House passes the bill", "AI summary of the official record", "Vote to pass with limited debate", "Passed",
+            "House passes the bill", "AI summary of the official record", PublishedTextOrigin.Model, "Vote to pass with limited debate", "Passed",
             [new("second", "No (Nay)", "Nay"), new("first", "Yes (Yea)", "Yea")]);
         var data = new SharedVoteRowsData(PublishedChamber.House,
             [new("first", "Alex Member"), new("second", "Sam Member"), new("third", "Missing Member")], [row]);
@@ -43,7 +44,7 @@ public sealed class SharedVoteRowsTests
     {
         const string headline = "<script>bad()</script>";
         var row = new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 1, 5,
-            headline, null, "Vote to agree to the motion", "Question agreed to", []);
+            headline, null, PublishedTextOrigin.Model, "Vote to agree to the motion", "Question agreed to", []);
         var data = new SharedVoteRowsData(PublishedChamber.Senate, [new("member", "Pat Member")], [row]);
 
         var document = await RenderAsync(data);
@@ -64,7 +65,7 @@ public sealed class SharedVoteRowsTests
     public async Task ComparisonLabelsRenderOnlyWhenTheComparisonIsEligible()
     {
         var same = new SharedVoteRowData(new string('c', 64), new(2026, 9, 16), 119, 2, 7,
-            "Members agree", null, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea"), new("second", "Yes (Aye)", "Yea")])
+            "Members agree", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea"), new("second", "Yes (Aye)", "Yea")])
         {
             MembersVotedTheSame = true
         };
@@ -93,7 +94,7 @@ public sealed class SharedVoteRowsTests
     public async Task ASingleMemberRowShowsNoComparisonBadgeEvenWhenTheGroupComparedTheVote()
     {
         var different = new SharedVoteRowData(new string('f', 64), new(2026, 9, 16), 119, 2, 8,
-            "Members differ", null, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea")])
+            "Members differ", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea")])
         {
             MembersVotedTheSame = false
         };
@@ -109,7 +110,7 @@ public sealed class SharedVoteRowsTests
     public async Task DifferencesOnlyKeepsTheOriginalComparisonCaptionAndShowsTheApprovedEmptyCopy()
     {
         var same = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 7,
-            "Same", null, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea"), new("second", "Yes (Yea)", "Yea")])
+            "Same", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("first", "Yes (Yea)", "Yea"), new("second", "Yes (Yea)", "Yea")])
         {
             MembersVotedTheSame = true
         };
@@ -136,7 +137,7 @@ public sealed class SharedVoteRowsTests
     [Fact]
     public async Task TheHeadingLevelMovesTheSectionHeadingAndItsRowHeadingsTogether()
     {
-        var row = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 1, 5, "A vote", null, "Vote to pass", "Passed", []);
+        var row = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 1, 5, "A vote", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", []);
         var data = new SharedVoteRowsData(PublishedChamber.House, [new("member", "Pat Member")], [row]);
 
         var nested = await RenderAsync(data, headingLevel: 3);
@@ -147,6 +148,23 @@ public sealed class SharedVoteRowsTests
         Assert.Null(nested.QuerySelector("h2"));
         Assert.Equal("How your House members voted", normal.QuerySelector("h2")!.TextContent);
         Assert.Equal("A vote", normal.QuerySelector("h3 a")!.TextContent);
+    }
+
+    [Fact]
+    public async Task OnlyAModelLabelTakesTheAiInkAndACodeLabelStaysMutedAsInAListRow()
+    {
+        var model = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes the bill", PublishedRecordLabels.ModelWording,
+            PublishedTextOrigin.Model, "Vote to pass", "Passed", []);
+        var code = model with { RecordId = new string('b', 64), Label = PublishedRecordLabels.CodeWording, TextOrigin = PublishedTextOrigin.Code };
+
+        var labels = (await RenderAsync(new(PublishedChamber.House, [], [model, code]))).QuerySelectorAll(".shared-vote-label");
+
+        Assert.Equal(["model", null], labels.Select(label => label.GetAttribute("data-origin")));
+        Assert.Equal([PublishedRecordLabels.ModelWording, PublishedRecordLabels.CodeWording], labels.Select(label => label.TextContent));
+        var css = WebStyleSheets.Read("public.css");
+        Assert.Contains(".shared-vote-label[data-origin=\"model\"] { color: var(--ai-ink); }", css);
+        Assert.DoesNotMatch(@"(?m)^\.shared-vote-label \{[^}]*color", css);
+        Assert.Matches(@"(?m)^\.shared-vote-meta \{[^}]*color: var\(--muted\)", css);
     }
 
     private static async Task<IDocument> RenderAsync(SharedVoteRowsData data, bool differencesOnly = false, int headingLevel = 2, bool singleMember = false)

@@ -74,7 +74,7 @@ public sealed class PublicPageReadingGradeTests
             Status = "Passed the House. Now in the Senate.",
             StatusLabel = "Passed the House",
             CongressGovUrl = "https://www.congress.gov/bill/119th-congress/house-bill/7",
-            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "Vote headline", null, "Vote to pass or agree to", "Passed", [])],
+            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "Vote headline", null, PublishedTextOrigin.Model, "Vote to pass or agree to", "Passed", [])],
             StatusReadAtUtc = new(2026, 11, 5, 9, 57, 0, TimeSpan.Zero)
         };
         var page = await RenderAsync<BillDetailPage>(new Dictionary<string, object?>
@@ -284,7 +284,7 @@ public sealed class PublicPageReadingGradeTests
             Issues = [new("foreign-policy", "Foreign policy and war")],
             PolicyArea = "International Affairs",
             BillLine = "This bill imposes sanctions.",
-            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, "Vote to pass or agree to", "Passed", [])]
+            Votes = [new(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, PublishedTextOrigin.Model, "Vote to pass or agree to", "Passed", [])]
         };
         var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3), PublishedChamber.House, "Published headline", null, "Published summary",
             PublishedTextOrigin.Model, "Passed", 216, 214, "Current bill line.", PublishedWording.BillLineSource);
@@ -320,7 +320,7 @@ public sealed class PublicPageReadingGradeTests
             SponsoredBills = 43,
             Issues = [new("tax", "Federal taxes", 8)],
             Marks = [new(new string('b', 64), new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"), new(new string('c', 64), new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
-            Votes = [new(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
+            Votes = [new(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", PublishedTextOrigin.Model, "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
             Statements = [new(new string('d', 64), new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", new string('a', 64), "House agrees to Senate changes", "AI linked vote label",
                 new(2026, 9, 16), PublishedChamber.House, 308, "Nay") { LinkApprover = PublishedApprover.Person }],
             Bills = [new(new string('e', 64), "hr", null, "H.R. 40 would study reparations.", new(2025, 1, 3), "Referred to the House Committee on the Judiciary.", new(2025, 1, 3))]
@@ -351,7 +351,7 @@ public sealed class PublicPageReadingGradeTests
             [new(PublishedChamber.House, 119, [new(PublishedVoteKind.Passage, 15, 201)], 196, 254, 0, 450, 0)]);
         var zip = new ZipMemberCardsData(8, 119, "36009", 2,
             [new("Representative for Alabama, district 2", new ZipMemberIdentityData("pat", "Pat Member", "Democratic", new(2029, 1, 3), null, [], [])), new("Senator for Alabama", null)], []);
-        var differs = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 2, 314, "House members differ", null, "Vote to pass", "Passed",
+        var differs = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 2, 314, "House members differ", null, PublishedTextOrigin.Model, "Vote to pass", "Passed",
             [new("pat", "Yes (Yea)", "Yea"), new("sam", "No (Nay)", "Nay")])
         { MembersVotedTheSame = false };
         var zipCompare = new ZipMemberCardsData(8, 119, "36009", 2,
@@ -454,7 +454,7 @@ public sealed class PublicPageReadingGradeTests
             ("briefs empty", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 0, []))), []),
             ("issues index", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, [new("firearms", "Firearms", 119, 3, 186)]))), ["Firearms"]),
             ("issues index empty", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, []))), []),
-            ("official votes", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 0)], OfficialRecordKind.Votes) { Votes = [new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, "Vote to pass or agree to", "Passed", [])], NextCursor = "next" })), ["Ann Able", "House agrees"]),
+            ("official votes", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 0)], OfficialRecordKind.Votes) { Votes = [new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, PublishedTextOrigin.Model, "Vote to pass or agree to", "Passed", [])], NextCursor = "next" })), ["Ann Able", "House agrees"]),
             ("official executive", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p4", "Eve East", PublishedOfficeKind.Executive, [new(OfficialRecordKind.ExecutiveActions, 1)], OfficialRecordKind.ExecutiveActions) { ExecutiveActions = [new(new string('3', 64), "Seafood Month", PublishedExecutiveActionKind.Proclamation, new(2026, 10, 22))], Offices = [new("President", "Republican", new(2025, 1, 20), null)] })), ["Eve East", "Seafood Month"]),
             ("official bills", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 1), new(OfficialRecordKind.Statements, 1)], OfficialRecordKind.Bills) { Bills = [new(new string('e', 64), "hr", "H.R. 40 would study reparations.", "Commission to Study Reparation Proposals Act", new(2025, 1, 3), "Referred to the House Committee on the Judiciary.", new(2025, 1, 3))] })), ["H.R. 40", "Reparation", "Referred to"]),
             ("official statements", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Statements, 1)], OfficialRecordKind.Statements) { Statements = [new(new string('d', 64), new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label")], LaterPage = true })), ["statement about", "AI statement label"]),

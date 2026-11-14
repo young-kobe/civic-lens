@@ -34,7 +34,7 @@ public sealed class OfficialProfilePageTests
         Issues = [new("tax", "Federal taxes", 8)],
         Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"),
                  new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
-        Votes = [new(VoteId, new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
+        Votes = [new(VoteId, new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", PublishedTextOrigin.Model, "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
         Statements = [new(StatementId, new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", VoteId, "House agrees to Senate changes", "AI linked vote label",
             new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
         Bills = [new(BillId, "hr", null, "H.R. 40 would study reparations.", new(2025, 1, 3),

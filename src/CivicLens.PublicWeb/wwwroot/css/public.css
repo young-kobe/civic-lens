@@ -83,7 +83,8 @@ table[data-paged]:focus { outline: none; }
 .shared-vote-title a { color: var(--info); text-decoration: underline; text-underline-offset: .16em; overflow-wrap: anywhere; }
 .shared-vote-title a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .shared-vote-meta { margin: 2px 0 0; color: var(--muted); font-size: .875rem; line-height: 1.45; }
-.shared-vote-label { display: inline-block; margin-inline-start: var(--s1); color: var(--ai-ink); }
+.shared-vote-label { display: inline-block; margin-inline-start: var(--s1); }
+.shared-vote-label[data-origin="model"] { color: var(--ai-ink); }
 .shared-vote-casts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: var(--s2) 0 0; padding: 0; list-style: none; }
 .shared-vote-cast { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .shared-vote-member { font-size: .875rem; }

@@ -17,7 +17,7 @@ public sealed class IssueMemberVotesTests
     private static readonly ZipMemberIdentityData Pat = new("pat", "Pat Member", "Democratic", null, null, [], []);
 
     private static readonly SharedVoteRowsData HouseVotes = new(PublishedChamber.House, [new("pat", "Pat Member")],
-        [new(new string('d', 64), new(2026, 9, 16), 119, 1, 5, "A vote", null, "Vote to pass", "Passed", [new("pat", "Yes", "Yea")])]);
+        [new(new string('d', 64), new(2026, 9, 16), 119, 1, 5, "A vote", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("pat", "Yes", "Yea")])]);
 
     [Fact]
     public async Task EachMemberGetsAnH3NameAndSingleMemberVoteRowsWithAnH4HeadingAndNoRepeatedName()
