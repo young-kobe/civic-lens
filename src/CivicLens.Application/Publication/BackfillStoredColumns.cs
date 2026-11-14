@@ -11,7 +11,7 @@ namespace CivicLens.Application.Publication;
 /// A vote revision takes <see cref="VoteStoredColumns.From"/> of its own vote record file, which the newest kept folder in its release range holds. Its columns
 /// and its written marker go in together. A member list pins the parties of its published revision with the lowest revision number that has a kept file, so a later revision of the
 /// list never changes them. A revision with no kept file stays unwritten. An official takes the photo path of the officials file of its release. An entry takes
-/// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. A release takes the vote links of <see cref="ReleaseBillLines"/> over its manifest. A bill status row takes <see cref="BillStatusMeaning.StageOf"/> of its text and bill type. A release whose folder is gone is skipped. A release whose manifest cannot be read is skipped and counted. Every write fills only what is not filled yet, so a second run changes nothing.
+/// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. A release takes the vote links of <see cref="ReleaseVoteBills"/> over its manifest. A bill status row takes <see cref="BillStatusMeaning.StageOf"/> of its text and bill type. A release whose folder is gone is skipped. A release whose manifest cannot be read is skipped and counted. Every write fills only what is not filled yet, so a second run changes nothing.
 /// Work runs in batches of <see cref="BatchSize"/> rows.
 /// </summary>
 public sealed class BackfillStoredColumns(IPublicationStore publications, IReleaseDirectory releases, IVoteReviewStore votes)

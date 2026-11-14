@@ -39,14 +39,12 @@ internal sealed class ReleaseOfficialVotes(IReleaseDirectory releases, VoteRecor
             ?? throw new InvalidDataException("A carried vote file is empty.")).Congress;
     }
 
-    public async Task<OfficialFiles> ListAsync(PreviousRelease previous, string officialId, CancellationToken cancellationToken)
+    public async Task<HashSet<int>> ListAsync(PreviousRelease previous, string officialId, CancellationToken cancellationToken)
     {
-        if (previous.DirectoryName is null) return OfficialFiles.None;
+        if (previous.DirectoryName is null) return [];
         var paths = await releases.ListFilesAsync(previous.DirectoryName, PublicationProtocol.OfficialFolder(officialId),
             PublicationProtocol.MaximumOfficialFiles, cancellationToken);
-        return new([.. paths.Select(PublicationProtocol.VotesCongressOf).OfType<int>()],
-            [.. paths.Select(PublicationProtocol.CongressPageOf).OfType<int>()],
-            paths.Contains(PublicationProtocol.OfficialRecordPagePath(officialId)));
+        return [.. paths.Select(PublicationProtocol.VotesCongressOf).OfType<int>()];
     }
 
     public async Task<PublishedOfficialVote[]> ReadAsync(PreviousRelease previous, string officialId, int congress,

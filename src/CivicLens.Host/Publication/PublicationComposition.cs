@@ -49,7 +49,7 @@ internal static class PublicationComposition
             new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
             new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
             PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, codeVersion));
-        var publish = new PublishRelease(publications, releases, ReleaseRenderer.FromEnvironment(), loaders,
+        var publish = new PublishRelease(publications, releases, loaders,
             new PublicationCatalog(ReviewOfficials.From(collection).Names, issues, icons),
             new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
                 PostgresExecutiveRosterStore.FromConnectionString(connectionString),
