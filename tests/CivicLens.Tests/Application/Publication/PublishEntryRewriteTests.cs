@@ -27,7 +27,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
-    public async Task TheHomeAndAllRecordsPagesFollowTheEventDayThenTheFirstPublicationDay()
+    public async Task TheManifestRecordsFollowTheEventDayThenTheFirstPublicationDay()
     {
         var scenario = new PublicationScenario();
         var newerEventPublishedEarlier = scenario.AddStatement('c', statementDate: new DateOnly(2026, 1, 20));
@@ -202,7 +202,6 @@ public sealed class PublishEntryRewriteTests
         var scenario = new PublicationScenario();
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
             new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('a', speakerIds: ["chair"]))));
-        scenario.OfficialPages.Clear();
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
             new PublishedRecordReference(PublishedRecordKind.Action, scenario.AddAction('b', cosponsorWithdrawn: false))));
@@ -210,7 +209,6 @@ public sealed class PublishEntryRewriteTests
         var summaries = Summaries(scenario, second);
         Assert.Equal(1, summaries["chair"].CosponsoredBills);
         Assert.Equal(0, summaries["mayor"].CosponsoredBills);
-        Assert.DoesNotContain(scenario.OfficialPages, page => page.Profile.Id == "chair");
         var chairEntries = Manifest(scenario, second).Records.Where(entry => entry.Officials.Any(official => official.Id == "chair"));
         Assert.DoesNotContain(chairEntries, entry => entry.Kind == PublishedRecordKind.Action);
     }
@@ -236,33 +234,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     [Fact]
-    public async Task ThePublishHandsTheHomeCardsTheVoteCountsAndTheLeaderOfTheCarriedSummaryAndARewriteOfAllOfficialsRecomputesThem()
-    {
-        var scenario = new PublicationScenario();
-        scenario.Clock.Now = new(2025, 4, 12, 0, 0, 0, TimeSpan.Zero);
-        var first = await PublishFirstAsync(scenario);
-        var vote = Assert.Single(scenario.Highlights!.Votes);
-        Assert.Equal((1, 1, PublishedVoteAlignment.Split), (vote.YeaCount, vote.NayCount, vote.Alignment));
-        Assert.Empty(scenario.Highlights.BreakLeaders);
-        var carried = Summaries(scenario, first);
-        var withLeader = carried["mayor"] with
-        {
-            PartyVotes = [new() { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Democrat, SplitVotesCast = 40, Breaks = 12 }]
-        };
-        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.OfficialSummariesPath] = JsonSerializer.SerializeToUtf8Bytes(
-            new PublishedOfficialSummaries { Officials = [.. carried.Values.Select(row => row.Id == "mayor" ? withLeader : row)] }, PublicationProtocol.JsonOptions);
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('d', speakerIds: ["chair"]))));
-
-        var leader = Assert.Single(scenario.Highlights!.BreakLeaders);
-        Assert.Equal(("mayor", 40, 12), (leader.Member.Official.Profile.Id, leader.Member.Cast, leader.Member.Breaks));
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
-        Assert.Empty(scenario.Highlights.BreakLeaders);
-    }
-
-    [Fact]
-    public async Task AReleaseWithNoSummaryFileGivesAnUntouchedOfficialNoVoteDataUntilARewriteOfAllOfficialsBecauseNoReaderGuessesADefault()
+    public async Task AReleaseWithNoSummaryFileGivesAnUntouchedOfficialARowComputedFromItsVoteFilesSoNoReaderGuessesADefault()
     {
         var scenario = new PublicationScenario();
         var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
@@ -272,12 +244,10 @@ public sealed class PublishEntryRewriteTests
 
         var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
             new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('c', speakerIds: ["chair"]))));
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3") { RewriteOfficials = true });
 
-        var untouched = Summaries(scenario, second)["mayor"];
-        Assert.Null(untouched.Congress);
-        Assert.Empty(untouched.Attendance);
-        Assert.Equal(119, Summaries(scenario, third)["mayor"].Congress);
+        var computed = Summaries(scenario, second)["mayor"];
+        Assert.Equal(119, computed.Congress);
+        Assert.Equal(1, Assert.Single(computed.Attendance).Held);
     }
 
     [Fact]

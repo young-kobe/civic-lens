@@ -2,26 +2,22 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AngleSharp.Html.Parser;
-using CivicLens.Application.Issues;
-using CivicLens.Application.Publication;
-using CivicLens.Host.Components.Ui;
-using CivicLens.Host.Publication;
-using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Components.Ui;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CivicLens.Tests.Host;
+namespace CivicLens.Tests.PublicWeb;
 
 public sealed class PublicFoundationTests
 {
     [Fact]
     public async Task BothHeaderNavigationFormsKeepTheirSectionsAndTheFooterHoldsTheOtherPages()
     {
-        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
+        var document = await ListPageRender.RenderPageAsync<MethodPage>(new Dictionary<string, object?> { ["RootPath"] = ListPageRender.Root });
 
         var navigationForms = document.QuerySelectorAll("nav[aria-label='Site']");
         Assert.Equal(2, navigationForms.Length);
@@ -36,7 +32,7 @@ public sealed class PublicFoundationTests
     [Fact]
     public async Task TheThemeMenuOffersLightSystemAndDarkAndKeepsTheStoredChoiceKeys()
     {
-        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderMethodAsync(CancellationToken.None));
+        var document = await ListPageRender.RenderPageAsync<MethodPage>(new Dictionary<string, object?> { ["RootPath"] = ListPageRender.Root });
 
         var menu = document.QuerySelector("header .theme-menu")!;
         Assert.Equal("theme-menu", menu.QuerySelector("button[popovertarget]")!.GetAttribute("popovertarget"));
@@ -46,15 +42,11 @@ public sealed class PublicFoundationTests
     }
 
     [Fact]
-    public async Task EveryNamedIconDrawsShapesAndAnIssueWithoutAnIconDrawsTheNeutralDefaultSoNoTileIsEmpty()
+    public async Task EveryNamedIconDrawsShapesSoNoTileIsEmpty()
     {
         foreach (var name in Enum.GetValues<IconName>())
             Assert.NotEmpty(new HtmlParser().ParseFragment(await RenderAsync<Icon>(new() { [nameof(Icon.Name)] = name }), null!)
                 .OfType<AngleSharp.Dom.IElement>().Single().QuerySelectorAll("path, circle, rect"));
-
-        foreach (var name in IssueIcons.Paths.Keys)
-            Assert.Contains(IssueIcons.Paths[name], await RenderAsync<IssueIcon>(new() { [nameof(IssueIcon.Name)] = name }), StringComparison.Ordinal);
-        Assert.Contains(IssueIcons.Paths[IssueIcons.Default], await RenderAsync<IssueIcon>(new()), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -79,10 +71,16 @@ public sealed class PublicFoundationTests
     [Fact]
     public async Task APagedTableKeepsEveryRowInItsHtmlSoNoRowNeedsJavaScriptToBeReached()
     {
-        var votes = Enumerable.Range(0, 40).Select(index => Vote(index)).ToArray();
-        var page = new ReleaseOfficialPage(new PublishedOfficialProfile { Id = "doe", Name = "Jane Doe", Terms = [] }, true, 119, true, [119], [], [.. votes], DateTimeOffset.UnixEpoch);
+        var parameters = new Dictionary<string, object?>
+        {
+            [nameof(DataTable<int>.Items)] = (IReadOnlyList<int>)[.. Enumerable.Range(0, 40)],
+            [nameof(DataTable<int>.Head)] = (RenderFragment)(builder => builder.AddContent(0, "")),
+            [nameof(DataTable<int>.Row)] = (RenderFragment<int>)(_ => builder => builder.AddContent(0, "")),
+            [nameof(DataTable<int>.Caption)] = "Votes",
+            [nameof(DataTable<int>.PagedRows)] = "records"
+        };
 
-        var document = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null).RenderOfficialRecordAsync(page, PublicationCatalogs.None, CancellationToken.None));
+        var document = new HtmlParser().ParseDocument(await RenderAsync<DataTable<int>>(parameters));
 
         var table = document.QuerySelector("table[data-paged]")!;
         Assert.Equal("15", table.GetAttribute("data-paged"));
@@ -108,22 +106,23 @@ public sealed class PublicFoundationTests
     }
 
     [Fact]
-    public void TheReleaseShipsTheLicenseOfEveryFontItShips()
+    public void ThePublicAssetsShipTheLicenseOfEveryFontTheyShip()
     {
-        var assets = new ReleaseRenderer(null, null).Assets;
+        var paths = PublicAssets.Paths;
 
-        Assert.All(assets, asset => Assert.Matches("^[a-z0-9._-]{1,80}(/[a-z0-9._-]{1,80})*$", asset.RelativePath));
+        Assert.All(paths, path => Assert.Matches("^[a-z0-9._-]{1,80}(/[a-z0-9._-]{1,80})*$", path));
         var licenseOf = new Dictionary<string, string>
         {
-            ["assets/fonts/schibsted-grotesk.woff2"] = "assets/fonts/ofl-schibsted-grotesk.txt",
-            ["assets/fonts/newsreader.woff2"] = "assets/fonts/ofl-newsreader.txt",
-            ["assets/fonts/archivo.woff2"] = "assets/fonts/ofl-archivo.txt",
-            ["assets/fonts/figtree.woff2"] = "assets/fonts/ofl-figtree.txt",
-            ["assets/fonts/gabarito.woff2"] = "assets/fonts/ofl-gabarito.txt"
+            [PublicAssets.SchibstedGroteskFont] = "assets/fonts/ofl-schibsted-grotesk.txt",
+            [PublicAssets.NewsreaderFont] = "assets/fonts/ofl-newsreader.txt",
+            [PublicAssets.ArchivoFont] = "assets/fonts/ofl-archivo.txt",
+            [PublicAssets.FigtreeFont] = "assets/fonts/ofl-figtree.txt",
+            [PublicAssets.GabaritoFont] = "assets/fonts/ofl-gabarito.txt"
         };
-        var fonts = assets.Where(asset => asset.RelativePath.EndsWith(".woff2", StringComparison.Ordinal)).Select(asset => asset.RelativePath);
+        var fonts = paths.Where(path => path.EndsWith(".woff2", StringComparison.Ordinal));
         Assert.Equal(licenseOf.Keys.Order(StringComparer.Ordinal), fonts.Order(StringComparer.Ordinal));
-        Assert.All(licenseOf.Values, path => Assert.Contains("SIL OPEN FONT LICENSE", System.Text.Encoding.UTF8.GetString(assets.Single(asset => asset.RelativePath == path).Content), StringComparison.Ordinal));
+        Assert.Equal(licenseOf.Values.Order(StringComparer.Ordinal), PublicAssets.FontLicenses.Order(StringComparer.Ordinal));
+        Assert.All(licenseOf.Values, path => Assert.Contains("SIL OPEN FONT LICENSE", System.Text.Encoding.UTF8.GetString(EmbeddedPublicAssets.Read(path)), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -200,26 +199,6 @@ public sealed class PublicFoundationTests
         var match = Regex.Match(lightDark, @"^light-dark\((.+?),\s*(?=(?:#|rgba))(.+)\)$");
         return [match.Groups[1].Value, match.Groups[2].Value];
     }
-
-    private static PublishedOfficialVote Vote(int index) => new()
-    {
-        RecordId = new string('a', 32) + index.ToString("D32", CultureInfo.InvariantCulture),
-        VotedOn = new DateOnly(2026, 4, 1).AddDays(-index),
-        Chamber = PublishedChamber.House,
-        Congress = 119,
-        Session = 1,
-        RollCallNumber = 100 + index,
-        BillType = "hr",
-        BillNumber = 7,
-        Cast = "Yea",
-        Result = "Passed",
-        Totals = new() { Yea = 218, Nay = 210, Present = 1, NotVoting = 5 },
-        SplitVote = false,
-        Party = "Republican",
-        Headline = $"Vote {index}",
-        Kind = PublishedVoteKind.Passage,
-        IssueIds = []
-    };
 
     private static async Task<string> RenderAsync<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent
     {

@@ -551,19 +551,7 @@ public sealed class OfficialProfilePageTests
         return pattern.Contains("--s", StringComparison.Ordinal) ? new[] { 0, 4, 8, 12, 16, 24, 32, 48 }[value] : value;
     }
 
-    private static async Task<IDocument> RenderAsync<TComponent>(object data) where TComponent : IComponent
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<TComponent>(ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                ["Data"] = data,
-                ["RootPath"] = Root
-            }));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAsync<TComponent>(object data) where TComponent : IComponent =>
+        ListPageRender.RenderAsync<TComponent>(data, "Data");
+
 }

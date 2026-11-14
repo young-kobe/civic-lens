@@ -391,12 +391,8 @@ public sealed class PublicPageReadingGradeTests
         static VoteMemberData MapMember(string name, string cast, string party, string? state, int? district) =>
             new("o-" + name, name, cast, party, VoteDetailPageFixture.Cite(VoteDetailPageFixture.Lines[4]), state, district);
         static Func<Task<IDocument>> Page<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<TComponent>(parameters.Where(pair => typeof(TComponent).GetProperty(pair.Key) is not null).ToDictionary());
-        static Func<Task<IDocument>> Shell<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent => () => RenderAsync<ServerPageFrame>(new()
-        {
-            [nameof(ServerPageFrame.Context)] = new ServerPageContext(new(2026, 5, 31), new(2026, 5, 29)),
-            [nameof(ServerPageFrame.Page)] = typeof(TComponent),
-            [nameof(ServerPageFrame.Parameters)] = parameters.ToDictionary(pair => pair.Key, pair => pair.Value!)
-        });
+        static Func<Task<IDocument>> Shell<TComponent>(Dictionary<string, object?> parameters) where TComponent : IComponent =>
+            () => ListPageRender.RenderPageAsync<TComponent>(parameters, new ServerPageContext(new(2026, 5, 31), new(2026, 5, 29)));
         static Dictionary<string, object?> With(string name, object? data, params (string Name, object? Value)[] more) =>
             new Dictionary<string, object?> { [name] = data, ["RootPath"] = Root }.Concat(more.Select(pair => KeyValuePair.Create(pair.Name, pair.Value))).ToDictionary();
 
@@ -505,16 +501,7 @@ public sealed class PublicPageReadingGradeTests
     private static string NormalizeText(IElement element) =>
         string.Join(' ', element.TextContent.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    private static async Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters)
-        where TComponent : IComponent
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<TComponent>(ParameterView.FromDictionary(parameters));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAsync<TComponent>(Dictionary<string, object?> parameters)
+        where TComponent : IComponent => ListPageRender.RenderPageAsync<TComponent>(parameters);
+
 }

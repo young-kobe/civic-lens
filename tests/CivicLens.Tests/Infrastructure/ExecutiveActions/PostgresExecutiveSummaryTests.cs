@@ -196,7 +196,7 @@ public sealed class PostgresExecutiveSummaryTests(PostgresCollection postgres) :
         var factory = AnalysisDbContextFactory.Create(connectionString);
         var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
         var directory = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
-        var publish = new PublishRelease(store, directory, new ReleaseRenderer(null, null),
+        var publish = new PublishRelease(store, directory,
             new PublishedRecordLoaders(new PostgresDocumentChangeReviewStore(factory),
                 new PostgresStatementReviewStore(factory), new PostgresActionReviewStore(factory), new PostgresVoteReviewStore(factory),
                 new PostgresRelationshipReviewStore(factory), new PostgresBriefReviewStore(factory), ReviewStore()),

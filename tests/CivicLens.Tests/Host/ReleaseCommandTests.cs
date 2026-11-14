@@ -19,6 +19,7 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "publish", "key", "--withdraw")]
     [InlineData("releases", "publish", "key", "--withdraw", "statement:abc")]
     [InlineData("releases", "publish", "key", "--withdraw", "draft:abc", "text")]
+    [InlineData("releases", "publish", "key", "--rewrite-pages")]
     [InlineData("releases", "blocked", "1")]
     [InlineData("releases", "list", "abc")]
     [InlineData("releases", "list", "0")]
@@ -79,47 +80,6 @@ public sealed class ReleaseCommandTests
             Assert.Equal(2, without.ExitCode);
             Assert.Equal(1, with.ExitCode);
             Assert.Equal(2, withoutIcons.ExitCode);
-        }
-        finally
-        {
-            Directory.Delete(folder, true);
-        }
-    }
-
-    [Fact]
-    public async Task PublishingRefusesAnInvalidPublicBaseUrlBeforeAnyWorkSoNoReleaseCarriesAWrongCanonicalAddress()
-    {
-        var folder = Directory.CreateTempSubdirectory("release-command").FullName;
-        try
-        {
-            var collection = Path.Combine(folder, "sources.json");
-            var issues = Path.Combine(folder, "issues.json");
-            await File.WriteAllTextAsync(collection, """{"version":1,"people":[],"sources":[]}""");
-            await File.WriteAllTextAsync(issues, System.Text.Json.JsonSerializer.Serialize(
-                CivicLens.Application.Issues.IssueConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
-            var icons = Path.Combine(folder, "issue-icons.json");
-            await File.WriteAllTextAsync(icons, System.Text.Json.JsonSerializer.Serialize(
-                CivicLens.Application.Issues.IssueIconConfiguration.None, CivicLens.Collection.Contracts.CollectionProtocol.JsonOptions));
-            var environment = new Dictionary<string, string>
-            {
-                ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner",
-                ["CIVIC_LENS_RELEASE_DIRECTORY"] = Path.Combine(folder, "releases"),
-                ["CIVIC_LENS_COLLECTION_CONFIG"] = collection,
-                ["CIVIC_LENS_ISSUES_CONFIG"] = issues,
-                ["CIVIC_LENS_ISSUE_ICONS_CONFIG"] = icons,
-                ["CIVIC_LENS_ARTIFACT_DIRECTORY"] = Path.Combine(folder, "captures"),
-                ["CIVIC_LENS_PUBLIC_BASE_URL"] = "https://civic.example/site"
-            };
-            const string unreachable = "Host=127.0.0.1;Port=1;Database=none;Username=none;Password=none;Timeout=2";
-
-            string[] publish = ["releases", "publish", "key", "statement:" + new string('a', 64)];
-
-            var invalid = await HostProcess.RunWithEnvironmentAsync(unreachable, null, environment, publish);
-            environment["CIVIC_LENS_PUBLIC_BASE_URL"] = "https://civic.example";
-            var valid = await HostProcess.RunWithEnvironmentAsync(unreachable, null, environment, publish);
-
-            Assert.Equal(2, invalid.ExitCode);
-            Assert.Equal(1, valid.ExitCode);
         }
         finally
         {
@@ -602,8 +562,8 @@ public sealed class ReleaseCommandTests
         Assert.Equal(0, exit);
 
         var files = scenario.Releases.Directories.Values.Single();
-        Assert.Contains(PublicationProtocol.RecordPagePath(statement), files.Keys);
-        Assert.Contains(PublicationProtocol.RecordPagePath(change), files.Keys);
+        Assert.Contains(PublicationProtocol.RecordDataPath(statement), files.Keys);
+        Assert.Contains(PublicationProtocol.RecordDataPath(change), files.Keys);
     }
 
     [Fact]
@@ -630,21 +590,27 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task TheRewriteOfficialsOptionPublishesWithNoRecordAndWritesTheOfficialPageAgain()
+    public async Task TheRewriteOfficialsOptionPublishesWithNoRecordAndComputesTheSummariesAgain()
     {
         var scenario = new PublicationScenario();
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        scenario.Releases.WriteOrder.Clear();
+        var first = scenario.Publications.Committed[^1].DirectoryName;
+        var summaries = JsonSerializer.Deserialize<PublishedOfficialSummaries>(scenario.Releases.Directories[first][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
+        scenario.Releases.Directories[first][PublicationProtocol.OfficialSummariesPath] = JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficialSummaries
+        {
+            Officials = [.. summaries.Officials.Select(row => row with { Attendance = [.. row.Attendance.Select(attendance => attendance with { Held = 99 })] })]
+        }, PublicationProtocol.JsonOptions);
 
         var plain = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        scenario.Releases.WriteOrder.Clear();
         var rewritten = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal((2, 0), (plain, rewritten));
-        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
+        var rewrittenRows = JsonSerializer.Deserialize<PublishedOfficialSummaries>(
+            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
+        Assert.Equal(1, Assert.Single(rewrittenRows.Officials.Single(row => row.Id == "mayor").Attendance).Held);
     }
 
     [Fact]
@@ -670,26 +636,7 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task TheRewritePagesOptionPublishesWithNoRecordAndRendersTheCarriedPageAgain()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('a');
-        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"statement:{statement}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        scenario.PageLayout = " layout-2";
-
-        var plain = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        var rewritten = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-
-        Assert.Equal((2, 0), (plain, rewritten));
-        var page = scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordPagePath(statement)];
-        Assert.EndsWith(" layout-2</html>", System.Text.Encoding.UTF8.GetString(page));
-    }
-
-    [Fact]
-    public async Task ARewriteOfPagesThatFindsAnInvalidRecordFilePrintsTheKindAndIdAndExitsWithOneSoTheOperatorKnowsWhichFileToCheck()
+    public async Task ARewriteOfEntriesThatFindsAnInvalidRecordFilePrintsTheKindAndIdAndExitsWithOneSoTheOperatorKnowsWhichFileToCheck()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('a');
@@ -697,29 +644,11 @@ public sealed class ReleaseCommandTests
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
         scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(action)] = "not json"u8.ToArray();
         var error = new StringWriter();
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries"], scenario.Publisher(), null!, null!, null!,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Contains($"Action {action}", error.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ARewriteOfPagesThatFindsAnInvalidRelationshipFilePrintsTheRelationshipIdAndExitsWithOne()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('a');
-        var action = scenario.AddAction('b');
-        var relationship = scenario.AddRelationship('e', statement, action);
-        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"statement:{statement}", $"action:{action}", $"relationship:{relationship}"],
-            scenario.Publisher(), null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.RecordDataPath(relationship)] = "not json"u8.ToArray();
-        var error = new StringWriter();
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-pages"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, error, CancellationToken.None);
-
-        Assert.Equal(1, exit);
-        Assert.Contains($"Relationship {relationship}", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -744,7 +673,6 @@ public sealed class ReleaseCommandTests
         var rewritten = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
         Assert.NotNull(rewritten.Records.Single(entry => entry.Kind == PublishedRecordKind.Vote).YeaCount);
         Assert.Equal(["chair"], rewritten.Records.Single(entry => entry.Kind == PublishedRecordKind.Action).CosponsorIds!);
-        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
         var summaries = JsonSerializer.Deserialize<PublishedOfficialSummaries>(directory[PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
         Assert.Equal(1, summaries.Officials.Single(row => row.Id == "chair").CosponsoredBills);
     }

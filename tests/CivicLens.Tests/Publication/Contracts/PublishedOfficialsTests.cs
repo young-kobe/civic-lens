@@ -7,7 +7,7 @@ namespace CivicLens.Tests.Publication.Contracts;
 public sealed class PublishedOfficialsTests
 {
     [Fact]
-    public void AReleaseKeepsItsOfficialsAndCatalogThroughAJsonRoundTrip()
+    public void AReleaseKeepsItsOfficialsThroughAJsonRoundTrip()
     {
         var officials = new PublishedOfficials
         {
@@ -22,17 +22,12 @@ public sealed class PublishedOfficialsTests
                 }
             ]
         };
-        var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
         var officialsBack = JsonSerializer.Deserialize<PublishedOfficials>(
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
-        var catalogBack = JsonSerializer.Deserialize<PublishedCatalog>(
-            JsonSerializer.Serialize(catalog, PublicationProtocol.JsonOptions), PublicationProtocol.JsonOptions)!;
         officialsBack.Validate();
-        catalogBack.Validate();
 
         Assert.Equal(new DateOnly(2025, 1, 3), officialsBack.Officials[0].Terms[0].Start);
-        Assert.Equal("Housing", catalogBack.Issues[0].Name);
     }
 
     [Theory]
@@ -69,7 +64,7 @@ public sealed class PublishedOfficialsTests
     }
 
     [Fact]
-    public void TheOfficialsAndCatalogJsonMatchPinnedSchemaVersion()
+    public void TheOfficialsJsonMatchesPinnedSchemaVersion()
     {
         var officials = new PublishedOfficials
         {
@@ -83,13 +78,10 @@ public sealed class PublishedOfficialsTests
                 }
             ]
         };
-        var catalog = new PublishedCatalog { Issues = [new() { Id = "housing", Name = "Housing" }], PolicyAreas = [] };
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
         Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"sen","kind":"senator","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
-        Assert.Equal("""{"issues":[{"id":"housing","name":"Housing"}],"policyAreas":[]}""",
-            JsonSerializer.Serialize(catalog, PublicationProtocol.JsonOptions));
     }
 
     [Fact]
@@ -157,20 +149,6 @@ public sealed class PublishedOfficialsTests
         Assert.Throws<InvalidDataException>(new PublishedOfficials { Officials = many }.Validate);
         Assert.Throws<InvalidDataException>(new PublishedOfficials { Officials = [longName] }.Validate);
         Assert.Throws<InvalidDataException>(new PublishedOfficials { Officials = [tooManyTerms] }.Validate);
-        Assert.Throws<InvalidDataException>(new PublishedCatalog
-        {
-            Issues = [.. Enumerable.Range(0, PublishedCatalog.MaximumEntries + 1).Select(index => new PublishedCatalogEntry { Id = $"i{index}", Name = "A" })],
-            PolicyAreas = []
-        }.Validate);
-    }
-
-    [Fact]
-    public void ACatalogWithADuplicateIdOrABlankNameIsRefused()
-    {
-        var entry = new PublishedCatalogEntry { Id = "housing", Name = "Housing" };
-
-        Assert.Throws<InvalidDataException>(new PublishedCatalog { Issues = [entry, entry], PolicyAreas = [] }.Validate);
-        Assert.Throws<InvalidDataException>(new PublishedCatalog { Issues = [entry with { Name = " " }], PolicyAreas = [] }.Validate);
     }
 
     private static readonly string PhotoHash = new('a', 64);

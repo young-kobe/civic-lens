@@ -1,11 +1,7 @@
 using AngleSharp.Dom;
-using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CivicLens.Tests.PublicWeb;
 
@@ -87,16 +83,6 @@ internal static class DetailPageFixture
         [new("official-a", "Mark Kelly")], [new("budget", "Federal budget and debt")],
         new DateTimeOffset(2026, 10, 30, 0, 42, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 30, 0, 44, 0, TimeSpan.Zero));
 
-    public static async Task<IDocument> RenderAsync<TPage, TData>(TData data) where TPage : IComponent
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<TPage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { ["Data"] = data, ["RootPath"] = Root }));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    public static Task<IDocument> RenderAsync<TPage, TData>(TData data) where TPage : IComponent =>
+        ListPageRender.RenderAsync<TPage>(data!, "Data");
 }

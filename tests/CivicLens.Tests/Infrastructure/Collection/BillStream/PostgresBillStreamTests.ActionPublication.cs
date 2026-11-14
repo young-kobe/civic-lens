@@ -156,7 +156,7 @@ public sealed partial class PostgresBillStreamTests
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
-        var publisher = new PublishRelease(store, releases, new ReleaseRenderer(null, null),
+        var publisher = new PublishRelease(store, releases,
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),
@@ -240,7 +240,7 @@ public sealed partial class PostgresBillStreamTests
         var names = revision.Sponsorships.Select(item => item.PersonId).Distinct().ToDictionary(id => id, id => $"Official {id}");
         var releases = new FileReleaseDirectory(Path.Combine(captureRoot, "releases"));
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
-        var publisher = new PublishRelease(publications, releases, new ReleaseRenderer(null, null),
+        var publisher = new PublishRelease(publications, releases,
             new PublishedRecordLoaders(PostgresDocumentChangeReviewStore.FromConnectionString(connectionString),
                 PostgresStatementReviewStore.FromConnectionString(connectionString), ActionReviews(),
                 PostgresVoteReviewStore.FromConnectionString(connectionString),

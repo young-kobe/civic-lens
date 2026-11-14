@@ -30,7 +30,6 @@ public sealed class PublishBriefTests
         var citation = Assert.Single(record.Citations);
         Assert.Equal(("R1", PublishedRecordKind.Statement, statement, "Cited R1"), (citation.Id, citation.Kind, citation.RecordId, citation.Headline));
         Assert.Equal(PublicationScenario.ApprovedAt, record.ApprovedAtUtc);
-        Assert.Contains(PublicationProtocol.RecordPagePath(brief), files.Keys);
     }
 
     [Fact]

@@ -36,12 +36,6 @@ public sealed class IssuePageTests
     }
 
     [Fact]
-    public void TheStaticIssuePageLedeAndTheServerPageShareOneTagCaveat()
-    {
-        Assert.Contains(PublishedWording.IssueTagCaveat, CivicLens.Host.Publication.PublishedFacetSummaryView.Lede(CivicLens.Application.Publication.FacetKind.Issue));
-    }
-
-    [Fact]
     public async Task EveryBillCountNamesBillsAndResolutionsWithOneNounRule()
     {
         var lineUp = new IssueLineUpData(119, 3, [new("Democrat", 2), new("Republican", 1)], 0);
@@ -271,16 +265,12 @@ public sealed class IssuePageTests
 
     private static double PassageGrade(IElement passage) => ReadingGrade.Of(passage.TextContent);
 
-    private static async Task<IDocument> RenderAsync(IssuePageData data, string? browserApiUrl = null)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+    private static Task<IDocument> RenderAsync(IssuePageData data, string? browserApiUrl = null) =>
+        ListPageRender.RenderPageAsync<IssuePage>(new Dictionary<string, object?>
         {
-            var output = await renderer.RenderComponentAsync<IssuePage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(IssuePage.Data)] = data, [nameof(IssuePage.RootPath)] = Root, [nameof(IssuePage.BrowserApiUrl)] = browserApiUrl }));
-            return output.ToHtmlString();
+            [nameof(IssuePage.Data)] = data,
+            [nameof(IssuePage.RootPath)] = Root,
+            [nameof(IssuePage.BrowserApiUrl)] = browserApiUrl
         });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+
 }
