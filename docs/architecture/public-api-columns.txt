@@ -125,6 +125,7 @@ member_votes party
 member_votes alignment
 member_votes alignment_known
 member_votes breaks_party
+member_votes text_origin
 vote_first_publications record_id
 vote_first_publications revision_number
 vote_first_publications release_number
