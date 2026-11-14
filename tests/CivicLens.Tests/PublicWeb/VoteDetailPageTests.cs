@@ -294,12 +294,16 @@ public sealed class VoteDetailPageTests
         [.. page.QuerySelectorAll(".vote-members tbody tr td:first-child").Select(cell => cell.TextContent)];
 
     [Fact]
-    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyForAPersonCorrectionAndARoutineUpdateShowsTheMutedLineInTheHeader()
     {
         var corrected = await RenderAsync(Vote() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
         var plain = await RenderAsync(Vote());
+        var updated = await RenderAsync(Vote() with { Corrections = [PublishedUpdateLineTests.SourceUpdate] });
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
+        Assert.Null(corrected.QuerySelector(".update-line"));
+        Assert.Null(plain.QuerySelector(".update-line"));
+        PublishedUpdateLineTests.AssertTheLineIsInTheRecordHeader(updated);
     }
 }

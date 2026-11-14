@@ -12,6 +12,9 @@ public static class PublishedCorrectionView
     public static string AfterTitle(PublishedCorrection correction) =>
         $", {Moment.Day(correction.PublishedAtUtc)}. {Replaces(correction)}{(correction.FactsUnchanged ? " " + FactsUnchangedText : "")}";
 
+    /// <summary>The muted record meta line of a routine code update: its history label and its day.</summary>
+    public static string UpdateLine(PublishedCorrection correction) => $"{Title(correction)}, {Moment.Day(correction.PublishedAtUtc)}.";
+
     public static string TimelineText(PublishedCorrection correction) =>
         $"{Title(correction)}, replaces revision {correction.ReplacedRevisionNumber}";
 
