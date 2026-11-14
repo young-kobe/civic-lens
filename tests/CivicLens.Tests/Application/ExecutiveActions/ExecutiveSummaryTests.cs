@@ -16,7 +16,7 @@ namespace CivicLens.Tests.Application.ExecutiveActions;
 
 public sealed class ExecutiveSummaryTests
 {
-    private const string PromptSha256 = "3119ab8f2aab6e230199ceed059520072adcc183bb397a81afdf22b384062187";
+    private const string PromptSha256 = "824e16c2a54c7ba26b8a08f9640903dfb72376ff8f7e4f6c3a1e9e597ac52b96";
     private const string FirstQuote = "I hereby order the Secretary of Commerce to review each import rule within 30 days";
     private const string SecondQuote = "The Secretary shall report the results to the President by March 1, 2025";
     private const string FirstSentence = "The order tells the Secretary of Commerce to review each import rule. The review must finish within 30 days.";
@@ -110,6 +110,17 @@ public sealed class ExecutiveSummaryTests
     }
 
     [Theory]
+    [InlineData("The Secretary must report the results to the President by March 1, 2026.", "2026")]
+    [InlineData("The Secretary must spend $5 million to report the results by March 1, 2025.", "$5 million")]
+    public void ASentenceWithAFigureThatTheSentTextLacksIsRejectedAndTheReasonNamesTheFigure(string sentence, string figure)
+    {
+        var resolution = Resolve(Output((FirstSentence, FirstQuote), (sentence, SecondQuote)));
+
+        Assert.False(resolution.IsAccepted);
+        Assert.Contains($"The summary has the figure \"{figure}\", which is not in the document text that was sent.", Assert.Single(resolution.Errors), StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("This order aims to cut costs for the Secretary of Commerce.", "aims to")]
     [InlineData("The Secretary Seeks To review each import rule within 30 days.", "seeks to")]
     [InlineData("The review is intended to finish within 30 days.", "intended to")]
@@ -183,7 +194,7 @@ public sealed class ExecutiveSummaryTests
         var system = ExecutiveSummaryPrompt.Build(Evidence(), 100_000)!.SystemPrompt;
 
         var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(system)));
-        Assert.Equal("executive-summary-prompt-v2", ExecutiveSummaryTask.PromptVersion);
+        Assert.Equal("executive-summary-prompt-v3", ExecutiveSummaryTask.PromptVersion);
         Assert.True(hash == PromptSha256, $"The prompt changed. Bump {nameof(ExecutiveSummaryTask.PromptVersion)} ({ExecutiveSummaryTask.PromptVersion}), and then update the pinned hash in this test. System prompt: {hash}");
         AiTextPromptRules.AssertHoldsSharedSentences(system, codeApproves: true);
     }

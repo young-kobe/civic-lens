@@ -54,4 +54,8 @@ public sealed class BillFigureSetTests
 
         Assert.Equal(["2027"], figures.Missing("H.R. 2027 starts in 2027.", "2027"));
     }
+
+    [Fact]
+    public void ATextWithNoBillNumberSkipsNoCitation() =>
+        Assert.Equal(["2025"], new BillFigureSet("The program ends on December 31, 2030.").Missing("H.R. 2025 ends the program.", null));
 }
