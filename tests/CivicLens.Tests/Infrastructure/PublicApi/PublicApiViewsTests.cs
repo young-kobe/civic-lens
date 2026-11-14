@@ -84,7 +84,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         foreach (var view in new[] { "active_records", "active_release", "votes", "vote_members", "vote_first_publications", "vote_party_tallies", "vote_evidence", "vote_sources", "member_votes", "vote_issues", "party_agreement", "bills", "bill_sponsorships", "bill_sponsorship_parties", "bill_issues", "zip_districts", "officials", "official_attendance", "official_party_lines", "official_issue_counts", "official_executive_actions", "release_officials", "release_official_terms", "release_issues", "release_issue_includes", "release_issue_excludes", "release_issue_party_lineups", "release_bill_counts", "release_official_bill_counts", "release_policy_areas",
             "briefs", "issue_votes", "issue_sponsors", "bill_status", "record_headlines", "record_links", "relationships", "vote_facts", "statement_speakers", "statement_speaker_terms", "statement_approvers", "statements", "statement_sources", "statement_quotations", "document_changes", "document_change_officials", "document_change_sources", "document_change_hunks", "document_change_word_edits", "document_change_citations",
             "executive_actions", "executive_action_notices", "executive_action_targets", "executive_action_summaries", "executive_action_summary_sentences", "executive_action_summary_sources", "executive_action_facts", "withdrawals", "withdrawal_corrections",
-            "action_sources", "executive_action_sources", "record_entries", "record_officials", "record_issues", "record_policy_areas", "record_first_publications",
+            "bill_text_sentences", "action_sources", "executive_action_sources", "record_entries", "record_officials", "record_issues", "record_policy_areas", "record_first_publications",
             "record_correction_histories", "record_correction_history_entries" })
         {
             // Join and aggregate views reject writes before privilege checks. The simple release identity view reaches the missing-grant check.
@@ -126,6 +126,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             $"bill_sponsorship_parties v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_sponsorships v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bill_status v {Owner} {Role}:SELECT {{security_barrier=true}}",
+            $"bill_text_sentences v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"bills v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"brief_citations v {Owner} {Role}:SELECT {{security_barrier=true}}",
             $"brief_paragraphs v {Owner} {Role}:SELECT {{security_barrier=true}}",
@@ -813,22 +814,106 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     public async Task KeyTermsReachTheViewInOrderForModelTextThatCitesBillTextOnlyBecauseAPersonEditOrATextFreeRevisionNeedsNoAiTerms()
     {
         await SeedBillsAsync();
-        await ExecuteAsync("""
-            SET session_replication_role = replica;
-            INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
-              VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2025-01-03',
-                      'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', 'x', 85000, 59987);
-            UPDATE action_revisions SET text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It pays landlords.' WHERE record_id IN ('A', 'M');
+        await ExecuteAsync($"""
+            {BillTextRows}
             INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
-              SELECT record_id, revision_number, 1, 'grant', 'x', 100, 30, 'The term grant means a payment.', true FROM action_revisions WHERE record_id IN ('A', 'M', 'C')
-              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', 'x', 10, 30, 'The term Secretary means the Secretary.', false FROM action_revisions WHERE record_id IN ('A', 'M', 'C');
+              SELECT record_id, revision_number, 1, 'grant', {Span(GrantQuote)}, 'The term "grant" means a payment under § 3.', true FROM action_revisions WHERE record_id IN ('A', 'M', 'C')
+              UNION ALL SELECT record_id, revision_number, 0, 'Secretary', {Span(SecretaryQuote)}, 'The term "Secretary" means the Secretary of Energy.', false FROM action_revisions WHERE record_id IN ('A', 'M', 'C');
             """);
 
-        Assert.Equal(["M|0|Secretary|The term Secretary means the Secretary.|false", "M|1|grant|The term grant means a payment.|true"],
+        Assert.Equal(["M|0|Secretary|The term \"Secretary\" means the Secretary of Energy.|false", "M|1|grant|The term \"grant\" means a payment under § 3.|true"],
             await PublicAsync("SELECT record_id || '|' || \"position\" || '|' || term || '|' || definition || '|' || cut FROM public_api.bill_key_terms ORDER BY record_id, \"position\""));
-        Assert.Equal(["Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms."],
+        Assert.Equal([BillTextWords.KeyTermsLabel],
             await PublicAsync("SELECT DISTINCT label FROM public_api.bill_key_terms"));
     }
+
+    [Fact]
+    public async Task EachKeyTermServesTheExactCitedCharactersOfItsQuoteBesideItsPlainDefinitionEvenAfterACharacterOutsideTheBasicPlane()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            {BillTextRows}
+            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
+              VALUES ('M', 1, 0, 'grant', {Span(GrantQuote)}, 'The term "grant" means a payment under § 3.', false);
+            """);
+
+        Assert.Equal([$"The term \"grant\" means a payment under § 3.|{GrantQuote}"],
+            await PublicAsync("SELECT definition || '|' || quote FROM public_api.bill_key_terms"));
+    }
+
+    [Fact]
+    public async Task TextSentencesReachTheViewInPositionOrderWithTheirPartAndExactQuoteForModelTextThatCitesBillTextOnly()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            {BillTextRows}
+            {TextSentenceRows("'A', 'M', 'C'")}
+            """);
+
+        Assert.Equal(
+        [
+            $"M|0|Summary|The bill defines a grant.|{GrantQuote}",
+            $"M|1|Summary|The Secretary pays landlords.|{PayQuote}",
+            $"M|2|WhyItMatters|It names who runs the program.|{SecretaryQuote}"
+        ], await PublicAsync("SELECT concat_ws('|', record_id, \"position\", part, sentence, quote) FROM public_api.bill_text_sentences ORDER BY record_id, \"position\""));
+    }
+
+    [Fact]
+    public async Task TheBillStoreReadsTheExactQuoteOfEachTextSentenceAndKeyTermAndEmptyListsForABillWithNone()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            {BillTextRows}
+            {TextSentenceRows("'M'")}
+            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
+              VALUES ('M', 1, 0, 'grant', {Span(GrantQuote)}, 'The term "grant" means a payment under § 3.', true);
+            """);
+        var builder = new NpgsqlConnectionStringBuilder(connectionString) { Username = Role, Password = LoginPassword };
+        await using var views = NpgsqlDataSource.Create(builder.ConnectionString);
+        var store = new CivicLens.PublicApi.Bills.BillStore(views);
+
+        var model = (await store.FindAsync("M", default))!;
+        var person = (await store.FindAsync("A", default))!;
+
+        CivicLens.PublicApi.Bills.BillTextSentence[] sentences =
+        [
+            new(PublishedTextPart.Summary, "The bill defines a grant.", GrantQuote),
+            new(PublishedTextPart.Summary, "The Secretary pays landlords.", PayQuote),
+            new(PublishedTextPart.WhyItMatters, "It names who runs the program.", SecretaryQuote)
+        ];
+        Assert.Equal(sentences, model.TextSentences);
+        Assert.Equal(new CivicLens.PublicWeb.Publication.BillKeyTermData("grant", "The term \"grant\" means a payment under § 3.", true, GrantQuote), Assert.Single(model.KeyTerms));
+        Assert.Empty(person.TextSentences);
+        Assert.Empty(person.KeyTerms);
+    }
+
+    // One bill text extraction. A character outside the basic plane comes before every quote, so a slice that counts code points, not UTF-16 units, misses.
+    private const string BillText = "SEC. 2. DEFINITIONS. \U0001F3E0 In this Act: (1) " + GrantQuote + " (2) " + SecretaryQuote + " SEC. 3. RENT AID. " + PayQuote;
+    private const string GrantQuote = "The term \u201Cgrant\u201D means a payment under \u00A7 3.";
+    private const string SecretaryQuote = "The term \u201CSecretary\u201D means the Secretary of Energy.";
+    private const string PayQuote = "The Secretary shall pay landlords under \u00A7 3(a).";
+
+    // The extraction, the UTF-16 start, and the length of a quote of BillText, as the stored span columns hold them.
+    private static string Span(string quote) => $"'{BillTextExtraction}', {BillText.IndexOf(quote, StringComparison.Ordinal)}, {quote.Length}";
+    private static readonly string BillTextExtraction = new('e', 64);
+
+    private static readonly string BillTextRows = $"""
+        SET session_replication_role = replica;
+        INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+          VALUES ('{BillTextExtraction}', 'attempt', 'extraction', '{BillText}', '{new string('f', 64)}');
+        INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
+          VALUES (119, 'hr', 7, 'BILLS-119hr7ih', 'Introduced in House', '2025-01-03',
+                  'https://www.congress.gov/119/bills/hr7/BILLS-119hr7ih.htm', '{BillTextExtraction}', 85000, 59987);
+        UPDATE action_revisions SET text_package_id = 'BILLS-119hr7ih', why_it_matters = 'It names who runs the program.' WHERE record_id IN ('A', 'M');
+        """;
+
+    // The rows go in out of position order, so the view order must come from the position.
+    private static string TextSentenceRows(string records) => $"""
+        INSERT INTO action_revision_text_citations (record_id, revision_number, position, part, citation_extraction_id, citation_start, citation_length, sentence)
+          SELECT record_id, revision_number, 2, 'WhyItMatters', {Span(SecretaryQuote)}, 'It names who runs the program.' FROM action_revisions WHERE record_id IN ({records})
+          UNION ALL SELECT record_id, revision_number, 0, 'Summary', {Span(GrantQuote)}, 'The bill defines a grant.' FROM action_revisions WHERE record_id IN ({records})
+          UNION ALL SELECT record_id, revision_number, 1, 'Summary', {Span(PayQuote)}, 'The Secretary pays landlords.' FROM action_revisions WHERE record_id IN ({records});
+        """;
 
     [Fact]
     public async Task EventDateAndCosponsorCountEqualTheStoredColumnsBecauseCSharpWritesThemOnceAndTheViewMustNotComputeThem()

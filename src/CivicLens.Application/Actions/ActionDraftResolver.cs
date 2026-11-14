@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using CivicLens.Application.Analysis;
 using CivicLens.Core.Actions;
+using CivicLens.Core.Analysis;
 using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using static CivicLens.Application.Analysis.AnalysisAnswerRules;
@@ -33,6 +34,7 @@ public static class ActionDraftResolver
         CheckNames(output.Summary.Text, "summary", snapshot, errors);
         CheckNoSummarySentence(output.Headline.Text, "headline", errors);
         CheckNoSummarySentence(output.Summary.Text, "summary", errors);
+        if (AiTextRules.PassageGradeError([output.Headline.Text, output.Summary.Text]) is { } passageGrade) errors.Add(passageGrade);
         var issueIds = context.Issues.Check(output.IssueIds, errors);
         if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
         return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
@@ -65,7 +67,7 @@ public static class ActionDraftResolver
         var why = QuotedSentences(output.WhyItMatters.Sentences, ActionTextPart.WhyItMatters, "whyItMatters", quotes, errors);
         CheckSentences(summary, "summary", context.Snapshot, figures, errors);
         CheckSentences(why, "whyItMatters", context.Snapshot, figures, errors);
-        if (PassageGradeError(output) is { } passageGrade) errors.Add(passageGrade);
+        if (AiTextRules.QuotedPassageGradeError(PassageOf(output)) is { } passageGrade) errors.Add(passageGrade);
         var keyTermErrors = new List<string>();
         var terms = keyTerms?.Resolve(output.KeyTerms, quotes, keyTermErrors) ?? default;
         if (!dropFailingKeyTerms) errors.AddRange(keyTermErrors);
@@ -109,7 +111,7 @@ public static class ActionDraftResolver
         BillTextQuotes quotes, List<string> errors)
     {
         var (minimum, maximum) = part == ActionTextPart.Summary
-            ? (ActionDraftRevision.MinimumSummarySentences, ActionDraftRevision.MaximumSummarySentences)
+            ? (QuotedSentenceLimits.MinimumSentences, QuotedSentenceLimits.MaximumSentences)
             : (1, ActionDraftRevision.MaximumWhyItMattersSentences);
         var citations = new List<ActionTextCitation>();
         if (items.Length < minimum || items.Length > maximum)
@@ -124,16 +126,16 @@ public static class ActionDraftResolver
     {
         var sentence = item?.Sentence?.Trim() ?? string.Empty;
         var quote = item?.Quote ?? string.Empty;
-        if (sentence.Length == 0 || sentence.Length > ActionDraftRevision.MaximumTextSentenceLength)
-            errors.Add($"A {field} sentence has {sentence.Length} characters. Write 1 to {ActionDraftRevision.MaximumTextSentenceLength}.");
-        else if (quote.Length > ActionDraftRevision.MaximumTextQuoteLength)
-            errors.Add($"A {field} quote has {quote.Length} characters. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
-        else if (ActionTextCitation.WordCount(quote) < ActionDraftRevision.MinimumTextQuoteWords)
-            errors.Add($"The {field} quote \"{Shorten(quote)}\" has fewer than {ActionDraftRevision.MinimumTextQuoteWords} words. Quote at least {ActionDraftRevision.MinimumTextQuoteWords}.");
+        if (sentence.Length == 0 || sentence.Length > QuotedSentenceLimits.MaximumSentenceLength)
+            errors.Add($"A {field} sentence has {sentence.Length} characters. Write 1 to {QuotedSentenceLimits.MaximumSentenceLength}.");
+        else if (quote.Length > QuotedSentenceLimits.MaximumQuoteLength)
+            errors.Add($"A {field} quote has {quote.Length} characters. Quote at most {QuotedSentenceLimits.MaximumQuoteLength}.");
+        else if (ActionTextCitation.WordCount(quote) < QuotedSentenceLimits.MinimumQuoteWords)
+            errors.Add($"The {field} quote \"{Shorten(quote)}\" has fewer than {QuotedSentenceLimits.MinimumQuoteWords} words. Quote at least {QuotedSentenceLimits.MinimumQuoteWords}.");
         else if (quotes.Find(quote) is not { } span)
             errors.Add($"The {field} quote \"{Shorten(quote)}\" is not an exact quote of the bill text that was sent. Copy it exactly.");
-        else if (span.Length > ActionDraftRevision.MaximumTextQuoteLength)
-            errors.Add($"A {field} quote spans {span.Length} characters of the stored text. Quote at most {ActionDraftRevision.MaximumTextQuoteLength}.");
+        else if (span.Length > QuotedSentenceLimits.MaximumQuoteLength)
+            errors.Add($"A {field} quote spans {span.Length} characters of the stored text. Quote at most {QuotedSentenceLimits.MaximumQuoteLength}.");
         else return new(part, span, sentence);
         return null;
     }
@@ -154,18 +156,9 @@ public static class ActionDraftResolver
             errors.Add($"The {field} has the figure \"{Shorten(figure)}\", which is not in the bill text that was sent. Use only amounts and years that the bill text has.");
     }
 
-    /// <summary>The headline and the sentences read as one passage. The message names the sentence with the highest grade, so the repair knows where to start.</summary>
-    private static string? PassageGradeError(ActionTextOutput output)
-    {
-        var pieces = PassageOf(output);
-        if (ActionTextApproval.IsPassageReadable(pieces, out var grade)) return null;
-        var hardest = pieces.MaxBy(ReadingGrade.Of)!;
-        return $"The headline and the sentences read at grade {ReadingGrade.Format(grade)} as one passage. Write at grade {ReadingGrade.TargetGrade} or below. The hardest sentence is \"{Shorten(hardest)}\" at grade {ReadingGrade.Format(ReadingGrade.Rounded(hardest))}. Use shorter words and shorter sentences. Keep the summary at {ActionDraftRevision.MinimumSummarySentences} to {ActionDraftRevision.MaximumSummarySentences} sentences.";
-    }
-
-    private static ImmutableArray<string> PassageOf(ActionTextOutput output) =>
-    [.. output.Summary.Sentences.Concat(output.WhyItMatters.Sentences).Select(item => item?.Sentence).Prepend(output.Headline.Text)
-        .Select(text => text?.Trim() ?? string.Empty).Where(text => text.Length > 0)];
+    /// <summary>The headline, the summary sentences and the whyItMatters sentences read as one passage.</summary>
+    private static IEnumerable<string?> PassageOf(ActionTextOutput output) =>
+        output.Summary.Sentences.Concat(output.WhyItMatters.Sentences).Select(item => item?.Sentence).Prepend(output.Headline.Text);
 
     private static void CheckNoSummarySentence(string text, string field, List<string> errors)
     {

@@ -1,11 +1,15 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.Bills;
 
-/// <summary>The bill text version that a text summary cites, and the characters of it that the model read.</summary>
-internal sealed record SeededBillText(int CharsRead, int CharsTotal, (string Term, string Definition, bool Cut)[]? KeyTerms = null);
+/// <summary>The bill text version that a text summary cites, and the characters of it that the model read. Each key term and sentence cites its quote.
+/// The seed writes one extraction that holds every quote, and cites each quote by its UTF-16 span there.</summary>
+internal sealed record SeededBillText(int CharsRead, int CharsTotal, (string Term, string Definition, bool Cut, string Quote)[]? KeyTerms = null,
+    (string Part, string Sentence, string Quote)[]? Sentences = null);
 
 internal sealed record SeededSponsorship(string Person, string Role, string SponsoredOn, string? WithdrawnOn = null, bool IsOriginal = true);
 
@@ -45,12 +49,20 @@ internal static class BillsSeed
     {
         if (bill.Text is null) return "";
         var package = $"BILLS-{bill.Congress}{bill.BillType}{bill.BillNumber}ih";
+        var extraction = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(bill.RecordId)));
+        var keyTerms = bill.Text.KeyTerms ?? [];
+        var sentences = bill.Text.Sentences ?? [];
+        var text = "SEC. 1. " + string.Join(" ", keyTerms.Select(item => item.Quote).Concat(sentences.Select(item => item.Quote)));
+        string Span(string quote) => $"'{extraction}', {text.IndexOf(quote, StringComparison.Ordinal)}, {quote.Length}";
         return $"""
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+              VALUES ('{extraction}', 'attempt', 'extraction', '{text}', '{new string('f', 64)}');
             INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
               VALUES ({bill.Congress}, '{bill.BillType}', {bill.BillNumber}, '{package}', 'Introduced in House', '2025-01-03',
-                      'https://www.congress.gov/{bill.Congress}/bills/{bill.BillType}{bill.BillNumber}/{package}.htm', 'x', {bill.Text.CharsTotal}, {bill.Text.CharsRead});
+                      'https://www.congress.gov/{bill.Congress}/bills/{bill.BillType}{bill.BillNumber}/{package}.htm', '{extraction}', {bill.Text.CharsTotal}, {bill.Text.CharsRead});
             UPDATE action_revisions SET text_package_id = '{package}', why_it_matters = 'It pays landlords.' WHERE record_id = '{bill.RecordId}';
-            {string.Join("\n", (bill.Text.KeyTerms ?? []).Select((item, position) => $"INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut) VALUES ('{bill.RecordId}', 1, {position}, '{item.Term}', 'x', {position * 100}, {item.Definition.Length}, '{item.Definition}', {(item.Cut ? "true" : "false")});"))}
+            {string.Join("\n", keyTerms.Select((item, position) => $"INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut) VALUES ('{bill.RecordId}', 1, {position}, '{item.Term}', {Span(item.Quote)}, '{item.Definition}', {(item.Cut ? "true" : "false")});"))}
+            {string.Join("\n", sentences.Select((item, position) => $"INSERT INTO action_revision_text_citations (record_id, revision_number, position, part, citation_extraction_id, citation_start, citation_length, sentence) VALUES ('{bill.RecordId}', 1, {position}, '{item.Part}', {Span(item.Quote)}, '{item.Sentence}');"))}
             """;
     }
 
