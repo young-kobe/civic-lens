@@ -20,16 +20,18 @@ public sealed class PublicReadIndexesMigrationTests(PostgresCollection postgres)
             await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
             var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, "20261107180000_PublicReadIndexes") < 0);
 
-            await db.GetService<IMigrator>().MigrateAsync(previous);
+            var migrator = db.GetService<IMigrator>();
+            await migrator.MigrateAsync(previous);
             Assert.Empty(await IndexDefinitionsAsync(database));
 
-            await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
+            await migrator.MigrateAsync("20261107180000_PublicReadIndexes");
             var definitions = await IndexDefinitionsAsync(database);
             Assert.Equal(2, definitions.Length);
             Assert.Contains(definitions, definition => definition.Contains("(congress, bill_number, bill_type, record_id, revision_number)", StringComparison.Ordinal)
                 && definition.Contains("WHERE ((headline IS NOT NULL) AND (event_on IS NOT NULL))", StringComparison.Ordinal));
             Assert.Contains(definitions, definition => definition.Contains("(list_id) INCLUDE (vote_cast)", StringComparison.Ordinal));
 
+            await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
             await using var connection = new NpgsqlConnection(database);
             await connection.OpenAsync();
             await using (var allowed = new NpgsqlCommand("SET ROLE civic_lens_public; SELECT record_id FROM public_api.votes LIMIT 0; SELECT record_id FROM public_api.bills LIMIT 0;", connection))

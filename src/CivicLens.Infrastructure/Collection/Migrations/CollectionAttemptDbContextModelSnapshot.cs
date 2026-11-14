@@ -9436,9 +9436,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.HasIndex("CitationExtractionId");
 
                     b.HasIndex("ListId")
-                        .HasDatabaseName("ix_vote_member_list_entries_tallies");
+                        .HasDatabaseName("ix_vote_member_list_entries_members");
 
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ListId"), new[] { "VoteCast" });
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("ListId"), new[] { "PersonId", "Party", "VoteCast" });
 
                     b.HasIndex("PersonId", "ListId")
                         .HasDatabaseName("ix_vote_member_list_entries_person");
