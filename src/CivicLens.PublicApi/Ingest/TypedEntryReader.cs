@@ -19,11 +19,11 @@ public sealed class TypedEntryReader(NpgsqlTransaction snapshot)
         await using var command = keys.Command(snapshot, $"""
             SELECT x.kind, x.record_id, x.revision_number, x.headline, x.source_host, x.event_date, x.bill_line, x.bill_title, x.document_type,
                    x.link_type, x.statement_record_id, x.target_kind, x.target_record_id, f.first_published_at_utc_ticks
-              FROM public_api.record_entries x
+              FROM unnest(@ids, @revisions) k(record_id, revision_number)
+             CROSS JOIN LATERAL (SELECT * FROM public_api.record_entries x WHERE {RevisionKeys.Match} OFFSET 0) x
              CROSS JOIN LATERAL (
                   SELECT f.first_published_at_utc_ticks FROM public_api.record_first_publications f
                    WHERE f.kind = x.kind AND f.record_id = x.record_id OFFSET 0) f
-             WHERE {RevisionKeys.Filter}
             """);
         var entries = new Dictionary<(string, int), PublishedRecordEntry>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -64,9 +64,11 @@ public sealed class TypedEntryReader(NpgsqlTransaction snapshot)
     {
         await using var command = keys.Command(snapshot, $"""
             SELECT x.record_id, x.revision_number, x.official_id, n.name, x.is_matched
-              FROM public_api.record_officials x
-              LEFT JOIN public_api.release_officials n ON n.release_number = @release AND n.official_id = x.official_id
-             WHERE {RevisionKeys.Filter}
+              FROM unnest(@ids, @revisions) k(record_id, revision_number)
+             CROSS JOIN LATERAL (SELECT * FROM public_api.record_officials x WHERE {RevisionKeys.Match} OFFSET 0) x
+              LEFT JOIN LATERAL (
+                   SELECT n.name FROM public_api.release_officials n
+                    WHERE n.release_number = @release AND n.official_id = x.official_id OFFSET 0) n ON TRUE
              ORDER BY x.record_id, x.revision_number, x."position"
             """);
         command.Parameters.AddWithValue("release", releaseNumber);
@@ -80,12 +82,16 @@ public sealed class TypedEntryReader(NpgsqlTransaction snapshot)
     }
 
     private static readonly string IssuesSql = $"""
-        SELECT x.record_id, x.revision_number, x.issue_id FROM public_api.record_issues x WHERE {RevisionKeys.Filter}
+        SELECT x.record_id, x.revision_number, x.issue_id
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.record_issues x WHERE {RevisionKeys.Match} OFFSET 0) x
          ORDER BY x.record_id, x.revision_number, x."position"
         """;
 
     private static readonly string PolicyAreasSql = $"""
-        SELECT x.record_id, x.revision_number, x.policy_area_id FROM public_api.record_policy_areas x WHERE {RevisionKeys.Filter}
+        SELECT x.record_id, x.revision_number, x.policy_area_id
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.record_policy_areas x WHERE {RevisionKeys.Match} OFFSET 0) x
          ORDER BY x.record_id, x.revision_number, x."position"
         """;
 
