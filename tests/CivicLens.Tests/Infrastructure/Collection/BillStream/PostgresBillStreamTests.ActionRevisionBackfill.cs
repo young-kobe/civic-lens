@@ -76,7 +76,7 @@ public sealed partial class PostgresBillStreamTests
 
         Assert.Equal((1, 0, 1), (result.Examined, result.Moved, result.Skipped));
         Assert.Equal("RebuildMismatch", Assert.Single(result.SkippedRevisions).Reason);
-        Assert.Null(await ScalarAsync("SELECT introduced_on FROM action_revisions"));
+        Assert.Equal(true, await ScalarAsync("SELECT introduced_on IS NULL FROM action_revisions"));
         Assert.Equal((0, 1, 0), Counts(await VerifyActionRevisionsAsync()));
     }
 
