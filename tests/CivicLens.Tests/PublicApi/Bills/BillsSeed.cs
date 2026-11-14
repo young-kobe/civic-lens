@@ -40,9 +40,19 @@ internal sealed record SeededBill(char Id, string EventOn)
 
 internal static class BillsSeed
 {
-    public static async Task AddBillsAsync(string database, params SeededBill[] bills)
+    public static Task AddBillsAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, false, bills);
+
+    /// <summary>Seeds bills at a schema before <c>action_revisions.introduced_on</c>, so the rows leave that column out.</summary>
+    public static Task AddBillsBeforeIntroducedOnAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, true, bills);
+
+    /// <summary>Stands in for <c>actions revisions backfill</c> after a test upgrades a database whose revisions have no introduced date yet.
+    /// It gives each such revision its event date, as the bill views of the test need a date and not a particular one.</summary>
+    public static Task FillIntroducedDatesAsync(string database) => ViewsSeed.ExecuteAsync(database,
+        "UPDATE action_revisions SET introduced_on = event_on WHERE introduced_on IS NULL AND event_on IS NOT NULL;");
+
+    private static async Task AddBillsAsync(string database, bool beforeIntroducedOn, SeededBill[] bills)
     {
-        foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill));
+        foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill, beforeIntroducedOn));
     }
 
     private static string EntryRow(SeededBill bill) => bill.BillLine is null ? "" : $"""
@@ -71,7 +81,7 @@ internal static class BillsSeed
             """;
     }
 
-    private static string Insert(SeededBill bill)
+    private static string Insert(SeededBill bill, bool beforeIntroducedOn)
     {
         var last = bill.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
         var cosponsors = bill.Sponsorships.Count(item => item.Role == "Cosponsor");
@@ -80,7 +90,7 @@ internal static class BillsSeed
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('{bill.RecordKind}', '{bill.RecordId}', {bill.FirstRelease}, 1, {last});
             {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId,
-                introducedOn: bill.IntroducedDate)}
+                introducedOn: beforeIntroducedOn ? null : bill.IntroducedDate)}
             {string.Join('\n', bill.Sponsorships.Select((item, position) => PublicActionRows.ActionSponsorship(
                 bill.RecordId, 1, position, item.Person, item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn)))}
             {string.Join('\n', bill.Issues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, position, true)))}

@@ -49,6 +49,7 @@ public sealed class PublicApiBillSponsorPartiesAndTimesMigrationTests(PostgresCo
             }
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
+            await BillsSeed.FillIntroducedDatesAsync(database);
             await using var publicRead = new NpgsqlConnection(database);
             await publicRead.OpenAsync();
             await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", publicRead)) await role.ExecuteNonQueryAsync();

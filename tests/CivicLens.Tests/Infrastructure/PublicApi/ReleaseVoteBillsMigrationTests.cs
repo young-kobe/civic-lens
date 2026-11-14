@@ -54,6 +54,7 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
             Assert.Equal([$"{new string('7', 64)}|{new string('b', 64)}", $"{new string('8', 64)}|none"], grouped);
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
+            await BillsSeed.FillIntroducedDatesAsync(database);
 
             Assert.Equal(columns, await RowsAsync(database, ViewColumns));
             Assert.Equal([$"{new string('7', 64)}|none", $"{new string('8', 64)}|none"], await RowsAsync(database, VoteLinks));
@@ -84,6 +85,7 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
             var grouped = await RowsAsync(database, VoteLinks);
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
+            await BillsSeed.FillIntroducedDatesAsync(database);
             await ExecuteAsync(database, $"""
                 INSERT INTO release_vote_bills (release_number, vote_record_id, bill_record_id)
                 SELECT 1, r.record_id, md5(r.bill_number::text) || md5('x' || r.bill_number::text) FROM vote_revisions r;
@@ -116,7 +118,7 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
     {
         await ViewsSeed.ActivateReleaseAsync(database, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(database, new SeededVote('7', "2026-03-03") { BillNumber = 7 }, new SeededVote('8', "2026-03-02") { BillNumber = 8 });
-        await BillsSeed.AddBillsAsync(database, new SeededBill('b', "2026-01-01") { BillNumber = 7 }, new SeededBill('d', "2026-01-01") { BillNumber = 7 });
+        await BillsSeed.AddBillsBeforeIntroducedOnAsync(database, new SeededBill('b', "2026-01-01") { BillNumber = 7 }, new SeededBill('d', "2026-01-01") { BillNumber = 7 });
     }
 
     // Vote n links bill n. The bills carry the record ids of md5(n) and md5('x' + n), as the seed of the issue fill test does.
@@ -128,7 +130,7 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
         await connection.OpenAsync();
         foreach (var statement in $"""
             SET session_replication_role = replica;
-            {PublicActionRows.ActionRevision("template", 1, "Person", "2025-02-01", 1)}
+            {PublicActionRows.ActionRevision("template", 1, "Person", "2025-02-01", 1, introducedOn: null)}
             CREATE TEMP TABLE bulk_ids AS
             SELECT n, md5(n::text) || md5('x' || n::text) AS id FROM generate_series(1, {Bills}) n;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)

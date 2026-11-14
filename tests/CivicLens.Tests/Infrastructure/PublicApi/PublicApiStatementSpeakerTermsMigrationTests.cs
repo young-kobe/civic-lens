@@ -37,6 +37,7 @@ public sealed class PublicApiStatementSpeakerTermsMigrationTests(PostgresCollect
                 """));
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
+            await BillsSeed.FillIntroducedDatesAsync(database);
 
             Assert.Equal("Democrat Democrat Representative House MA 1", await ScalarAsync(database, """
                 SELECT b.party || ' ' || t.party || ' ' || t.kind || ' ' || t.office || ' ' || t.state || ' ' || t.district

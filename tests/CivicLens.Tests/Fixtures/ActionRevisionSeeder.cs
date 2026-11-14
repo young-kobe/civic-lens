@@ -9,7 +9,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CivicLens.Tests.Fixtures;
 
 /// <summary>Stores an action revision with the row builder that production code uses, so that the columns and child rows are as a real write leaves them.
-/// A revision by code or analysis gets a run ID that the revision key derives, because the table requires a unique one. It relaxes the foreign keys, because the test needs neither the draft nor the candidate. A second call for the same revision replaces the first.</summary>
+/// A revision by code or analysis gets a run ID that the revision key derives, because the table requires a unique one. It relaxes the foreign keys, because the test needs neither the draft nor the candidate. With no candidate there is no stored detail page, so the introduced date is
+/// the sponsor entry date, which <c>ActionBillReader</c> writes from the same bill record, or the event date when no sponsor is tracked. A second call for the same revision replaces the first.</summary>
 internal static class ActionRevisionSeeder
 {
     public static async Task AddAsync(string connectionString, ActionDraftRevision revision, string? runId = null)
@@ -70,7 +71,10 @@ internal static class ActionRevisionSeeder
 
     private static object CreateRow(ActionDraftRevision revision, string? runId)
     {
-        return typeof(PostgresActionReviewStore).Assembly.GetType($"{typeof(PostgresActionReviewStore).Namespace}.ActionRevisionRows")!
+        var row = typeof(PostgresActionReviewStore).Assembly.GetType($"{typeof(PostgresActionReviewStore).Namespace}.ActionRevisionRows")!
             .GetMethod("Create")!.Invoke(null, [revision, runId, TestCodeVersion.Current])!;
+        var sponsor = revision.Sponsorships.FirstOrDefault(item => item.Role == ActionSponsorshipRole.Sponsor);
+        row.GetType().GetProperty("IntroducedOn")!.SetValue(row, (DateOnly?)(sponsor?.SponsoredOn ?? revision.EventOn()));
+        return row;
     }
 }
