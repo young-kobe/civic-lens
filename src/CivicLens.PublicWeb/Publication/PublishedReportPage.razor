@@ -1,13 +1,13 @@
 @using CivicLens.Publication.Contracts
 
-<PublicPage Section="null" CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person reads each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)">
+<PublicPage Section="null" CanonicalPath="@PublicationProtocol.ReportPagePath" NoIndex="true" Title="Report a problem" Description="Tell Civic Lens what is wrong with a published record. A person reads each report." ExternalScript="@(IsAvailable ? TurnstileScript : null)" RootPath="@RootPath">
     <PageHeader Title="Report a problem" Lede="Tell us what is wrong with a published record. A person reads each report." />
     @if (!IsAvailable)
     {
         <Panel Label="Report a problem" Padded="true">
             <EmptyState Level="2" Title="Reporting is not available"
                         Text="This release has no report service. Browse the published records instead.">
-                <Action><Button Href="@PublicationProtocol.AllRecordsPagePath(1)">All records</Button></Action>
+                <Action><Button Href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</Button></Action>
             </EmptyState>
         </Panel>
     }
@@ -17,9 +17,9 @@
             <div class="report-subject" data-report-subject>
                 <p class="report-subject-eyebrow">You are reporting this record</p>
                 <h2 class="report-subject-title" hidden data-report-subject-title><a data-report-subject-link></a></h2>
-                <p class="muted small"><span data-report-subject-revision></span> <a href="@PublicationProtocol.ReportPagePath">Wrong record? Choose another.</a></p>
+                <p class="muted small"><span data-report-subject-revision></span> <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Wrong record? Choose another.</a></p>
             </div>
-            <form class="form" data-report-title-parameter="@ReaderReportProtocol.TitleParameter" data-report-title-limit="@ReaderReportProtocol.MaximumTitleCharacters" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@PublicationProtocol.RecordPagePath("{id}")">
+            <form class="form" data-report-title-parameter="@ReaderReportProtocol.TitleParameter" data-report-title-limit="@ReaderReportProtocol.MaximumTitleCharacters" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@(RootPath + PublicationProtocol.RecordPagePath("{id}"))">
                 <input type="hidden" name="@ReaderReportProtocol.RecordIdField" data-report-query />
                 <input type="hidden" name="@ReaderReportProtocol.RevisionField" data-report-query />
                 <FieldSet Legend="What is wrong" Id="report-category">
@@ -44,8 +44,8 @@
             <EmptyState Level="2" Title="Find the record first"
                         Text="@($"To report a record, open the record. Each record page has a link in the footer that starts with \"{PublishedRecordLabels.ReportLinkStart}\". Use that link to come back here. Search for a record, or start with an official.")">
                 <Action>
-                    <Button Href="@PublicationProtocol.SearchPagePath">Search records</Button>
-                    <Button Href="@PublicationProtocol.OfficialsPagePath">Officials</Button>
+                    <Button Href="@(RootPath + PublicationProtocol.SearchPagePath)">Search records</Button>
+                    <Button Href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</Button>
                 </Action>
             </EmptyState>
         </Panel>
@@ -56,7 +56,7 @@
                     <span>This page needs JavaScript to run the check that you are not a robot. Without JavaScript, you cannot send a report here.</span>
                 </div>
             </noscript>
-            <p><a data-report-record href="@PublicationProtocol.AllRecordsPagePath(1)">All records</a></p>
+            <p><a data-report-record href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</a></p>
         </Panel>
     }
     <Panel Title="A problem with the site" Padded="true">
@@ -68,6 +68,8 @@
 
     private const string TurnstileScript = "https://challenges.cloudflare.com/turnstile/v0/api.js";
 
+    /// <summary>The public site root of a server page. The static release leaves it empty, so its links stay relative.</summary>
+    [Parameter] public string RootPath { get; set; } = string.Empty;
     [Parameter] public string? PublicApiUrl { get; set; }
     [Parameter] public string? TurnstileSiteKey { get; set; }
 

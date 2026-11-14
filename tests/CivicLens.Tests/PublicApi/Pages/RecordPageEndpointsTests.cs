@@ -62,7 +62,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal("exact quote", page.QuerySelector(".detail-quotes blockquote")!.TextContent);
         Assert.Equal(["exact quote", "Friday"], page.QuerySelectorAll("#source mark").Select(mark => mark.TextContent));
         Assert.Contains("Said on 2 Mar 2026.", page.QuerySelector(".detail-lede")!.TextContent);
-        Assert.NotNull(page.QuerySelector(".ai-summary-label"));
+        Assert.NotNull(page.QuerySelector(".ai-label"));
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["Textparagraphone[R1]", "Textparagraphtwo[R2][R3]"], page.QuerySelectorAll(".ai-summary p.record-body").Select(text => Regex.Replace(text.TextContent, @"\s+", "")));
         Assert.Equal(["Pinned statement headline", "Pinned document headline", "Bill 7"], page.QuerySelectorAll(".detail-cited li a").Select(link => link.TextContent));
         Assert.Null(page.QuerySelector(".detail-lede"));
-        Assert.NotNull(page.QuerySelector(".ai-summary-label"));
+        Assert.NotNull(page.QuerySelector(".ai-label"));
     }
 
     public static TheoryData<PublishedRecordKind> WithdrawableKinds => new()

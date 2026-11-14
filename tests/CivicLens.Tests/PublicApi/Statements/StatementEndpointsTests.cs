@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
-using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 
@@ -73,9 +72,9 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
         Assert.Equal(1, rows['a'].GetProperty("revisionNumber").GetInt32());
         Assert.Equal("Headline a", rows['a'].GetProperty("headline").GetString());
         Assert.Equal(["official-z", "official-a"], rows['a'].GetProperty("speakerIds").EnumerateArray().Select(id => id.GetString()!).ToArray());
-        Assert.Equal(PublishedRecordLabels.StatementModelWording, rows['a'].GetProperty("label").GetString());
+        Assert.Equal(AiLabelWords.StatementModelWording, rows['a'].GetProperty("label").GetString());
         Assert.Equal("model", rows['b'].GetProperty("textOrigin").GetString());
-        Assert.Equal(PublishedRecordLabels.StatementCheckedByPersonWording, rows['b'].GetProperty("label").GetString());
+        Assert.Equal(AiLabelWords.StatementCheckedByPersonWording, rows['b'].GetProperty("label").GetString());
         Assert.Equal("person", rows['c'].GetProperty("textOrigin").GetString());
         Assert.Equal(JsonValueKind.Null, rows['c'].GetProperty("label").ValueKind);
     }

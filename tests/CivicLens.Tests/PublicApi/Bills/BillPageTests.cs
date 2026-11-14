@@ -259,7 +259,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Equal($"\"{grant}\"", terms[1].QuerySelector("blockquote")!.TextContent);
         Assert.Equal([false, true], terms.Select(term => term.QuerySelector(".bill-term-cut") is not null));
         Assert.Equal(BillTextWords.KeyTermsLabel,
-            page.QuerySelector(".bill-terms .ai-summary-label")!.TextContent);
+            page.QuerySelector(".bill-terms .ai-label")!.TextContent);
         Assert.Equal("Based on: Introduced in House, 2 Mar 2026. Read the full text on Congress.gov. This summary covers the first 59,987 of 85,000 characters. Later sections are not covered.",
             page.QuerySelectorAll("details#source dt").Single(item => item.TextContent == "Bill text").NextElementSibling!.TextContent);
     }

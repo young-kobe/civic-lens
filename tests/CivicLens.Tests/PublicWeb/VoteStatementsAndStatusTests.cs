@@ -10,6 +10,16 @@ public sealed class VoteStatementsAndStatusTests
         new(id.PadRight(64, 'c'), new DateOnly(2026, 9, 12), "A statement about the bill", null, PublishedTextOrigin.Person, approver, [.. speakers.Select(speaker => new VoteStatementSpeaker(speaker.Id, speaker.Name))]);
 
     [Fact]
+    public async Task TheVoteSummaryLabelAndEachStatementLabelAreDrawnByAiLabel()
+    {
+        var statement = Statement("a", PublishedApprover.Code, ("o1", "Ada Able")) with { Label = AiLabelWords.StatementModelWording, TextOrigin = PublishedTextOrigin.Model };
+        var page = await RenderAsync(Vote() with { Statements = [statement], StatementTotal = 1 });
+
+        AiLabelAssert.DrawnByAiLabel(page, AiLabelWords.ModelWording);
+        AiLabelAssert.DrawnByAiLabel(page, AiLabelWords.StatementModelWording);
+    }
+
+    [Fact]
     public async Task NoLinkedStatementShowsNoSection()
     {
         var page = await RenderAsync(Vote());

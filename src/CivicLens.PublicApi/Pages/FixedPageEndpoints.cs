@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Briefs;
+using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicWeb.Publication;
@@ -9,7 +10,7 @@ using Microsoft.AspNetCore.Routing;
 
 namespace CivicLens.PublicApi.Pages;
 
-/// <summary>The gated previews of the pages with fixed text and the two lists: About, Method, the weekly briefs list, and the issues index.
+/// <summary>The gated previews of the pages with fixed text and the two lists: About, Method, the glossary, the report page, the weekly briefs list, and the issues index.
 /// Each path is the public path of its page under the server-page prefix. The Caddy cutover maps them later.</summary>
 public static class FixedPageEndpoints
 {
@@ -22,6 +23,17 @@ public static class FixedPageEndpoints
         routes.MapGet(Path(PublicationProtocol.MethodPagePath), (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(() => responder.RespondAsync<MethodPage>(context, StatusCodes.Status200OK,
                 new Dictionary<string, object?> { [nameof(MethodPage.RootPath)] = rootPath }, cancellationToken)));
+        routes.MapGet(Path(PublicationProtocol.GlossaryPagePath), (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
+            ApiResults.GuardAsync(() => responder.RespondAsync<PublishedGlossaryPage>(context, StatusCodes.Status200OK,
+                new Dictionary<string, object?> { [nameof(PublishedGlossaryPage.RootPath)] = rootPath }, cancellationToken)));
+        routes.MapGet(Path(PublicationProtocol.ReportPagePath), (HttpContext context, HomePageReader home, PublicApiOptions options, ServerPageResponder responder,
+            CancellationToken cancellationToken) => ApiResults.GuardAsync(() => responder.RespondAsync<PublishedReportPage>(context, StatusCodes.Status200OK,
+                new Dictionary<string, object?>
+                {
+                    [nameof(PublishedReportPage.RootPath)] = rootPath,
+                    [nameof(PublishedReportPage.PublicApiUrl)] = home.BrowserApiRoot,
+                    [nameof(PublishedReportPage.TurnstileSiteKey)] = options.TurnstileSiteKey
+                }, cancellationToken)));
         routes.MapGet(Path(PublicationProtocol.BriefsPagePath(1)), (HttpContext context, BriefListReader briefs, ServerPageResponder responder,
             CancellationToken cancellationToken) => RespondBriefsAsync(1, context, briefs, responder, rootPath, cancellationToken));
         routes.MapGet(Path("briefs-{page:int:min(2)}.html"), (int page, HttpContext context, BriefListReader briefs, ServerPageResponder responder,

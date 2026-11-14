@@ -92,7 +92,7 @@ public sealed class BillDetailPageTests
 
         Assert.Same(fold, summary.NextElementSibling);
         Assert.True(summary.ClassList.Contains("ai-summary-ai"));
-        Assert.Equal(Bill.Label, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(Bill.Label, summary.QuerySelector(".ai-label")!.TextContent);
         Assert.Equal(["This bill imposes sanctions.", "It extends a law."], fold.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent));
         Assert.Null((await RenderAsync(Bill with { CrsText = null })).QuerySelector(".bill-main > details.source-fold"));
     }
@@ -100,13 +100,13 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task OnlyAModelSummaryWithALabelGetsTheAiStyleAndNoLabelColumnShowsPlainText()
     {
-        var code = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = PublishedRecordLabels.CodeWording })).QuerySelector(".ai-summary")!;
+        var code = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording })).QuerySelector(".ai-summary")!;
         var plain = (await RenderAsync(Bill with { Label = null })).QuerySelector(".ai-summary")!;
 
         Assert.False(code.ClassList.Contains("ai-summary-ai"));
-        Assert.Equal(PublishedRecordLabels.CodeWording, code.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(AiLabelWords.CodeWording, code.QuerySelector(".ai-label")!.TextContent);
         Assert.False(plain.ClassList.Contains("ai-summary-ai"));
-        Assert.Null(plain.QuerySelector(".ai-summary-label"));
+        Assert.Null(plain.QuerySelector(".ai-label"));
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class BillDetailPageTests
 
         Assert.Equal(Root + $"records/{new string('b', 64)}.html", row.QuerySelector("h3 a")!.GetAttribute("href"));
         Assert.Contains("roll call 410, 119th Congress, session 2. Vote to pass or agree to. Result: Passed", row.QuerySelector(".shared-vote-meta")!.TextContent);
-        Assert.Equal("AI summary. Drafted by an AI model from reviewed records.", row.QuerySelector(".shared-vote-label")!.TextContent);
+        Assert.Equal("AI summary. Drafted by an AI model from reviewed records.", row.QuerySelector(".ai-label")!.TextContent);
         Assert.Null(row.QuerySelector(".shared-vote-casts"));
         Assert.Null(page.QuerySelector(".shared-vote-rows > h2"));
     }
@@ -351,7 +351,7 @@ public sealed class BillDetailPageTests
 
         Assert.Same(section, page.QuerySelector(".bill-main > .ai-summary")!.NextElementSibling);
         Assert.Equal("Key terms", section.QuerySelector("h2")!.TextContent);
-        var label = section.QuerySelector(".ai-summary.ai-summary-ai > .ai-summary-label")!;
+        var label = section.QuerySelector(".ai-summary.ai-summary-ai > .ai-label")!;
         Assert.Equal(BillTextWords.KeyTermsLabel, label.TextContent);
         Assert.Equal(["Landlord", "Tenant"], terms.Select(term => term.QuerySelector("dt")!.TextContent));
         Assert.Equal("\"The term “landlord” means an owner of a dwelling unit\"", terms[0].QuerySelector("blockquote.quote")!.TextContent);
@@ -381,7 +381,7 @@ public sealed class BillDetailPageTests
         var fold = page.QuerySelector("details#source")!;
         var source = fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Bill text").NextElementSibling!.TextContent;
 
-        Assert.Equal(BillTextWords.Label, summary.QuerySelector(".ai-summary-label")!.TextContent);
+        Assert.Equal(BillTextWords.Label, summary.QuerySelector(".ai-label")!.TextContent);
         Assert.Equal(["The bill would add a tax credit. It would end in 2030.", "Families with a child could pay less tax."], summary.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent));
         Assert.Equal(BillTextWords.WhyItMattersHeading, summary.QuerySelector("h2.bill-why-title")!.TextContent);
         Assert.Equal("Based on: Introduced in House, 11 Sep 2025. Read the full text on Congress.gov. This summary covers the first 60,000 of 84,210 characters. Later sections are not covered.", source);
@@ -419,7 +419,19 @@ public sealed class BillDetailPageTests
             whole.QuerySelectorAll("dt").Single(term => term.TextContent == "Bill text").NextElementSibling!.TextContent);
         Assert.Null(crs.QuerySelector(".bill-why-title"));
         Assert.DoesNotContain(crs.QuerySelectorAll("details#source dt"), term => term.TextContent == "Bill text");
-        Assert.Equal(PublishedRecordLabels.ModelWording, crs.QuerySelectorAll("details#source dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
+        Assert.Equal(Bill.Label, crs.QuerySelectorAll("details#source dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheSummaryKeyTermsSourceFoldAndVoteRowLabelsOfTheBillPageAreDrawnByAiLabel()
+    {
+        var model = await RenderAsync(TextBill with { KeyTerms = [new("Tenant", "The term \"tenant\" means a person who rents.", false, "The term “tenant” means a person who rents.")], KeyTermsLabel = BillTextWords.KeyTermsLabel });
+        var code = await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording });
+
+        AiLabelAssert.DrawnByAiLabel(model, BillTextWords.Label);
+        AiLabelAssert.DrawnByAiLabel(model, BillTextWords.KeyTermsLabel);
+        AiLabelAssert.DrawnByAiLabel(model, Bill.Votes[0].Label!);
+        AiLabelAssert.DrawnByAiLabel(code, AiLabelWords.CodeWording);
     }
 
     private static async Task<IDocument> RenderAsync(BillPageData data)

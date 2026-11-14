@@ -179,7 +179,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             SELECT related_headline || '|' || related_text_origin || '|' || related_label FROM public_api.record_links WHERE kind = '{pageKind}' AND record_id = '{page}'
             """);
 
-        var label = modelKind == "statement" ? PublishedRecordLabels.StatementModelWording : PublishedRecordLabels.ModelWording;
+        var label = modelKind == "statement" ? AiLabelWords.StatementModelWording : AiLabelWords.ModelWording;
         Assert.Equal([$"Model headline|Model|{label}"], rows);
     }
 
@@ -198,7 +198,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         [
             "Doe on rent|Person|none",
             "Doe on rent|Person|none",
-            $"Housing bill|Code|{PublishedRecordLabels.CodeWording}",
+            $"Housing bill|Code|{AiLabelWords.CodeWording}",
             "Vote on housing|Person|none"
         ], await PublicAsync("""
             SELECT related_headline || '|' || related_text_origin || '|' || coalesce(related_label, 'none') FROM public_api.record_links ORDER BY related_headline, related_kind
@@ -247,8 +247,8 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             """);
 
         Assert.Equal(expected, fromView);
-        Assert.Contains($"Statement 0|Model|{PublishedRecordLabels.StatementModelWording}", fromView);
-        Assert.Contains($"Statement 1|Model|{PublishedRecordLabels.StatementCheckedByPersonWording}", fromView);
+        Assert.Contains($"Statement 0|Model|{AiLabelWords.StatementModelWording}", fromView);
+        Assert.Contains($"Statement 1|Model|{AiLabelWords.StatementCheckedByPersonWording}", fromView);
         Assert.Contains("Statement 2|Person|none", fromView);
     }
 
@@ -263,7 +263,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
             """);
         const string query = "SELECT related_label FROM public_api.record_links WHERE kind = 'action'";
         var published = await PublicAsync(query);
-        Assert.Equal([PublishedRecordLabels.StatementModelWording], published);
+        Assert.Equal([AiLabelWords.StatementModelWording], published);
 
         await SeedAsync(PublicRecordPageRows.StatementApproval(Statement1, 1, 2, "auth0|owner"));
         Assert.Equal(published, await PublicAsync(query));

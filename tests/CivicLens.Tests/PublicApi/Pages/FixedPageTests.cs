@@ -1,6 +1,8 @@
 using System.Net;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.Host.Publication;
+using CivicLens.PublicApi;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -10,17 +12,27 @@ using CivicLens.Tests.PublicApi.Votes;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
-/// <summary>The gated About, Method, weekly briefs list, and issues index pages, and the freshness line that the shell shows on every server page.</summary>
+/// <summary>The gated About, Method, glossary, report, weekly briefs list, and issues index pages, and the freshness line that the shell shows on every server page.</summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
 public sealed class FixedPageTests(PostgresCollection postgres)
 {
     private const string Root = "https://civic-lens.test/";
+    private const string ApiOrigin = "https://api.civic-lens.test";
+    private const string SiteKey = "1x00000000000000000000AA";
     private static readonly DateTimeOffset PublishedAt = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
 
-    private async Task<ApiHost> StartAsync(params SeededVote[] votes)
+    private Task<ApiHost> StartAsync(params SeededVote[] votes) => StartAsync(options => options, votes);
+
+    private Task<ApiHost> StartWithReportAsync(string? browserApi, string? siteKey) => StartAsync(options => options with
     {
-        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") });
+        BrowserApiUrl = PublicBaseUrl.Parse(browserApi, PublicApiOptions.BrowserApiUrlVariable),
+        TurnstileSiteKey = siteKey
+    });
+
+    private async Task<ApiHost> StartAsync(Func<PublicApiOptions, PublicApiOptions> change, params SeededVote[] votes)
+    {
+        var host = await ApiHost.StartAsync(postgres, options => change(options with { PublicBaseUrl = PublicBaseUrl.Parse(Root, "test") }));
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, votes);
         return host;
@@ -30,6 +42,13 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     {
         using var response = await host.Client.GetAsync(ServerPageEndpoints.Prefix + (path.Length == 0 ? string.Empty : "/" + path));
         return (response.StatusCode, new HtmlParser().ParseDocument(await response.Content.ReadAsStringAsync()));
+    }
+
+    /// <summary>The text of the page body without the freshness line, which only a server page shows.</summary>
+    private static string MainText(IDocument page)
+    {
+        page.QuerySelector(".public-freshness")?.Remove();
+        return page.QuerySelector("main")!.TextContent;
     }
 
     private static string Freshness(IDocument page) => string.Join(" | ", page.QuerySelectorAll(".public-freshness span").Select(span => span.TextContent));
@@ -70,6 +89,74 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.DoesNotContain("closest vote", text, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(page.QuerySelector("#" + BoardWords.AgreementId));
         Assert.Contains(page.QuerySelectorAll("main a"), link => link.GetAttribute("href") == Root + PublicationProtocol.OfficialsPagePath);
+    }
+
+    [Fact]
+    public async Task TheGlossaryIsServedInTheServerShellWithTheTextOfTheStaticGlossaryAndItsCanonicalPath()
+    {
+        await using var host = await StartAsync();
+        var staticPage = new HtmlParser().ParseDocument(await new ReleaseRenderer(null, null, PublicBaseUrl.Parse(Root, "test")).RenderGlossaryAsync(CancellationToken.None));
+
+        var (status, page) = await GetAsync(host, PublicationProtocol.GlossaryPagePath);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(Root + PublicationProtocol.GlossaryPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
+        Assert.Equal("Glossary", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(MainText(staticPage), MainText(page));
+        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
+        Assert.Equal("page", page.QuerySelectorAll(".public-footer a").Single(link => link.GetAttribute("href") == Root + PublicationProtocol.GlossaryPagePath).GetAttribute("aria-current"));
+        Assert.All(page.QuerySelectorAll("link[rel=stylesheet]"), link => Assert.StartsWith(Root, link.GetAttribute("href")));
+    }
+
+    [Fact]
+    public async Task TheReportPageIsServedInTheServerShellWithTheTextOfTheStaticReportPageAndRootedLinks()
+    {
+        await using var host = await StartWithReportAsync(ApiOrigin, SiteKey);
+        var staticPage = new HtmlParser().ParseDocument(await new ReleaseRenderer(ApiOrigin, SiteKey, PublicBaseUrl.Parse(Root, "test")).RenderReportAsync(CancellationToken.None));
+
+        var (status, page) = await GetAsync(host, PublicationProtocol.ReportPagePath);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(Root + PublicationProtocol.ReportPagePath, page.QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
+        Assert.Equal("noindex", page.QuerySelector("meta[name=robots]")!.GetAttribute("content"));
+        Assert.Equal("Report a problem", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(MainText(staticPage), MainText(page));
+        Assert.Equal(PublicSections.PreviewIssuesPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.RecordPagePath("{id}"), page.QuerySelector("form[data-report-api]")!.GetAttribute("data-record-page"));
+        Assert.All(page.QuerySelectorAll("main a[href]:not([href^='mailto:'])"), link => Assert.StartsWith(Root, link.GetAttribute("href")));
+        foreach (var path in new[] { PublicationProtocol.SearchPagePath, PublicationProtocol.OfficialsPagePath, PublicationProtocol.AllRecordsPagePath(1) })
+            Assert.Contains(page.QuerySelectorAll("main a"), link => link.GetAttribute("href") == Root + path);
+    }
+
+    [Fact]
+    public async Task TheReportFormPostsToTheBrowserApiOriginWithTheSiteKeyThatPublishAlsoReads()
+    {
+        await using var host = await StartWithReportAsync(ApiOrigin + "/", SiteKey);
+
+        var (_, page) = await GetAsync(host, PublicationProtocol.ReportPagePath);
+
+        Assert.Equal(ApiOrigin + ReaderReportProtocol.SubmitPath, page.QuerySelector("form[data-report-api]")!.GetAttribute("data-report-api"));
+        Assert.Equal(SiteKey, page.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
+        Assert.Single(page.QuerySelectorAll("script[src^='https://challenges.cloudflare.com/turnstile/']"));
+        Assert.DoesNotContain("Reporting is not available", page.QuerySelector("main")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData(null, SiteKey)]
+    [InlineData(ApiOrigin, null)]
+    [InlineData(null, null)]
+    public async Task WithoutTheBrowserApiOriginOrTheSiteKeyTheReportPageSaysReportingIsNotAvailable(string? browserApi, string? siteKey)
+    {
+        await using var host = await StartWithReportAsync(browserApi, siteKey);
+
+        var (status, page) = await GetAsync(host, PublicationProtocol.ReportPagePath);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("Reporting is not available", page.QuerySelector(".empty h2")!.TextContent);
+        Assert.Null(page.QuerySelector("main form"));
+        Assert.Null(page.QuerySelector(".cf-turnstile"));
+        Assert.Empty(page.QuerySelectorAll("script[src^='https://challenges.cloudflare.com/']"));
+        Assert.Equal(Root + PublicationProtocol.AllRecordsPagePath(1), page.QuerySelector(".empty a")!.GetAttribute("href"));
     }
 
     [Fact]
@@ -180,6 +267,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     [InlineData(PublicationProtocol.MethodPagePath)]
     [InlineData(PublicationProtocol.FacetsPath)]
     [InlineData(PublicationProtocol.VoteKindsPagePath)]
+    [InlineData(PublicationProtocol.GlossaryPagePath)]
+    [InlineData(PublicationProtocol.ReportPagePath)]
     [InlineData("compare")]
     [InlineData("no-such-page")]
     public async Task EveryServerPageShowsTheNewestRollCallOfEachChamberFromOneOwner(string path)
