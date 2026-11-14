@@ -32,7 +32,7 @@ public sealed class PublicApiOfficialPartyLinesMigrationTests(PostgresCollection
             Assert.Equal(before, after[..before.Length]);
             Assert.Equal(["party", "alignment"], after[before.Length..(before.Length + 2)]);
             var partyLineDefinition = await QueryAsync(connectionString, "SELECT pg_get_viewdef('public_api.official_party_lines'::regclass)");
-            Assert.Contains("FROM public_api.member_votes", partyLineDefinition, StringComparison.Ordinal);
+            Assert.Contains("FROM public_api.official_vote_parties", partyLineDefinition, StringComparison.Ordinal);
             Assert.DoesNotContain("public_api.votes", partyLineDefinition, StringComparison.Ordinal);
             Assert.DoesNotContain("public_api.vote_members", partyLineDefinition, StringComparison.Ordinal);
 

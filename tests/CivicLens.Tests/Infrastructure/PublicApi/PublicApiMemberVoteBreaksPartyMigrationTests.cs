@@ -37,6 +37,7 @@ public sealed class PublicApiMemberVoteBreaksPartyMigrationTests(PostgresCollect
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
+            await ApplyAsync(database, new PublicApiOfficialVoteParties().DownOperations);
             await ApplyAsync(database, new PublicApiMemberVoteTextOrigin().DownOperations);
             await ViewsSeed.ActivateReleaseAsync(database, 1, DateTimeOffset.UnixEpoch, recordCount: Votes.Length);
             await ViewsSeed.AddVotesAsync(database, Votes);

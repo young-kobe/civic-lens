@@ -187,6 +187,45 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AMemberWhoChangesPartyInACongressIsOnBothPartyBoardsWithItsOwnSplitVotesAndOneAttendance()
+    {
+        var votes = Enumerable.Range(0, 25).Select(index => Vote((char)('a' + index), "House", 119, index + 1,
+            ["p0", "p1"], [index == 3 ? "Not Voting" : "Yea", "Nay"], "Split")).ToArray();
+        await using var host = await StartAsync(votes);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, """
+            UPDATE vote_member_list_entries e SET party = 'Republican'
+              FROM vote_revisions v
+             WHERE e.list_id = v.member_list_id AND e.person_id = 'p0' AND v.roll_call_number > 15;
+            """);
+
+        using var answer = await GetAsync(host);
+
+        var boards = answer.RootElement.GetProperty("boards").EnumerateArray().ToArray();
+        var asDemocrat = Member(Board(boards, "house", "Democrat"), "p0");
+        var asRepublican = Member(Board(boards, "house", "Republican"), "p0");
+        Assert.Equal((14, 0), (asDemocrat.GetProperty("cast").GetInt32(), asDemocrat.GetProperty("breaks").GetInt32()));
+        Assert.Equal((10, 10), (asRepublican.GetProperty("cast").GetInt32(), asRepublican.GetProperty("breaks").GetInt32()));
+        foreach (var member in new[] { asDemocrat, asRepublican })
+            Assert.Equal((1, 25), (member.GetProperty("missedVotes").GetProperty("missed").GetInt32(),
+                member.GetProperty("missedVotes").GetProperty("held").GetInt32()));
+    }
+
+    [Fact]
+    public async Task AMissingPartyPinOfAVoteMemberWhoIsNoOfficialStillReturnsUnknownBoardsAndAgreements()
+    {
+        var vote = Vote('a', "House", 119, 1, ["p0", "p1", "x9"], ["Yea", "Nay", "Yea"], "Split");
+        await using var host = await StartAsync([vote]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE vote_member_list_entries SET party = NULL WHERE person_id = 'x9'");
+
+        using var answer = await GetAsync(host);
+
+        Assert.All(answer.RootElement.GetProperty("boards").EnumerateArray(), board =>
+            Assert.Equal(JsonValueKind.Null, board.GetProperty("members").ValueKind));
+        Assert.All(answer.RootElement.GetProperty("agreements").EnumerateArray(), item =>
+            Assert.Equal(JsonValueKind.Null, item.GetProperty("agreement").ValueKind));
+    }
+
+    [Fact]
     public async Task MissingTypedVoteCongressReturnsUnknownBoardsAndAgreements()
     {
         var vote = Vote('a', "House", 119, 1, ["p0", "p1"], ["Yea", "Nay"], "Split");

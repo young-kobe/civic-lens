@@ -22,45 +22,11 @@ public sealed class BoardStore(NpgsqlDataSource views, PartyAgreementStore agree
          ORDER BY official_id, "position"
         """;
 
-    private const string AttendanceSql = """
-        SELECT ranked.official_id, ranked.chamber, ranked.congress, ranked.held, ranked.missed,
-               ranked.first_voted_on, ranked.last_voted_on
-          FROM (
-              SELECT a.official_id, a.chamber, a.congress, a.held, a.missed, a.first_voted_on, a.last_voted_on,
-                     dense_rank() OVER (PARTITION BY a.official_id ORDER BY a.congress DESC) AS congress_rank
-                FROM public_api.official_attendance a
-               WHERE a.congress IS NOT NULL AND a.official_id = ANY(@official_ids)
-          ) ranked
-         WHERE ranked.congress_rank <= 2
-         ORDER BY ranked.official_id, ranked.congress DESC, ranked.chamber
-        """;
-
-    private const string PartyVotesSql = """
-        WITH selected AS (
-            SELECT * FROM unnest(@official_ids::text[], @congresses::integer[]) AS s(official_id, congress)
-        ), memberships AS (
-            SELECT DISTINCT m.official_id, m.chamber, m.congress, m.party
-              FROM public_api.member_votes m
-              JOIN selected s ON s.official_id = m.official_id AND s.congress = m.congress
-             WHERE m.party IN ('Democrat', 'Republican')
-        )
-        SELECT m.official_id, m.congress, m.chamber, m.party,
-               COALESCE(p.cast_count, 0) AS cast_count, COALESCE(p.against_party, 0) AS against_party
-          FROM memberships m
-          LEFT JOIN public_api.official_party_lines p
-            ON p.official_id = m.official_id AND p.chamber = m.chamber AND p.congress = m.congress AND p.party = m.party
-         ORDER BY m.official_id, m.congress DESC, m.chamber, m.party
-        """;
-
-    private const string IncompleteVoteInputsSql = """
-        WITH selected AS (
-            SELECT * FROM unnest(@chambers::text[], @congresses::integer[]) AS s(chamber, congress)
-        )
-        SELECT EXISTS (
-            SELECT 1
-              FROM public_api.member_votes m
-              JOIN selected s ON s.chamber = m.chamber AND s.congress = m.congress
-             WHERE NOT m.alignment_known OR m.party IS NULL)
+    // One pass over the vote figures of every member of the active release. The rows of people who are not officials still count for incompleteness.
+    private const string VoteFiguresSql = """
+        SELECT official_id, chamber, congress, party, held, missed, first_voted_on, last_voted_on, cast_count, against_party, unwritten_votes
+          FROM public_api.official_vote_parties
+         ORDER BY official_id, congress DESC, chamber, party
         """;
 
     public async Task<BoardAnswer?> FindAsync(CancellationToken cancellationToken)
@@ -77,19 +43,18 @@ public sealed class BoardStore(NpgsqlDataSource views, PartyAgreementStore agree
         var officials = await ReadOfficialsAsync(connection, transaction, cancellationToken);
         var officialIds = officials.Select(official => official.OfficialId).ToArray();
         var terms = await ReadTermsAsync(connection, transaction, officialIds, cancellationToken);
-        var attendance = await ReadAttendanceAsync(connection, transaction, officialIds, cancellationToken);
-        var partyVotes = await ReadPartyVotesAsync(connection, transaction, attendance, cancellationToken);
-        var congressesByOfficial = attendance.Keys.GroupBy(key => key.OfficialId, StringComparer.Ordinal)
+        var figures = await ReadVoteFiguresAsync(connection, transaction, [.. officialIds], cancellationToken);
+        var congressesByOfficial = figures.Attendance.Keys.GroupBy(key => key.OfficialId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(key => key.Congress).Distinct().OrderDescending().Take(2).ToArray(), StringComparer.Ordinal);
         var pages = OfficialBoardPage.All(
             [.. officials.Select(official => official.Listing)],
-            [.. officials.Select(official => SummaryOf(official.OfficialId, congressesByOfficial, attendance, partyVotes))]);
+            [.. officials.Select(official => SummaryOf(official.OfficialId, congressesByOfficial, figures.Attendance, figures.PartyVotes))]);
 
         var relevantCongresses = pages.SelectMany(page => new[] { page.Congress, page.NewerCongress }
                 .Where(congress => congress is not null)
                 .Select(congress => (page.Board.Chamber, Congress: congress!.Value)))
-            .Distinct().ToArray();
-        var incompleteVoteInputs = await HasIncompleteVoteInputsAsync(connection, transaction, relevantCongresses, cancellationToken);
+            .Distinct();
+        var incompleteVoteInputs = relevantCongresses.Any(figures.IncompleteCongresses.Contains);
         var agreementAnswers = new Dictionary<PublishedChamber, PartyAgreementAnswer?>();
         foreach (var chamber in Enum.GetValues<PublishedChamber>())
         {
@@ -167,65 +132,53 @@ public sealed class BoardStore(NpgsqlDataSource views, PartyAgreementStore agree
         return terms;
     }
 
-    private static async Task<Dictionary<(string OfficialId, int Congress), List<PublishedAttendanceSummary>>> ReadAttendanceAsync(
-        NpgsqlConnection connection, NpgsqlTransaction transaction, string[] officialIds, CancellationToken cancellationToken)
+    private static async Task<BoardVoteFigures> ReadVoteFiguresAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        HashSet<string> officialIds, CancellationToken cancellationToken)
     {
-        var attendance = new Dictionary<(string OfficialId, int Congress), List<PublishedAttendanceSummary>>();
-        if (officialIds.Length == 0) return attendance;
-        await using var command = new NpgsqlCommand(AttendanceSql, connection, transaction);
-        command.Parameters.AddWithValue("official_ids", officialIds);
+        var figures = new BoardVoteFigures([], [], []);
+        await using var command = new NpgsqlCommand(VoteFiguresSql, connection, transaction);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var key = (reader.GetString(0), reader.GetInt32(2));
-            if (!attendance.TryGetValue(key, out var figures)) attendance.Add(key, figures = []);
-            figures.Add(new PublishedAttendanceSummary
-            {
-                Chamber = Enum.Parse<PublishedChamber>(reader.GetString(1)),
-                Held = checked((int)reader.GetInt64(3)),
-                Missed = checked((int)reader.GetInt64(4)),
-                First = reader.GetFieldValue<DateOnly>(5),
-                Last = reader.GetFieldValue<DateOnly>(6)
-            });
+            var officialId = reader.GetString(0);
+            var chamber = Enum.Parse<PublishedChamber>(reader.GetString(1));
+            var congress = reader.GetInt32(2);
+            var party = reader.IsDBNull(3) ? null : reader.GetString(3);
+            if (party is null || reader.GetInt64(10) > 0) figures.IncompleteCongresses.Add((chamber, congress));
+            if (!officialIds.Contains(officialId)) continue;
+            AddAttendance(figures.Attendance, (officialId, congress), chamber, reader);
+            if (party is "Democrat" or "Republican") AddPartyVotes(figures.PartyVotes, (officialId, congress), chamber, party, reader);
         }
-        return attendance;
+        return figures;
     }
 
-    private static async Task<Dictionary<(string OfficialId, int Congress), List<PublishedPartyVoteSummary>>> ReadPartyVotesAsync(
-        NpgsqlConnection connection, NpgsqlTransaction transaction,
-        Dictionary<(string OfficialId, int Congress), List<PublishedAttendanceSummary>> attendance,
-        CancellationToken cancellationToken)
+    // Each party row of an official repeats the totals of its chamber and Congress, so the first row gives the attendance.
+    private static void AddAttendance(Dictionary<(string OfficialId, int Congress), List<PublishedAttendanceSummary>> attendance,
+        (string OfficialId, int Congress) key, PublishedChamber chamber, NpgsqlDataReader reader)
     {
-        var output = new Dictionary<(string OfficialId, int Congress), List<PublishedPartyVoteSummary>>();
-        var selected = attendance.Keys.ToArray();
-        if (selected.Length == 0) return output;
-        await using var command = new NpgsqlCommand(PartyVotesSql, connection, transaction);
-        command.Parameters.AddWithValue("official_ids", selected.Select(key => key.OfficialId).ToArray());
-        command.Parameters.AddWithValue("congresses", selected.Select(key => key.Congress).ToArray());
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        if (!attendance.TryGetValue(key, out var figures)) attendance.Add(key, figures = []);
+        if (figures.Any(figure => figure.Chamber == chamber)) return;
+        figures.Add(new PublishedAttendanceSummary
         {
-            var key = (reader.GetString(0), reader.GetInt32(1));
-            if (!output.TryGetValue(key, out var figures)) output.Add(key, figures = []);
-            figures.Add(new PublishedPartyVoteSummary
-            {
-                Chamber = Enum.Parse<PublishedChamber>(reader.GetString(2)),
-                Party = reader.GetString(3),
-                SplitVotesCast = checked((int)reader.GetInt64(4)),
-                Breaks = checked((int)reader.GetInt64(5))
-            });
-        }
-        return output;
+            Chamber = chamber,
+            Held = checked((int)reader.GetInt64(4)),
+            Missed = checked((int)reader.GetInt64(5)),
+            First = reader.GetFieldValue<DateOnly>(6),
+            Last = reader.GetFieldValue<DateOnly>(7)
+        });
     }
 
-    private static async Task<bool> HasIncompleteVoteInputsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
-        (PublishedChamber Chamber, int Congress)[] selected, CancellationToken cancellationToken)
+    private static void AddPartyVotes(Dictionary<(string OfficialId, int Congress), List<PublishedPartyVoteSummary>> partyVotes,
+        (string OfficialId, int Congress) key, PublishedChamber chamber, string party, NpgsqlDataReader reader)
     {
-        if (selected.Length == 0) return false;
-        await using var command = new NpgsqlCommand(IncompleteVoteInputsSql, connection, transaction);
-        command.Parameters.AddWithValue("chambers", selected.Select(item => item.Chamber.ToString()).ToArray());
-        command.Parameters.AddWithValue("congresses", selected.Select(item => item.Congress).ToArray());
-        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+        if (!partyVotes.TryGetValue(key, out var figures)) partyVotes.Add(key, figures = []);
+        figures.Add(new PublishedPartyVoteSummary
+        {
+            Chamber = chamber,
+            Party = party,
+            SplitVotesCast = checked((int)reader.GetInt64(8)),
+            Breaks = checked((int)reader.GetInt64(9))
+        });
     }
 
     private static PublishedOfficialSummary SummaryOf(string officialId,
@@ -307,4 +260,9 @@ public sealed class BoardStore(NpgsqlDataSource views, PartyAgreementStore agree
     }
 
     private sealed record BoardOfficial(string OfficialId, OfficialListing Listing);
+
+    private sealed record BoardVoteFigures(
+        Dictionary<(string OfficialId, int Congress), List<PublishedAttendanceSummary>> Attendance,
+        Dictionary<(string OfficialId, int Congress), List<PublishedPartyVoteSummary>> PartyVotes,
+        HashSet<(PublishedChamber Chamber, int Congress)> IncompleteCongresses);
 }

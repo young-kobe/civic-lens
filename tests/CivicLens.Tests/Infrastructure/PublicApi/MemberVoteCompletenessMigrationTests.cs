@@ -19,6 +19,7 @@ public sealed class MemberVoteCompletenessMigrationTests(PostgresCollection post
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
+            await ApplyAsync(database, new PublicApiOfficialVoteParties().DownOperations);
             await ApplyAsync(database, new PublicApiMemberVoteTextOrigin().DownOperations);
             await ApplyAsync(database, new PublicApiMemberVoteBreaksParty().DownOperations);
             var migration = new PublicApiMemberVoteCompleteness();
@@ -71,10 +72,11 @@ public sealed class MemberVoteCompletenessMigrationTests(PostgresCollection post
             await QueryAsPublicAsync(database,
                 "SELECT official_id || '|' || alignment_known::text || '|' || coalesce(alignment, '') || '|' || coalesce(party, '') FROM public_api.member_votes ORDER BY official_id"));
 
+    // The grants of db migrate name views of later migrations, which the test rolled back. So the test grants the one column that db migrate gives the owner for this view.
     private static async Task UpgradeAsync(string database, PublicApiMemberVoteCompleteness migration)
     {
         await ApplyAsync(database, migration.UpOperations);
-        await ApplyGrantsAsync(database);
+        await ExecuteAsync(database, "GRANT SELECT (columns_written) ON public.vote_revisions TO civic_lens_public_owner");
     }
 
     private static async Task ApplyAsync(string database, IReadOnlyList<MigrationOperation> operations)
