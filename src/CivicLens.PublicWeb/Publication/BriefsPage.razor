@@ -7,7 +7,7 @@
     {
         <Panel Label="Weekly briefs" Padded="true">
             <EmptyState Level="2" Title="No weekly briefs yet" Text="Civic Lens has not published a weekly brief. Browse the published records instead.">
-                <Action><Button Href="@(RootPath + PublicationProtocol.AllRecordsPagePath(1))">All records</Button></Action>
+                <Action><Button Href="@VotesList.Href">@VotesList.Label</Button></Action>
             </EmptyState>
         </Panel>
     }
@@ -31,6 +31,9 @@
 @code {
     [Parameter, EditorRequired] public BriefsPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+
+    /// <summary>The votes list replaces the old all records list, which has no server page.</summary>
+    private static PublicSections.RecordList VotesList => PublicSections.ListOf(PublishedRecordKind.Vote);
 
     private int PageCount => PublicationProtocol.PageCount(Data.Total);
 
