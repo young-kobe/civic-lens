@@ -753,6 +753,8 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 Published votes from before code text hold model text. `votes text backfill` moves them to code text. It makes no model call and spends no tokens. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
 
+Do not run this command in production yet. The history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. A separate later PR adds a text rewrite kind to the correction history. Run the command in production only after that PR lands.
+
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes text backfill 500
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes text backfill 500 <cursor>
@@ -1348,6 +1350,8 @@ Do this after a deploy that adds a column that only the ingest fills, such as `s
 3. Empty the index tables: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="TRUNCATE active_release, records, releases"'`.
 4. Start the service: `sudo deploy/scripts/compose.sh up --detach search`. The start empties the cached manifest validators, so the first poll ingests the active release. Search answers 503 until that ingest ends.
 5. Check that the column is filled: `sudo deploy/scripts/compose.sh exec -T search-postgres sh -c 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command="SELECT count(*) FROM records WHERE summary IS NULL AND kind IN ('"'"'statement'"'"', '"'"'documentChange'"'"', '"'"'action'"'"', '"'"'vote'"'"')"'` must print 0.
+
+File `007_hide_cut_bill_lines.sql` clears the bill line and the snippet of each stored row whose bill line ends with the cut mark. Reset the index once after the deploy of the search batch fix (PR #582). The ingest then fills these rows from the active release again.
 
 On the dev machine, remove the search database as in [Run the search service](#run-the-search-service) and start it again.
 

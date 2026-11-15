@@ -483,7 +483,7 @@ A reader asks `VoteRevisionRows` for the rows of a query with their facts, issue
 ## Limits and planned work
 
 - Published votes from before code text keep their model text and its AI label until `votes text backfill` moves them. No redraft runs by itself.
-- The history entry of a moved vote reads "Summary rewritten by the AI model". A correction entry does not record who wrote the new text. The approved title "Wording rewritten by code" needs a stored correction kind first.
+- The history entry of a moved vote reads "Summary rewritten by the AI model". A correction entry does not record who wrote the new text. The approved title "Wording rewritten by code" needs a stored correction kind first. A separate later PR adds a text rewrite kind to the correction history. Until it lands, `votes text backfill` must not run in production.
 - The House source holds no description of an amendment. The House Clerk XML has one, but the vote stream does not capture it.
 - A stored party of an old vote cannot change. A correction needs an explicit owner command. That command is not built.
 - Only the members of the member list are pinned. They are the tracked members. The other member lines of the roll call still take their party from the roster rule at each build. So the party majorities and the alignment of a new revision count those members by the roster of that day.
