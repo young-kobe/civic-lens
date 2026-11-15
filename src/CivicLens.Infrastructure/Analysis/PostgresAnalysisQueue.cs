@@ -180,6 +180,26 @@ internal sealed class PostgresAnalysisQueue<TRow, TBudget, TRun>(IDbContextFacto
         return true;
     }
 
+    /// <summary>Adds a Bypassed run to a settled entry outside a claim, for an owner command, and runs <paramref name="write"/> in the same transaction.
+    /// It locks the entry as a checkpoint does, so the lock order stays the same. The entry keeps its state. An entry that is not Succeeded returns
+    /// <paramref name="unsettledCode"/>, because the worker writes its next result. A refusal of <paramref name="write"/> rolls back the run.</summary>
+    public async Task<string?> AddBypassedRunAsync(TRun run, string unsettledCode,
+        Func<CollectionAttemptDbContext, CancellationToken, Task<string?>> write, CancellationToken cancellationToken)
+    {
+        var analysisRun = mapping.RunOf(run);
+        if (analysisRun.Outcome != AnalysisRunOutcome.Bypassed) throw new ArgumentException("Only a run without a model call settles outside a claim.", nameof(run));
+        analysisRun.ValidateForWrite();
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var row = await LockAsync(db, analysisRun.ComparisonId, cancellationToken);
+        if (row is not { Status: State.Succeeded }) return unsettledCode;
+        await SettleRunAsync(db, row, run, (await DatabaseClock.ReadAsync(db, cancellationToken)).Ticks, cancellationToken);
+        if (await write(db, cancellationToken) is { } refusal) return refusal;
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return null;
+    }
+
     public async Task<bool> ReleaseAsync(AnalysisClaim claim, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);

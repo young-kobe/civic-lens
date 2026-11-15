@@ -203,6 +203,28 @@ public sealed class ActionBillTextDraftTests
         Assert.Contains("reads at grade 14.1 as one passage. Write at grade 12 or below.", error, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Ed Markey backs rent aid for tenants.", "who is not an official in the facts")]
+    [InlineData("It pays rent aid. Congress.gov has no summary of this bill yet.", "Never write that sentence")]
+    public async Task ABillTextSentenceThatNamesAPersonOutsideTheFactsOrSaysThereIsNoSummaryIsRefused(string sentence, string reason)
+    {
+        var refused = ActionDraftResolver.ResolveBillText(Output([(sentence, FirstQuote), (SecondPlain, SecondQuote)]), await ContextAsync(), "run", DateTimeOffset.UnixEpoch);
+
+        Assert.False(refused.IsAccepted);
+        Assert.Contains(refused.Errors, error => error.Contains(reason, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ABillTextSentenceThatNamesATrackedCosponsorIsRefusedBecauseCodeOwnsTheCosponsorList()
+    {
+        var context = await ContextAsync([[new(ActionBillWorld.Markey, "2025-01-04", Original: true)]]);
+
+        var refused = ActionDraftResolver.ResolveBillText(Output([("Ed Markey backs rent aid for tenants.", FirstQuote), (SecondPlain, SecondQuote)]), context, "run",
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Contains(refused.Errors, error => error.Contains("names \"Ed Markey\", a cosponsor", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ABillTextDraftWithABannedPhraseInASentenceIsRefusedWithTheReasonThatNamesThePhrase()
     {
@@ -357,14 +379,14 @@ public sealed class ActionBillTextDraftTests
     {
         var withSummary = ActionBillWorld.Create(summaries: [Summary]);
         var (summaryStore, summaryModel) = await RunAsync(withSummary, new FakeHeadlineSummaryModel().Draft(
-            HeadlineSummaryOutputs.Output(summary: "Elizabeth Warren introduced a housing bill.", issueIds: ["rent"])), On);
+            JsonSerializer.Serialize(new { issueIds = new[] { "rent" }, confidence = 0.8 })), On);
         var (textStore, textModel) = await RunAsync(ActionBillWorld.Create(summaries: []), new FakeHeadlineSummaryModel().Draft(Output()), On);
         var (codeStore, codeModel) = await RunAsync(ActionBillWorld.Create(summaries: [], policyArea: BillGateFixtures.UntrackedPolicyArea),
             new FakeHeadlineSummaryModel(), On, withText: false);
 
         var fromSummary = Assert.Single(summaryStore.Revisions);
-        Assert.Equal((null, "00@2025-01-05T10:00:00Z"), (fromSummary.TextPackageId, fromSummary.SummaryVersion));
-        Assert.Null(Assert.Single(summaryModel.Requests).PromptVersion);
+        Assert.Equal((ReviewTextOrigin.Code, null, "00@2025-01-05T10:00:00Z"), (fromSummary.TextOrigin, fromSummary.TextPackageId, fromSummary.SummaryVersion));
+        Assert.Equal(ActionDraftTask.IssuePromptVersion, Assert.Single(summaryModel.Requests).PromptVersion);
         Assert.Equal(PackageId, Assert.Single(textStore.Revisions).TextPackageId);
         Assert.Equal(ActionDraftTask.TextPromptVersion, Assert.Single(textModel.Requests).PromptVersion);
         Assert.Equal((ReviewTextOrigin.Code, null), (Assert.Single(codeStore.Revisions).TextOrigin, Assert.Single(codeStore.Revisions).TextPackageId));
@@ -452,7 +474,7 @@ public sealed class ActionBillTextDraftTests
     [Fact]
     public async Task ATextPromptOverTheByteCapFallsBackToTheCodeWriteLikeTheSummaryPathInsteadOfBlockingTheEntry()
     {
-        var tight = new ActionDraftSettings(ActionDraftPrompt.MinimumReservation, concurrency: 1, draftsFromBillText: true);
+        var tight = new ActionDraftSettings(ActionIssuePrompt.MinimumReservation, concurrency: 1, draftsFromBillText: true);
 
         var (store, model) = await RunAsync(ActionBillWorld.Create(summaries: [], policyArea: BillGateFixtures.UntrackedPolicyArea),
             new FakeHeadlineSummaryModel(), tight);
@@ -463,9 +485,9 @@ public sealed class ActionBillTextDraftTests
         Assert.Empty(model.Requests);
     }
 
-    private static async Task<ActionDraftContext> ContextAsync()
+    private static async Task<ActionDraftContext> ContextAsync(CosponsorSpec[][]? cosponsorPages = null)
     {
-        var world = ActionBillWorld.Create(summaries: []);
+        var world = ActionBillWorld.Create(cosponsorPages: cosponsorPages, summaries: []);
         var evidence = world.Evidence() with { BillText = Of() };
         var snapshot = (await world.Reader().ReadAsync(evidence, default)).Snapshot!;
         return new ActionDraftContext(evidence, snapshot, BillGateFixtures.HousingChoice(), "housing", BillGateFixtures.Revision().Id);

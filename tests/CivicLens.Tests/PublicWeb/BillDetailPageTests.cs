@@ -118,13 +118,58 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task OnlyAModelSummaryWithALabelGetsTheAiStyleAndNoLabelColumnShowsPlainText()
     {
-        var code = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording })).QuerySelector(".ai-summary")!;
+        var person = (await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Person, Label = null })).QuerySelector(".ai-summary")!;
         var plain = (await RenderAsync(Bill with { Label = null })).QuerySelector(".ai-summary")!;
 
-        Assert.False(code.ClassList.Contains("ai-summary-ai"));
-        Assert.Equal(AiLabelWords.CodeWording, code.QuerySelector(".ai-label")!.TextContent);
+        Assert.Equal(Bill.Summary, person.QuerySelector("p")!.TextContent);
+        Assert.False(person.ClassList.Contains("ai-summary-ai"));
+        Assert.Null(person.QuerySelector(".ai-label"));
         Assert.False(plain.ClassList.Contains("ai-summary-ai"));
         Assert.Null(plain.QuerySelector(".ai-label"));
+    }
+
+    private static readonly BillPageData CodeBill = Bill with
+    {
+        Headline = "H.R. 5334: The Example Act of 2026",
+        Summary = "H.R. 5334, The Example Act of 2026. Sponsor: Pat One. Introduced 11 Sep 2025.",
+        TextOrigin = PublishedTextOrigin.Code,
+        Label = AiLabelWords.CodeWording,
+        Votes = []
+    };
+
+    [Fact]
+    public async Task ACodeBillShowsTheCrsTextWordForWordUnderTheBillLineWithTheCrsTagAndNoAiLabel()
+    {
+        var page = await RenderAsync(CodeBill);
+
+        var crs = page.QuerySelector(".bill-main > .bill-crs")!;
+        Assert.Equal(PublishedWording.CrsTextTag, crs.QuerySelector(".bill-crs-tag")!.TextContent);
+        Assert.Equal(["This bill imposes sanctions.", "It extends a law."], crs.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent));
+        Assert.Equal(CodeBill.BillLine, page.QuerySelector(".bill-head .bill-line-row")!.TextContent.Trim());
+        Assert.Null(page.QuerySelector(".ai-summary"));
+        Assert.Null(page.QuerySelector(".ai-label"));
+        Assert.Null(page.QuerySelector(".bill-main details.source-fold"));
+        Assert.Null(page.QuerySelector(".bill-no-summary"));
+        Assert.DoesNotContain(CodeBill.Summary, page.Body!.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain(PublishedRecordLabels.WordingFact, page.QuerySelector(".bill-kv")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACodeBillWithNoCrsTextShowsItsTitleAndTheNoSummaryNoteAndABillTextSummaryKeepsItsAiSummaryAndQuotes()
+    {
+        var page = await RenderAsync(CodeBill with { CrsText = null, CrsVersion = null, BillLine = null });
+        var text = await RenderAsync(TextBill with { TextSentences = [new(PublishedTextPart.Summary, "It adds a credit.", "a credit of $500")] });
+
+        Assert.Equal("H.R. 5334, The Example Act of 2026", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(PublishedWording.NoBillSummary, page.QuerySelector(".bill-main > .bill-no-summary")!.TextContent);
+        Assert.Null(page.QuerySelector(".bill-crs"));
+        Assert.Null(page.QuerySelector(".ai-summary"));
+        Assert.Null(page.QuerySelector(".ai-label"));
+        var summary = text.QuerySelector(".bill-main > .ai-summary")!;
+        Assert.Equal(BillTextWords.Label, summary.QuerySelector(".ai-label")!.TextContent);
+        Assert.Equal("a credit of $500", summary.QuerySelector(".quote")!.TextContent);
+        Assert.Null(text.QuerySelector(".bill-no-summary"));
+        Assert.Null(text.QuerySelector(".bill-crs"));
     }
 
     [Fact]
@@ -444,12 +489,10 @@ public sealed class BillDetailPageTests
     public async Task TheSummaryKeyTermsSourceFoldAndVoteRowLabelsOfTheBillPageAreDrawnByAiLabel()
     {
         var model = await RenderAsync(TextBill with { KeyTerms = [new("Tenant", "The term \"tenant\" means a person who rents.", false, "The term “tenant” means a person who rents.")], KeyTermsLabel = BillTextWords.KeyTermsLabel });
-        var code = await RenderAsync(Bill with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording });
 
         AiLabelAssert.DrawnByAiLabel(model, BillTextWords.Label);
         AiLabelAssert.DrawnByAiLabel(model, BillTextWords.KeyTermsLabel);
         AiLabelAssert.DrawnByAiLabel(model, Bill.Votes[0].Label!);
-        AiLabelAssert.DrawnByAiLabel(code, AiLabelWords.CodeWording);
     }
 
     private static Task<IDocument> RenderAsync(BillPageData data) =>
