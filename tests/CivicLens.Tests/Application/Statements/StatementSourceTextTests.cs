@@ -91,6 +91,8 @@ public sealed class StatementSourceTextTests
     [InlineData("Senator Warren announced a rent cap. \"This cap protects families.\"")]
     [InlineData("\"This cap protects families,\" said Senator Warren. \"It is unfair,\" said Jo Rivera.")]
     [InlineData("\"This cap protects families,\" Warren said, quoting a tenant: \"We need it.\"")]
+    [InlineData("\"This cap protects families,\" said Senator Tim Warren.")]
+    [InlineData("\"This cap protects families,\" Jo Warren said.")]
     public void TheCodeRevisionHasNoSpeakerWhenAQuotedPassageMayBeAnotherPersonBecauseCodeCannotNameOtherSpeakers(string body)
     {
         Assert.Empty(CodeSpeakers("Warren backs a rent cap\n" + body));

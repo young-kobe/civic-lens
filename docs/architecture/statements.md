@@ -242,7 +242,7 @@ The executor runs when `CIVIC_LENS_STATEMENT_DRAFTING_DAILY_TOKENS` and `ANTHROP
 - The summary is the exact saved text.
 - Each quoted passage that `QuotedText` finds is a quotation, up to 32. A text with no quoted passage cites the trimmed text after the headline as release text.
 - The speaker is the office owner of the source when it is covered. Otherwise it is the one covered official. With several officials and no office owner, the speaker is empty.
-- Code keeps that speaker only when it attributes every quoted passage to that official. The clause next to each passage must be "said NAME" or "NAME said". NAME is one to four capitalized words that end with the last name of the official. Otherwise the speaker is empty, so a person chooses the speakers and approves the revision. A text with no quoted passage is release text of the office.
+- Code keeps that speaker only when it attributes every quoted passage to that official. The clause next to each passage must be "said NAME" or "NAME said". NAME is one to four capitalized words that end with the last name of the official. Each other word is a title, such as "Senator", or a word of the official's name. So "said Senator Tim Scott" never counts for Rick Scott. Otherwise the speaker is empty, so a person chooses the speakers and approves the revision. A text with no quoted passage is release text of the office.
 - The date is null, because code never guesses a date. Other speakers are empty. The gate gives the issues and the policy areas. `BillNumberFinder` gives the bill numbers.
 
 The run is `Bypassed` with the reason `source-text` and no tokens. The entry settles Succeeded with no code. This follows the code text of an action; see [actions](actions.md#behavior).
@@ -610,7 +610,7 @@ The gate and drafting run on the shared owners in [analysis](analysis.md#code-ma
 - A statement that a model drafted before the short release rule keeps its AI summary until the owner runs `analyses redraft --stale statements`. A draft with a person decision keeps its AI summary. See [statement redraft](#statement-redraft).
 - The headline of a short release is the first line of the saved region. A page region that starts with a label such as "Press Release" gives that label as the headline. Nobody has measured the first lines of the saved regions.
 - A short release has no date and no other speakers, because only the model reads them. Its page says "Date not stated".
-- The attribution rule of a short release is strict. A title with a period, such as "Sen. Warren", stops the clause, so a person approves that release. Another person with the same last name as the official passes the rule.
+- The attribution rule of a short release is strict. A title with a period, such as "Sen. Warren", stops the clause, so a person approves that release. Another person with the same last name can pass the rule. That happens only when the clause names no other given name, such as "said Senator Scott".
 - Two parallel preparations of one source can deadlock when their feed items have an equal `pubDate` and swap order. Postgres aborts one transaction, the worker retries it, and no data is lost. The insert order stays as it is.
 - Planned: structured statement extraction and temporal identity resolution.
 - A feed item source still admits page jobs for the same links. A page that returns 403 fails and adds nothing. A page that works adds nothing when the feed text came first.
