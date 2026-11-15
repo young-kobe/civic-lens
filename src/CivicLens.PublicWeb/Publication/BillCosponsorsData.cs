@@ -21,7 +21,7 @@ public sealed record BillCosponsorsData(PublishedChamber Chamber, BillSponsorDat
         var parties = Original.Concat(Later).Where(sponsor => sponsor.Party is not null).GroupBy(sponsor => sponsor.Party!)
             .OrderBy(group => PartyTones.Rank(group.Key)).ThenBy(group => group.Key, StringComparer.Ordinal).ToArray();
         List<PartyBarSegment> segments = [.. parties.Select((group, index) =>
-            new PartyBarSegment(PublishedPartyNames.Members(group.Key), group.Count(), PartyTones.Of(group.Key), PartyFills[index % PartyFills.Length]))];
+            new PartyBarSegment(PublishedPartyNames.Members(group.Key, group.Count()), group.Count(), PartyTones.Of(group.Key), PartyFills[index % PartyFills.Length]))];
         if (Original.Concat(Later).Count(sponsor => sponsor.Party is null) is > 0 and var unknown)
             segments.Add(new(NoParty, unknown, PartyTone.Quiet, PartyBarFill.Open));
         return new($"Tracked {Chamber} cosponsors by party on the day each one joined", segments);

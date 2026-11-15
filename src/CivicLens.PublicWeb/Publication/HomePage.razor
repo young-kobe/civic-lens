@@ -64,7 +64,7 @@
                     <p class="small muted home-featured-rule">Civic Lens picks this vote by a fixed rule: the latest passage vote on a bill.</p>
                     @if (BrowserApiUrl is not null)
                     {
-                        <p class="small muted home-featured-zip"><a href="@("#" + ZipInputId)">Enter your ZIP code</a> to see how your members voted on this.</p>
+                        <p class="small muted home-featured-zip" data-featured-zip-prompt><a href="@("#" + ZipInputId)">Enter your ZIP code</a> to see how your members voted on this.</p>
                     }
                 </section>
             }
@@ -119,13 +119,7 @@
             {
                 <section class="home-issues" aria-labelledby="home-issues-title">
                     <h2 id="home-issues-title">Start with an issue</h2>
-                    <ul class="home-issue-list" role="list">
-                        @foreach (var issue in Data.Issues)
-                        {
-                            <li><IssueTile Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))" Name="@issue.Name" Congress="issue.Congress"
-                                           SubstantiveVotes="issue.SubstantiveVotes" Bills="issue.Bills" /></li>
-                        }
-                    </ul>
+                    <IssueTileList Issues="Data.Issues" RootPath="@RootPath" />
                 </section>
             }
             @if (breakers.Count > 0 || delegates.Count > 0)
@@ -175,7 +169,7 @@
                                 <div>
                                     <p class="muted small">@PublishedRecordLabels.ExecutiveActionKind(action.Kind)</p>
                                     <a href="@(RootPath + PublicationProtocol.RecordPagePath(action.NewestRecordId))">@action.NewestTitle</a>
-                                    <p class="muted small">@action.Count record@(action.Count == 1 ? "" : "s") in this release</p>
+                                    <p class="muted small">@ExecutiveActionWords.HomeGroupCount(action)</p>
                                     <p class="muted small">Signed @action.NewestSignedOn.ToString("d MMM yyyy")</p>
                                 </div>
                             </li>

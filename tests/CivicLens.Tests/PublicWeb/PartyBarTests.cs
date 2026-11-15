@@ -21,12 +21,18 @@ public sealed class PartyBarTests
     }
 
     [Theory]
-    [InlineData(58, 152, 105.0)]
-    [InlineData(3, 3, 3.0)]
-    [InlineData(1, 0, 0.5)]
-    public void TheHalfLineSitsAtHalfOfTheYesAndNoCasts(int yes, int no, double expected)
+    [InlineData(58, 152, VoteThreshold.Half, 106)]
+    [InlineData(3, 3, VoteThreshold.Half, 4)]
+    [InlineData(1, 0, VoteThreshold.Half, 1)]
+    [InlineData(140, 70, VoteThreshold.TwoThirds, 140)]
+    [InlineData(3, 1, VoteThreshold.TwoThirds, 3)]
+    [InlineData(2, 0, VoteThreshold.TwoThirds, 2)]
+    public void TheMarkSitsAtTheWholeNumberOfYesVotesThatTheVoteNeeds(int yes, int no, VoteThreshold threshold, int expected)
     {
-        Assert.Equal(expected, VotePageView.CastBar("Group", PartyTone.Neutral, yes, no, 0, 4, 0, VoteThreshold.Half).Mark!.Count);
+        var mark = VotePageView.CastBar("Group", PartyTone.Neutral, yes, no, 0, 4, 0, threshold).Mark!;
+
+        Assert.Equal(expected, mark.Count);
+        Assert.Equal($"Yes votes needed: {(threshold == VoteThreshold.Half ? "more than half" : "two-thirds")} of the {yes + no} Yes and No votes", mark.Label);
     }
 
     [Fact]
@@ -53,7 +59,7 @@ public sealed class PartyBarTests
         var page = await new HtmlParser().ParseDocumentAsync(html);
 
         var items = page.QuerySelectorAll(".party-bar-legend li");
-        Assert.Equal(["Yes", "No", "Present", "Other", "Not voting", "Half of Yes and No votes: 2.5"],
+        Assert.Equal(["Yes", "No", "Present", "Other", "Not voting", "Yes votes needed: more than half of the 5 Yes and No votes"],
             items.Select(item => Regex.Replace(item.TextContent, @"^\s*\d*\s*", "").Trim()));
         var looks = items.Take(5).Select(item => item.QuerySelector("rect")!).Select(rect => (rect.GetAttribute("data-tone"), rect.GetAttribute("data-fill"))).ToArray();
         Assert.Equal(5, looks.Distinct().Count());

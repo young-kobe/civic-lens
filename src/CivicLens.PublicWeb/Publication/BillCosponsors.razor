@@ -8,7 +8,7 @@
         {
             <text>@Sponsor.Name sponsored the bill. </text>
         }
-        This site tracks <b>@Cosponsors.Total</b> @Cosponsors.Chamber members who cosponsored it: <b>@Cosponsors.Original.Length</b> on the day it was introduced and <b>@Cosponsors.Later.Length</b> who joined later. Cosponsors we do not track are not counted.
+        This site tracks <b>@Cosponsors.Total</b> @Cosponsors.Chamber @(Cosponsors.Total == 1 ? "member" : "members") who cosponsored it: <b>@Cosponsors.Original.Length</b> on the day it was introduced and <b>@Cosponsors.Later.Length</b> who joined later. Cosponsors we do not track are not counted.
     </p>
     @if (Cosponsors.Total > 0)
     {

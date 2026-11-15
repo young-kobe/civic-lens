@@ -85,16 +85,16 @@ public sealed class HomePageTests
     }
 
     [Theory]
-    [InlineData(12, 7, 4, "12 substantive votes", "7 bills", "4 records in this release")]
-    [InlineData(1, 1, 1, "1 substantive vote", "1 bill", "1 record in this release")]
-    [InlineData(1234, 12345, 4, "1,234 substantive votes", "12,345 bills", "4 records in this release")]
+    [InlineData(12, 7, 4, "12 substantive votes", "7 bills", "4 presidential notices on this site, signed since 20 Jan 2025")]
+    [InlineData(1, 1, 1, "1 substantive vote", "1 bill", "1 presidential notice on this site")]
+    [InlineData(1234, 12345, 1311, "1,234 substantive votes", "12,345 bills", "1,311 presidential notices on this site, signed since 20 Jan 2025")]
     public async Task IssuesAndExecutiveGroupsRenderTheirScopedPublishedFacts(
         int substantiveVotes, int bills, int executiveRecords, string voteCount, string billCount, string executiveCount)
     {
-        var issue = new HomeIssueData("health", "Health", 119, substantiveVotes, bills);
+        var issue = new IssuesIndexItemData("health", "Health", 119, substantiveVotes, bills);
         var actionId = new string('c', 64);
         var action = new HomeExecutiveGroupData(PublishedExecutiveActionKind.Notice, executiveRecords, actionId,
-            "Newest notice title", new(2026, 5, 31));
+            "Newest notice title", new(2026, 5, 31), new(2025, 1, 20));
         var page = await RenderAsync(new(7, null, [], null)
         {
             Issues = [issue],
@@ -106,14 +106,28 @@ public sealed class HomePageTests
         Assert.Equal(Root + PublicationProtocol.IssuePagePath("health", 1), issueLink.GetAttribute("href"));
         Assert.Contains(voteCount, issueLink.TextContent);
         Assert.Contains(billCount, issueLink.TextContent);
-        Assert.Contains("119th Congress", issueLink.TextContent);
+        Assert.DoesNotContain("Congress", issueLink.TextContent);
+        Assert.Equal("Each tile counts the substantive votes and the bills tagged with the issue in the 119th Congress.", page.QuerySelector(".home-issues .home-section-lede")!.TextContent);
 
         var actionCard = Assert.Single(page.QuerySelectorAll(".home-executive-list li"));
         Assert.Equal("Presidential notice", actionCard.QuerySelector("p")!.TextContent);
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(actionId), actionCard.QuerySelector("a")!.GetAttribute("href"));
         Assert.Contains("Newest notice title", actionCard.TextContent);
-        Assert.Contains(executiveCount, actionCard.TextContent);
+        Assert.Equal(executiveCount, actionCard.QuerySelectorAll("p")[1].TextContent);
+        Assert.DoesNotContain("in this release", actionCard.TextContent);
         Assert.Contains("Signed 31 May 2026", actionCard.TextContent);
+    }
+
+    [Fact]
+    public async Task IssueTilesOfDifferentCongressesNameTheirOwnCongressAndTheListNamesNone()
+    {
+        var page = await RenderAsync(new(7, null, [], null)
+        {
+            Issues = [new("health", "Health", 119, 0, 3), new("tax", "Taxes", 118, 2, 4), new("guns", "Firearms", null, null, null)]
+        });
+
+        Assert.Equal(["119th Congress", "118th Congress"], page.QuerySelectorAll(".home-issue-congress").Select(item => item.TextContent));
+        Assert.Null(page.QuerySelector(".home-issues .home-section-lede"));
     }
 
     [Fact]
@@ -263,12 +277,31 @@ public sealed class HomePageTests
     }
 
     [Fact]
+    public async Task TheFeaturedZipPromptHidesOnceALookupAnswersAndReturnsWhenTheZipIsCleared()
+    {
+        var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+        var start = script.IndexOf("const initZipLookup", StringComparison.Ordinal);
+        var lookup = script[start..script.IndexOf("\n    };", start, StringComparison.Ordinal)];
+
+        Assert.True(page.QuerySelector(".home-featured-zip")!.HasAttribute("data-featured-zip-prompt"));
+        Assert.Contains("const featuredPrompt = document.querySelector(\"[data-featured-zip-prompt]\");", lookup, StringComparison.Ordinal);
+        Assert.Contains("""
+                    if (!remembered.complete(call.zip, Number(fragment.dataset.release), call.startingState, call.persist)) return false;
+                    if (featuredPrompt) featuredPrompt.hidden = true;
+""", lookup, StringComparison.Ordinal);
+        var clear = lookup[lookup.IndexOf("const clearLookup", StringComparison.Ordinal)..];
+        Assert.Contains("if (featuredPrompt) featuredPrompt.hidden = false;", clear[..clear.IndexOf("};", StringComparison.Ordinal)], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheFeaturedVoteShowsOnePartyBarForEachPartyCountOfItsRelease()
     {
         var page = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) });
 
         var bars = page.QuerySelectorAll(".home-featured-parties .party-bar").ToArray();
         Assert.Equal(["House Democrats", "House Republicans", "House Independents"], bars.Select(bar => bar.QuerySelector("figcaption")!.TextContent));
+        Assert.All(bars, bar => Assert.Null(bar.QuerySelector("line.party-bar-mark")));
     }
 
     [Fact]
