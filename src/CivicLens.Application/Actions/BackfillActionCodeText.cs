@@ -1,6 +1,7 @@
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Review;
 
@@ -30,6 +31,17 @@ public sealed class BackfillActionCodeText(IActionDraftStore store, ActionBillRe
         return new(targets.Count, targets.Count - skips.Count, skips.Count, skips, next);
     }
 
+    /// <summary>The retired text that <see cref="IActionDraftStore.ListPublishedRetiredTextAsync"/> lists, read again on the current revision: model text
+    /// that cites no bill text, or a code headline that names the sponsor instead of the title. The SQL of the list repeats this rule only to select the
+    /// candidates in one query. This check decides.</summary>
+    private static bool HoldsRetiredText(ActionDraftRevision revision) => revision.TextOrigin switch
+    {
+        ReviewTextOrigin.Model => revision.TextPackageId is null,
+        ReviewTextOrigin.Code => revision.Headline.Contains(": introduced by ", StringComparison.Ordinal) ||
+            revision.Headline.EndsWith(": introduced in Congress", StringComparison.Ordinal),
+        _ => false
+    };
+
     /// <summary>Returns null when the record moved, else the reason it kept its text.</summary>
     private async Task<string?> MoveAsync(ActionCodeTextTarget target, CancellationToken cancellationToken)
     {
@@ -38,7 +50,8 @@ public sealed class BackfillActionCodeText(IActionDraftStore store, ActionBillRe
         if (evidence is null) return ActionDraftErrorCodes.EvidenceUnavailable;
         if (evidence.HasNewerCandidate) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         if (evidence.IsRejected) return ActionDraftErrorCodes.RecordRejected;
-        if (evidence.Current is not { TextOrigin: ReviewTextOrigin.Model or ReviewTextOrigin.Code } current) return ActionCodeTextSkip.NotRetiredText;
+        // The list is read before this record. A worker draft or another backfill run can replace the retired text in between, so it is checked again.
+        if (evidence.Current is not { } current || !HoldsRetiredText(current)) return ActionCodeTextSkip.NotRetiredText;
         evidence = evidence.WithReadableSummaries();
         var read = await reader.ReadAsync(evidence, cancellationToken);
         if (read.Snapshot is not { } snapshot) return read.ErrorCode;

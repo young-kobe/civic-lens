@@ -32,11 +32,15 @@ internal sealed class FakeActionDraftStore : FakeAnalysisQueue<ActionDraftRun>, 
 
     public Task<int> RequeueRefusedAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    /// <summary>Lists the one record of the evidence whatever its current text, as a list read before a worker draft replaced that text.</summary>
     public Task<IReadOnlyList<ActionCodeTextTarget>> ListPublishedRetiredTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+        Task.FromResult<IReadOnlyList<ActionCodeTextTarget>>([new(Evidence.Candidate.RecordId, Evidence.Candidate.CandidateId)]);
 
-    public Task<string?> AppendCodeTextAsync(ActionDraftRevision revision, ActionDraftRun run, int readStateVersion, CancellationToken cancellationToken) =>
-        throw new NotSupportedException();
+    public Task<string?> AppendCodeTextAsync(ActionDraftRevision revision, ActionDraftRun run, int readStateVersion, CancellationToken cancellationToken)
+    {
+        Revisions.Add(revision);
+        return Task.FromResult<string?>(null);
+    }
 
     public Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ActionDraftListItem>>([]);
