@@ -369,10 +369,10 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     [InlineData("issue=health&sponsor=p1", "a")]
     [InlineData("policyArea=health", "fae")]
     [InlineData("policyArea=tax", "b")]
-    [InlineData("from=2026-03-02&to=2026-03-02", "abc")]
-    [InlineData("from=2026-03-03", "e")]
-    [InlineData("to=2026-02-28", "f")]
-    [InlineData("from=2026-03-02&to=2026-03-02&sponsor=p1&congress=119", "a")]
+    [InlineData("from=2026-03-10&to=2026-03-10", "ae")]
+    [InlineData("from=2026-03-11", "f")]
+    [InlineData("to=2026-03-10", "ae")]
+    [InlineData("from=2026-03-10&to=2026-03-10&sponsor=p1&congress=119", "a")]
     public async Task EveryFilterNarrowsTheListAndKeepsTheOrder(string query, string expected)
     {
         await using var host = await StartWithBillsAsync(All);
@@ -381,6 +381,20 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(expected.ToCharArray(), Ids(page));
         Assert.Equal(1, page.RootElement.GetProperty("release").GetInt32());
+    }
+
+    // F has the oldest event date, 20 Feb, and the newest action, 20 Mar. B and C have an event date in March and no stored status.
+    [Theory]
+    [InlineData("from=2026-02-01&to=2026-02-28", "")]
+    [InlineData("from=2026-03-15&to=2026-03-31", "f")]
+    [InlineData("from=2026-03-01&to=2026-03-31", "fae")]
+    public async Task ADateFilterTestsTheLatestActionDateSoTheEventDateNeverDecidesAndABillWithNoStoredStatusNeverMatches(string query, string expected)
+    {
+        await using var host = await StartWithBillsAsync(All);
+
+        using var page = await GetAsync(host, "/v1/bills?" + query);
+
+        Assert.Equal(expected.ToCharArray(), Ids(page));
     }
 
     [Fact]
