@@ -498,7 +498,7 @@ public sealed class PublishVoteTests
     public async Task VoteviewSenatorsTakeTheRosterPartyByBioguideIdEvenWhenTheMemberLineNamesAnotherParty()
     {
         var scenario = new PublicationScenario();
-        scenario.RosterMembers = [new RosterMember("M000001", "Mayor Example", null, null, null, [Term("Democrat", chamber: "sen")]), new RosterMember("R9", "R9", null, null, null, [Term("Republican", chamber: "sen")])];
+        scenario.RosterMembers = [new RosterMember("M000001", "Mayor Example", null, null, null, null, [Term("Democrat", chamber: "sen")]), new RosterMember("R9", "R9", null, null, null, null, [Term("Republican", chamber: "sen")])];
         var vote = scenario.AddVote('d', chamber: Chamber.Senate, source: VoteSource.Voteview, totalLines: ["Count: Yea 1, Nay 1, Present 0, Not voting 0"],
             otherMemberLines: ["Member: R9, A, D, AL, Nay"], trackedSourceId: "M000001");
 
@@ -696,7 +696,7 @@ public sealed class PublishVoteTests
     private static RosterTerm Term(string party, string? caucus = null, string chamber = "rep") =>
         new(0, chamber, new(2025, 1, 3), new(2027, 1, 3), "MA", 1, null, party, caucus);
 
-    private static RosterMember Member(string id, params RosterTerm[] terms) => new(id, id, null, null, null, terms);
+    private static RosterMember Member(string id, params RosterTerm[] terms) => new(id, id, null, null, null, null, terms);
 
     private static PublishedVote ReadVote(PublicationScenario scenario, PublicationReleaseSummary summary, string recordId) =>
         JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(recordId)],

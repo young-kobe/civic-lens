@@ -464,6 +464,7 @@ officials photo_path
 officials caucus
 officials term_end_on
 officials record_count
+officials sort_name
 party_agreement agreed
 party_agreement chamber
 party_agreement congress

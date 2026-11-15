@@ -47,6 +47,9 @@ public interface IPublicationStore
 
     Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken);
 
+    /// <summary>Fills the sort name of each release official row of every release that holds none, by official ID. Returns the rows filled.</summary>
+    Task<int> FillOfficialSortNamesAsync(IReadOnlyDictionary<string, string> sortNames, CancellationToken cancellationToken);
+
     /// <summary>Reads up to <paramref name="limit"/> entry rows with no Congress that follow <paramref name="after"/> in key order.</summary>
     Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken);
 

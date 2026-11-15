@@ -1168,7 +1168,7 @@ The verifier writes nothing. It repeats the file checks of the backfill. Then it
 
 ### Stored columns backfill
 
-The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, the bill link of each vote of a release, and the stage of each bill status. This command fills them for rows that earlier releases wrote.
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, the bill link of each vote of a release, the stage of each bill status, and the sort name of each release official. This command fills them for rows that earlier releases wrote. It also fills the last names of the latest roster snapshots from their saved captures. The command needs `CIVIC_LENS_COLLECTION_CONFIG` and `CIVIC_LENS_ARTIFACT_DIRECTORY`, as a publish does.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
@@ -1186,13 +1186,15 @@ The command prints JSON with these keys:
 - `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
 - `officialPhotoPathsFilled`, `entryCongressesFilled`, and `voteBillLinksFilled`: the rows that this run filled.
 - `billStatusesFilled`: the bill status rows that got a stage in this run.
+- `rosterLastNamesFilled`: the rows of the latest member and executive snapshots that got a last name from their saved capture.
+- `officialSortNamesFilled`: the release official rows that got a sort name. An official that no roster names keeps no sort name, and the list sorts that official by name.
 - `releasesWithUnreadableManifest`: the kept releases whose manifest is invalid. The run wrote no vote link for them. Restore the folder, then run the command again.
 
 The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` and `releasesWithUnreadableManifest` are both 0. Otherwise it is 1.
 
 ### Vote bills verify
 
-This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.
+This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases vote-bills verify

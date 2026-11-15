@@ -6,4 +6,5 @@ internal sealed class ExecutiveOfficialRow
     public int GovtrackId { get; set; }
     public string? WikidataId { get; set; }
     public string FullName { get; set; } = null!;
+    public string? LastName { get; set; }
 }
