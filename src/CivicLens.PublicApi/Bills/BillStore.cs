@@ -160,7 +160,7 @@ public sealed class BillStore(NpgsqlDataSource views)
             CheckedAtUtc = ViewColumns.Utc(reader, 35),
             FirstPublishedAtUtc = ViewColumns.Utc(reader, 36),
             SummaryFromCrs = reader.GetBoolean(37),
-            IntroducedOn = reader.GetFieldValue<DateOnly>(42)
+            IntroducedOn = ViewColumns.Date(reader, 42)
         };
     }
 
@@ -276,7 +276,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     public async Task<BillSponsors?> ListSponsorsAsync(string recordId, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand("""
-            SELECT a.release_number, s."position", s.official_id, o.name, p.party, s.role, s.sponsored_on, s.withdrawn_on
+            SELECT a.release_number, s."position", s.official_id, o.name, p.party, s.role, s.is_original, s.sponsored_on, s.withdrawn_on
               FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
               LEFT JOIN public_api.bill_sponsorships s ON s.record_id = @id
               LEFT JOIN public_api.officials o ON o.official_id = s.official_id
@@ -464,7 +464,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     // Column 0 holds the release. The row starts at column 1.
     private static BillSponsorRow ReadBillSponsor(DbDataReader reader) => new(
         reader.GetInt32(1), reader.GetString(2), reader.GetString(3), ViewColumns.Text(reader, 4), ViewColumns.Enum<PublishedSponsorshipRole>(reader, 5),
-        reader.GetFieldValue<DateOnly>(6), ViewColumns.Date(reader, 7));
+        reader.GetBoolean(6), reader.GetFieldValue<DateOnly>(7), ViewColumns.Date(reader, 8));
 
     private static string ActionHistorySql(ActionHistoryRequest request) => $"""
         SELECT a.release_number, b.history_observed_at_utc_ticks, b.history_action_count,

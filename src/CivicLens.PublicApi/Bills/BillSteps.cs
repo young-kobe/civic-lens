@@ -8,16 +8,16 @@ namespace CivicLens.PublicApi.Bills;
 /// <summary>
 /// The one owner of the steps of the bill page. Each rule reads one whole known shape of an official action text from its start. The step titles
 /// are the approved phrases of the Mosaic v2 bill page and the owner approved phrases for the presentation to the President and a veto. Each of those two
-/// steps shows the Congress.gov action date. The introduction step shows the introduced date of the Congress.gov bill record, and the sponsor when the release tracks one.
+/// steps shows the Congress.gov action date. The introduction step shows <see cref="BillIntroducedWords.Step"/>.
 /// </summary>
 public static partial class BillSteps
 {
     private const string ResolvingDifferences = "ResolvingDifferences";
 
-    public static BillStepData[] Of(BillRow bill, DateOnly introducedOn, BillSponsorData? sponsor, IReadOnlyList<BillActionRow> actions)
+    public static BillStepData[] Of(BillRow bill, DateOnly? introducedOn, BillSponsorData? sponsor, IReadOnlyList<BillActionRow> actions)
     {
         var chamber = BillNumbers.ChamberOf(bill.BillType);
-        var introduced = sponsor is null ? Moment.Day(introducedOn) : $"{Moment.Day(introducedOn)}, by {sponsor.Name}";
+        var introduced = BillIntroducedWords.Step(introducedOn, sponsor?.Name);
         var steps = new List<BillStepData> { new($"Introduced in the {chamber}", introduced) { Chamber = chamber } };
         var ordered = actions.OrderBy(action => action.ActionDate).ThenBy(action => action.ActionTime).ThenBy(action => action.Position).ToArray();
         steps.AddRange(Passages(ordered));

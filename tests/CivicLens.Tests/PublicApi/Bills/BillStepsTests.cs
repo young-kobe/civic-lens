@@ -47,6 +47,16 @@ public sealed class BillStepsTests
         Assert.Equal("6 Apr 2026", BillSteps.Of(bill, new(2026, 4, 6), null, [])[0].Detail);
     }
 
+    /// <summary>A revision that the backfill has not reached has no introduced date. The step then shows no detail, not another date.</summary>
+    [Fact]
+    public void TheIntroductionStepShowsNoDetailWhenTheIntroducedDateIsMissing()
+    {
+        var sponsor = new BillSponsorData("p1", "Pat One", "Democrat", new(2026, 4, 6));
+
+        Assert.Equal("", BillSteps.Of(HouseBill with { EventDate = new(2026, 7, 9) }, null, sponsor, [])[0].Detail);
+        Assert.Equal("", BillSteps.Of(HouseBill, null, null, [])[0].Detail);
+    }
+
     [Fact]
     public void EachChamberPassageIsOneStepWithItsFirstDateAndAnyRecordedVote()
     {

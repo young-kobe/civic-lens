@@ -33,7 +33,10 @@ internal sealed record SeededBill(char Id, string EventOn)
     /// <summary>The introduced date of the bill record. By default it is the date of the sponsor entry, as <c>ActionBillReader</c> writes it, or the event date when no sponsor is tracked.</summary>
     public string? IntroducedOn { get; init; }
 
-    public string IntroducedDate => IntroducedOn ?? Sponsorships.FirstOrDefault(item => item.Role == "Sponsor")?.SponsoredOn ?? EventOn;
+    /// <summary>True for a revision that the backfill has not reached: it stores no introduced date.</summary>
+    public bool Undated { get; init; }
+
+    public string? IntroducedDate => Undated ? null : IntroducedOn ?? Sponsorships.FirstOrDefault(item => item.Role == "Sponsor")?.SponsoredOn ?? EventOn;
 
     public string RecordId { get; init; } = new(Id, 64);
 }
@@ -44,11 +47,6 @@ internal static class BillsSeed
 
     /// <summary>Seeds bills at a schema before <c>action_revisions.introduced_on</c>, so the rows leave that column out.</summary>
     public static Task AddBillsBeforeIntroducedOnAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, true, bills);
-
-    /// <summary>Stands in for <c>actions revisions backfill</c> after a test upgrades a database whose revisions have no introduced date yet.
-    /// It gives each such revision its event date, as the bill views of the test need a date and not a particular one.</summary>
-    public static Task FillIntroducedDatesAsync(string database) => ViewsSeed.ExecuteAsync(database,
-        "UPDATE action_revisions SET introduced_on = event_on WHERE introduced_on IS NULL AND event_on IS NOT NULL;");
 
     private static async Task AddBillsAsync(string database, bool beforeIntroducedOn, SeededBill[] bills)
     {

@@ -223,7 +223,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
             page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .bill-kv dt").Select(term => term.TextContent));
     }
 
-    /// <summary>The split compares each sponsorship date with the introduced date of the bill record. The Congress.gov original flag plays no part.</summary>
+    /// <summary>When the bill record has its introduced date, the split compares each sponsorship date with it. The Congress.gov original flag then plays no part.</summary>
     [Fact]
     public async Task TheCosponsorSplitCountsACosponsorByTheIntroducedDateOfTheBillRecord()
     {
@@ -246,6 +246,35 @@ public sealed class BillPageTests(PostgresCollection postgres)
         var backers = page.QuerySelector("[aria-labelledby=bill-backers-title]")!;
         Assert.Contains("1 on the day it was introduced and 1 who joined later.", backers.QuerySelector(".bill-lede")!.TextContent);
         Assert.Equal(["Ann Two", "Bob Three (2 May 2026)"], backers.QuerySelectorAll(".bill-kv dd").Select(names => names.TextContent.Trim()));
+    }
+
+    /// <summary>The backfill has not reached the revision, so it has no introduced date. The bill stays public, the page prints no introduction date,
+    /// and the cosponsor split takes the stored Congress.gov original flag. A later sponsorship flagged original still counts on the day.</summary>
+    [Fact]
+    public async Task ABillWithNoIntroducedDateStaysPublicPrintsNoIntroductionDateAndSplitsCosponsorsByTheOriginalFlag()
+    {
+        await using var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('f', "2026-05-02")
+        {
+            Undated = true,
+            Sponsorships =
+            [
+                new("p1", "Sponsor", "2026-04-06"), new("p2", "Cosponsor", "2026-05-02", null, true), new("p3", "Cosponsor", "2026-04-06", null, false)
+            ]
+        });
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Official("p1", "Pat One", "Democrat"), Official("p2", "Ann Two", "Democrat"),
+            Official("p3", "Bob Three", "Republican"));
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
+
+        var page = await ReadPageAsync(host, new string('f', 64));
+
+        Assert.Equal("Sponsored by Pat One, a Democrat.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
+        Assert.Null(page.QuerySelector(".bill-stepper .bill-step-detail"));
+        var backers = page.QuerySelector("[aria-labelledby=bill-backers-title]")!;
+        Assert.Contains("1 on the day it was introduced and 1 who joined later.", backers.QuerySelector(".bill-lede")!.TextContent);
+        Assert.Equal(["Added on the day it was introduced", "Added later"], backers.QuerySelectorAll(".bill-kv dt").Select(term => term.TextContent));
+        Assert.Equal(["Ann Two", "Bob Three (6 Apr 2026)"], backers.QuerySelectorAll(".bill-kv dd").Select(names => names.TextContent.Trim()));
     }
 
     [Fact]

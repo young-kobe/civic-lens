@@ -54,7 +54,6 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
             Assert.Equal([$"{new string('7', 64)}|{new string('b', 64)}", $"{new string('8', 64)}|none"], grouped);
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
-            await BillsSeed.FillIntroducedDatesAsync(database);
 
             Assert.Equal(columns, await RowsAsync(database, ViewColumns));
             Assert.Equal([$"{new string('7', 64)}|none", $"{new string('8', 64)}|none"], await RowsAsync(database, VoteLinks));
@@ -85,7 +84,6 @@ public sealed partial class ReleaseVoteBillsMigrationTests(PostgresCollection po
             var grouped = await RowsAsync(database, VoteLinks);
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
-            await BillsSeed.FillIntroducedDatesAsync(database);
             await ExecuteAsync(database, $"""
                 INSERT INTO release_vote_bills (release_number, vote_record_id, bill_record_id)
                 SELECT 1, r.record_id, md5(r.bill_number::text) || md5('x' || r.bill_number::text) FROM vote_revisions r;

@@ -118,9 +118,9 @@ public sealed class BillPageReader(BillStore bills, VoteStore votes, CorrectionH
         ? new(name, bill.TextVersionDate, read, total)
         : null;
 
-    /// <summary>The one owner of the cosponsor split. A cosponsor joined on the day the bill was introduced when the sponsorship date is the introduced date of the
-    /// Congress.gov bill record. Every later sponsorship date joined later.</summary>
-    private static bool JoinedOnIntroduction(BillSponsorRow row, DateOnly introducedOn) => row.SponsoredOn <= introducedOn;
+    /// <summary>The one owner of the cosponsor split. When the bill record has its introduced date, a cosponsor joined on the day the bill was introduced
+    /// when the sponsorship date is on or before it, and every later date joined later. When the date is missing, the stored Congress.gov original flag decides.</summary>
+    private static bool JoinedOnIntroduction(BillSponsorRow row, DateOnly? introducedOn) => introducedOn is { } day ? row.SponsoredOn <= day : row.IsOriginal;
 
     private static BillSponsorData Person(BillSponsorRow row) => new(row.OfficialId, row.Name, row.Party, row.SponsoredOn);
 }

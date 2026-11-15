@@ -62,7 +62,7 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal((1, 0, 0), Counts(await VerifyActionRevisionsAsync()));
     }
 
-    /// <summary>A detail page with no exact introduced line gives no date. The row is skipped, so the operator sees it, and it stays out of the public bill views.</summary>
+    /// <summary>A detail page with no exact introduced line gives no date. The row is skipped and verify counts it as legacy, so the operator sees it. The public bill views still show the bill.</summary>
     [Fact]
     public async Task ARevisionWhoseDetailPageHasNoIntroducedLineIsSkippedAndStaysLegacy()
     {

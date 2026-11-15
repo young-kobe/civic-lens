@@ -53,6 +53,24 @@ public sealed class BillDetailPageTests
         Assert.Equal("Sponsored by Pat One, a Democrat. Introduced 11 Sep 2025. Became law on 18 Sep 2026 as Public Law 119-111.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
     }
 
+    /// <summary>A revision that the backfill has not reached has no introduced date, so the page prints no date for it rather than another date.</summary>
+    [Fact]
+    public async Task ABillWithNoIntroducedDatePrintsNoIntroductionDateInTheLedeTheStepperOrTheCosponsorList()
+    {
+        var page = await RenderAsync(Bill with
+        {
+            Introduced = null,
+            Sponsors = [],
+            Steps = [new("Introduced in the House", "")],
+            PublicLaw = null
+        });
+
+        Assert.Null(page.QuerySelector(".bill-head .bill-lede"));
+        Assert.Null(page.QuerySelector(".bill-stepper .bill-step-detail"));
+        Assert.Equal(["Added on the day it was introduced", "Added later"],
+            page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .bill-kv dt").Select(term => term.TextContent));
+    }
+
     /// <summary>A bill with no tracked sponsor still has the introduced date of its bill record, so the lede, the stepper, and the cosponsor list print it.</summary>
     [Fact]
     public async Task ABillWithNoTrackedSponsorPrintsItsIntroducedDateInTheLedeTheStepperAndTheCosponsorList()

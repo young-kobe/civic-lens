@@ -51,7 +51,6 @@ public sealed class PublicApiBillTextQuotesMigrationTests(PostgresCollection pos
             Assert.Equal([BillTextWords.KeyTermsLabel], await LabelsAsync(database));
 
             await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
-            await BillsSeed.FillIntroducedDatesAsync(database);
             Assert.Equal([Quote], await ViewsSeed.QueryAsPublicAsync(database, "SELECT quote FROM public_api.bill_key_terms"));
         }
         finally { await postgres.DropDatabaseAsync(database); }

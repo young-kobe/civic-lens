@@ -180,7 +180,8 @@
         var parts = new List<string>();
         if (Data.Sponsors.FirstOrDefault() is { } sponsor)
             parts.Add(sponsor.Party is { } party ? $"Sponsored by {sponsor.Name}, {Article(party)} {party}." : $"Sponsored by {sponsor.Name}.");
-        parts.Add($"Introduced {Moment.Day(Data.Introduced)}.");
+        if (BillIntroducedWords.Lede(Data.Introduced) is { } introduced)
+            parts.Add(introduced);
         if (Data.PublicLaw is { } law)
             parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
         return string.Join(' ', parts);
