@@ -138,6 +138,19 @@ public sealed class ActionCommandTests(PostgresCollection postgres) : IAsyncLife
     }
 
     [Theory]
+    [InlineData("actions", "text", "backfill")]
+    [InlineData("actions", "text", "backfill", "many")]
+    [InlineData("actions", "text", "backfill", "5", "not-a-record-id")]
+    [InlineData("actions", "text", "backfill", "5", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "extra")]
+    public async Task TheTextBackfillRefusesABadLimitOrCursorBeforeItReadsItsConfiguration(params string[] arguments)
+    {
+        var result = await RunAsync("auth0|owner", arguments);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("actions text backfill <limit> [cursor]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("backfill", "5")]
     [InlineData("verify")]
     public async Task TheAiDrafterCannotRunTheRevisionCommands(params string[] command)

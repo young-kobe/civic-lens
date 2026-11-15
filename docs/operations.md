@@ -753,7 +753,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 Published votes from before code text hold model text. `votes text backfill` moves them to code text. It makes no model call and spends no tokens. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
 
-Run this command in production only after the correction text rewrite kind deploys, with the migration `CorrectionTextRewrite`. Before it, the history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. After it, the entry reads "Wording rewritten by code".
+Run `votes text backfill` or `actions text backfill` in production only after the correction text rewrite kind deploys, with the migration `CorrectionTextRewrite`. Before it, the history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. After it, the entry reads "Wording rewritten by code".
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes text backfill 500
@@ -791,6 +791,29 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It reports unfinished CRS derivations as legacy. Completed CRS bodies are checked during the backfill write; verification does not derive them again. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. No key is allowed to be absent.
 
 Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
+
+### Action code text backfill
+
+Published bill records from before code text keep their retired text. They are the CRS rewrites, the title-only model drafts, and the code headlines that read "introduced by". The owner command moves them to code text with no model call. Do not run it in production yet; see the hold in [vote text backfill](#vote-text-backfill). The commands need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
+
+```sh
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text backfill 500
+dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text backfill 500 <next-cursor>
+```
+
+`backfill <limit> [cursor]` examines at most `limit` published records in record ID order after the cursor. It writes a code revision with the same issues for each one. Code approves it, and the next release of the worker publishes it. It makes no model call and charges no budget. The command prints `examined`, `moved`, `skipped`, `skips`, and `nextCursor`. The exit code is 1 when a record was skipped.
+
+A skip names the record and a reason. `factsChanged` means the worker drafts the record, because its facts changed. `draftPending` means a draft entry waits or runs. `textKept`, `recordRejected`, and `supersededByNewerCandidate` follow the worker rules. The [code text backfill](architecture/actions.md#code-text-backfill) holds the rules.
+
+Order of use:
+
+1. Deploy the code with the new code text. `deploy` migrates and restarts the worker.
+2. Check `actions draft status`. Wait until no entry is pending, so few records skip with `draftPending`.
+3. Run `actions text backfill 500`. Pass the printed `nextCursor` to the next run. Stop when `nextCursor` is null.
+4. Run `actions text backfill 500` once more with no cursor. It must print `examined` 0, apart from records that skipped.
+5. Let the worker publish. Its next tick puts every moved record in one release, about 7,400 records.
+
+Each moved record gains a history entry that reads "Updated from the source". A moved record can queue relationship pairs, as a worker revision does. The command is safe to repeat. A moved record holds current code text, so a second run finds nothing.
 
 ### Executive action text backfill
 
@@ -1620,7 +1643,7 @@ The installer refuses a checkout that anyone other than root can write, because 
 
 Every result that an agent reads goes to its model vendor, so add a column to the hidden list before it holds private text.
 
-**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, `analyses redraft --stale` with an optional stage, `bills subjects backfill`, `bills status backfill`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, `releases entries verify`, `releases tallies verify` with a bounded count and optional cursor, `votes text backfill` with a bounded count and optional cursor, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, or reset a database. Publishing cannot name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
+**Listed commands.** `/usr/local/bin/civic-lens-ops` runs only the commands that `deploy/scripts/operator-command.sh` lists: `status`, `release sizes`, `deploy`, `db migrate`, `worker health`, `analyses redraft --stale` with an optional stage, `bills subjects backfill`, `bills status backfill`, `actions revisions backfill`, `actions revisions verify`, `executive-actions revisions backfill`, `executive-actions revisions verify`, `relationships revisions backfill`, `relationships revisions verify`, `statements revisions backfill`, `statements revisions verify`, `brief revisions backfill`, `brief revisions verify`, `document-changes revisions backfill`, `document-changes revisions verify`, `releases first-published backfill`, `releases entries backfill` with a count, `releases entries verify`, `releases tallies verify` with a bounded count and optional cursor, `votes text backfill` and `actions text backfill`, each with a bounded count and optional cursor, and `releases publish` with a key and the rewrite options. It cannot withdraw, activate an older release, or reset a database. Publishing cannot name a record. `release sizes` counts a shared file once, so the oldest release shows its full size and each later release shows only its new bytes. Only one command runs at a time, apart from `status`, `release sizes`, and `worker health`.
 
 `deploy` takes a full commit SHA on `origin/main` that is the checkout or newer. The scripts of that commit run as root, and a migration has no undo, so a rollback stays with the owner. It checks out the commit, runs `update.sh`, and runs `check-live.sh`. A merge to `main` is therefore the real approval. GitHub does not stop the agent from merging, because it uses the owner's token. Only the agent rules and the Claude Code permissions stop it.
 

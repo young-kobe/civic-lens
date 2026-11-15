@@ -75,14 +75,14 @@ public static class PublicationProtocol
     public static string ReportPageLink(string recordId, int revision, string title)
     {
         var link = $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}";
-        var shortTitle = ShortTitle(title);
+        var shortTitle = CutAtWord(title, ReaderReportProtocol.MaximumTitleCharacters);
         return shortTitle.Length == 0 ? link : $"{link}&{ReaderReportProtocol.TitleParameter}={Uri.EscapeDataString(shortTitle)}";
     }
 
-    private static string ShortTitle(string title)
+    /// <summary>The one cut of a title to <paramref name="limit"/> characters: on a word boundary, with an ellipsis. A title that fits stays whole.</summary>
+    public static string CutAtWord(string title, int limit)
     {
         var text = title.Trim();
-        var limit = ReaderReportProtocol.MaximumTitleCharacters;
         if (text.Length <= limit) return text;
         var head = text[..(limit - 1)];
         var space = head.LastIndexOf(' ');

@@ -52,9 +52,10 @@ internal static class ActionBillTexts
     public static DocumentExtraction Extraction(ActionDraftBillText text) => new(Attempt, ExtractionVersion, text.Text);
 
     public static string Output((string Sentence, string Quote)[]? summary = null, (string Sentence, string Quote)[]? whyItMatters = null,
-        string[]? issueIds = null, (string Term, string Quote)[]? keyTerms = null) => JsonSerializer.Serialize(new
+        string[]? issueIds = null, (string Term, string Quote)[]? keyTerms = null, string headline = "H.R. 1 pays landlords for tenants with low income.") =>
+        JsonSerializer.Serialize(new
         {
-            headline = new { text = "H.R. 1 pays landlords for tenants with low income.", confidence = 0.8 },
+            headline = new { text = headline, confidence = 0.8 },
             summary = new { sentences = (summary ?? [(FirstPlain, FirstQuote), (SecondPlain, SecondQuote)]).Select(Item), confidence = 0.7 },
             whyItMatters = new { sentences = (whyItMatters ?? [(WhyPlain, WhyQuote)]).Select(Item), confidence = 0.6 },
             issueIds = issueIds ?? ["rent"],

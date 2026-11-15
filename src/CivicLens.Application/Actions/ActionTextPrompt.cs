@@ -42,7 +42,7 @@ public static class ActionTextPrompt
         var issueSchema = issues.AnswerSchema();
         var system = (issueSchema is null ? SystemInstructions : SystemInstructions + issues.Instructions("the title or the bill text")) +
             (keyTerms is null ? string.Empty : KeyTermInstructions);
-        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, withSummary: false, billText, keyTerms?.Section);
+        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, billText, keyTerms?.Section);
         var schema = AnalysisSchema.BillTextDraft(issueSchema, withKeyTerms: keyTerms is not null);
         var bytes = Encoding.UTF8.GetByteCount(system) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;

@@ -41,12 +41,20 @@ internal static class ActionDraftComposition
         var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("The text measure needs ANTHROPIC_API_KEY.");
         var issues = StatementIssueRubric.FromEnvironment() ?? throw new ArgumentException("The text measure needs CIVIC_LENS_ISSUES_CONFIG.");
-        var reader = new ActionBillReader(PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
-            new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader()),
-            new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
+        var reader = CreateOwnerReader(connectionString, codeVersion);
         var settings = new ActionDraftSettings(AnalysisSettings.DefaultCallTokenLimit, draftsFromBillText: true,
             keyTermGlossary: ActionDraftConfiguration.ReadKeyTermGlossary(billText: true));
         var store = new PostgresActionDraftStore(AnalysisDbContextFactory.Create(connectionString), codeVersion, settings.DraftsKeyTerms);
         return new(store, new ActionDraftStep(store, reader, new AnthropicActionDraftModel(apiKey), settings, issues));
     }
+
+    /// <summary>The code text backfill of <c>actions text backfill</c>. It calls no model, so it needs no key.</summary>
+    public static BackfillActionCodeText CreateCodeTextBackfill(string connectionString, CodeVersion codeVersion, PostgresActionDraftStore store) =>
+        new(store, CreateOwnerReader(connectionString, codeVersion),
+            StatementIssueRubric.FromEnvironment() ?? throw new ArgumentException("The action text backfill needs CIVIC_LENS_ISSUES_CONFIG."), TimeProvider.System);
+
+    private static ActionBillReader CreateOwnerReader(string connectionString, CodeVersion codeVersion) =>
+        new(PostgresCollectionJobStore.FromConnectionString(connectionString, codeVersion),
+            new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader()),
+            new CaptureDocumentTextExtractor(), PublicationComposition.RequireArtifactRoot());
 }
