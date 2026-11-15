@@ -12,12 +12,19 @@ namespace CivicLens.PublicApi.Bills;
 /// <c>public_api.record_entries</c> (the stored approval time), and <c>public_api.record_first_publications</c>. Every answer takes its release from the query that reads its rows.</summary>
 public sealed class BillStore(NpgsqlDataSource views)
 {
+    /// <summary>One row of a list read and the latest action date of its key.</summary>
+    private sealed record ListedBill(BillRow Bill, DateOnly? LatestActionDate);
+
     private const string Columns = """
         b.record_id, b.revision_number, b.congress, b.bill_type, b.bill_number, b.bill_title, b.headline, b.summary, b.text_origin, b.label,
         b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line,
         b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law
         """;
-    private const string Order = "b.event_date DESC, b.record_id";
+    /// <summary>The sort of every bill list: the latest official action that the active release pinned, newest first, with bills of no stored status last. The one owner of that order.</summary>
+    private const string Order = "b.latest_action_date DESC NULLS LAST, b.record_id";
+
+    // A list row holds the bill columns and then the latest action date of its key, which the cursor of the next page takes.
+    private const int LatestActionColumn = 23;
 
     /// <summary>The name of the first sponsor of the bill <c>b</c>, in stored order, or null when the release names none. The one owner of that rule.</summary>
     internal const string SponsorNameSql = """
@@ -72,25 +79,24 @@ public sealed class BillStore(NpgsqlDataSource views)
          WHERE b.congress = @congress AND b.policy_area_id IS NOT NULL AND b.policy_area IS NOT NULL ORDER BY b.policy_area, b.policy_area_id
         """;
 
-    private const string AfterCursor = " AND (b.event_date < @cursor_date OR (b.event_date = @cursor_date AND b.record_id > @cursor_id))";
+    // The cursor tests follow the order: a bill with no stored status comes after every dated bill. StatementStore pages its undated statements the same way.
+    private const string AfterDated = " AND (b.latest_action_date < @cursor_date OR b.latest_action_date IS NULL OR (b.latest_action_date = @cursor_date AND b.record_id > @cursor_id))";
+    private const string AfterNoAction = " AND b.latest_action_date IS NULL AND b.record_id > @cursor_id";
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<BillPage?> ListAsync(BillRequest request, CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand(ListSql(request));
         AddParameters(command, request);
-        var rows = new List<BillRow>();
+        var rows = new List<ListedBill>();
         int? release = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
+                if (!reader.IsDBNull(1)) rows.Add(ReadListed(reader));
             }
-        if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
-        return new(active, page, next);
+        return release is { } active ? PageOf(active, rows, request.Limit) : null;
     }
 
     /// <summary>Reads one page of the bills of the newest Congress that the active release holds and that Congress, in one query, inside the transaction of the caller.
@@ -101,7 +107,7 @@ public sealed class BillStore(NpgsqlDataSource views)
         if (request.Congress is not null) throw new ArgumentException("The newest Congress list takes its own Congress.", nameof(request));
         await using var command = new NpgsqlCommand(NewestCongressSql(request), transaction.Connection, transaction);
         AddParameters(command, request);
-        var rows = new List<BillRow>();
+        var rows = new List<ListedBill>();
         int? release = null, congress = null;
         var total = 0;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -110,12 +116,9 @@ public sealed class BillStore(NpgsqlDataSource views)
                 release = reader.GetInt32(0);
                 congress = ViewColumns.Number(reader, reader.FieldCount - 2);
                 total = ViewColumns.Total(reader);
-                if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
+                if (!reader.IsDBNull(1)) rows.Add(ReadListed(reader));
             }
-        if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? BillCursor.Of(active, page[^1]).Encode() : null;
-        return new(new BillPage(active, page, next), congress, total);
+        return release is { } active ? new(PageOf(active, rows, request.Limit), congress, total) : null;
     }
 
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
@@ -318,12 +321,12 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     private static string ListSql(BillRequest request) => $"""
-        SELECT a.release_number, {Columns}
+        SELECT a.release_number, {Columns}, b.latest_action_date
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT b.* FROM (
-                    SELECT b.record_id, b.revision_number {KeysOf(request)}
-                     WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
+               SELECT b.*, k.latest_action_date FROM (
+                    SELECT b.record_id, b.revision_number, b.latest_action_date {KeysOf(request)}
+                     WHERE TRUE{Filters(request)}{AfterCursor(request)}
                      ORDER BY {Order} LIMIT @take) k
                {BillsOfKeysSql}) b
             ON TRUE
@@ -333,13 +336,13 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static string NewestCongressSql(BillRequest request) => $"""
         WITH newest AS MATERIALIZED (
              SELECT c.congress, c.bills FROM public_api.release_bill_counts c WHERE c.bills > 0 ORDER BY c.congress DESC LIMIT 1)
-        SELECT a.release_number, {Columns}, n.congress, coalesce(n.bills, 0)::bigint AS in_congress
+        SELECT a.release_number, {Columns}, b.latest_action_date, n.congress, coalesce(n.bills, 0)::bigint AS in_congress
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN newest n ON TRUE
           LEFT JOIN LATERAL (
-               SELECT b.* FROM (
-                    SELECT b.record_id, b.revision_number {KeysOf(request)}
-                     WHERE b.congress = n.congress{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
+               SELECT b.*, k.latest_action_date FROM (
+                    SELECT b.record_id, b.revision_number, b.latest_action_date {KeysOf(request)}
+                     WHERE b.congress = n.congress{Filters(request)}{AfterCursor(request)}
                      ORDER BY {Order} LIMIT @take) k
                {BillsOfKeysSql}) b
             ON TRUE
@@ -383,6 +386,13 @@ public sealed class BillStore(NpgsqlDataSource views)
         (request.From is null ? "" : " AND b.event_date >= @from") +
         (request.To is null ? "" : " AND b.event_date <= @to");
 
+    private static string AfterCursor(BillRequest request) => request.Cursor switch
+    {
+        null => "",
+        { LatestActionDate: null } => AfterNoAction,
+        _ => AfterDated
+    };
+
     private static void AddParameters(NpgsqlCommand command, BillRequest request)
     {
         var parameters = command.Parameters;
@@ -398,7 +408,7 @@ public sealed class BillStore(NpgsqlDataSource views)
         if (request.From is { } from) parameters.Add(new NpgsqlParameter("from", NpgsqlDbType.Date) { Value = from });
         if (request.To is { } to) parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
         if (request.Cursor is not { } cursor) return;
-        parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = cursor.EventDate });
+        if (cursor.LatestActionDate is { } date) parameters.Add(new NpgsqlParameter("cursor_date", NpgsqlDbType.Date) { Value = date });
         parameters.AddWithValue("cursor_id", cursor.RecordId);
     }
 
@@ -413,6 +423,16 @@ public sealed class BillStore(NpgsqlDataSource views)
             ON TRUE
          ORDER BY s."position"
         """;
+
+    private static ListedBill ReadListed(DbDataReader reader) => new(ReadRow(reader), ViewColumns.Date(reader, LatestActionColumn));
+
+    /// <summary>Takes one page of the rows that a list read, one more than the limit when a next page exists. The cursor holds the sort key of the last row of the page.</summary>
+    private static BillPage PageOf(int release, List<ListedBill> rows, int limit)
+    {
+        var page = rows.Take(limit).ToArray();
+        var next = rows.Count > limit ? new BillCursor(release, page[^1].LatestActionDate, page[^1].Bill.RecordId).Encode() : null;
+        return new(release, [.. page.Select(row => row.Bill)], next);
+    }
 
     // Column 0 holds the release. The row starts at column 1.
     private static BillRow ReadRow(DbDataReader reader) => new()
