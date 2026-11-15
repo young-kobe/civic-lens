@@ -46,8 +46,10 @@ public sealed record PublishedStatement
         if (!PublicationProtocol.IsRecordId(PublishedRecordKind.Statement, RecordId) || RevisionNumber < 1 ||
             string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary))
             throw new InvalidDataException("Published record identity or wording is invalid.");
-        if (ApprovedBy == PublishedApprover.Code && TextOrigin != PublishedTextOrigin.Model)
-            throw new InvalidDataException("Code approves only text that a model wrote.");
+        if (ApprovedBy == PublishedApprover.Code && TextOrigin == PublishedTextOrigin.Person)
+            throw new InvalidDataException("Code approves only a model summary or the source text.");
+        if (TextOrigin == PublishedTextOrigin.Code && (Summary != Source?.Text || StatementDate is not null))
+            throw new InvalidDataException("A code statement shows the exact source text and has no date.");
         if ((StatementDate is null) != (StatementDateEvidence is null))
             throw new InvalidDataException("A statement date requires exact evidence.");
         ValidateContent(Source, Quotations, StatementDateEvidence, ArticleUrl);

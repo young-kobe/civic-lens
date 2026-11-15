@@ -2,12 +2,16 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Statements;
+using CivicLens.Core.Documents;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
+using CivicLens.Core.Statements;
 using CivicLens.Infrastructure.Analysis;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Collection.Jobs;
 using CivicLens.Infrastructure.Collection.Jobs.Persistence;
+using CivicLens.Infrastructure.Documents;
+using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Infrastructure.Statements.Persistence;
 using CivicLens.Publication.Contracts;
@@ -52,7 +56,7 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
         var gateRun = await db.Set<StatementAnalysisRunRow>().AsNoTracking()
             .Where(run => run.CandidateId == candidateId && run.Task == StatementGateTask.Task && run.Reason != null)
             .OrderByDescending(run => run.StartedAtUtcTicks).FirstOrDefaultAsync(cancellationToken);
-        var existing = await ReadExistingDraftAsync(db, candidateId, cancellationToken);
+        var existing = await ReadExistingDraftAsync(db, article, cancellationToken);
         var revision = await admittingRevisions.ReadAsync(db, candidateId, cancellationToken);
         return new(article, StatementGateCarryOver.From(gateRun is null ? null : StatementGateQueueMapping.ToRun(gateRun)), existing, revision);
     }
@@ -60,39 +64,55 @@ public sealed class PostgresStatementDraftStore : PostgresAnalysisStore<Statemen
     public Task<int> RequeueStaleAsync(CancellationToken cancellationToken) =>
         queue.RequeueAsync(State.Succeeded, null, null, async (db, settled, token) =>
         {
-            var stale = await StaleCandidateIdsAsync(db, [.. settled.Select(row => row.CandidateId)], token);
+            var stale = await StaleCandidateIdsAsync(db, [.. settled.Select(row => row.CandidateId)], null, token);
             return settled.Where(row => stale.Contains(row.CandidateId));
         }, cancellationToken);
 
-    private static async Task<StatementExistingDraft?> ReadExistingDraftAsync(CollectionAttemptDbContext db, string candidateId,
+    private static async Task<StatementExistingDraft?> ReadExistingDraftAsync(CollectionAttemptDbContext db, StatementArticle article,
         CancellationToken cancellationToken)
     {
-        var current = await db.Set<StatementDraftRow>().AsNoTracking().Where(row => row.CandidateId == candidateId)
+        var current = await db.Set<StatementDraftRow>().AsNoTracking().Where(row => row.CandidateId == article.CandidateId)
             .Select(row => (int?)row.CurrentRevisionNumber).SingleOrDefaultAsync(cancellationToken);
         if (current is not { } number) return null;
-        var stale = await StaleCandidateIdsAsync(db, [candidateId], cancellationToken);
-        return new(number, stale.Contains(candidateId));
+        var stale = await StaleCandidateIdsAsync(db, [article.CandidateId], article.Extraction, cancellationToken);
+        return new(number, stale.Contains(article.CandidateId));
     }
 
-    /// <summary>A stale candidate holds a draft whose current revision is a model revision that an older task, prompt, or schema made.
+    /// <summary>A stale candidate holds a draft whose current revision is a model revision that an older task, prompt, or schema made,
+    /// or a model revision of a short release that code now writes from its source text (owner decision, 2026-11-14).
     /// No person decision has set its status, and no person has a final decision on it. A person decision is final, so code never replaces that text.
-    /// A person revision becomes the current revision, so the author kind of the current revision shows that no person revision is on top.</summary>
+    /// A person revision becomes the current revision, so the author kind of the current revision shows that no person revision is on top.
+    /// The evidence read passes the extraction that it already read, so only the command reads extractions here.</summary>
     private static async Task<HashSet<string>> StaleCandidateIdsAsync(CollectionAttemptDbContext db, string[] candidateIds,
-        CancellationToken cancellationToken)
+        DocumentExtraction? readExtraction, CancellationToken cancellationToken)
     {
         var untouched = StatementDraftRows.UntouchedStatuses;
         var personDecisions = StatementDraftRows.PersonDecisions(db).AsNoTracking();
         var modelDrafts = await (from draft in db.Set<StatementDraftRow>().AsNoTracking()
                                  join revision in db.Set<StatementRevisionRow>().AsNoTracking()
                                      on new { draft.CandidateId, Number = draft.CurrentRevisionNumber } equals new { revision.CandidateId, Number = revision.RevisionNumber }
+                                 join candidate in db.Set<StatementCandidateRow>().AsNoTracking() on draft.CandidateId equals candidate.CandidateId
+                                 join extraction in db.Set<DocumentExtractionRow>().AsNoTracking() on candidate.ExtractionId equals extraction.ExtractionId
                                  where candidateIds.Contains(draft.CandidateId) && untouched.Contains(draft.ReviewStatus) &&
                                      !personDecisions.Any(decision => decision.CandidateId == draft.CandidateId) &&
                                      revision.AuthorKind == ReviewAuthorKind.Analysis && revision.RunId != null
-                                 select new { draft.CandidateId, RunId = revision.RunId! }).ToArrayAsync(cancellationToken);
+                                 select new
+                                 {
+                                     draft.CandidateId,
+                                     RunId = revision.RunId!,
+                                     candidate.ExtractionId,
+                                     MayBeShort = extraction.Text.Length <= StatementDraftRevision.MaximumSummaryLength
+                                 }).ToArrayAsync(cancellationToken);
         var staleRunIds = await StaleAnalysisRuns.FindStaleRunIdsAsync<StatementAnalysisRunRow>(db,
             [.. modelDrafts.Select(draft => draft.RunId)], StatementDraftTask.CurrentVersions, cancellationToken);
-        return modelDrafts.Where(draft => staleRunIds.Contains(draft.RunId)).Select(draft => draft.CandidateId)
-            .ToHashSet(StringComparer.Ordinal);
+        var stale = modelDrafts.Where(draft => staleRunIds.Contains(draft.RunId)).Select(draft => draft.CandidateId).ToHashSet(StringComparer.Ordinal);
+        var mayBeShort = modelDrafts.Where(draft => draft.MayBeShort && !stale.Contains(draft.CandidateId)).ToArray();
+        if (mayBeShort.Length == 0) return stale;
+        var extractions = readExtraction is not null ? new() { [readExtraction.ExtractionId] = readExtraction }
+            : await PostgresDocumentExtractionStore.ReadManyAsync(db, [.. mayBeShort.Select(draft => draft.ExtractionId).Distinct()], cancellationToken);
+        stale.UnionWith(mayBeShort.Where(draft => StatementSourceText.Read(extractions[draft.ExtractionId]) is not null)
+            .Select(draft => draft.CandidateId));
+        return stale;
     }
 
     public async Task<IReadOnlyList<StatementDraftListItem>> ListAsync(StatementDraftView? view, int limit, CancellationToken cancellationToken)

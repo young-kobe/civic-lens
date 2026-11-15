@@ -54,6 +54,23 @@ public sealed class PublishedStatementTests
     }
 
     [Fact]
+    public void CodeApprovesTheSourceTextOfAShortReleaseOnlyWhenTheSummaryIsTheExactSourceTextWithNoDate()
+    {
+        var sourceText = Statement() with
+        {
+            TextOrigin = PublishedTextOrigin.Code,
+            ApprovedBy = PublishedApprover.Code,
+            Summary = Text,
+            StatementDate = null,
+            StatementDateEvidence = null
+        };
+
+        sourceText.Validate();
+        Assert.Throws<InvalidDataException>((sourceText with { Summary = "Summary" }).Validate);
+        Assert.Throws<InvalidDataException>((sourceText with { StatementDate = Statement().StatementDate, StatementDateEvidence = Statement().StatementDateEvidence }).Validate);
+    }
+
+    [Fact]
     public void ValidStatementPasses()
     {
         Statement().Validate();
