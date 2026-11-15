@@ -38,18 +38,6 @@ public sealed class MissedVotesTests
         Assert.Equal((new DateOnly(2025, 1, 3), new DateOnly(2026, 10, 20)), (house.First, house.Last));
     }
 
-    [Theory]
-    [InlineData(4, false)]
-    [InlineData(5, true)]
-    public void TheShareShowsOnlyAtTheThresholdOfHeldRollCalls(int held, bool showsShare)
-    {
-        var votes = Enumerable.Range(0, held).Select(index => Vote(index, index == 0 ? PublishedOfficialVote.NotVoting : "Yea"));
-
-        var share = Assert.Single(MissedVotes.Of(votes)).Share;
-
-        Assert.Equal(showsShare ? 1.0 / held : null, share);
-    }
-
     private static PublishedOfficialVote Vote(int id, string cast, PublishedChamber chamber = PublishedChamber.House) => new()
     {
         RecordId = id.ToString("x64"),

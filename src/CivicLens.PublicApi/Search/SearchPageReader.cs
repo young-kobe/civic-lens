@@ -9,7 +9,8 @@ namespace CivicLens.PublicApi.Search;
 
 /// <summary>Builds the search page from one request. The index answers the results. Officials and a bill number match come only with the first page of a text search.
 /// A kind, official, issue, or date filter hides the bill number match, because the filter can leave out the bill. The page shows nothing before the first search,
-/// so an empty request reads no results.</summary>
+/// so an empty request reads no results. The total comes from its own count query. Both queries name one release, and the rows of a release never change,
+/// so the total and the page agree. A page with no hits reads no total.</summary>
 public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, OfficialStore officialStore, BillStore bills)
 {
     private const int BillMatchLimit = 5;
@@ -26,15 +27,16 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         if (await index.FindReleaseAsync(request.Release, cancellationToken) is not { } release) return null;
         var issues = (await issueStore.ListOptionsAsync(cancellationToken)).Select(issue => new SearchChoiceData(issue.IssueId, issue.Name)).ToArray();
         var typed = Typed(request);
-        if (typed.IsEmpty) return new(typed, release.ReleaseNumber, [], false, null, [], null, issues, null);
+        if (typed.IsEmpty) return new(typed, release.ReleaseNumber, [], false, null, [], 0, null, issues, null);
 
         var page = await index.SearchAsync(release.ReleaseNumber, request, cancellationToken);
         var hits = page.Hits.Select(Hit).ToArray();
+        var total = hits.Length == 0 ? 0 : await index.CountAsync(release.ReleaseNumber, request, cancellationToken);
         var first = request.Cursor is null && request.Text is not null;
         var (officials, moreOfficials) = first ? await FindOfficialsAsync(request.Text!, cancellationToken) : ([], false);
         var bill = first && !typed.HasFilter ? await FindBillAsync(request.Text!, hits, cancellationToken) : null;
         var filterName = page.Hits.SelectMany(hit => hit.Officials).FirstOrDefault(official => official.Id == request.Official)?.Name;
-        return new(typed, release.ReleaseNumber, officials, moreOfficials, bill, hits, page.NextCursor, issues, filterName);
+        return new(typed, release.ReleaseNumber, officials, moreOfficials, bill, hits, total, page.NextCursor, issues, filterName);
     }
 
     private static SearchQueryData Typed(SearchRequest request) => new(request.Text,

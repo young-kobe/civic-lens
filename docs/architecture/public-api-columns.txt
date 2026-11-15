@@ -241,6 +241,14 @@ bill_status latest_action_text
 bill_status latest_action_date
 bill_status read_at_utc_ticks
 bill_status status
+bill_keys record_id
+bill_keys revision_number
+bill_keys congress
+bill_keys bill_type
+bill_keys bill_number
+bill_keys policy_area_id
+bill_keys event_date
+bill_keys status
 bill_text_sentences part
 bill_text_sentences position
 bill_text_sentences quote

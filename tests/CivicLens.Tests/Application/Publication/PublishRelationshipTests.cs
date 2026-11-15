@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
@@ -58,44 +57,6 @@ public sealed class PublishRelationshipTests
         var entry = ReadManifest(scenario, summary.DirectoryName).Records.Single(candidate => candidate.RecordId == action);
 
         Assert.Equal("A housing bill", entry.BillTitle);
-    }
-
-    [Fact]
-    public async Task TheOfficialPageListsEachLinkOfAStatementOfTheOfficialWithTheBillTitleAndTheCastOfTheOfficial()
-    {
-        var scenario = new PublicationScenario();
-        var (statement, action, _) = await PublishRecordsAsync(scenario);
-        var vote = scenario.AddVote('a');
-        var toBill = scenario.AddRelationship('e', statement, action);
-        var toVote = scenario.AddRelationship('f', statement, vote, PublishedRecordKind.Vote);
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            Reference(PublishedRecordKind.Vote, vote), Reference(PublishedRecordKind.Relationship, toBill), Reference(PublishedRecordKind.Relationship, toVote)));
-
-        var pairs = scenario.OfficialPages.Last(page => page.Profile.Id == "mayor" && page.IsCurrent).Pairs;
-        Assert.Equal(2, pairs.Length);
-        var bill = pairs.Single(pair => pair.TargetRecordId == action);
-        Assert.Equal(("A housing bill", null), (bill.TargetTitle, bill.Cast));
-        Assert.Equal("Yea", pairs.Single(pair => pair.TargetRecordId == vote).Cast);
-        Assert.All(pairs, pair => Assert.Equal((statement, "Statement c", StatementDate), (pair.StatementRecordId, pair.StatementHeadline, pair.StatementDay)));
-    }
-
-    [Fact]
-    public async Task ABillThatTheOfficialDoesNotSponsorStillTouchesTheOfficialPageWhenItIsReplacedBecauseThePairShowsItsTitle()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('c', statementDate: StatementDate);
-        var action = scenario.AddAction('d', sponsorId: "chair");
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Action, action)));
-        var relationship = scenario.AddRelationship('e', statement, action);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-        scenario.Releases.WriteOrder.Clear();
-        scenario.ReviseAction(action, 2);
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)));
-
-        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
     }
 
     [Fact]
@@ -160,20 +121,18 @@ public sealed class PublishRelationshipTests
     }
 
     [Fact]
-    public async Task ARelationshipPublishesWithTheCitedRecordsThatTheSamePublishAddsAndTheirPagesListIt()
+    public async Task ARelationshipPublishesWithTheCitedRecordsThatTheSamePublishAdds()
     {
         var scenario = new PublicationScenario();
         var statement = scenario.AddStatement('c');
         var action = scenario.AddAction('d');
         var relationship = scenario.AddRelationship('e', statement, action);
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
             Reference(PublishedRecordKind.Relationship, relationship), Reference(PublishedRecordKind.Statement, statement),
             Reference(PublishedRecordKind.Action, action)));
 
         Assert.Equal(3, scenario.Publications.LastCommit!.Records.Length);
-        Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, summary.DirectoryName, statement));
-        Assert.Equal($"<html>action {action} related e</html>", PageOf(scenario, summary.DirectoryName, action));
     }
 
     [Fact]
@@ -190,7 +149,7 @@ public sealed class PublishRelationshipTests
     }
 
     [Fact]
-    public async Task APublishThatAddsALinkWritesAgainThePageOfEachCitedRecordAndKeepsItsRecordFileAsTheSameFile()
+    public async Task APublishThatAddsALinkKeepsTheRecordFileOfEachCitedRecordAsTheSameFile()
     {
         var scenario = new PublicationScenario();
         var (statement, action, other) = await PublishRecordsAsync(scenario);
@@ -202,19 +161,14 @@ public sealed class PublishRelationshipTests
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
 
         var second = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, summary.DirectoryName, statement));
-        Assert.Equal($"<html>action {action} related e</html>", PageOf(scenario, summary.DirectoryName, action));
         Assert.Same(statementFile, second[PublicationProtocol.RecordDataPath(statement)]);
         Assert.Contains((first, PublicationProtocol.RecordDataPath(statement)), scenario.Releases.Links);
         Assert.Contains((first, PublicationProtocol.RecordDataPath(action)), scenario.Releases.Links);
-        Assert.DoesNotContain((first, PublicationProtocol.RecordPagePath(statement)), scenario.Releases.Links);
-        Assert.DoesNotContain((first, PublicationProtocol.RecordPagePath(action)), scenario.Releases.Links);
-        Assert.Contains((first, PublicationProtocol.RecordPagePath(other)), scenario.Releases.Links);
         Assert.Contains((first, PublicationProtocol.RecordDataPath(other)), scenario.Releases.Links);
     }
 
     [Fact]
-    public async Task AReplacedRecordPageListsTheLinksThatAnEarlierReleaseCarriesAndTheLinkFilesAreCarriedAsTheyAre()
+    public async Task AReplacedRecordKeepsTheLinkFilesThatAnEarlierReleaseCarriesAsTheyAre()
     {
         var scenario = new PublicationScenario();
         var (statement, action, _) = await PublishRecordsAsync(scenario);
@@ -225,15 +179,12 @@ public sealed class PublishRelationshipTests
 
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
 
-        Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
         Assert.Contains((second.DirectoryName, PublicationProtocol.RecordDataPath(relationship)), scenario.Releases.Links);
-        Assert.Contains((second.DirectoryName, PublicationProtocol.RecordPagePath(relationship)), scenario.Releases.Links);
-        Assert.Contains((second.DirectoryName, PublicationProtocol.RecordPagePath(action)), scenario.Releases.Links);
         Assert.Contains(new PublishedRevisionBinding(PublishedRecordKind.Relationship, relationship, 1), scenario.Publications.LastCommit!.Records);
     }
 
     [Fact]
-    public async Task AReplacedLinkIsListedOnceBecauseTheNewRevisionTakesThePlaceOfTheCarriedOne()
+    public async Task AReplacedLinkTakesTheNewRevisionInItsRecordFile()
     {
         var scenario = new PublicationScenario();
         var (statement, action, _) = await PublishRecordsAsync(scenario);
@@ -244,48 +195,7 @@ public sealed class PublishRelationshipTests
         var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
             Request("k3", relationship));
 
-        Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
         Assert.Equal(2, ReadRecord<PublishedRelationship>(scenario, third.DirectoryName, relationship).RevisionNumber);
-    }
-
-    [Fact]
-    public async Task TheRelatedListFollowsTheStatementDateAndPutsAnUndatedStatementLast()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('d');
-        var march = scenario.AddStatement('a', statementDate: new DateOnly(2026, 3, 1));
-        var january = scenario.AddStatement('b', statementDate: new DateOnly(2026, 1, 1));
-        var undated = scenario.AddStatement('c');
-        var links = new[]
-        {
-            scenario.AddRelationship('1', march, action), scenario.AddRelationship('2', january, action), scenario.AddRelationship('3', undated, action)
-        };
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k", [
-            Reference(PublishedRecordKind.Action, action), Reference(PublishedRecordKind.Statement, march),
-            Reference(PublishedRecordKind.Statement, january), Reference(PublishedRecordKind.Statement, undated),
-            .. links.Select(link => Reference(PublishedRecordKind.Relationship, link))]));
-
-        Assert.Equal($"<html>action {action} related 2 1 3</html>", PageOf(scenario, summary.DirectoryName, action));
-    }
-
-    [Fact]
-    public async Task ACarriedVoteKeepsTheLinkToItsBillActionWhenALinkMakesItsPageRenderAgain()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('c');
-        var action = scenario.AddAction('d');
-        var vote = scenario.AddVote('f', billActionRecordIds: [action]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Action, action),
-            Reference(PublishedRecordKind.Vote, vote)));
-        var relationship = scenario.AddRelationship('e', statement, vote, PublishedRecordKind.Vote);
-        var before = scenario.Votes.BillLookups;
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-
-        Assert.Equal($"<html>vote {vote} bill {action} related e</html>", PageOf(scenario, summary.DirectoryName, vote));
-        Assert.Equal(before + 1, scenario.Votes.BillLookups);
     }
 
     [Fact]
@@ -304,44 +214,6 @@ public sealed class PublishRelationshipTests
     }
 
     [Fact]
-    public async Task OnlyTheCarriedLinksThatCiteAnAddedRecordAreReadFromDiskSoThePublishCostFollowsTheLinksOfThatRecord()
-    {
-        var scenario = new PublicationScenario();
-        var (statement, action, _) = await PublishRecordsAsync(scenario);
-        var otherStatement = scenario.AddStatement('a');
-        var otherAction = scenario.AddAction('f');
-        var citing = scenario.AddRelationship('e', statement, action);
-        var unrelated = scenario.AddRelationship('1', otherStatement, otherAction);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            Reference(PublishedRecordKind.Statement, otherStatement), Reference(PublishedRecordKind.Action, otherAction),
-            Reference(PublishedRecordKind.Relationship, citing), Reference(PublishedRecordKind.Relationship, unrelated)));
-        scenario.AddStatement('c', revisionNumber: 2, statementDate: StatementDate, correctionNote: PublicationScenario.PersonNote);
-        scenario.Releases.ReadPaths.Clear();
-
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Statement, statement)));
-
-        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.BillStatusPath, PublicationProtocol.RecordDataPath(citing)], scenario.Releases.ReadPaths);
-        Assert.Equal($"<html>statement {statement} related e</html>", PageOf(scenario, third.DirectoryName, statement));
-    }
-
-    [Fact]
-    public async Task EachCarriedRecordIsReadAndRenderedBeforeTheNextIsReadSoPeakMemoryStaysAtAboutOneRecord()
-    {
-        var scenario = new PublicationScenario();
-        var (statement, action, _) = await PublishRecordsAsync(scenario);
-        var relationship = scenario.AddRelationship('e', statement, action);
-        scenario.Events.Clear();
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-
-        var carried = scenario.Events.Where(entry => entry is "read c" or "read d" or "render c" or "render d").ToArray();
-        Assert.Equal(["read", "render", "read", "render"], carried.Select(entry => entry.Split(' ')[0]));
-        Assert.Equal(carried[0].Split(' ')[1], carried[1].Split(' ')[1]);
-        Assert.Equal(carried[2].Split(' ')[1], carried[3].Split(' ')[1]);
-        Assert.NotEqual(carried[0].Split(' ')[1], carried[2].Split(' ')[1]);
-    }
-
-    [Fact]
     public async Task ARelationshipWhoseQuoteLiesOutsideEveryPassageOfItsStatementIsRefusedBecauseThePageWouldQuoteTextThatNoOneApproved()
     {
         var scenario = new PublicationScenario();
@@ -352,46 +224,6 @@ public sealed class PublishRelationshipTests
 
         foreach (var relationship in new[] { outside, otherExtraction })
             await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k" + relationship[0], relationship)));
-    }
-
-    [Fact]
-    public async Task AJointStatementPutsItsPairOnTheMatchedOfficialAndAReplacedBillTouchesOnlyThatOfficial()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('c', statementDate: StatementDate, speakerIds: ["chair", "mayor"]);
-        var action = scenario.AddAction('d', sponsorId: "chair");
-        var vote = scenario.AddVote('a', memberIds: ["chair"]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Action, action), Reference(PublishedRecordKind.Vote, vote)));
-        var relationship = scenario.AddRelationship('e', statement, action);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-        Assert.Single(scenario.OfficialPages.Last(page => page.Profile.Id == "chair" && page.IsCurrent).Pairs);
-        Assert.Empty(scenario.OfficialPages.Last(page => page.Profile.Id == "mayor" && page.IsCurrent).Pairs);
-        scenario.Releases.WriteOrder.Clear();
-        scenario.ReviseAction(action, 2);
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Action, action)));
-
-        Assert.Contains(PublicationProtocol.OfficialPagePath("chair"), scenario.Releases.WriteOrder);
-        Assert.DoesNotContain(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
-    }
-
-    [Fact]
-    public async Task AVoteThatIsReplacedTouchesTheOfficialPageOfASpeakerWhoIsNotAMemberOfItsChamber()
-    {
-        var scenario = new PublicationScenario();
-        var statement = scenario.AddStatement('c', statementDate: StatementDate);
-        var vote = scenario.AddVote('a', memberIds: ["chair"]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            Reference(PublishedRecordKind.Statement, statement), Reference(PublishedRecordKind.Vote, vote)));
-        var relationship = scenario.AddRelationship('e', statement, vote, PublishedRecordKind.Vote);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", relationship));
-        scenario.Releases.WriteOrder.Clear();
-        scenario.ReviseVote(vote, 2);
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", Reference(PublishedRecordKind.Vote, vote)));
-
-        Assert.Contains(PublicationProtocol.OfficialPagePath("mayor"), scenario.Releases.WriteOrder);
     }
 
     private static async Task<(string Statement, string Action, string Other)> PublishRecordsAsync(PublicationScenario scenario)
@@ -409,9 +241,6 @@ public sealed class PublishRelationshipTests
 
     private static PublishReleaseRequest Request(string key, string relationshipId) =>
         PublicationScenario.Request(key, Reference(PublishedRecordKind.Relationship, relationshipId));
-
-    private static string PageOf(PublicationScenario scenario, string directory, string recordId) =>
-        Encoding.UTF8.GetString(scenario.Releases.Directories[directory][PublicationProtocol.RecordPagePath(recordId)]);
 
     private static TRecord ReadRecord<TRecord>(PublicationScenario scenario, string directory, string recordId) =>
         JsonSerializer.Deserialize<TRecord>(scenario.Releases.Directories[directory][PublicationProtocol.RecordDataPath(recordId)],

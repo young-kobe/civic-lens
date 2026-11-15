@@ -1,17 +1,14 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Application.Publication;
 
-internal delegate Task<string> PageRenderer(ImmutableArray<PublishedRelationship> related, ReleaseBillLines billLines, CancellationToken cancellationToken);
-
-internal record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion, byte[] Json, PublishedCorrection[] Corrections, PageRenderer RenderPage)
+internal record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion, byte[] Json, PublishedCorrection[] Corrections)
 {
     public static PendingRecord<TRecord> Create<TRecord>(PublishedRecordEntry entry, int reviewStateVersion, TRecord record,
-        PublishedCorrection[] corrections, PageRenderer renderPage)
+        PublishedCorrection[] corrections)
         where TRecord : class =>
-        new(entry, reviewStateVersion, record, JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions), corrections, renderPage);
+        new(entry, reviewStateVersion, record, JsonSerializer.SerializeToUtf8Bytes(record, PublicationProtocol.JsonOptions), corrections);
 
     public string RecordId => Entry.RecordId;
 
@@ -19,4 +16,4 @@ internal record PendingRecord(PublishedRecordEntry Entry, int ReviewStateVersion
 }
 
 internal sealed record PendingRecord<TRecord>(PublishedRecordEntry Entry, int ReviewStateVersion, TRecord Record, byte[] Json,
-    PublishedCorrection[] Corrections, PageRenderer RenderPage) : PendingRecord(Entry, ReviewStateVersion, Json, Corrections, RenderPage);
+    PublishedCorrection[] Corrections) : PendingRecord(Entry, ReviewStateVersion, Json, Corrections);

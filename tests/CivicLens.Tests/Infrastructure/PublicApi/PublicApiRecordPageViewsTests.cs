@@ -1,6 +1,4 @@
 using System.Collections.Immutable;
-using System.Reflection;
-using CivicLens.Application.Actions;
 using CivicLens.Core.Review;
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection.Migrations;
@@ -541,15 +539,13 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
 
     private static string CitedHeadline(string currentHeadline) => "Earlier: " + currentHeadline;
 
-    // ReleaseLinks is internal, so the test builds it through its private constructor. The static pages call the same Citing method.
-    private static PublishedRelationship[] CitingLinks(PublishedRelationship[] links, PublishedRecordKind kind, string recordId)
-    {
-        var type = typeof(IActionReviewStore).Assembly.GetType("CivicLens.Application.Publication.ReleaseLinks")!;
-        var releaseLinks = Activator.CreateInstance(type, BindingFlags.Instance | BindingFlags.NonPublic, null,
-            [links.ToImmutableArray(), ImmutableArray<PublishedRelationshipCitation>.Empty], null)!;
-        var citing = (ImmutableArray<PublishedRelationship>)type.GetMethod("Citing")!.Invoke(releaseLinks, [kind, recordId])!;
-        return [.. citing];
-    }
+    // The links that cite one record, in the order of the record page: dated statements first, by date, then by link ID.
+    private static PublishedRelationship[] CitingLinks(PublishedRelationship[] links, PublishedRecordKind kind, string recordId) =>
+        [.. links.Where(link => Cites(link.Statement, kind, recordId) || Cites(link.Target, kind, recordId))
+            .OrderBy(link => link.StatementDate is null).ThenBy(link => link.StatementDate).ThenBy(link => link.RecordId, StringComparer.Ordinal)];
+
+    private static bool Cites(PublishedRelationshipCitation citation, PublishedRecordKind kind, string recordId) =>
+        citation.Kind == kind && citation.RecordId == recordId;
 
     private async Task<string[]> PublicAsync(string sql)
     {

@@ -22,14 +22,13 @@ public sealed class DataTableTests
     }
 
     [Fact]
-    public async Task ASortableTableMarksItsHeadersTheValueBehindACellAndTheDefaultOrderInTheCaption()
+    public async Task ASortableTableMarksItsHeadersAndTheDefaultOrderInTheCaption()
     {
         var document = new HtmlParser().ParseDocument(await RenderAsync(sortable: true));
 
         Assert.Equal("Words. Newest first.", document.QuerySelector("caption")!.TextContent);
         Assert.Equal("Newest first", document.QuerySelector("table")!.GetAttribute("data-default-order"));
         Assert.Equal(["text", "number"], document.QuerySelectorAll("th").Select(header => header.GetAttribute("data-sort")));
-        Assert.Equal("7", document.QuerySelector("td[data-sort-value]")!.GetAttribute("data-sort-value"));
     }
 
     private static async Task<string> RenderAsync(bool sortable)
@@ -39,13 +38,13 @@ public sealed class DataTableTests
         {
             RenderFragment head = builder =>
             {
-                Cell(builder, header: true, sortable ? SortKind.Text : SortKind.None, null, "Word");
-                Cell(builder, header: true, sortable ? SortKind.Number : SortKind.None, null, "Count");
+                Cell(builder, header: true, sortable ? SortKind.Text : SortKind.None, "Word");
+                Cell(builder, header: true, sortable ? SortKind.Number : SortKind.None, "Count");
             };
             RenderFragment<string> row = word => builder =>
             {
-                Cell(builder, header: false, SortKind.None, null, word);
-                Cell(builder, header: false, SortKind.None, sortable ? "7" : null, "7");
+                Cell(builder, header: false, SortKind.None, word);
+                Cell(builder, header: false, SortKind.None, "7");
             };
             var parameters = new Dictionary<string, object?>
             {
@@ -59,13 +58,12 @@ public sealed class DataTableTests
         });
     }
 
-    private static void Cell(RenderTreeBuilder builder, bool header, SortKind sort, string? sortValue, string text)
+    private static void Cell(RenderTreeBuilder builder, bool header, SortKind sort, string text)
     {
         builder.OpenComponent<TableCell>(0);
         builder.AddComponentParameter(1, nameof(TableCell.Header), header);
         builder.AddComponentParameter(2, nameof(TableCell.Sort), sort);
-        builder.AddComponentParameter(3, nameof(TableCell.SortValue), sortValue);
-        builder.AddComponentParameter(4, nameof(TableCell.ChildContent), (RenderFragment)(content => content.AddContent(0, text)));
+        builder.AddComponentParameter(3, nameof(TableCell.ChildContent), (RenderFragment)(content => content.AddContent(0, text)));
         builder.CloseComponent();
     }
 }

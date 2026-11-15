@@ -1,0 +1,18 @@
+@using CivicLens.Publication.Contracts
+
+@if (Shown(Corrections) is { } shown)
+{
+    <p class="small muted update-line">@PublishedCorrectionView.UpdateLine(shown)</p>
+}
+
+@code {
+    /// <summary>The correction history of the shown revision, newest first.</summary>
+    [Parameter, EditorRequired] public PublishedCorrection[] Corrections { get; set; } = [];
+
+    /// <summary>The routine code update that the record meta names: the newest update from the source. A person correction shows the correction banner
+    /// instead, so the page then shows no line. A summary rewrite of a vote is not an update from the source and shows no line.</summary>
+    public static PublishedCorrection? Shown(PublishedCorrection[] corrections) =>
+        PublishedCorrectionBanner.Shown(corrections) is null
+            ? corrections.FirstOrDefault(correction => !correction.FactsUnchanged)
+            : null;
+}

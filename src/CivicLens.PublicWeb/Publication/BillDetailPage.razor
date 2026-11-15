@@ -18,7 +18,11 @@
                 <p class="bill-line-row"><PublishedBillLine Line="@Data.BillLine" /></p>
                 <PublishedBillLineNote />
             }
-            <p class="bill-lede">@Lede()</p>
+            @if (Lede() is { Length: > 0 } lede)
+            {
+                <p class="bill-lede">@lede</p>
+            }
+            <PublishedUpdateLine Corrections="Data.Corrections" />
         </header>
         <PublishedCorrectionBanner Kind="PublishedRecordKind.Action" Corrections="Data.Corrections" />
         @if (Data.Steps.Length > 0)

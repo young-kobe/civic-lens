@@ -8,14 +8,14 @@ Civic Lens publishes reviewed, evidence-backed records for regular citizens who 
 
 Three views share one evidence base: officials' statements and actions, tracked-document changes, and weekly media briefs. The registry size is not fixed in code. A new official on an existing source type needs configuration only. A new source format can need a connector.
 
-The system has one repository and three runtime parts. A C# application runs collection, analysis, and the shared private review workspace. A separate C# collector executable fetches sources. A static public publication serves approved releases.
+The system has one repository and three runtime parts. A C# application runs collection, analysis, and the shared private review workspace. A separate C# collector executable fetches sources. A public service, `PublicApi`, serves every public page from published data. The publisher writes release data files and no page.
 
 ### Record terms
 
 - A **statement** is a public communication by an official in their own words. It comes from the official, their office, or the official record of their remarks. It states a position, makes a claim, or claims credit. One statement covers one source document, such as a press release or a floor speech. It holds the speaker, the date, a short account, and exact cited quotations.
 - An **executive action** is a presidential document that the Federal Register publishes: an executive order, a proclamation, a notice, or a memorandum. Its record holds the official title and the facts of the document. An original document also has its body text, stored beside the record. This slice holds no summary.
 - An **action** is an act that an official performs in their official capacity. The institution where it happened records it. Examples are sponsoring or cosponsoring a bill, withdrawing a cosponsorship, and casting a roll-call vote. Each action states whether it is a proposal, a procedural act, or a decision. What happens to a bill later is context, because it is an act of Congress, not of the official.
-- A **relationship** is a reviewed link of a named type between a statement and an action or a vote. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. The worker drafts relationships. A person reviews them. An approved relationship publishes in a static release.
+- A **relationship** is a reviewed link of a named type between a statement and an action or a vote. Examples are "describes own bill", "states position on", and "claims credit for". Chronology alone never creates one. The worker drafts relationships. A person reviews them. An approved relationship publishes in a release.
 
 ### Editorial rules
 
@@ -27,7 +27,7 @@ The system has one repository and three runtime parts. A C# application runs col
 - A capture is not a document version, an approval, or a publication.
 - A model prediction is never a human approval. Approval binds to the exact revision and evidence reviewed.
 - Code approves action records, House vote records, Senate vote records, and executive action records. Their facts come from Congress.gov, the Clerk XML, the Voteview vote files, and the Federal Register. A Senate vote from the Voteview source rests on Voteview data. Code checks every citation. Code also approves a statement from the own office of its official; see [statements](architecture/statements.md#statement-code-approval). People approve all other records. Public pages label the headline and the summary as an AI summary of the official record. Text that a person wrote gets no label.
-- Approval and publication are separate actions. Public serving reads published releases only.
+- Approval and publication are separate actions. Public serving reads published data only: the `public_api` views and the photo files of the release. An operational database outage stops live read routes while cached pages stay up.
 
 ### Status
 
@@ -48,18 +48,18 @@ Implemented:
 - relationship review: person edits, version-bound decisions, and a derived flag for changed cited records
 - AI drafting of weekly briefs from the records published in a closed week
 - the authenticated review workspace
-- static release publication of document changes, statements, actions, votes, weekly briefs, and relationships
+- release publication of document changes, statements, actions, votes, weekly briefs, and relationships
 - related records on the statement, action, and vote pages
-- the public pages of each release: officials, official profiles, party voting boards, issues, weekly briefs, all records, about, method, reader reports, and photos
+- the public pages that `PublicApi` serves: officials, official profiles, party voting boards, issues, weekly briefs, about, method, reader reports, and search
 - presidential documents from the Federal Register, recorded as code-approved executive actions with their official titles and captured disposition notes
 - record withdrawals, the member roster, and member photos
-- the public search service with its own Postgres database, fed from published releases, and the search page of each release
+- the public search service with its own Postgres database, fed from published releases
 
-Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The public root remains static, and `/web` remains a gated Home preview. The public `/compare.html` route serves server-rendered Compare. Both use the configured public base URL. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The [roadmap](roadmap.md) holds the order.
 
 ## Layers and dependency rules
 
-Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb and uses the Npgsql package. It renders PublicWeb components as static server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
+Core holds domain invariants. Application holds use cases and the interfaces of external boundaries. Infrastructure implements external adapters. Host wires the application. PublicWeb holds the public Razor components and references Publication.Contracts only. Host references PublicWeb, and no production project references Host. Collection.Contracts and Publication.Contracts have no dependencies. Publication.Contracts also holds pure public rules that Host and PublicApi share, such as `BillStatusMeaning`, so each rule has one owner. The collector references Collection.Contracts only. The search service, `CivicLens.PublicApi`, references Publication.Contracts and PublicWeb and uses the Npgsql package. It renders PublicWeb components as server pages. Public MCP will read the publication contract, never local application internals. Architecture tests enforce these references.
 
 | Layer | Owns | Must not own |
 |---|---|---|
@@ -70,14 +70,14 @@ Core holds domain invariants. Application holds use cases and the interfaces of 
 | Collector | Bounded source interaction and complete raw capture production | Durable scheduling, imports, officials registry or publication |
 | Host | Command parsing, composition, review pages, and the public page components that still need Application types | Collection algorithms or evidence invariants |
 | PublicWeb | The public Razor components: shared UI, evidence display, and the public pages that need only Publication.Contracts | Application, Infrastructure, or Host types, packages, and operational storage |
-| PublicApi | Release ingest, the search index, static server rendering, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
+| PublicApi | Release ingest, the search index, server rendering of every public page, and the public read API | Operational storage outside the `public_api` views, credentials, job handlers, or unpublished evidence |
 
 `tools/render-architecture.py` generates the diagrams below. Run `python3 tools/render-architecture.py`, then open `artifacts/architecture.html` for the explorer. Planned components are labeled there; a diagram is not a claim that the pipeline exists.
 
 <!-- diagrams:start -->
 ### Collection to publication (target)
 
-Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all record kinds, including weekly briefs and relationships; and static release publication of all record kinds. Planned: classification and private and public MCP.
+Target workflow. Implemented: configured collection with durable jobs, discovery, and admission; the Congress.gov bill stream with its gate and action candidates; text extraction, history, and comparison; AI drafting of document-change accounts; the statement gate and statement drafting; AI drafting of bill action records; AI drafting of weekly briefs; version-bound review of all record kinds, including weekly briefs and relationships; and release publication of all record kinds, with every public page served by PublicApi. Planned: classification and private and public MCP.
 
 ```mermaid
 flowchart LR
@@ -154,7 +154,7 @@ flowchart LR
 | Captures | Compressed content-addressed files; immutable source and extraction versions |
 | Classification (planned) | Rules from measured change history first. A model tier only if the R-13 measurement shows a need (D-05) |
 | Drafting | Claude models through the official `Anthropic` C# SDK in Infrastructure; model extraction is planned; the model for each task can change after evaluation |
-| Public website | The C# release builder renders shared Razor components for the static public root; small JS modules add the theme toggle, the comparison control, and the search page. PublicApi serves every reader page at its public path from the `public_api` views. The static pages remain release output until retirement |
+| Public website | PublicApi renders shared Razor components as server pages at the public paths from the `public_api` views; small JS modules add the theme toggle, the comparison control, and the search page |
 | Public search and read API | `CivicLens.PublicApi` uses its own Postgres database, fed from published releases, for full-text search. Its read API and server-rendered previews read published data from the operational database's `public_api` views as the restricted role `civic_lens_public` |
 | Local MCP (planned) | Official C# SDK; separate local development and review registration |
 | Public MCP (planned) | Separate deployment over published artifacts and index; Cloudflare Worker is a candidate |
@@ -449,10 +449,9 @@ This is the only navigation index.
 | The Congress rule: day to Congress and session | [Publication](architecture/publication.md#invariants) | `src/CivicLens.Publication.Contracts/CongressCalendar.cs` |
 | Published vote record, builder, and page | [Publication](architecture/publication.md#vote-record) | `src/CivicLens.Publication.Contracts/PublishedVote.cs` |
 | Published relationship record, builder, and page | [Publication](architecture/publication.md#relationship-record) | `src/CivicLens.Publication.Contracts/PublishedRelationship.cs` |
-| Related records on record pages | [Publication](architecture/publication.md#related-records) | `src/CivicLens.Application/Publication/ReleasePages.cs` |
 | Backups, retention, monitoring | [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Web host, security headers, components | [Host](architecture/host.md#behavior) | `src/CivicLens.Host/Program.cs` |
-| Public Razor component library | [Publication](architecture/publication.md#rendering) | `src/CivicLens.PublicWeb/CivicLens.PublicWeb.csproj` |
+| Public Razor component library | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/CivicLens.PublicWeb.csproj` |
 | Production hosting plan | [Host](architecture/host.md#limits-and-planned-work) | none |
 | MCP plans | [Review](architecture/review.md#limits-and-planned-work), [Publication](architecture/publication.md#limits-and-planned-work) | none |
 | Public views, role, active release rule | [Publication](architecture/publication.md#public-api-views) | `src/CivicLens.Infrastructure/Collection/Migrations/20261103165431_PublicApiViews.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104013000_PublicApiZipDistricts.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261104014700_PublicApiReleaseTime.cs`, `src/CivicLens.Infrastructure/Collection/Migrations/20261105005544_VoteQuestionResultColumns.cs`, `src/CivicLens.Infrastructure/Publication/PublicApiGrants.cs` |
@@ -462,13 +461,10 @@ This is the only navigation index.
 | Reader report queue: pull, dismiss, editor panel, close by approval | [Review](architecture/review.md#reader-reports), [Search](architecture/search.md#operational-pull) | `src/CivicLens.Application/Reports/PullReaderReports.cs`, `src/CivicLens.Infrastructure/Reports/PostgresReaderReportStore.cs` |
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
 | Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |
-| Issue panel and `method.html` | [Publication](architecture/publication.md#issue-panel) | `src/CivicLens.Application/Publication/TalkAndActionProfile.cs` |
-| Officials and catalog files of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
-| Official pages, officials list, and vote files of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialPages.cs` |
+| Officials file of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
+| Vote files and summary rows of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialFiles.cs` |
 | Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
 | Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
-| Canonical addresses, sitemap, robots file, and not found page | [Publication](architecture/publication.md#public-base-url) | `src/CivicLens.Application/Publication/ReleaseSite.cs` |
 | Server sitemap and robots file from the views | [Public site](architecture/public-site.md#invariants) | `src/CivicLens.PublicApi/Sitemap/SitemapEndpoints.cs` |
-| Public filter pages | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseFacets.cs` |
 | Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

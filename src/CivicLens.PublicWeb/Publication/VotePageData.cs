@@ -2,7 +2,7 @@ using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>Everything that the vote page shows, read from one active release. Party counts are null when the release does not hold them.</summary>
+/// <summary>Everything that the vote page shows, read from one active release. Party counts are null when the release does not hold them. A Senate vote takes them from its member list.</summary>
 public sealed record VotePageData(
     int Release,
     string RecordId,

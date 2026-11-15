@@ -56,7 +56,7 @@ public sealed class OfficialsPageTests
     {
         var page = await RenderAsync(Page([Row("hal", "Hal Hale", PublishedOfficeKind.Representative, "DC", 0, "Democrat", null, 3)]));
 
-        Assert.Equal("Delegate for DC", page.QuerySelector(".list-row-meta span")!.TextContent);
+        Assert.Equal("Delegate for District of Columbia", page.QuerySelector(".list-row-meta span")!.TextContent);
     }
 
     [Theory]

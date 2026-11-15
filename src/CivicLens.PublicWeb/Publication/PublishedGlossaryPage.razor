@@ -77,7 +77,7 @@
 </PublicPage>
 
 @code {
-    /// <summary>The public site root of a server page. The static release leaves it empty, so its links stay relative.</summary>
+    /// <summary>The public site root of the server page.</summary>
     [Parameter] public string RootPath { get; set; } = string.Empty;
 
     private static readonly IReadOnlyList<GlossaryIndexGroup> IndexGroups = BuildIndexGroups();

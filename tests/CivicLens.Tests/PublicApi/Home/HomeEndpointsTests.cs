@@ -350,40 +350,6 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
     private static SeededVote Senate(char id, string day, int rollCall) => new(id, day) { Chamber = "Senate", RollCall = rollCall, Result = "Agreed to" };
 
-    private static bool HasCounts(SeededVote vote) => vote.Casts.Any(cast => cast is "Yea" or "Aye" or "Nay" or "No");
-
-    /// <summary>The entry as the publisher writes it. <c>PublishedVote</c> gives an alignment only to a substantive vote with counts, and <paramref name="bothParties"/> says
-    /// whether the vote also has a Democrat row and a Republican row. A party with no majority still gets the mixed alignment. Another vote has none, so the entry carries no counts and no alignment.</summary>
-    private static PublishedRecordEntry EntryOf(SeededVote vote, bool bothParties = true) => new()
-    {
-        Kind = PublishedRecordKind.Vote,
-        RecordId = vote.RecordId,
-        RevisionNumber = 1,
-        Headline = $"Headline {vote.Id}",
-        FirstPublishedAtUtc = Published,
-        Officials = [],
-        IssueIds = [],
-        PolicyAreaIds = [],
-        EventDate = DateOnly.Parse(vote.VotedOn, System.Globalization.CultureInfo.InvariantCulture),
-        YeaCount = HasCounts(vote) ? vote.Casts.Count(cast => cast is "Yea" or "Aye") : null,
-        NayCount = HasCounts(vote) ? vote.Casts.Count(cast => cast is "Nay" or "No") : null,
-        Alignment = Enum.Parse<PublishedVoteKind>(vote.Kind).IsSubstantive() && HasCounts(vote) && bothParties ? PublishedVoteAlignment.PartiesAgree : null,
-        Chamber = Enum.Parse<PublishedChamber>(vote.Chamber),
-        VoteKind = Enum.Parse<PublishedVoteKind>(vote.Kind)
-    };
-
-    private static PublicationRelease ReleaseOf(IEnumerable<PublishedRecordEntry> entries) => new()
-    {
-        SchemaVersion = PublicationProtocol.SchemaVersion,
-        ReleaseNumber = 1,
-        PublishedAtUtc = Published,
-        Withdrawals = [],
-        Records = [.. entries]
-    };
-
-    private static string[] StaticVotePick(IEnumerable<PublishedRecordEntry> entries) =>
-        [.. HomeHighlights.From(ReleaseOf(entries), [], 0).Votes.Select(entry => entry.RecordId)];
-
     [Fact]
     public async Task TheFeaturedVoteIsSeparateFromTwoRecentVotesPerChamber()
     {
@@ -531,7 +497,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheVotesDifferFromTheStaticPickForAVoteWithCountsAndNoAlignmentAndForVotesOfOneDay()
+    public async Task TheVotesIncludeAVoteWithCountsAndNoAlignmentAndOrderVotesOfOneDayByLaterRollCall()
     {
         var votes = new[]
         {
@@ -543,13 +509,10 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host);
 
-        var entries = votes.Select(vote => EntryOf(vote, bothParties: vote.Id != 'a'));
-        Assert.Equal([votes[3].RecordId, votes[1].RecordId, votes[2].RecordId, votes[0].RecordId], StaticVotePick(entries));
         Assert.Equal([votes[3].RecordId, votes[1].RecordId, votes[2].RecordId, votes[0].RecordId], Ids(answer));
-        // Two House votes of one day: the static pick orders them by record ID, the route by later roll call.
+        // Two House votes of one day: the route orders them by later roll call.
         var sameDay = new[] { House('c', "2026-04-20", 10), House('d', "2026-04-20", 11) };
         await using var tie = await StartAsync(sameDay);
-        Assert.Equal([sameDay[0].RecordId, sameDay[1].RecordId], StaticVotePick(sameDay.Select(vote => EntryOf(vote))));
         var tieAnswer = await GetAsync(tie);
         Assert.Equal(sameDay[1].RecordId, FeaturedId(tieAnswer));
         Assert.Equal([sameDay[0].RecordId], Ids(tieAnswer));
@@ -591,7 +554,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBillLineIsTheLineThatTheStaticBillLinesGiveWhenTheBillRecordsAreInTheActiveRelease()
+    public async Task TheBillLineIsTheLineOfTheFirstBillRecordByRecordIdWhenTheBillRecordsAreInTheActiveRelease()
     {
         var votes = new[]
         {
@@ -600,7 +563,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         };
         var bills = new[]
         {
-            // The first record of the bill has no line, so the line is null, as in the static rule.
+            // The first record of the bill has no line, so the line is null.
             new SeededBill('a', "2026-03-01") { BillNumber = 1 }, new SeededBill('b', "2026-03-01") { BillNumber = 1, BillLine = "Line b." },
             new SeededBill('d', "2026-03-01") { BillNumber = 2, BillLine = "Line d." }, new SeededBill('c', "2026-03-01") { BillNumber = 2, BillLine = "Line c." },
             new SeededBill('0', "2026-03-01") { BillNumber = 3, BillLine = "No sponsorships.", Sponsorships = [] }
@@ -609,24 +572,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
 
         var answer = await GetAsync(host);
 
-        var actions = bills.Select(bill => new PublishedRecordEntry
-        {
-            Kind = PublishedRecordKind.Action,
-            RecordId = bill.RecordId,
-            RevisionNumber = 1,
-            Headline = "H",
-            FirstPublishedAtUtc = Published,
-            Officials = [],
-            IssueIds = [],
-            PolicyAreaIds = [],
-            BillLine = bill.BillLine
-        }).ToArray();
-        var actionIdsByVote = votes.ToDictionary(vote => vote.RecordId,
-            vote => bills.Where(bill => bill.BillNumber == vote.BillNumber).Select(bill => bill.RecordId).Order(StringComparer.Ordinal).ToImmutableArray());
-        var lines = ReleaseBillLines.From(actions, actionIdsByVote);
-        var expected = votes.Take(2).Reverse().Select(vote => lines.Of(EntryOf(vote))).ToArray();
         var served = answer.GetProperty("votes").EnumerateArray().Select(vote => vote.GetProperty("billLine").GetString()).ToArray();
-        Assert.Equal(expected, served);
         Assert.Equal(new string?[] { "Line c.", null }, served);
         Assert.Equal(JsonValueKind.Null, answer.GetProperty("featuredVote").GetProperty("billLine").ValueKind);
     }
@@ -681,46 +627,27 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, none.ValueKind);
     }
 
-    private static PublishedRecordEntry BriefEntry(SeededBrief brief, DateTimeOffset firstPublished) => new()
-    {
-        Kind = PublishedRecordKind.Brief,
-        RecordId = brief.RecordId,
-        RevisionNumber = 1,
-        Headline = brief.Headline,
-        FirstPublishedAtUtc = firstPublished,
-        Officials = [],
-        IssueIds = [],
-        PolicyAreaIds = [],
-        EventDate = DateOnly.Parse(brief.WeekStart, System.Globalization.CultureInfo.InvariantCulture)
-    };
-
-    private static string StaticBriefPick(IEnumerable<PublishedRecordEntry> entries) => ReleaseRecordOrder.BriefsNewestFirst(entries).First().RecordId;
-
     [Fact]
-    public async Task TheBriefIsTheStaticHomeBriefWhenEveryBriefHasColumnsAndNoTwoShareAWeek()
+    public async Task TheBriefIsTheNewestWeekWhenEveryBriefHasColumnsAndNoTwoShareAWeek()
     {
         var briefs = new[] { new SeededBrief('a', "2026-05-04"), new SeededBrief('b', "2026-05-18"), new SeededBrief('c', "2026-05-11") };
         await using var host = await StartAsync([], briefs: briefs);
 
         var brief = (await GetAsync(host)).GetProperty("brief");
 
-        Assert.Equal(StaticBriefPick(briefs.Select(item => BriefEntry(item, Published))), brief.GetProperty("recordId").GetString());
         Assert.Equal(briefs[1].RecordId, brief.GetProperty("recordId").GetString());
     }
 
     [Fact]
-    public async Task TheBriefDiffersFromTheStaticHomeBriefForOneWeekAndForARevisionThatHoldsOnlyJson()
+    public async Task TheBriefOfOneWeekTakesTheLowerRecordIdAndABriefThatHoldsOnlyJsonIsHidden()
     {
-        // The static pick breaks a tie on the week by the later first publication, the route by record ID.
-        // The static pick also counts a brief that an older code wrote with revision_json only. The view hides it.
+        // The route breaks a tie on the week by record ID. The view hides a brief that an older code wrote with revision_json only.
         var same = new[] { new SeededBrief('x', "2026-06-01"), new SeededBrief('y', "2026-06-01") };
         var old = new SeededBrief('d', "2026-06-08") { WithColumns = false };
         await using var host = await StartAsync([], briefs: [.. same, old]);
 
         var brief = (await GetAsync(host)).GetProperty("brief");
 
-        Assert.Equal(same[1].RecordId, StaticBriefPick([BriefEntry(same[0], Published), BriefEntry(same[1], Published.AddHours(1))]));
-        Assert.Equal(old.RecordId, StaticBriefPick([BriefEntry(same[0], Published), BriefEntry(same[1], Published.AddHours(1)), BriefEntry(old, Published.AddHours(2))]));
         Assert.Equal(same[0].RecordId, brief.GetProperty("recordId").GetString());
     }
 

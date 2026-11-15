@@ -451,28 +451,21 @@ public sealed class BillDetailPageTests
         AiLabelAssert.DrawnByAiLabel(code, AiLabelWords.CodeWording);
     }
 
-    private static async Task<IDocument> RenderAsync(BillPageData data)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
-        {
-            var output = await renderer.RenderComponentAsync<BillDetailPage>(ParameterView.FromDictionary(
-                new Dictionary<string, object?> { [nameof(BillDetailPage.Data)] = data, [nameof(BillDetailPage.RootPath)] = Root }));
-            return output.ToHtmlString();
-        });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+    private static Task<IDocument> RenderAsync(BillPageData data) =>
+        ListPageRender.RenderAsync<BillDetailPage>(data, nameof(BillDetailPage.Data));
+
 
     [Fact]
-    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyWhenTheRecordHasACorrection()
+    public async Task TheCorrectionBannerFollowsTheHeadlineOnlyForAPersonCorrectionAndARoutineUpdateShowsTheMutedLineInTheHeader()
     {
         var corrected = await RenderAsync(Bill with { Corrections = [PublishedCorrectionBannerTests.Newest] });
         var plain = await RenderAsync(Bill);
-        var updated = await RenderAsync(Bill with { Corrections = [PublishedCorrectionBannerTests.Newest with { Note = null }] });
+        var updated = await RenderAsync(Bill with { Corrections = [PublishedUpdateLineTests.SourceUpdate] });
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
         Assert.Null(plain.QuerySelector(".correction-banner"));
-        Assert.Null(updated.QuerySelector(".correction-banner"));
+        Assert.Null(corrected.QuerySelector(".update-line"));
+        Assert.Null(plain.QuerySelector(".update-line"));
+        PublishedUpdateLineTests.AssertTheLineIsInTheRecordHeader(updated);
     }
 }

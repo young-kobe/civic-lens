@@ -6,9 +6,9 @@ namespace CivicLens.Application.Publication;
 /// <summary>
 /// How often one official voted with the party majority of the official on split votes in one chamber.
 /// A split vote is a substantive one where most Democrats and most Republicans voted on opposite sides. Only a Yea or Nay cast counts.
-/// NotCast counts the split votes with another cast, such as Present or Not Voting. Breaks are the casts against the party majority, newest first.
+/// Breaks are the casts against the party majority, newest first.
 /// </summary>
-public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int Matched, ImmutableArray<PublishedOfficialVote> Breaks, int NotCast)
+public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int Matched, ImmutableArray<PublishedOfficialVote> Breaks)
 {
     public int Cast => Matched + Breaks.Length;
 
@@ -17,7 +17,7 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
         .GroupBy(vote => (vote.Chamber, vote.Party)).OrderBy(group => group.Key.Chamber).ThenBy(group => group.Key.Party, StringComparer.Ordinal)
         .Select(group => From(group.Key.Chamber, group.Key.Party, group.Where(vote => vote.SplitVote).ToArray()))];
 
-    public static bool IsBreak(PublishedOfficialVote vote) =>
+    private static bool IsBreak(PublishedOfficialVote vote) =>
         vote.SplitVote && vote.PartyMajority is { } majority && PublishedPartyMajority.IsAgainstPartyMajority(vote.Party, vote.Cast, majority);
 
     private static bool HasMajorParty(PublishedOfficialVote vote) => PublishedPartyMajority.IsMajorParty(vote.Party);
@@ -27,6 +27,6 @@ public sealed record VotesWithParty(PublishedChamber Chamber, string Party, int 
         var breaks = splitVotes.Where(IsBreak).OrderByDescending(vote => vote.VotedOn).ThenByDescending(vote => vote.Session)
             .ThenByDescending(vote => vote.RollCallNumber).ToImmutableArray();
         var matched = splitVotes.Count(vote => PublishedOfficialVote.SideOf(vote.Cast) is not null) - breaks.Length;
-        return new(chamber, party, matched, breaks, splitVotes.Length - matched - breaks.Length);
+        return new(chamber, party, matched, breaks);
     }
 }

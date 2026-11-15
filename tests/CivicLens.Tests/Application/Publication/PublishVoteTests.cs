@@ -41,7 +41,6 @@ public sealed class PublishVoteTests
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
         var files = scenario.Releases.Directories[summary.DirectoryName];
-        Assert.Contains(PublicationProtocol.RecordPagePath(vote), files.Keys);
         var record = JsonSerializer.Deserialize<PublishedVote>(files[PublicationProtocol.RecordDataPath(vote)], PublicationProtocol.JsonOptions)!;
         Assert.Equal([PublicationScenario.VoteDetail, PublicationScenario.VoteMembers], record.Sources.Select(source => source.Text));
         var member = Assert.Single(record.Members);
@@ -150,7 +149,7 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", vote));
 
-        Assert.Equal($"<html>vote {vote} bill {action}</html>", PageOf(scenario, summary, vote));
+        Assert.Equal(new ReleaseVoteBill(vote, action), Assert.Single(scenario.Publications.LastCommit!.VoteBills));
     }
 
     [Fact]
@@ -163,7 +162,7 @@ public sealed class PublishVoteTests
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
             new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
 
-        Assert.Equal($"<html>vote {vote} bill {action}</html>", PageOf(scenario, summary, vote));
+        Assert.Equal(new ReleaseVoteBill(vote, action), Assert.Single(scenario.Publications.LastCommit!.VoteBills));
     }
 
     [Fact]
@@ -174,7 +173,7 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
-        Assert.Equal($"<html>vote {vote} bill </html>", PageOf(scenario, summary, vote));
+        Assert.Empty(scenario.Publications.LastCommit!.VoteBills);
     }
 
     [Fact]
@@ -188,87 +187,24 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", vote));
 
-        Assert.Equal($"<html>vote {vote} bill {action}</html>", PageOf(scenario, summary, vote));
+        Assert.Equal(new ReleaseVoteBill(vote, action), Assert.Single(scenario.Publications.LastCommit!.VoteBills));
     }
 
     [Fact]
-    public async Task TheVotePageAndTheListPagesShowTheBillLineOfTheActionOnItsBillBecauseOneMapOfTheBuildFeedsEveryPage()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid. It adds a cap.");
-        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
-            new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
-
-        Assert.Equal($"<html>vote {vote} bill {action} line This bill funds rent aid.</html>", PageOf(scenario, summary, vote));
-        var index = Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.AllRecordsPagePath(1)]);
-        Assert.Contains("lines [c:This bill funds rent aid.,d:This bill funds rent aid.]", index, StringComparison.Ordinal);
-        var facet = Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.PolicyAreaPagePath("housing-development", 1)]);
-        Assert.Contains("lines [c:This bill funds rent aid.", facet, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TheHomeHighlightsGetTheSameBillLinesAsTheListPages()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
-        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
-
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k",
-            new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
-
-        Assert.Equal("This bill funds rent aid.", scenario.Highlights!.BillLines.BillOfVote(vote)!.Line);
-    }
-
-    [Fact]
-    public async Task ACarriedVotePageRendersAgainWhenAnActionWithABillLineJoinsItsBillAndStaysAsItWasWhenAnUnrelatedRecordPublishes()
+    public async Task ACarriedVoteLinksItsBillOnlyOnceTheActionOfTheBillJoinsTheRelease()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
         var vote = scenario.AddVote('d', billActionRecordIds: [action]);
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", vote));
-        scenario.PageLayout = " layout-2";
 
-        var unrelated = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
             new PublishedRecordReference(PublishedRecordKind.Statement, scenario.AddStatement('b'))));
-        var joined = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3",
+        Assert.Empty(scenario.Publications.LastCommit!.VoteBills);
+        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3",
             new PublishedRecordReference(PublishedRecordKind.Action, action)));
 
-        Assert.Equal($"<html>vote {vote} bill </html>", PageOf(scenario, unrelated, vote));
-        Assert.Equal($"<html>vote {vote} bill {action} line This bill funds rent aid. layout-2</html>", PageOf(scenario, joined, vote));
-    }
-
-    [Fact]
-    public async Task ACarriedVotePageGetsTheBillLinkWhenAnActionWithNoBillLineJoinsItsBill()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c');
-        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", vote));
-        scenario.PageLayout = " layout-2";
-
-        var joined = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            new PublishedRecordReference(PublishedRecordKind.Action, action)));
-
-        Assert.Equal($"<html>vote {vote} bill {action} layout-2</html>", PageOf(scenario, joined, vote));
-    }
-
-    [Fact]
-    public async Task ACarriedVotePageStaysAsItWasWhenANewRevisionOfItsActionKeepsTheSameBillLine()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c', summaryText: "This bill funds rent aid.");
-        var vote = scenario.AddVote('d', billActionRecordIds: [action]);
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1",
-            new PublishedRecordReference(PublishedRecordKind.Vote, vote), new PublishedRecordReference(PublishedRecordKind.Action, action)));
-        scenario.PageLayout = " layout-2";
-        scenario.ReviseAction(action, 2);
-
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k2",
-            new PublishedRecordReference(PublishedRecordKind.Action, action)));
-
-        Assert.DoesNotContain("layout-2", PageOf(scenario, summary, vote), StringComparison.Ordinal);
+        Assert.Equal(new ReleaseVoteBill(vote, action), Assert.Single(scenario.Publications.LastCommit!.VoteBills));
     }
 
     [Fact]
@@ -769,9 +705,6 @@ public sealed class PublishVoteTests
     private static PublishedOfficialVotes ReadOfficialVotes(PublicationScenario scenario, PublicationReleaseSummary summary, string officialId) =>
         JsonSerializer.Deserialize<PublishedOfficialVotes>(
             scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.OfficialVotesPath(officialId, 119)], PublicationProtocol.JsonOptions)!;
-
-    private static string PageOf(PublicationScenario scenario, PublicationReleaseSummary summary, string recordId) =>
-        Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordPagePath(recordId)]);
 
     private static PublishReleaseRequest Request(string key, string voteId) =>
         PublicationScenario.Request(key, new PublishedRecordReference(PublishedRecordKind.Vote, voteId));

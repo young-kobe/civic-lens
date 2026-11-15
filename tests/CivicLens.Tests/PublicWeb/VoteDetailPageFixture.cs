@@ -44,12 +44,13 @@ internal static class VoteDetailPageFixture
         Text = Text
     };
 
+    /// <summary>The breaks_party value of each member follows the majorities of <see cref="Tallies"/>, as the view gives it. Ed Eaton did not vote, so he has no party line.</summary>
     public static readonly VoteMemberData[] Members =
     [
-        new("o1", "Ada Able", "Aye", "Democrat", Cite(Lines[4])),
-        new("o2", "Ben Baker", "Nay", "Democrat", Cite(Lines[5])),
-        new("o3", "Cy Cole", "Aye", "Republican", Cite(Lines[6])),
-        new("o4", "Di Dole", "Nay", "Republican", Cite(Lines[7])),
+        new("o1", "Ada Able", "Aye", "Democrat", Cite(Lines[4])) { BreaksParty = true },
+        new("o2", "Ben Baker", "Nay", "Democrat", Cite(Lines[5])) { BreaksParty = false },
+        new("o3", "Cy Cole", "Aye", "Republican", Cite(Lines[6])) { BreaksParty = false },
+        new("o4", "Di Dole", "Nay", "Republican", Cite(Lines[7])) { BreaksParty = true },
         new("o5", "Ed Eaton", "Not Voting", "Republican", Cite(Lines[8]))
     ];
 
@@ -67,20 +68,12 @@ internal static class VoteDetailPageFixture
         [new() { Text = Lines[1], Citation = Cite(Lines[1]) }, new() { Text = Lines[2], Citation = Cite(Lines[2]) }, new() { Text = Lines[3], Citation = Cite(Lines[3]) }],
         [Source], Members, new("b".PadRight(64, 'b'), "Sanctioning Russia and Iran Act of 2026", "A bill line."), [new("tax", "Taxes")], "hr", 5334);
 
-    public static async Task<IDocument> RenderAsync(VotePageData data, VoteMemberFilter? filter = null)
-    {
-        await using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
-        var html = await renderer.Dispatcher.InvokeAsync(async () =>
+    public static Task<IDocument> RenderAsync(VotePageData data, VoteMemberFilter? filter = null) =>
+        ListPageRender.RenderPageAsync<VoteDetailPage>(new Dictionary<string, object?>
         {
-            var output = await renderer.RenderComponentAsync<VoteDetailPage>(ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                [nameof(VoteDetailPage.Data)] = data,
-                [nameof(VoteDetailPage.RootPath)] = Root,
-                [nameof(VoteDetailPage.Filter)] = filter ?? new VoteMemberFilter()
-            }));
-            return output.ToHtmlString();
+            [nameof(VoteDetailPage.Data)] = data,
+            [nameof(VoteDetailPage.RootPath)] = Root,
+            [nameof(VoteDetailPage.Filter)] = filter ?? new VoteMemberFilter()
         });
-        return await new HtmlParser().ParseDocumentAsync(html);
-    }
+
 }
