@@ -14,7 +14,7 @@ internal static class DetailPageFixture
     public static readonly string ActionId = new('e', 64);
     public static readonly string ChangeId = new('d', 64);
 
-    public const string StatementText = "Intro line. \"First quote.\" Middle. \"Second quote.\" More. \"Third quote.\" Gap. \"Fourth quote.\" End. Said on Friday.";
+    public const string StatementText = "Intro line. \"First quote.\" Middle. \"Second quote.\" More. \"Third quote.\" Gap. \"Fourth quote.\" End. \"Fifth quote.\" Said on Friday.";
 
     public const string StatementLabel = "An AI summary of this press release.";
 
@@ -29,7 +29,7 @@ internal static class DetailPageFixture
         new PublishedDocumentVersion { ExtractionId = "x1", Url = "https://feed.example/rss", ObservedAtUtc = new(2026, 10, 29, 17, 19, 0, TimeSpan.Zero), Text = StatementText },
         "https://kelly.example/release",
         dated ? new PublishedCitation { ExtractionId = "x1", Start = StatementText.IndexOf("Friday", StringComparison.Ordinal), Length = 6, Quote = "Friday" } : null,
-        [.. new[] { "First quote.", "Second quote.", "Third quote.", "Fourth quote." }.Take(quotes).Select(quote =>
+        [.. new[] { "First quote.", "Second quote.", "Third quote.", "Fourth quote.", "Fifth quote." }.Take(quotes).Select(quote =>
             new PublishedQuotation { ExtractionId = "x1", Start = StatementText.IndexOf(quote, StringComparison.Ordinal), Length = quote.Length, Quote = quote, Kind = PublishedQuotationKind.DirectQuotation })],
         new DateTimeOffset(2026, 10, 30, 0, 42, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 30, 0, 44, 0, TimeSpan.Zero));
 

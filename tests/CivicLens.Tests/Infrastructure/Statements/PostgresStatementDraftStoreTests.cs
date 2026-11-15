@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Analysis;
+using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Documents;
@@ -125,6 +126,25 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
     }
 
     [Fact]
+    public async Task AShortReleaseOfTheOwnOfficeStoresItsSourceTextAsACodeRevisionWithABypassedRunAndCodeApprovesIt()
+    {
+        var candidate = await PassedCandidateAsync(ShortRelease, admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        var model = new FakeStatementDraftModel();
+
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+        Assert.Equal(("Code", ShortRelease), (await TextAsync($"SELECT author_kind FROM statement_revisions WHERE candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT summary FROM statement_revisions WHERE candidate_id = '{candidate}'")));
+        Assert.Equal(("Bypassed", StatementDraftErrorCodes.SourceText), (
+            await TextAsync($"SELECT r.outcome FROM statement_analysis_runs r JOIN statement_revisions v ON v.run_id = r.run_id WHERE v.candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT r.reason FROM statement_analysis_runs r JOIN statement_revisions v ON v.run_id = r.run_id WHERE v.candidate_id = '{candidate}'")));
+        await AssertColumnsAndChildRowsMatchJsonAsync(candidate);
+        Assert.Equal("civic-lens:code", await TextAsync($"SELECT actor_subject FROM statement_review_decisions WHERE candidate_id = '{candidate}'"));
+    }
+
+    [Fact]
     public async Task ACodeApprovalRunsTheRelationshipHookSoAnApprovedStatementOfTheSponsorQueuesItsPair()
     {
         var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
@@ -228,6 +248,67 @@ public sealed class PostgresStatementDraftStoreTests(PostgresCollection postgres
 
         Assert.Equal(0, await drafts.RequeueStaleAsync(default));
         Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+    }
+
+    [Fact]
+    public async Task ACodeApprovedModelSummaryOfAShortReleaseIsStaleAndTheRedraftWritesItsSourceTextWithNoModelCallAndCodeApprovesIt()
+    {
+        var candidate = await ShortReleaseWithModelDraftAsync();
+        Assert.Equal(("Analysis", "Approved"), (await TextAsync($"SELECT author_kind FROM statement_revisions WHERE candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'")));
+        var model = new FakeStatementDraftModel();
+
+        Assert.True((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+        Assert.Equal(1, await drafts.RequeueStaleAsync(default));
+        await DraftingWorker(model).ExecuteAsync(once: true);
+
+        Assert.Empty(model.Requests);
+        Assert.Equal(("Code", ShortRelease), (
+            await TextAsync($"SELECT author_kind FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 2"),
+            await TextAsync($"SELECT summary FROM statement_revisions WHERE candidate_id = '{candidate}' AND revision_number = 2")));
+        Assert.Equal(("Approved", "civic-lens:code,civic-lens:code"), (
+            await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"),
+            await TextAsync($"SELECT string_agg(actor_subject, ',' ORDER BY revision_number) FROM statement_review_decisions WHERE candidate_id = '{candidate}'")));
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+    }
+
+    [Fact]
+    public async Task APersonApprovalOfAShortReleaseModelSummaryIsFinalSoTheShortRuleDoesNotMakeItStale()
+    {
+        var candidate = await ShortReleaseWithModelDraftAsync(SoleCoverage(Warren));
+        await DecideAsync(candidate, ReviewDecisionKind.Approve, "person-approval-short");
+
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+        Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+    }
+
+    [Fact]
+    public async Task ACodeApprovedModelSummaryOfAReleaseOverTheShortLimitIsNotStaleBecauseItKeepsItsAiSummary()
+    {
+        var candidate = await PassedCandidateAsync(admittedBy: AdmittedDefinition(OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel().Draft(Output(quotes: ["a rent cap for tenants"]))).ExecuteAsync(once: true);
+        Assert.Equal("Approved", await TextAsync($"SELECT review_status FROM statement_drafts WHERE candidate_id = '{candidate}'"));
+
+        Assert.Equal(0, await drafts.RequeueStaleAsync(default));
+        Assert.False((await drafts.ReadEvidenceAsync(candidate, default))!.ExistingDraft!.IsStaleModelDraft);
+    }
+
+    /// <summary>A short release that the model drafted before the short release rule. Code drafts it today, so the rows of its code revision
+    /// and run are turned into the rows that a model draft wrote then: the analysis author, a Drafted run, and a model summary.</summary>
+    private async Task<string> ShortReleaseWithModelDraftAsync(CollectionConfiguration? coverage = null)
+    {
+        var candidate = await PassedCandidateAsync(ShortRelease, admittedBy: AdmittedDefinition(coverage ?? OwnOffice(Warren)));
+        await DraftingWorker(new FakeStatementDraftModel()).ExecuteAsync(once: true);
+        const string modelSummary = "The senator announced a rent cap for tenants.";
+        await ExecuteAsync(connectionString, $"""
+            UPDATE statement_analysis_runs SET outcome = 'Drafted', reason = NULL
+             WHERE run_id = (SELECT run_id FROM statement_revisions WHERE candidate_id = '{candidate}');
+            UPDATE statement_revisions SET author_kind = 'Analysis', author_subject = '{ReviewAuthor.AnalysisSubject}', summary = '{modelSummary}',
+                   revision_json = jsonb_set(jsonb_set(revision_json::jsonb, ARRAY['authorSubject'], to_jsonb('{ReviewAuthor.AnalysisSubject}'::text)),
+                       ARRAY['summary'], to_jsonb('{modelSummary}'::text))::text
+             WHERE candidate_id = '{candidate}';
+            """);
+        return candidate;
     }
 
     [Theory]
