@@ -522,9 +522,9 @@ public sealed partial class PostgresHouseVoteTests
         return (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE update_date_utc_ticks = {vote.UpdateDate.UtcTicks}"))!;
     }
 
-    private async Task<string> ReadableCandidateAsync()
+    private async Task<string> ReadableCandidateAsync(DateTimeOffset? updated = null, string position = "Yea")
     {
-        var vote = HouseVoteFixtures.Vote(100, Updated);
+        var vote = HouseVoteFixtures.Vote(100, updated ?? Updated);
         var roll = HouseVoteFixtures.Roll100;
         var source = new ConfiguredCollectionSource(HouseVoteFixtures.Configuration() with
         {
@@ -535,12 +535,12 @@ public sealed partial class PostgresHouseVoteTests
         var detailText = HouseVoteRenderer.RenderDetail(HouseVoteParser.Parse(Encoding.UTF8.GetBytes(detailBody), roll));
         var detailExtraction = await extractions.SaveAsync(detailJob, detailBody, detailText, HouseVoteParser.ExtractionVersion);
         var membersJob = Assert.Single((await store.AdmitDetailAsync(source, detailJob, vote, detailExtraction, default)).Jobs).JobId;
-        var membersBody = VoteWorld.MembersBody([new("A000001", "Zed", "Zimmer", "Yea")]);
+        var membersBody = VoteWorld.MembersBody([new("A000001", "Zed", "Zimmer", position)]);
         var membersText = HouseVoteRenderer.RenderMembers(HouseVoteMembersParser.Parse(Encoding.UTF8.GetBytes(membersBody), roll));
         var membersExtraction = await extractions.SaveAsync(membersJob, membersBody, membersText, HouseVoteMembersParser.ExtractionVersion);
         await store.AdmitMembersAsync(source, membersJob, vote, membersExtraction, default);
         await AdmitBillDetailAsync(readable: true);
-        return (string)(await ScalarAsync("SELECT candidate_id FROM vote_candidates"))!;
+        return (string)(await ScalarAsync($"SELECT candidate_id FROM vote_candidates WHERE update_date_utc_ticks = {vote.UpdateDate.UtcTicks}"))!;
     }
 
     private PostgresVoteDraftStore VoteStore() => new(new PooledDbContextFactory<CollectionAttemptDbContext>(

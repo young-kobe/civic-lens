@@ -8,7 +8,8 @@ namespace CivicLens.Application.Votes;
 /// <summary>
 /// Moves published votes from model text to code text, with no model call. For each published vote whose current revision holds model text,
 /// it appends a code revision with the same facts and the same issues, so code approves it and the next release publishes it.
-/// The revision cites a Bypassed <c>codeWritten</c> run, as the worker does. A vote whose facts changed is left to the worker.
+/// The revision cites a Bypassed <c>codeWritten</c> run, as the worker does. It checks the newest candidate of the roll call, because an unchanged
+/// update writes no revision. A vote whose newest candidate changed the facts, or waits in the queue, is left to the worker.
 /// A moved vote holds code text, so a second run finds nothing.
 /// </summary>
 public sealed class BackfillVoteCodeText(IVoteDraftStore store, VoteReader reader, IssueConfigurationRevision issues, TimeProvider clock)
@@ -33,6 +34,7 @@ public sealed class BackfillVoteCodeText(IVoteDraftStore store, VoteReader reade
     {
         var evidence = await store.ReadEvidenceAsync(target.CandidateId, cancellationToken);
         if (evidence is null) return VoteDraftErrorCodes.EvidenceUnavailable;
+        // The list names the newest candidate, so the facts and queue checks below apply to it. A candidate that arrives after the list supersedes it.
         if (evidence.HasNewerCandidate) return VoteDraftErrorCodes.SupersededByNewerCandidate;
         if (evidence.Current is not { TextOrigin: ReviewTextOrigin.Model } current) return VoteCodeTextSkip.NotModelText;
         var read = await reader.ReadAsync(evidence, cancellationToken);
