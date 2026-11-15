@@ -14,6 +14,8 @@ public static class PublicationProtocol
     public const int PageSize = 50;
     public const int MaximumFacetIdLength = 60;
     public const string HomePath = "index.html";
+    /// <summary>The ZIP results of the home page, where a reader sees and compares their members.</summary>
+    public const string YourMembersPath = HomePath + "#zip-results";
     public const string FacetsPath = "issues.html";
     public const int MaximumManifestBytes = 64 * 1024 * 1024;
     public const int SearchSourceTextCharacters = 200_000;
@@ -28,6 +30,7 @@ public static class PublicationProtocol
     public const string AboutPagePath = "about.html";
     public const string GlossaryPagePath = "glossary.html";
     public const string VoteKindsPagePath = "vote-kinds.html";
+    /// <summary>The old Compare page. It redirects to <see cref="YourMembersPath"/>.</summary>
     public const string ComparePagePath = "compare.html";
     public const string BoardsPagePath = "boards.html";
     public const string SitemapPath = "sitemap.xml";
@@ -75,14 +78,14 @@ public static class PublicationProtocol
     public static string ReportPageLink(string recordId, int revision, string title)
     {
         var link = $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}";
-        var shortTitle = ShortTitle(title);
+        var shortTitle = CutAtWord(title, ReaderReportProtocol.MaximumTitleCharacters);
         return shortTitle.Length == 0 ? link : $"{link}&{ReaderReportProtocol.TitleParameter}={Uri.EscapeDataString(shortTitle)}";
     }
 
-    private static string ShortTitle(string title)
+    /// <summary>The one cut of a title to <paramref name="limit"/> characters: on a word boundary, with an ellipsis. A title that fits stays whole.</summary>
+    public static string CutAtWord(string title, int limit)
     {
         var text = title.Trim();
-        var limit = ReaderReportProtocol.MaximumTitleCharacters;
         if (text.Length <= limit) return text;
         var head = text[..(limit - 1)];
         var space = head.LastIndexOf(' ');

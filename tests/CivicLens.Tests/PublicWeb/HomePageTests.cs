@@ -30,12 +30,11 @@ public sealed class HomePageTests
     }
 
     [Fact]
-    public async Task CompareLinkUsesTheConfiguredPublicSiteRootWhileZipLookupUsesTheApiOrigin()
+    public async Task TheHeroHasNoCompareLinkBecauseTheZipResultsCompareTheMembersWhileZipLookupUsesTheApiOrigin()
     {
         var page = await RenderAsync(new(7, Featured, [], null), "https://api.civic-lens.test");
 
-        Assert.Equal(Root + "compare.html", page.QuerySelectorAll(".home-browse a")
-            .Single(link => link.TextContent == "Compare your members").GetAttribute("href"));
+        Assert.DoesNotContain(page.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("compare", StringComparison.Ordinal));
         Assert.Equal("https://api.civic-lens.test", page.QuerySelector("[data-zip-api]")!.GetAttribute("data-zip-api"));
     }
 

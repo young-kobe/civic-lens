@@ -51,6 +51,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
+        await HomeSeed.AddBriefsAsync(host.OperationalDatabase, new SeededBrief('a', "2026-01-05"));
+
         var (status, page) = await GetAsync(host, PublicationProtocol.AboutPagePath);
         var text = page.QuerySelector("main")!.TextContent;
 
@@ -151,19 +153,17 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBriefsListShowsTheEmptyStateWithALinkToTheVotesListWhenNoBriefIsPublished()
+    public async Task WhileNoBriefIsPublishedTheBriefsListAnswersTheNotFoundPageAndAboutDoesNotLinkIt()
     {
         await using var host = await StartAsync();
 
         var (status, page) = await GetAsync(host, PublicationProtocol.BriefsPagePath(1));
+        var (_, about) = await GetAsync(host, PublicationProtocol.AboutPagePath);
 
-        Assert.Equal(HttpStatusCode.OK, status);
-        Assert.Equal("No weekly briefs yet", page.QuerySelector(".empty h2")!.TextContent);
-        var action = Assert.Single(page.QuerySelectorAll(".empty a"));
-        Assert.Equal(Root + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote), action.GetAttribute("href"));
-        Assert.Equal("Votes", action.TextContent.Trim());
-        Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
-        Assert.Equal("Updated 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal(HttpStatusCode.NotFound, status);
+        Assert.Equal("Page not found", page.QuerySelector("h1")!.TextContent);
+        Assert.DoesNotContain(about.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("briefs", StringComparison.Ordinal));
+        Assert.Contains("A weekly brief is a sample.", about.QuerySelector("main")!.TextContent);
     }
 
     [Fact]
@@ -179,6 +179,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
 
         Assert.Equal([Root + PublicationProtocol.RecordPagePath(newer.RecordId), Root + PublicationProtocol.RecordPagePath(older.RecordId)],
             rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")));
+        Assert.Equal("Updated 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
         Assert.Contains("Week of 12 Jan 2026", rows[0].TextContent);
         Assert.DoesNotContain("AI model", rows[0].TextContent);
         Assert.Contains("Drafted by an AI model from reviewed records. A person checked it before publication.", rows[1].TextContent);
@@ -264,7 +265,6 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     [InlineData(PublicationProtocol.VoteKindsPagePath)]
     [InlineData(PublicationProtocol.GlossaryPagePath)]
     [InlineData(PublicationProtocol.ReportPagePath)]
-    [InlineData("compare")]
     [InlineData("no-such-page")]
     public async Task EveryServerPageShowsTheNewestRollCallOfEachChamberFromOneOwner(string path)
     {

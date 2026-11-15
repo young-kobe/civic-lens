@@ -1,5 +1,6 @@
 using CivicLens.Application.Actions;
 using CivicLens.Application.Review;
+using CivicLens.Core;
 using CivicLens.Core.Review;
 using CivicLens.Host.Analysis;
 
@@ -7,10 +8,11 @@ namespace CivicLens.Host.Actions;
 
 internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, ActionDraftView, ActionDraftListItem> drafts,
     RequeueBlockedActionDrafts requeueBlocked, RequeueRefusedActionDrafts requeueRefused,
-    BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner)
+    BackfillRevisions backfill, VerifyRevisions verify, Func<BackfillActionCodeText> codeText, ReviewActor owner)
 {
     private const string Usage = "Use actions draft status, actions draft list [drafted|unchanged|superseded|no-official|pending|failed] [limit], " +
-        "actions draft requeue <candidate-id|--all>, actions draft requeue --blocked --code <block-code>, actions draft requeue --refused, actions revisions backfill <limit>, or actions revisions verify.";
+        "actions draft requeue <candidate-id|--all>, actions draft requeue --blocked --code <block-code>, actions draft requeue --refused, actions revisions backfill <limit>, actions revisions verify, " +
+        "or actions text backfill <limit> [cursor].";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["actions", ..];
@@ -45,6 +47,11 @@ internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, Action
                     return await OwnerCommand.BackfillRevisionsAsync(backfill, owner, limit, Usage, cancellationToken);
                 case ["actions", "revisions", "verify"]:
                     return await OwnerCommand.VerifyRevisionsAsync(verify, owner, cancellationToken);
+                case ["actions", "text", "backfill", var limit, .. var cursor] when cursor.Length <= 1:
+                    var (pageLimit, after) = (OwnerCommand.ParseLimit(limit, Usage), ParseCursor(cursor));
+                    var moved = await codeText().ExecuteAsync(owner, pageLimit, after, cancellationToken);
+                    CommandOutput.Write(moved);
+                    return moved.Skipped == 0 ? 0 : 1;
                 case ["actions", "draft", "requeue", "--blocked", ..]:
                     Console.Error.WriteLine(Usage);
                     return 2;
@@ -56,6 +63,14 @@ internal sealed class ActionCommand(AnalysisQueueCommands<ActionDraftRun, Action
                     return 2;
             }
         });
+
+    // The cursor is the record ID of the last examined record, as the previous page printed it.
+    private static string? ParseCursor(string[] cursor) => cursor switch
+    {
+        [] => null,
+        [var recordId] when LowercaseHex.Is(recordId, 64) => recordId,
+        _ => throw new ArgumentException(Usage)
+    };
 
     private static ActionDraftView ParseView(string text) => text switch
     {

@@ -41,7 +41,7 @@
         <div class="issue-grid">
             <section class="issue-section" id="your-members" aria-labelledby="issue-members-title">
                 <h2 id="issue-members-title">Your members on this issue</h2>
-                <p class="issue-members-prompt" data-issue-members-prompt>Enter your ZIP to see how your members voted on this issue. <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
+                <p class="issue-members-prompt" data-issue-members-prompt>Enter your ZIP to see how your members voted on this issue. <a href="@(RootPath + PublicationProtocol.YourMembersPath)">Find my members</a></p>
                 @if (BrowserApiUrl is not null)
                 {
                     <div class="issue-members" data-issue-members="@Data.IssueId" data-release="@Data.Release" data-congress="@Data.Congress" data-members-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)" aria-live="polite" hidden></div>

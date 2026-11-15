@@ -9,57 +9,26 @@
             <MembersStrip Data="Data" RootPath="@RootPath" NewVoteCount="NewVoteCount" />
         </template>
         <ZipDistrictCountNote DistrictCount="Data.DistrictCount" />
-        @if (View == "compare")
+        @* The answer leads with how the members voted. The member cards and their figures follow it. *@
+        @if (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null)
         {
-            @if (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null)
-            {
-                <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />
-            }
-            @foreach (var chamber in new[] { CivicLens.Publication.Contracts.PublishedChamber.House, CivicLens.Publication.Contracts.PublishedChamber.Senate })
-            {
-                var seats = Data.Seats.Select((seat, index) => (Seat: seat, Index: index)).Where(item => item.Seat.Chamber == chamber).ToArray();
-                @if (seats.Length > 0)
-                {
-                    <section class="zip-member-chamber" data-chamber="@chamber.ToString().ToLowerInvariant()">
-                        <h2>@chamber</h2>
-                        <ul class="zip-member-cards" role="list">
-                            @foreach (var item in seats)
-                            {
-                                <ZipMemberCard Seat="item.Seat" RootPath="@RootPath" IdPrefix="@($"zip-member-{item.Index}")" />
-                            }
-                        </ul>
-                        <ChamberDifferences Data="Data" Chamber="chamber" RootPath="@RootPath" />
-                    </section>
-                }
-            }
+            <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />
         }
-        else
+        @if (Data.SharedVotes.Length == 0)
         {
-            @* The answer leads with how the members voted. The member cards and their figures follow it. *@
-            @if (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null)
-            {
-                <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />
-            }
-            @if (Data.SharedVotes.Length == 0)
-            {
-                <p class="muted" data-member-votes-empty>No records match.</p>
-            }
-            @foreach (var votes in Data.SharedVotes)
-            {
-                <SharedVoteRows Data="votes" RootPath="@RootPath" />
-            }
-            <ul class="zip-member-cards" role="list">
-                @for (var seatIndex = 0; seatIndex < Data.Seats.Length; seatIndex++)
-                {
-                    <ZipMemberCard Seat="Data.Seats[seatIndex]" RootPath="@RootPath" IdPrefix="@($"zip-member-{seatIndex}")" />
-                }
-            </ul>
+            <p class="muted" data-member-votes-empty>No records match.</p>
         }
+        @foreach (var votes in Data.SharedVotes)
+        {
+            <SharedVoteRows Data="votes" RootPath="@RootPath" />
+        }
+        <ul class="zip-member-cards" role="list">
+            @for (var seatIndex = 0; seatIndex < Data.Seats.Length; seatIndex++)
+            {
+                <ZipMemberCard Seat="Data.Seats[seatIndex]" RootPath="@RootPath" IdPrefix="@($"zip-member-{seatIndex}")" />
+            }
+        </ul>
         <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
-        @if (ComparePageUrl is not null && View.Length == 0)
-        {
-            <p class="zip-member-compare"><a href="@ComparePageUrl">Compare your members</a></p>
-        }
     }
 </div>
 
@@ -67,7 +36,6 @@
     [Parameter, EditorRequired] public ZipMemberCardsData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter] public string View { get; set; } = string.Empty;
-    [Parameter] public string? ComparePageUrl { get; set; }
     [Parameter] public int? SinceRelease { get; set; }
     [Parameter] public long? NewVoteCount { get; set; }
 }

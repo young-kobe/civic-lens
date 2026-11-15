@@ -39,13 +39,22 @@ internal static class OfficialRecordQueries
                (SELECT count(*) FROM public_api.executive_actions e WHERE e.official_id = @id)
         """;
 
-    private static readonly string VotesSql = $"""
+    private static string VotesSql(OfficialRecordRequest filter) => $"""
         SELECT a.release_number, v.official_id, {MemberVoteStore.VoteColumns}
           FROM public_api.member_votes v
          CROSS JOIN (SELECT release_number FROM public_api.active_release LIMIT 1) a
-         WHERE v.official_id = @id AND v.kind = ANY(@kinds){After("v.voted_on", "v.record_id")}
+         WHERE v.official_id = @id AND v.kind = ANY(@kinds){VoteFilters(filter)}{After("v.voted_on", "v.record_id")}
          ORDER BY v.voted_on DESC, v.record_id LIMIT @take
         """;
+
+    // The issue test reads the column issue_ids of the same view, as MemberVoteStore does. The party test reads breaks_party, the one owner of that rule,
+    // and the cast test reads side, the normalized Yea or Nay of the view. Each filter only narrows the votes of one official, which the person index finds.
+    private static string VoteFilters(OfficialRecordRequest filter) =>
+        (filter.Issue is null ? "" : " AND @issue = ANY(v.issue_ids)") +
+        (filter.BillType is null ? "" : " AND v.bill_type = @bill_type") +
+        (filter.BillNumber is null ? "" : " AND v.bill_number = @bill_number") +
+        (filter.AgainstPartyOnly ? " AND v.breaks_party" : "") +
+        (filter.Cast is null ? "" : " AND v.side = @side");
 
     private static readonly string BillsSql = $"""
         SELECT {OfficialPageQueries.BillColumns}
@@ -95,13 +104,21 @@ internal static class OfficialRecordQueries
         return (int)(long)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
-    public static Task<Page<SharedVoteRowData>> ReadVotesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordCursor? after,
-        CancellationToken cancellationToken) =>
-        ReadPageAsync(connection, transaction, VotesSql, officialId, after, reader =>
+    /// <summary>Reads one page of the substantive votes of the official that pass the vote filters of the request.</summary>
+    public static Task<Page<SharedVoteRowData>> ReadVotesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordRequest filter,
+        OfficialRecordCursor? after, CancellationToken cancellationToken) =>
+        ReadPageAsync(connection, transaction, VotesSql(filter), officialId, after, reader =>
         {
             var vote = MemberVoteStore.ReadVote(reader);
             return (OfficialPageReader.Vote(officialId, vote) with { Chamber = vote.Chamber }, vote.VotedOn, vote.RecordId);
-        }, cancellationToken, withKinds: true);
+        }, cancellationToken, parameters =>
+        {
+            parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
+            if (filter.Issue is not null) parameters.AddWithValue("issue", filter.Issue);
+            if (filter.BillType is not null) parameters.AddWithValue("bill_type", filter.BillType);
+            if (filter.BillNumber is { } number) parameters.AddWithValue("bill_number", number);
+            if (filter.Cast is not null) parameters.AddWithValue("side", filter.Cast == OfficialRecordRequest.Yes ? "Yea" : "Nay");
+        });
 
     public static Task<Page<OfficialBillData>> ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordCursor? after,
         CancellationToken cancellationToken) =>
@@ -129,14 +146,14 @@ internal static class OfficialRecordQueries
         }, cancellationToken);
 
     private static async Task<Page<T>> ReadPageAsync<T>(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, string officialId, OfficialRecordCursor? after,
-        Func<NpgsqlDataReader, (T Row, DateOnly Day, string RecordId)> read, CancellationToken cancellationToken, bool withKinds = false)
+        Func<NpgsqlDataReader, (T Row, DateOnly Day, string RecordId)> read, CancellationToken cancellationToken, Action<NpgsqlParameterCollection>? filters = null)
     {
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("id", officialId);
         command.Parameters.AddWithValue("take", PageSize + 1);
         command.Parameters.AddWithValue("after_day", NpgsqlTypes.NpgsqlDbType.Date, after is null ? DBNull.Value : after.Day);
         command.Parameters.AddWithValue("after_id", after?.RecordId ?? string.Empty);
-        if (withKinds) command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
+        filters?.Invoke(command.Parameters);
         var rows = new List<(T Row, DateOnly Day, string RecordId)>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken)) rows.Add(read(reader));

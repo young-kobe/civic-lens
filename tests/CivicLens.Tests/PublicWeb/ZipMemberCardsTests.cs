@@ -137,7 +137,7 @@ public sealed class ZipMemberCardsTests
     }
 
     [Fact]
-    public async Task TheHomeAnswerLeadsWithHowTheMembersVotedThenTheCardsWithTheirIssueRowsFoldedAndAReadableCompareLink()
+    public async Task TheHomeAnswerLeadsWithHowTheMembersVotedThenTheCardsWithTheirIssueRowsFolded()
     {
         var vote = new SharedVoteRowData(new string('c', 64), new(2026, 9, 16), 119, 2, 314,
             "House passes a bill", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea")]);
@@ -149,49 +149,15 @@ public sealed class ZipMemberCardsTests
         {
             SharedVotes = [new(PublishedChamber.House, [new("pat", "Pat Member")], [vote])],
             IssueOptions = [new("health", "Health")]
-        }, comparePageUrl: Root + "compare.html");
+        });
 
-        var order = document.QuerySelectorAll("[data-member-issue-filter], .shared-vote-rows, .zip-member-cards, .zip-member-compare").Select(node => node.ClassName!).ToArray();
-        Assert.Equal(["zip-member-issue-filter", "shared-vote-rows", "zip-member-cards", "zip-member-compare"], order);
+        var order = document.QuerySelectorAll("[data-member-issue-filter], .shared-vote-rows, .zip-member-cards").Select(node => node.ClassName!).ToArray();
+        Assert.Equal(["zip-member-issue-filter", "shared-vote-rows", "zip-member-cards"], order);
         Assert.Equal("How your House members voted", document.QuerySelector(".shared-vote-rows h2")!.TextContent);
         var fold = document.QuerySelector(".zip-member-card details.zip-member-issues")!;
         Assert.False(fold.HasAttribute("open"));
         Assert.Equal("Most active issues in Congress 119", fold.QuerySelector("summary")!.TextContent);
         Assert.Contains("Firearms: 0 bills sponsored, 49 substantive votes cast.", fold.TextContent);
-        Assert.Equal(Root + "compare.html", document.QuerySelector(".zip-member-compare a")!.GetAttribute("href"));
-        Assert.Null(document.QuerySelector(".home-browse"));
-    }
-
-    [Fact]
-    public async Task CompareLayoutGroupsTheFullRosterAndReusesTheSameMemberCardsAndIssueFilter()
-    {
-        var member = new ZipMemberIdentityData("pat", "Pat Member", "Democratic", null, null, [House], [HouseDemocrat]);
-        var vote = new SharedVoteRowData(new string('d', 64), new(2026, 9, 16), 119, 2, 314,
-            "House members differ", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea"), new("other", "No (Nay)", "Nay")])
-        {
-            MembersVotedTheSame = false
-        };
-        var document = await RenderAsync(new ZipMemberCardsData(9, 119, "36009", 3,
-            [new("Representative for Alabama, district 2", member),
-                new("Representative for Alabama, district 1", member with { OfficialId = "other", Name = "Other" }),
-                new("Representative for Alabama, district 3", null),
-                new("Senator for Alabama", member with { OfficialId = "senator", Name = "Senator Member", Attendance = [], PartyLines = [] })
-                { Chamber = PublishedChamber.Senate }], [])
-        {
-            SharedVotes = [new(PublishedChamber.House, [new("pat", "Pat Member"), new("other", "Other")], [vote])],
-            IssueOptions = [new("health", "Health")]
-        }, view: "compare");
-
-        Assert.Equal(["house", "senate"], document.QuerySelectorAll(".zip-member-chamber").Select(section => section.GetAttribute("data-chamber")));
-        Assert.Equal(4, document.QuerySelectorAll(".zip-member-card").Length);
-        Assert.Contains("Congress 120", document.QuerySelector(".zip-member-attendance")!.TextContent);
-        Assert.Equal(2, document.QuerySelectorAll(".zip-member-party-line").Length);
-        Assert.Single(document.QuerySelectorAll("[data-member-issue=health]"));
-        Assert.Equal("Votes where your members differed", document.QuerySelector(".shared-vote-rows h2")!.TextContent);
-        Assert.Equal(Root + PublicationProtocol.RecordPagePath(vote.RecordId), document.QuerySelector(".shared-vote-row h3 a")!.GetAttribute("href"));
-        Assert.Equal("No differing votes in this selection.", document.QuerySelector(".zip-member-chamber[data-chamber=senate] [data-member-votes-empty]")!.TextContent);
-        var popovers = document.QuerySelectorAll("button[popovertarget]").Select(button => button.GetAttribute("popovertarget")!).ToArray();
-        Assert.Equal(popovers.Length, popovers.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
@@ -262,7 +228,7 @@ public sealed class ZipMemberCardsTests
         Assert.Contains("District of Columbia has no senators.", document.DocumentElement!.TextContent);
     }
 
-    private static async Task<IDocument> RenderAsync(ZipMemberCardsData data, string view = "", string? comparePageUrl = null)
+    private static async Task<IDocument> RenderAsync(ZipMemberCardsData data, string view = "")
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -273,8 +239,7 @@ public sealed class ZipMemberCardsTests
                 {
                     [nameof(ZipMemberCards.Data)] = data,
                     [nameof(ZipMemberCards.RootPath)] = Root,
-                    [nameof(ZipMemberCards.View)] = view,
-                    [nameof(ZipMemberCards.ComparePageUrl)] = comparePageUrl
+                    [nameof(ZipMemberCards.View)] = view
                 }));
             return output.ToHtmlString();
         });

@@ -20,6 +20,33 @@ public sealed class StatementDetailPageTests
     }
 
     [Fact]
+    public async Task AShortReleaseShowsItsOwnSourceTextWithEachQuoteMarkedAndTheSourceTextLabelInPlaceOfASummary()
+    {
+        var data = Statement(PublishedTextOrigin.Code, dated: false) with { Summary = StatementText, Label = AiLabelWords.StatementSourceTextWording };
+
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
+
+        var summary = page.QuerySelector(".ai-summary")!;
+        Assert.Null(page.QuerySelector(".ai-summary-ai"));
+        Assert.Equal(AiLabelWords.StatementSourceTextWording, summary.QuerySelector(".ai-label")!.TextContent);
+        Assert.Equal(StatementText, summary.QuerySelector(".doc-text")!.TextContent);
+        Assert.Equal(["First quote.", "Second quote.", "Third quote.", "Fourth quote."], summary.QuerySelectorAll("mark").Select(mark => mark.TextContent));
+        Assert.Equal(1, page.QuerySelectorAll("[id='cite-1']").Length);
+        Assert.Null(page.QuerySelector("#source .doc-text"));
+        Assert.DoesNotContain("model", summary.TextContent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ALongReleaseKeepsItsAiSummaryAndTheMarkedSourceTextStaysInTheFold()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+
+        Assert.Equal("A model wrote this <b>summary</b>.", page.QuerySelector(".ai-summary-ai p")!.TextContent);
+        Assert.Null(page.QuerySelector(".ai-summary .doc-text"));
+        Assert.Equal(StatementText, page.QuerySelector("#source .doc-text")!.TextContent);
+    }
+
+    [Fact]
     public async Task APersonSummaryHasNoAiLabelAndNeverSaysAModelWroteIt()
     {
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(PublishedTextOrigin.Person));

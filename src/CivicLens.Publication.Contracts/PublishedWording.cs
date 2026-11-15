@@ -23,6 +23,12 @@ public static class PublishedWording
     /// <summary>The source of a bill line, which takes the first sentence of the Congressional Research Service summary.</summary>
     public const string BillLineSource = "From the Congressional Research Service summary.";
 
+    /// <summary>The tag of the CRS summary text on the bill page. The page shows that text word for word, so it carries no AI label.</summary>
+    public const string CrsTextTag = "From the Congressional Research Service (CRS)";
+
+    /// <summary>The note of a bill page that has no CRS summary text and no summary of the bill text.</summary>
+    public const string NoBillSummary = "No summary of this bill is available yet.";
+
     /// <summary>The split vote line of an issue page, as the text before the glossary term and the term itself. One split vote reads "was a split vote". Any other count reads "were split votes".</summary>
     public static (string Lead, string Term) SplitVoteLine(int splitVotes, int substantiveVotes)
     {

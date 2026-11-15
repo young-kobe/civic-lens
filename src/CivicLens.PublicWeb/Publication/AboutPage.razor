@@ -20,7 +20,7 @@
         <p>A link joins a statement to a bill or a vote. A link is not a verdict. It does not say that the vote or the bill matches the statement.</p>
     </Panel>
     <Panel Title="Weekly briefs" Padded="true">
-        <p>A weekly brief is a sample. It is not a full account of the week. Each brief says how many records it cites and how many records Civic Lens considered. <a href="@(RootPath + PublicationProtocol.BriefsPagePath(1))">See all weekly briefs.</a></p>
+        <p>A weekly brief is a sample. It is not a full account of the week. Each brief says how many records it cites and how many records Civic Lens considered.@if (HasBriefs) { <text> </text><a href="@(RootPath + PublicationProtocol.BriefsPagePath(1))">See all weekly briefs.</a> }</p>
     </Panel>
     <Panel Title="Corrections and withdrawals" Padded="true">
         <p>A record page shows each <Term Key="correction">correction</Term>. A person can withdraw a record. The page of a withdrawn record says that it is withdrawn. Its content is no longer published.</p>
@@ -64,6 +64,8 @@
 
 @code {
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
+    /// <summary>True when the release holds a weekly brief. The briefs list has no page before the first brief, so the page links it only then.</summary>
+    [Parameter] public bool HasBriefs { get; set; }
 
     private const string CloudflarePrivacyUrl = "https://www.cloudflare.com/privacypolicy/";
     private const string CreativeCommonsUrl = "https://creativecommons.org/licenses/by/4.0/";

@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 @* The private fragment of the official page section "Compare with your other members". It names one ZIP area, so no cache keeps it.
-   Its comparison is the rule of the Compare page: SharedVoteRows in the differences-only mode over the same ZIP snapshot. *@
+   Its comparison is SharedVoteRows in the differences-only mode over the same ZIP snapshot. *@
 <div data-zip-member-fragment data-zcta="@Data.Zcta" data-release="@Data.Release" data-congress="@Data.Congress" data-issue="" data-view="official" data-official="@OfficialId" data-since-release="" data-new-votes="">
     @if (seat is not null)
     {
@@ -11,7 +11,7 @@
                 <text>Your other members: </text>@for (var index = 0; index < others.Length; index++)
                 {
                     @(index == 0 ? "" : index == others.Length - 1 ? " and " : ", ")<a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(others[index].OfficialId)))">@others[index].Name</a>
-                }<text>. </text><a href="@(RootPath + PublicationProtocol.ComparePagePath)">Compare all @(others.Length + 1)</a>
+                }<text>. </text><a href="@(RootPath + PublicationProtocol.YourMembersPath)">Compare all @(others.Length + 1)</a>
             }
         </p>
         <ZipDistrictCountNote DistrictCount="Data.DistrictCount" />

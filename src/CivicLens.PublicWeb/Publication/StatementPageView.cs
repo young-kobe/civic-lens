@@ -24,6 +24,13 @@ public static class StatementPageView
 
     public const string DateNotStated = "Date not stated";
 
+    /// <summary>The name of the marked saved text, in the source fold or in place of the summary.</summary>
+    public const string SourceTextLabel = "Source text";
+
+    /// <summary>A short release shows its own saved text, with each quote marked, in place of a summary. Its text origin is Code, because
+    /// code copied the text and no model wrote it. The source fold then holds the facts only, so the marks keep one anchor each.</summary>
+    public static bool ShowsSourceText(StatementPageData data) => data.TextOrigin == PublishedTextOrigin.Code;
+
     public const string FeedNote = "The source below is the feed that lists the article. It holds a copy of the article text.";
 
     public static string CheckFor(PublishedTextOrigin origin) => $"{(origin == PublishedTextOrigin.Model ? ModelCheckLine : CheckLine)} {CaptureCaveat}";

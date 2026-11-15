@@ -14,12 +14,15 @@ public static class ActionIssuePrompt
         - issueIds: the ids of the candidate issues that the bill is about. Choose from the candidate issues only. List each id once. The policy area of the bill is a hint only: never choose an issue because of the policy area. Choose an issue only when words in the title or the subjects show that the bill is about it. When no such words exist, use an empty list. Read the definition, the includes, and the excludes of each candidate.
         """;
 
+    /// <summary>The smallest daily reservation that still fits one issue call: the system prompt and the output limit.</summary>
+    public static long MinimumReservation => Encoding.UTF8.GetByteCount(SystemInstructions) + ActionDraftTask.MaximumIssueOutputTokens;
+
     public static AnalysisModelRequest? Build(ActionBillSnapshot snapshot, BillIssueChoice issues, int maximumBytes,
         ImmutableArray<string> previousErrors = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(issues);
-        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, withSummary: false, billText: null);
+        var user = ActionDraftPrompt.UserPrompt(snapshot, issues, previousErrors, billText: null);
         var schema = AnalysisSchema.IssueChoice(issues.AnswerSchema()!);
         var bytes = Encoding.UTF8.GetByteCount(SystemInstructions) + Encoding.UTF8.GetByteCount(user) + Encoding.UTF8.GetByteCount(schema);
         if (bytes > maximumBytes) return null;

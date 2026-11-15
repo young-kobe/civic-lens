@@ -17,9 +17,13 @@ public static class FixedPageEndpoints
     public static void MapFixedPages(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
         var rootPath = baseUrl.Join(string.Empty);
-        routes.MapGet(ServerPageEndpoints.Route(PublicationProtocol.AboutPagePath), (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            ApiResults.GuardAsync(() => responder.RespondAsync<AboutPage>(context, StatusCodes.Status200OK,
-                new Dictionary<string, object?> { [nameof(AboutPage.RootPath)] = rootPath }, cancellationToken)));
+        routes.MapGet(ServerPageEndpoints.Route(PublicationProtocol.AboutPagePath), (HttpContext context, BriefListReader briefs, ServerPageResponder responder,
+            CancellationToken cancellationToken) => ApiResults.GuardAsync(() => responder.RespondAsync<AboutPage>(context, StatusCodes.Status200OK,
+                async () => new Dictionary<string, object?>
+                {
+                    [nameof(AboutPage.RootPath)] = rootPath,
+                    [nameof(AboutPage.HasBriefs)] = await briefs.ExistsAsync(cancellationToken)
+                }, cancellationToken)));
         routes.MapGet(ServerPageEndpoints.Route(PublicationProtocol.MethodPagePath), (HttpContext context, ServerPageResponder responder, CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(() => responder.RespondAsync<MethodPage>(context, StatusCodes.Status200OK,
                 new Dictionary<string, object?> { [nameof(MethodPage.RootPath)] = rootPath }, cancellationToken)));
@@ -48,7 +52,9 @@ public static class FixedPageEndpoints
                 : ApiResults.NoRelease()));
     }
 
-    /// <summary>A page past the last brief has no page. It leaves the request to the shared not found page.</summary>
+    /// <summary>A page past the last brief, and the first page while no brief exists, has no page. It leaves the request to the shared not found page.
+    /// A not found answer, not a redirect to Home: a browser keeps a permanent redirect, so the list would stay out of reach after the first brief,
+    /// and a temporary redirect to Home would tell a search engine that the empty list is the home page.</summary>
     private static Task<IResult> RespondBriefsAsync(int page, HttpContext context, BriefListReader briefs, ServerPageResponder responder, string rootPath,
         CancellationToken cancellationToken) => ApiResults.GuardAsync(async () => await briefs.ReadAsync(page, cancellationToken) is { } data
             ? await responder.RespondAsync<BriefsPage>(context, StatusCodes.Status200OK, data.Release, new Dictionary<string, object?>

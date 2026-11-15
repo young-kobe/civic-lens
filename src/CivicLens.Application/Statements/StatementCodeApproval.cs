@@ -1,5 +1,6 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Review;
+using CivicLens.Core.Review;
 using CivicLens.Core.Statements;
 using CivicLens.Publication.Contracts;
 
@@ -23,7 +24,7 @@ public static class StatementCodeApproval
         return ApprovalCheck.Of(() =>
         {
             allowed.RequireApprovable(revision, evidence.Article.Extraction, IsDateReadByCode(revision.StatementDate, evidence.Article.FirstCapturedOn));
-            AiTextRules.RequireReadablePassage([revision.Headline, revision.Summary]);
+            if (revision.AuthorKind == ReviewAuthorKind.Analysis) AiTextRules.RequireReadablePassage([revision.Headline, revision.Summary]);
         });
     }
 

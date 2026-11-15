@@ -14,7 +14,16 @@
         <div class="detail-layout">
             <div class="detail-main">
                 <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
-                    <ChildContent><p>@Data.Summary</p></ChildContent>
+                    <ChildContent>
+                        @if (StatementPageView.ShowsSourceText(Data))
+                        {
+                            <DocumentText Label="@StatementPageView.SourceTextLabel" Runs="sourceRuns" />
+                        }
+                        else
+                        {
+                            <p>@Data.Summary</p>
+                        }
+                    </ChildContent>
                     <Check>@StatementPageView.CheckFor(Data.TextOrigin) <a href="#source">@SourceFold.Title</a></Check>
                 </AiSummary>
                 <section class="detail-section" aria-labelledby="statement-quotes-title">
@@ -80,17 +89,24 @@
             {
                 <p class="muted small">@StatementPageView.FeedNote</p>
             }
-            <DocumentText Label="Source text" Runs="CitedText.Split(Data.Source.Text, StatementPageView.Ranges(Data.Quotations, Data.DateEvidence))" />
+            @if (!StatementPageView.ShowsSourceText(Data))
+            {
+                <DocumentText Label="@StatementPageView.SourceTextLabel" Runs="sourceRuns" />
+            }
         </SourceFold>
     </article>
 </PublicPage>
 
 @code {
     private ReportedRecord record = default!;
+    private IReadOnlyList<TextRun> sourceRuns = [];
 
     [Parameter, EditorRequired] public StatementPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 
-    protected override void OnParametersSet() =>
+    protected override void OnParametersSet()
+    {
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Statement, Data.Headline, Data.ShortName);
+        sourceRuns = CitedText.Split(Data.Source.Text, StatementPageView.Ranges(Data.Quotations, Data.DateEvidence));
+    }
 }

@@ -1,0 +1,30 @@
+@using CivicLens.PublicWeb.Components.Ui
+
+@* The filter form of a list in its fold. The fold opens on a wide screen only while no filter is active, so it closes after Apply and the chips name the filters.
+   A refused request keeps it open on every screen, so the reader sees the marked field. *@
+<details class="list-fold" open="@IsRefused" data-wide-open="@(!IsActive)">
+    <summary>@Summary</summary>
+    <form class="in" method="get" aria-label="@FormLabel">
+        @Hidden
+        <div class="lists-filter">@Fields</div>
+        <div class="lists-filter-actions">
+            <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
+            @if (IsActive)
+            {
+                <a href="@ClearHref">Clear filters</a>
+            }
+        </div>
+    </form>
+</details>
+
+@code {
+    [Parameter, EditorRequired] public string Summary { get; set; } = default!;
+    [Parameter, EditorRequired] public string FormLabel { get; set; } = default!;
+    [Parameter, EditorRequired] public bool IsActive { get; set; }
+    [Parameter] public bool IsRefused { get; set; }
+    [Parameter, EditorRequired] public RenderFragment Fields { get; set; } = default!;
+    /// <summary>Hidden fields that the form sends with the filters, such as the tab of the page.</summary>
+    [Parameter] public RenderFragment? Hidden { get; set; }
+    /// <summary>The address of the same page with no filter.</summary>
+    [Parameter] public string ClearHref { get; set; } = "?";
+}

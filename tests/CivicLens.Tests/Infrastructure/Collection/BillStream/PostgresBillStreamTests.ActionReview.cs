@@ -272,16 +272,17 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
-    public async Task AWorkerRedraftAfterAPersonApprovedAPersonEditStaysAwaitingReviewWithTheModelSuggestionAttached()
+    public async Task AWorkerRedraftAfterAPersonApprovedAPersonEditStaysAwaitingReviewAndKeepsThePersonTextWithNoCall()
     {
         await DraftAsync(UpdatedAt, DraftableOutput);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
         await DecideAsync(2, 1, ReviewDecisionKind.Approve);
 
-        await DraftAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+        _ = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
 
         var redraft = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!;
-        Assert.Equal((ReviewTextOrigin.Person, true), (redraft.TextOrigin, redraft.Suggestion is not null));
+        Assert.Equal((ReviewTextOrigin.Person, null), (redraft.TextOrigin, redraft.Suggestion));
         Assert.Equal("AwaitingReview", await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal([ReviewAuthor.CodeSubject, Reviewer.Subject], (await ActionDecisionsAsync()).Select(decision => decision.ActorSubject));
     }
@@ -429,7 +430,7 @@ public sealed partial class PostgresBillStreamTests
     [Fact]
     public async Task ASaveAndApproveDuringTheCallTakesTheRevisionConflictPathAndTheRetryEndsUnchanged()
     {
-        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DraftFromBillTextForReviewAsync();
         await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
         Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
         var model = new FakeHeadlineSummaryModel().Reply(async _ =>
@@ -437,17 +438,17 @@ public sealed partial class PostgresBillStreamTests
             var before = (await ActionReviews().GetRevisionAsync(RecordId, 1, default))!;
             await new SaveActionDraft(ActionReviews()).ExecuteAsync(Reviewer, new(RecordId, 1, before.Headline + " edited",
                 before.Summary, SuggestionChoice.Keep, "edit", new ApprovalWithSave(0, null, [], null)));
-            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+            return new("end_turn", BillTextOutput, new(900, 100, 0, 0), "req_fixture");
         });
 
-        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+        Assert.Single((await RunActionWorkerAsync(model, TextSettings)).Requests);
 
         Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
         Assert.Equal("RetryWaiting", await ScalarAsync("SELECT status FROM action_analysis"));
         Assert.Equal(ActionDraftErrorCodes.RevisionConflict, await ScalarAsync("SELECT error_code FROM action_analysis"));
         await ExecuteAsync(connectionString, "UPDATE action_analysis SET status = 'Pending', retry_at = NULL");
 
-        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel(), TextSettings)).Requests);
 
         Assert.Equal(2, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
         Assert.Equal(1L, await ScalarAsync($"SELECT count(*) FROM action_analysis_runs WHERE reason = '{ActionDraftErrorCodes.Unchanged}'"));
@@ -458,7 +459,7 @@ public sealed partial class PostgresBillStreamTests
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await DecideAsync(1, 0, ReviewDecisionKind.Reject, reason: ReviewReasonCode.Duplicate);
         var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A renamed bill");
-        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel(), TextSettings)).Requests);
         Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_analysis_runs WHERE reason = 'recordRejected'"));
         await AssertBlockAsync(newer);
         return newer;
@@ -482,16 +483,16 @@ public sealed partial class PostgresBillStreamTests
     [InlineData(ReviewDecisionKind.RequestChanges, "ChangesRequested", "Name the bill.")]
     public async Task APersonDecisionDuringTheRedraftCallIsFinalSoTheAppendIsRefusedAndTheDecisionIsKept(ReviewDecisionKind kind, string status, string? note)
     {
-        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await DraftFromBillTextForReviewAsync();
         await ExecuteAsync(connectionString, "UPDATE action_analysis_runs SET prompt_version = 'action-draft-prompt-v1'");
         Assert.Equal(1, await ActionStore().RequeueStaleAsync(default));
         var model = new FakeHeadlineSummaryModel().Reply(async _ =>
         {
             await DecideAsync(1, 0, kind, note);
-            return new("end_turn", DraftableOutput, new(900, 100, 0, 0), "req_fixture");
+            return new("end_turn", BillTextOutput, new(900, 100, 0, 0), "req_fixture");
         });
 
-        Assert.Single((await RunActionWorkerAsync(model)).Requests);
+        Assert.Single((await RunActionWorkerAsync(model, TextSettings)).Requests);
 
         Assert.Equal(status, await ScalarAsync($"SELECT review_status FROM action_drafts WHERE record_id = '{RecordId}'"));
         Assert.Equal(1, await ScalarAsync("SELECT current_revision_number FROM action_drafts"));
@@ -994,7 +995,7 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
-        await DraftForReviewAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+        await SettleStoredSuggestionAsync();
         var withSuggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!;
         Assert.Equal(("Person headline", ReviewTextOrigin.Person), (withSuggestion.Headline, withSuggestion.TextOrigin));
         Assert.NotNull(withSuggestion.Suggestion);
@@ -1015,7 +1016,7 @@ public sealed partial class PostgresBillStreamTests
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);
         await SaveAsync(1, SuggestionChoice.Keep, "save-2");
-        await DraftForReviewAsync(UpdatedAt.AddDays(1), DraftableOutput, title: "A renamed bill");
+        await SettleStoredSuggestionAsync();
         var suggestion = (await ActionReviews().GetRevisionAsync(RecordId, 3, default))!.Suggestion!;
 
         var used = await SaveAsync(3, SuggestionChoice.Use, "save-4", headline: "Posted headline", summary: "Posted summary.");
@@ -1070,6 +1071,42 @@ public sealed partial class PostgresBillStreamTests
     {
         _ = await ReadableCandidateAsync("A000001", updatedAt, title: title);
         Assert.Single((await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(output))).Requests);
+    }
+
+    private static readonly ActionDraftSettings TextSettings = new(10_000_000, concurrency: 1, draftsFromBillText: true);
+
+    /// <summary>An answer of the text call that names no one. The officials of this fixture have one letter names, so the text holds no "b" or "c".</summary>
+    private static readonly string BillTextOutput = ActionBillTexts.Output(
+        [("It pays landlords for tenants with low earnings.", ActionBillTexts.FirstQuote),
+         ("A tenant qualifies if the home earns under half the area median.", ActionBillTexts.SecondQuote)],
+        [("Aid stops at the end of 2030.", ActionBillTexts.WhyQuote)], headline: "H.R. 7 pays landlords for tenants with low earnings.");
+
+    /// <summary>A model draft from the bill text, the one model text that the worker still writes for a bill. Code approval is undone for the person flow.</summary>
+    private async Task DraftFromBillTextForReviewAsync()
+    {
+        var candidate = await ReadableCandidateAsync("A000001", UpdatedAt, withSummary: false);
+        _ = await StoreBillTextAsync(candidate, ActionBillTexts.Body);
+        Assert.Single((await RunActionWorkerAsync(new FakeHeadlineSummaryModel().Draft(BillTextOutput), TextSettings)).Requests);
+        Assert.Equal("Model", await ScalarAsync($"SELECT text_origin FROM action_revisions WHERE record_id = '{RecordId}'"));
+        await ReopenAsync();
+    }
+
+    /// <summary>The worker writes no model suggestion on an action now, but stored revisions still hold them. This settles revision 3 with person text and a
+    /// suggestion, as the retired CRS prompt wrote it, and reopens it for the person flow.</summary>
+    private async Task SettleStoredSuggestionAsync()
+    {
+        var candidate = (string)(await ScalarAsync("SELECT candidate_id FROM action_analysis"))!;
+        var edited = (await ActionReviews().GetRevisionAsync(RecordId, 2, default))!;
+        var firstRunId = (string)(await ScalarAsync("SELECT run_id FROM action_revisions WHERE revision_number = 1"))!;
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Pending' WHERE candidate_id = '{candidate}'");
+        _ = await SettleAsync(candidate, Revision(candidate, 3, includesSummaries: true) with
+        {
+            Headline = edited.Headline,
+            Summary = edited.Summary,
+            TextOrigin = ReviewTextOrigin.Person,
+            Suggestion = new("Model headline", "Model summary.", firstRunId, new string('7', 64))
+        });
+        await ReopenAsync();
     }
 
     private async Task AddSponsorAsync(DateTimeOffset updatedAt)

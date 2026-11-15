@@ -118,6 +118,20 @@ public sealed class OfficialsPageTests
     }
 
     [Fact]
+    public async Task TheCountLineNamesNoReleaseAndEachActiveFilterHasOneChipInFormOrder()
+    {
+        var row = Row("a", "Ann", PublishedOfficeKind.Senator, "MA", null, "Democrat", null, 0);
+        var filtered = await RenderAsync(Page([row], new("senate", "MA", "democrat", "An")));
+        var party = await RenderAsync(Page([row], new(null, null, "independent", null)));
+        var plain = await RenderAsync(Page([row]));
+
+        Assert.Equal("Showing 1 official on this page.", filtered.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal(["Senate", "MA", "Democrat", "Name: An"], filtered.QuerySelectorAll(".list-chips li").Select(chip => chip.TextContent.Trim()));
+        Assert.Equal(["Independent"], party.QuerySelectorAll(".list-chips li").Select(chip => chip.TextContent.Trim()));
+        Assert.Null(plain.QuerySelector(".list-chips"));
+    }
+
+    [Fact]
     public async Task StoredNamesAreEncodedAndOfficialIdsAreEscapedInTheLink()
     {
         var page = await RenderAsync(Page([Row("a b", "<script>x()</script>", PublishedOfficeKind.Senator, null, null, null, null, 0)]));

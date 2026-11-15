@@ -35,18 +35,22 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task TheHeaderLinksEachKindToItsListPageAndTheBoardsPageAndHasNoLinkForTheOldAllRecordsList()
+    public async Task TheHeaderAndTheMenuSheetLinkEachSectionInTheMockupOrderWithStatementsAndThenANarrowOnlySearchAndNoLinkForTheOldAllRecordsList()
     {
         var page = await RenderAsync(section: PublicSection.Boards, title: "Compare the parties", canonicalPath: PublicationProtocol.BoardsPagePath);
-        var nav = page.QuerySelector(".public-nav")!;
 
-        Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Executive actions", "Compare parties"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
-        Assert.Equal(
-            [Root + PublicationProtocol.OfficialsPagePath, Root + PublicationProtocol.FacetsPath, Root + "votes.html", Root + "bills.html", Root + "executive-actions.html",
-             Root + "boards.html"],
-            nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
-        Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
-        Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);
+        foreach (var nav in new[] { page.QuerySelector(".public-nav")!, page.QuerySelector(".public-menu-nav")! })
+        {
+            Assert.Equal(["Officials", "Issues", "Votes", "Bills", "Statements", "Executive actions", "Compare parties", "Search"], nav.QuerySelectorAll("a").Select(link => link.TextContent));
+            Assert.Equal(
+                [Root + PublicationProtocol.OfficialsPagePath, Root + PublicationProtocol.FacetsPath, Root + "votes.html", Root + "bills.html", Root + "statements.html",
+                 Root + "executive-actions.html", Root + "boards.html", Root + "search.html"],
+                nav.QuerySelectorAll("a").Select(link => link.GetAttribute("href")));
+            Assert.DoesNotContain(nav.QuerySelectorAll("a"), link => link.GetAttribute("href")!.Contains("all.html"));
+            Assert.Equal("Compare parties", Assert.Single(nav.QuerySelectorAll("[aria-current=page]")).TextContent);
+            Assert.Equal("Search", Assert.Single(nav.QuerySelectorAll("a[data-narrow-only]")).TextContent);
+        }
+        Assert.Empty(page.QuerySelectorAll(".public-footer [data-narrow-only]"));
         Assert.Equal(["Home"], page.QuerySelectorAll("main nav[aria-label=Breadcrumb] a").Select(link => link.TextContent));
     }
 
@@ -84,27 +88,16 @@ public sealed class PublicNavigationTests
     }
 
     [Fact]
-    public async Task CompareBreadcrumbsUseThePublicRootAndMarkTheCurrentPageWithoutALink()
+    public async Task TheFooterLinkOfTheMethodPageAndTheHomeCardLinkUseThePageTitle()
     {
-        const string publicRoot = "https://civic-lens.test/";
-        const string privateApi = "https://api.civic-lens.test";
-        var page = await RenderAsync<ComparePage>(new Dictionary<string, object?>
-        {
-            [nameof(ComparePage.RootPath)] = publicRoot,
-            [nameof(ComparePage.BrowserApiUrl)] = privateApi
-        });
-        var breadcrumb = Assert.Single(page.QuerySelectorAll("nav[aria-label=Breadcrumb]"));
-        var links = breadcrumb.QuerySelectorAll("a");
-        var current = Assert.Single(breadcrumb.QuerySelectorAll("[aria-current=page]"));
+        var method = await RenderAsync<MethodPage>(new Dictionary<string, object?> { [nameof(MethodPage.RootPath)] = Root });
+        var home = await RenderAsync<HomePage>(new Dictionary<string, object?> { [nameof(HomePage.Data)] = new HomePageData(7, null, [], null), [nameof(HomePage.RootPath)] = Root });
+        var title = method.QuerySelector("main h1")!.TextContent;
 
-        Assert.Single(links);
-        Assert.Equal(publicRoot + PublicationProtocol.HomePath, links[0].GetAttribute("href"));
-        Assert.Equal("Home", links[0].TextContent);
-        Assert.Equal("Compare your members", current.TextContent);
-        Assert.Equal("span", current.LocalName);
-        Assert.Null(current.GetAttribute("href"));
-        Assert.Equal(1, breadcrumb.QuerySelectorAll(".public-breadcrumb-separator[aria-hidden=true]").Length);
-        Assert.DoesNotContain(privateApi, breadcrumb.InnerHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("How the counts work", title);
+        Assert.Equal(title, method.QuerySelector($".public-footer-nav a[href='{Root}method.html']")!.TextContent);
+        Assert.Equal(title, home.QuerySelectorAll($"main a[href='{Root}method.html']").Last().TextContent);
+        Assert.DoesNotContain("How we check records", home.Body!.TextContent);
     }
 
     [Fact]

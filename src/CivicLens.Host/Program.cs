@@ -100,6 +100,7 @@ if (args is [] or ["--help"] or ["help"])
           actions text measure <token-cap> <bills-file>
           actions revisions backfill <limit>
           actions revisions verify
+          actions text backfill <limit> [cursor]
           votes draft status
           votes draft list [drafted|unchanged|superseded|no-member|pending|failed] [limit]
           votes draft requeue <candidate-id|--all>
@@ -148,6 +149,7 @@ if (args is [] or ["--help"] or ["help"])
         worker also drafts bill actions when CIVIC_LENS_ACTION_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         actions text measure calls the paid model and needs CIVIC_LENS_DATABASE, CIVIC_LENS_REVIEW_OWNER, CIVIC_LENS_ARTIFACT_DIRECTORY, CIVIC_LENS_ISSUES_CONFIG, and ANTHROPIC_API_KEY.
         actions text measure stops before a call that could pass the token cap, writes a report under artifacts/action-text-measure, and writes no database row.
+        actions text backfill needs CIVIC_LENS_ARTIFACT_DIRECTORY and CIVIC_LENS_ISSUES_CONFIG. It calls no model.
         bills text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled congress-bill-text source. It refuses while action draft jobs are pending.
         executive-actions text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled federal-register-text source. It refuses while Federal Register jobs are pending.
         worker also drafts House and Senate votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
@@ -370,7 +372,8 @@ try
             draftStore, new PostgresAnalysisStatusStore(contexts, ActionDraftTask.Task));
         var backfillStore = new PostgresActionRevisionBackfillStore(contexts);
         var actions = new ActionCommand(draftCommands, new RequeueBlockedActionDrafts(draftStore), new RequeueRefusedActionDrafts(draftStore),
-            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner);
+            new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore),
+            () => ActionDraftComposition.CreateCodeTextBackfill(connectionString, codeVersion, draftStore), owner);
         executing = true;
         return await actions.ExecuteAsync(args, cancellation.Token);
     }
