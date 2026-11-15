@@ -729,6 +729,27 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             Assert.Equal(["A", "C", "M"], await PublicAsync($"SELECT DISTINCT record_id FROM public_api.{view} ORDER BY 1"));
     }
 
+    /// <summary>The bill view gives the introduced date of the bill record. A revision that the backfill has not reached has a null date, and every bill view still shows it.</summary>
+    [Fact]
+    public async Task TheBillViewGivesTheIntroducedDateAndEveryBillViewShowsARevisionWithoutOne()
+    {
+        await SeedBillsAsync();
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('action', 'undated', 1, 1, NULL);
+            {PublicActionRows.ActionRevision("undated", 1, "Person", "2026-02-20", 1, introducedOn: null)}
+            {PublicActionRows.ActionSponsorship("undated", 1, 0, "p1", "Sponsor", true, "2026-01-10")}
+            {PublicActionRows.ActionIssue("undated", 1, "health", 0, true)}
+            UPDATE action_revisions SET introduced_on = DATE '2026-01-10' WHERE record_id = 'A';
+            """);
+
+        Assert.Equal(["A 2026-01-10", "C 2026-02-20", "M 2026-02-20", "undated none"],
+            await PublicAsync("SELECT record_id || ' ' || coalesce(introduced_on::text, 'none') FROM public_api.bills ORDER BY 1"));
+        foreach (var view in new[] { "bill_sponsorships", "bill_issues", "bill_keys" })
+            Assert.Equal(["A", "C", "M", "undated"], await PublicAsync($"SELECT DISTINCT record_id FROM public_api.{view} ORDER BY 1"));
+        Assert.Empty(await QueryAsync("SELECT viewname FROM pg_views WHERE schemaname = 'public_api' AND definition LIKE '%introduced_on IS NOT NULL%'", connectionString));
+    }
+
     [Fact]
     public async Task NoBillChildViewShowsARecordThatBillsHidesBecauseARouteJoinsThemByRecordId()
     {

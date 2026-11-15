@@ -51,6 +51,7 @@ internal sealed class ActionRevisionRow : IReviewRevisionRow, IReviewTextRow
     public bool? IssueCandidatesRecorded { get; set; }
     public DateOnly? EventOn { get; set; }
     public int? CosponsorCount { get; set; }
+    public DateOnly? IntroducedOn { get; set; }
     public string? TextPackageId { get; set; }
     public string? WhyItMatters { get; set; }
     public List<ActionRevisionIssueRow> Issues { get; set; } = [];

@@ -36,6 +36,7 @@ internal static class ActionDraftRows
         var extractions = await PostgresActionReviewStore.ReadExtractionsAsync(db, [revision], cancellationToken);
         var row = ActionRevisionRows.Create(revision, runId, codeVersion);
         ActionRevisionRows.FillCrsSummary(row, revision, extractions);
+        row.IntroducedOn = await ActionRevisionRows.ReadIntroducedOnAsync(db, revision.CandidateId, cancellationToken);
         await records.AppendCodeApprovedAsync(db, draft, revision, row, await records.ReadCycleAsync(db, draft, cancellationToken),
             () => ApprovalCheck.OfAsync(() => PostgresActionReviewStore.ValidateApprovalAsync(db, revision, cancellationToken, extractions)));
         return null;

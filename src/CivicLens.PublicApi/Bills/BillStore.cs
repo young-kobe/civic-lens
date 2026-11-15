@@ -142,7 +142,8 @@ public sealed class BillStore(NpgsqlDataSource views)
                    ARRAY(SELECT t.sentence FROM public_api.bill_text_sentences t
                           WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position"),
                    ARRAY(SELECT t.quote FROM public_api.bill_text_sentences t
-                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position")
+                          WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position"),
+                   b.introduced_on
               FROM public_api.bills b
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
               LEFT JOIN public_api.record_entries e ON e.kind = 'action' AND e.record_id = b.record_id AND e.revision_number = b.revision_number
@@ -158,7 +159,8 @@ public sealed class BillStore(NpgsqlDataSource views)
             KeyTermsLabel = ViewColumns.Text(reader, 34),
             CheckedAtUtc = ViewColumns.Utc(reader, 35),
             FirstPublishedAtUtc = ViewColumns.Utc(reader, 36),
-            SummaryFromCrs = reader.GetBoolean(37)
+            SummaryFromCrs = reader.GetBoolean(37),
+            IntroducedOn = ViewColumns.Date(reader, 42)
         };
     }
 

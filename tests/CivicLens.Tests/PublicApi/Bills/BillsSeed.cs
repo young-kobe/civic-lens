@@ -30,14 +30,27 @@ internal sealed record SeededBill(char Id, string EventOn)
     public string? BillLine { get; init; }
     public SeededBillText? Text { get; init; }
 
+    /// <summary>The introduced date of the bill record. By default it is the date of the sponsor entry, as <c>ActionBillReader</c> writes it, or the event date when no sponsor is tracked.</summary>
+    public string? IntroducedOn { get; init; }
+
+    /// <summary>True for a revision that the backfill has not reached: it stores no introduced date.</summary>
+    public bool Undated { get; init; }
+
+    public string? IntroducedDate => Undated ? null : IntroducedOn ?? Sponsorships.FirstOrDefault(item => item.Role == "Sponsor")?.SponsoredOn ?? EventOn;
+
     public string RecordId { get; init; } = new(Id, 64);
 }
 
 internal static class BillsSeed
 {
-    public static async Task AddBillsAsync(string database, params SeededBill[] bills)
+    public static Task AddBillsAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, false, bills);
+
+    /// <summary>Seeds bills at a schema before <c>action_revisions.introduced_on</c>, so the rows leave that column out.</summary>
+    public static Task AddBillsBeforeIntroducedOnAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, true, bills);
+
+    private static async Task AddBillsAsync(string database, bool beforeIntroducedOn, SeededBill[] bills)
     {
-        foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill));
+        foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill, beforeIntroducedOn));
     }
 
     private static string EntryRow(SeededBill bill) => bill.BillLine is null ? "" : $"""
@@ -66,7 +79,7 @@ internal static class BillsSeed
             """;
     }
 
-    private static string Insert(SeededBill bill)
+    private static string Insert(SeededBill bill, bool beforeIntroducedOn)
     {
         var last = bill.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
         var cosponsors = bill.Sponsorships.Count(item => item.Role == "Cosponsor");
@@ -74,7 +87,8 @@ internal static class BillsSeed
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('{bill.RecordKind}', '{bill.RecordId}', {bill.FirstRelease}, 1, {last});
-            {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId)}
+            {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId,
+                introducedOn: beforeIntroducedOn ? null : bill.IntroducedDate)}
             {string.Join('\n', bill.Sponsorships.Select((item, position) => PublicActionRows.ActionSponsorship(
                 bill.RecordId, 1, position, item.Person, item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn)))}
             {string.Join('\n', bill.Issues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, position, true)))}

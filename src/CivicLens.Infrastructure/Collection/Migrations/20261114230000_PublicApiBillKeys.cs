@@ -12,7 +12,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 /// </summary>
 public partial class PublicApiBillKeys : Migration
 {
-    private const string UpSql = """
+    /// <summary>The current <c>public_api.bill_keys</c> view. A later migration that drops the bill view creates it again from here on rollback.</summary>
+    internal const string BillKeysView = """
         CREATE VIEW public_api.bill_keys WITH (security_barrier = true) AS
         SELECT b.record_id, b.revision_number, b.congress, b.bill_type, b.bill_number, b.policy_area_id, b.event_date, s.status
           FROM public_api.bills b
@@ -22,7 +23,7 @@ public partial class PublicApiBillKeys : Migration
         """;
 
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(UpSql);
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(BillKeysView);
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql("DROP VIEW public_api.bill_keys;");

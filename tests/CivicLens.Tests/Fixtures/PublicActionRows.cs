@@ -3,10 +3,14 @@ namespace CivicLens.Tests.Fixtures;
 /// <summary>SQL that writes the action rows that the <c>public_api</c> bill views read.</summary>
 internal static class PublicActionRows
 {
+    /// <summary>The default introduced date of <see cref="ActionRevision"/>: the event date. A null date leaves the column out, so a test at a schema before the column can use the row.</summary>
+    public const string SameAsEvent = "event";
+
     // Run ID and code version satisfy the author checks. The Code row also carries the bill citation that the Code author needs.
     public static string ActionRevision(string record, int revision, string origin, string? eventOn, int? cosponsorCount,
-        int congress = 119, string billType = "hr", int billNumber = 7, string? policyAreaId = "health", string? headline = null)
+        int congress = 119, string billType = "hr", int billNumber = 7, string? policyAreaId = "health", string? headline = null, string? introducedOn = SameAsEvent)
     {
+        var introduced = introducedOn == SameAsEvent ? eventOn : introducedOn;
         var authorKind = origin switch { "Model" => "Analysis", "Code" => "Code", _ => "Person" };
         var run = authorKind == "Person" ? "NULL" : $"'run-{record[^Math.Min(record.Length, 20)..]}'";
         var codeVersion = authorKind == "Code" ? $"'{new string('c', 40)}'" : "NULL";
@@ -20,13 +24,13 @@ internal static class PublicActionRows
                 candidate_includes_summaries, candidate_includes_subjects, fingerprint, bill_title, issue_revision_id, issue_candidates_recorded,
                 bill_citation_extraction_id, bill_citation_start, bill_citation_length,
                 policy_area, policy_area_citation_extraction_id, policy_area_citation_start, policy_area_citation_length, policy_area_id,
-                suggestion_headline, suggestion_summary, suggestion_run_id, suggestion_fingerprint, event_on, cosponsor_count)
+                suggestion_headline, suggestion_summary, suggestion_run_id, suggestion_fingerprint, event_on, cosponsor_count{(introduced is null ? "" : ", introduced_on")})
             VALUES ('{record}', {revision}, 'test', '{authorKind}', {run}, {codeVersion}, 'x', 1,
                 '{headline ?? $"Headline {record}"}', 'Summary {record}', '{origin}', 'src', {congress}, '{billType}', {billNumber}, '{new string('b', 64)}', 1,
                 true, true, '{new string('d', 64)}', 'A housing bill', '{new string('e', 64)}', true,
                 {billCitation}, {policyArea},
                 'Model draft headline', 'Model draft summary', 'suggestion-run', '{new string('f', 64)}',
-                {(eventOn is null ? "NULL" : $"'{eventOn}'")}, {cosponsorCount?.ToString() ?? "NULL"});
+                {(eventOn is null ? "NULL" : $"'{eventOn}'")}, {cosponsorCount?.ToString() ?? "NULL"}{(introduced is null ? "" : $", '{introduced}'")});
             """;
     }
 
