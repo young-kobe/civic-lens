@@ -47,7 +47,7 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AMemberOfTheZipNamesTheOtherMembersLinksCompareAndListsOnlyTheVotesWhereTheMembersOfTheChamberDiffered()
+    public async Task AMemberOfTheZipNamesTheOtherMembersLinksTheHomeZipResultsAndListsOnlyTheVotesWhereTheMembersOfTheChamberDiffered()
     {
         await using var host = await StartAsync();
 
@@ -60,7 +60,7 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
         Assert.StartsWith("Rita One is one of your members. Your other members: Ross Two, Sam Senator and Sue Senator.", note.TextContent.Trim().ReplaceLineEndings(" ").Replace("  ", " "));
         Assert.Equal(["Ross Two", "Sam Senator", "Sue Senator"], note.QuerySelectorAll("a").Take(3).Select(link => link.TextContent));
         Assert.Equal("Compare all 4", note.QuerySelectorAll("a").Last().TextContent);
-        Assert.EndsWith("/compare.html", note.QuerySelectorAll("a").Last().GetAttribute("href"));
+        Assert.EndsWith("/index.html#zip-results", note.QuerySelectorAll("a").Last().GetAttribute("href"));
         Assert.Equal("Your ZIP area lies in 2 districts. The district with the most land is first.", note.NextElementSibling!.TextContent);
         var votes = fragment.QuerySelector("section.shared-vote-rows[data-chamber='house']")!;
         Assert.Equal("Votes where your members differed", votes.QuerySelector("h3")!.TextContent);
@@ -83,15 +83,13 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AChamberWithNoSharedVotesShowsTheSameEmptyLineOnTheOfficialPageAsOnCompare()
+    public async Task AChamberWithNoSharedVotesShowsTheApprovedEmptyLineOnTheOfficialPage()
     {
         await using var host = await StartAsync();
 
         var official = await GetFragmentAsync(host, "view=official&official=ak-a", "99501");
-        var compare = await GetFragmentAsync(host, "view=compare", "99501");
 
         Assert.Equal(SharedVoteRows.NoDifferences, official.QuerySelector("[data-member-votes-empty]")!.TextContent);
-        Assert.Equal(SharedVoteRows.NoDifferences, compare.QuerySelector(".zip-member-chamber[data-chamber=senate] [data-member-votes-empty]")!.TextContent);
     }
 
     [Fact]
@@ -111,7 +109,7 @@ public sealed class OfficialMembersEndpointsTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        foreach (var query in new[] { "view=official", "view=official&official=p0&issue=tax", "view=official&official=p0&sinceRelease=1", "view=compare&official=p0", "official=p0" })
+        foreach (var query in new[] { "view=official", "view=official&official=p0&issue=tax", "view=official&official=p0&sinceRelease=1", "view=strip&official=p0", "official=p0" })
         {
             using var response = await host.Client.GetAsync("/v1/zip-districts/12345/members?" + query);
             Assert.True(response.StatusCode == HttpStatusCode.BadRequest, $"{query} gave {(int)response.StatusCode}");

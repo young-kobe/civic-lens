@@ -11,33 +11,12 @@
     }
     else
     {
-        <details class="list-fold" open="@Filter.IsActive" data-wide-open>
-            <summary>@FilterSummary</summary>
-            <form class="in" method="get" aria-label="@($"Filter {List.Label.ToLowerInvariant()}")">
-                <div class="lists-filter">@Fields</div>
-                <div class="lists-filter-actions">
-                    <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
-                    @if (Filter.IsActive)
-                    {
-                        <a href="?">Clear filters</a>
-                    }
-                </div>
-            </form>
-        </details>
+        <ListFilterFold Summary="@FilterSummary" FormLabel="@($"Filter {List.Label.ToLowerInvariant()}")" IsActive="Filter.IsActive" IsRefused="Filter.Invalid is not null" Fields="Fields" />
     }
     @* A refused request shows the form with the refused field marked, and no rows. *@
     @if (!IsEmptyRelease && Filter.Invalid is null)
     {
-        <p class="list-status" role="status">Showing @RowCount @(RowCount == 1 ? Singular : Plural) on this page.</p>
-        @if (AllChips.Count > 0)
-        {
-            <ul class="detail-chips list-chips" aria-label="Active filters">
-                @foreach (var chip in AllChips)
-                {
-                    <li><StatusBadge Text="@chip" /></li>
-                }
-            </ul>
-        }
+        <ListStatus Count="RowCount" Singular="@Singular" Plural="@Plural" Chips="AllChips" />
         @if (RowCount == 0)
         {
             <EmptyState Title="@EmptyTitle" Level="2">

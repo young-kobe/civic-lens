@@ -1,0 +1,19 @@
+@* The count line of one list page and one chip for each active filter. The count names the rows of this page only, because no list counts a filtered total. *@
+<p class="list-status" role="status">Showing @Count @(Count == 1 ? Singular : Plural) on this page.</p>
+@if (Chips.Count > 0)
+{
+    <ul class="detail-chips list-chips" aria-label="Active filters">
+        @foreach (var chip in Chips)
+        {
+            <li><StatusBadge Text="@chip" /></li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter, EditorRequired] public int Count { get; set; }
+    [Parameter, EditorRequired] public string Singular { get; set; } = default!;
+    [Parameter, EditorRequired] public string Plural { get; set; } = default!;
+    /// <summary>The text of each active filter, in form order.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<string> Chips { get; set; } = default!;
+}
