@@ -74,14 +74,14 @@ public static class OfficialRecordText
     /// <summary>The line above a list. It names who the records belong to, what the list counts, and its time frame.</summary>
     public static string CountLine(OfficialRecordKind kind, int count, string name) => kind switch
     {
-        OfficialRecordKind.Votes => $"This list holds {count} {Noun(count, "vote")} of {name} in this release: roll calls on passage, amendments, conference reports, veto overrides and nominations. Rows are newest first.",
-        OfficialRecordKind.Bills => $"This list holds {count} {(count == 1 ? "bill or resolution" : "bills and resolutions")} that {name} sponsored in this release. Rows are newest first.",
-        OfficialRecordKind.Statements => $"This list holds {count} {Noun(count, "statement")} that name {name} as a speaker in this release. Rows are newest first.",
-        OfficialRecordKind.ExecutiveActions => $"This list holds {count} executive {Noun(count, "action")} that {name} signed in this release. Rows are newest first.",
+        OfficialRecordKind.Votes => $"This list holds {PublishedWording.Count(count)} {Noun(count, "vote")} of {name} in this release: roll calls on passage, amendments, conference reports, veto overrides and nominations. Rows are newest first.",
+        OfficialRecordKind.Bills => $"This list holds {PublishedWording.Count(count)} {(count == 1 ? "bill or resolution" : "bills and resolutions")} that {name} sponsored in this release. Rows are newest first.",
+        OfficialRecordKind.Statements => $"This list holds {PublishedWording.Count(count)} {Noun(count, "statement")} that name {name} as a speaker in this release. Rows are newest first.",
+        OfficialRecordKind.ExecutiveActions => $"This list holds {PublishedWording.Count(count)} executive {Noun(count, "action")} that {name} signed in this release. Rows are newest first.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no count line.")
     };
 
-    public static string PagerSummary(int shown, int total) => $"{shown} on this page. {total} in all.";
+    public static string PagerSummary(int shown, int total) => $"{PublishedWording.Count(shown)} on this page. {PublishedWording.Count(total)} in all.";
 
     public static string OfficesSummary(int count) => $"Offices held ({count} {Noun(count, "term")})";
 

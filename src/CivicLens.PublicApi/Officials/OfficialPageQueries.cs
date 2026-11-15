@@ -7,21 +7,20 @@ using Npgsql;
 namespace CivicLens.PublicApi.Officials;
 
 /// <summary>
-/// The reads that only the official page needs, each inside the caller's snapshot: the vote strip marks, the statements that a reviewer linked to a vote,
+/// The reads that only the official page needs, each inside the caller's snapshot: the vote strip, the statements that a reviewer linked to a vote,
 /// the sponsored bills with their introduced dates, and the newest executive actions of each document type.
-/// The marks read <c>member_votes.breaks_party</c>, the one owner of the party-break rule that <c>official_vote_parties</c> counts for <c>official_party_lines</c>, so the strip and the figures count the same votes.
+/// The strip reads <c>member_votes.breaks_party</c>, the one owner of the party-break rule that <c>official_vote_parties</c> counts for <c>official_party_lines</c>, so the strip and the figures count the same votes.
 /// </summary>
 internal static class OfficialPageQueries
 {
-    public const int MarkLimit = 12;
+    public const int MarkLimit = 10;
     public const int RowLimit = 5;
 
-    // A vote that broke from the party (the view column breaks_party), or a roll call with the cast Not Voting. Newest first. The window count is the number of marks before the limit.
+    // The latest roll calls of every kind in the Congress, newest first, as the attendance figure counts them. breaks_party is null for a vote with no party line.
     private const string MarksSql = """
-        SELECT v.record_id, v.voted_on, v.chamber, v.roll_call_number, v.vote_cast = @not_voting, v.party, count(*) OVER ()
+        SELECT v.record_id, v.voted_on, v.chamber, v.roll_call_number, v.vote_cast, coalesce(v.breaks_party, false), v.party
           FROM public_api.member_votes v
          WHERE v.official_id = @id AND v.congress = @congress
-           AND (v.vote_cast = @not_voting OR v.breaks_party)
          ORDER BY v.voted_on DESC, v.chamber, v.roll_call_number DESC, v.record_id
          LIMIT @take
         """;
@@ -102,24 +101,20 @@ internal static class OfficialPageQueries
         return website is null || PublishedWebsite.IsValid(website) ? website : throw new InvalidDataException("The stored official website is not a valid https address.");
     }
 
-    /// <summary>Reads the newest marks and how many marks the official has in all.</summary>
-    public static async Task<(OfficialMarkData[] Marks, int Total)> ReadMarksAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)
+    /// <summary>Reads the latest roll calls of the strip and returns them oldest first, as the strip draws them from the left.</summary>
+    public static async Task<OfficialMarkData[]> ReadMarksAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, int congress, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(MarksSql, connection, transaction);
         command.Parameters.AddWithValue("id", officialId);
         command.Parameters.AddWithValue("congress", congress);
-        command.Parameters.AddWithValue("not_voting", PublishedOfficialVote.NotVoting);
         command.Parameters.AddWithValue("take", MarkLimit);
         var marks = new List<OfficialMarkData>();
-        var total = 0;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-        {
             marks.Add(new(reader.GetString(0), reader.GetFieldValue<DateOnly>(1), ViewColumns.Enum<PublishedChamber>(reader, 2), reader.GetInt32(3),
-                reader.GetBoolean(4), ViewColumns.Text(reader, 5)));
-            total = (int)reader.GetInt64(6);
-        }
-        return ([.. marks], total);
+                reader.GetString(4), reader.GetBoolean(5), ViewColumns.Text(reader, 6)));
+        marks.Reverse();
+        return [.. marks];
     }
 
     public static async Task<OfficialStatementData[]> ReadStatementsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)

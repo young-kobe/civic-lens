@@ -34,11 +34,11 @@
                     <ul class="official-figs" role="list">
                         @foreach (var figure in Data.Attendance)
                         {
-                            <li><b>@(figure.Held - figure.Missed)</b><span>@OfficialPageText.VotedOn(figure)</span></li>
+                            <li><b>@PublishedWording.Count(figure.Held - figure.Missed)</b><span>@OfficialPageText.VotedOn(figure)</span></li>
                         }
                         @if (party is not null)
                         {
-                            <li><b>@party.WithParty</b><span>of @party.Cast <Term Key="split-vote">split votes</Term> @OfficialPageText.PartyLineScope(party)</span></li>
+                            <li><b>@PublishedWording.Count(party.WithParty)</b><span>of @PublishedWording.Count(party.Cast) <Term Key="split-vote">split votes</Term> @OfficialPageText.PartyLineScope(party)</span></li>
                         }
                         @if (Data.BillsCongress is not null)
                         {
@@ -79,26 +79,23 @@
                         {
                             @if (marksCongress is { } congress)
                             {
-                                <p class="official-lede">Each square is one vote of @Data.Name in the @CongressCalendar.Ordinal(congress) Congress. Select a square to open that vote.</p>
+                                <p class="official-lede">@OfficialPageText.StripLede(Data.Name, Data.Marks.Length, congress)</p>
                             }
-                            <ul class="official-strip" role="list" aria-label="Votes against the party and missed roll calls">
+                            <ul class="official-strip" role="list" aria-label="@($"Latest roll calls of {Data.Name}")">
                                 @foreach (var mark in Data.Marks)
                                 {
-                                    <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" class="@(mark.IsMissed ? "missed" : "against")" data-tone="@(mark.IsMissed ? null : PartyTones.Of(mark.Party ?? string.Empty).ToString().ToLowerInvariant())" title="@Moment.Day(mark.VotedOn), @VoteWords.RollCall(mark.Chamber, mark.RollCall): @OfficialPageText.MarkName(mark)"><span class="visually-hidden">@Moment.Day(mark.VotedOn), @VoteWords.RollCall(mark.Chamber, mark.RollCall): @OfficialPageText.MarkName(mark)</span></a></li>
+                                    var label = OfficialPageText.MarkLabel(mark);
+                                    <li><a href="@(RootPath + PublicationProtocol.RecordPagePath(mark.RecordId))" data-mark="@VoteMapMarks.Name(mark.Mark)" data-breaks="@(mark.BreaksParty ? "party" : null)" title="@label"><span class="visually-hidden">@label</span></a></li>
                                 }
                             </ul>
-                            @if (Data.MarksTotal > Data.Marks.Length)
-                            {
-                                <p class="muted small">The @Data.Marks.Length newest of @Data.MarksTotal. <a href="@RecordPath(OfficialRecordKind.Votes)">See all votes and records of @Data.Name</a></p>
-                            }
-                            <ul class="official-legend" role="list">
-                                @foreach (var line in Data.PartyLines.Where(line => line.AgainstParty > 0).OrderBy(line => line.FirstVotedOn))
+                            <ul class="official-legend" role="list" aria-label="What the squares mean">
+                                @foreach (var shown in Data.Marks.Select(mark => mark.Mark).Distinct().Order())
                                 {
-                                    <li><span class="swatch against" data-tone="@PartyTones.Of(line.Party).ToString().ToLowerInvariant()" aria-hidden="true"></span>@OfficialPageText.AgainstPartyLegend(line)</li>
+                                    <li><span class="swatch" data-mark="@VoteMapMarks.Name(shown)" aria-hidden="true"></span>@VoteMapMarks.Label(shown)</li>
                                 }
-                                @foreach (var figure in Data.Attendance)
+                                @foreach (var against in Data.Marks.Where(mark => mark.BreaksParty).Select(OfficialPageText.AgainstParty).Distinct())
                                 {
-                                    <li><span class="swatch missed" aria-hidden="true"></span>@figure.Missed missed @figure.Chamber roll @(figure.Missed == 1 ? "call" : "calls")</li>
+                                    <li><span class="swatch" data-breaks="party" aria-hidden="true"></span>@against</li>
                                 }
                             </ul>
                         }

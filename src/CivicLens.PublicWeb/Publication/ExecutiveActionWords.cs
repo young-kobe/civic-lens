@@ -68,6 +68,11 @@ public static class ExecutiveActionWords
 
     private static string Article(string word) => "aeiou".Contains(word[0]) ? "an" : "a";
 
+    /// <summary>The count line of one Home group: how many documents of the kind this site holds, and since when they were signed.</summary>
+    public static string HomeGroupCount(HomeExecutiveGroupData group) => group.Count == 1
+        ? $"1 {OfficialPageText.ExecutivePlural(group.Kind, 1)} on this site"
+        : $"{PublishedWording.Count(group.Count)} {OfficialPageText.ExecutivePlural(group.Kind, group.Count)} on this site, signed since {Moment.Day(group.OldestSignedOn)}";
+
     public const string ReadIt = "Read it in the Federal Register";
 
     /// <summary>The text of a correction notice in three parts. The middle part is the link.</summary>

@@ -29,9 +29,9 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
     {
         var id = page.OfficialId;
         var recent = await MemberVoteStore.ReadAsync(connection, transaction, new() { Officials = [id] }, OfficialPageQueries.RowLimit, cancellationToken);
-        var (marks, marksTotal) = detail.Congress is { } congress
+        var marks = detail.Congress is { } congress
             ? await OfficialPageQueries.ReadMarksAsync(connection, transaction, id, congress, cancellationToken)
-            : ([], 0);
+            : [];
         var bills = detail.Bills is { } figure
             ? await OfficialPageQueries.ReadBillsAsync(connection, transaction, id, figure.Congress, cancellationToken)
             : [];
@@ -41,7 +41,6 @@ public sealed class OfficialPageReader(NpgsqlDataSource views)
             Website = await OfficialPageQueries.ReadWebsiteAsync(connection, transaction, id, cancellationToken),
             Votes = [.. (recent?.Officials[0].Votes ?? []).Select(vote => Vote(id, vote))],
             Marks = marks,
-            MarksTotal = marksTotal,
             Statements = statements,
             HasLinkedStatements = statements.Length > 0 || await OfficialPageQueries.ReadHasBillLinkedStatementAsync(connection, transaction, id, cancellationToken),
             Bills = bills,
