@@ -39,8 +39,8 @@ public static class ZipDistrictEndpoints
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
             var issue = QueryValues.Filter(http.Request.Query, "issue");
             var view = QueryValues.Value(http.Request.Query, "view") ?? string.Empty;
-            if (view is not "" and not "compare" and not "strip" and not "issue" and not "official")
-                throw new ArgumentException("view must be empty, compare, strip, issue, or official.", "view");
+            if (view is not "" and not "strip" and not "issue" and not "official")
+                throw new ArgumentException("view must be empty, strip, issue, or official.", "view");
             var official = QueryValues.Filter(http.Request.Query, "official");
             if (view == "official" && (official is null || issue is not null || http.Request.Query.ContainsKey("sinceRelease")))
                 throw new ArgumentException("The official view needs an official and takes no issue or release marker.", "official");
@@ -81,10 +81,7 @@ public static class ZipDistrictEndpoints
                 [nameof(ZipMemberCards.RootPath)] = rootPath,
                 [nameof(ZipMemberCards.View)] = view,
                 [nameof(ZipMemberCards.SinceRelease)] = sinceRelease,
-                [nameof(ZipMemberCards.NewVoteCount)] = lookup.NewVoteCount,
-                [nameof(ZipMemberCards.ComparePageUrl)] = view != string.Empty || options.BrowserApiUrl is null
-                    ? null
-                    : options.PublicBaseUrl?.Join(PublicationProtocol.ComparePagePath)
+                [nameof(ZipMemberCards.NewVoteCount)] = lookup.NewVoteCount
             });
             return Results.Content(html, "text/html; charset=utf-8");
         });

@@ -2,7 +2,7 @@
 
 <div class="members-strip-content" data-member-strip-content>
     <nav class="members-strip-nav" aria-label="Your members">
-        <a class="members-strip-home" href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Your members</a>
+        <a class="members-strip-home" href="@(RootPath + PublicationProtocol.YourMembersPath)">Your members</a>
         @foreach (var member in Members)
         {
             <a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(member.OfficialId)))">@member.Name</a>

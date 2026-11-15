@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 
 <noscript><div class="notice notice-warn"><span>The ZIP lookup needs JavaScript. Without it, browse <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">all officials</a>.</span></div></noscript>
-<form class="zip-form" hidden data-zip-api="@BrowserApiUrl" data-zip-view="@View" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)">
+<form class="zip-form" hidden data-zip-api="@BrowserApiUrl" data-officials-page="@(RootPath + PublicationProtocol.OfficialsPagePath)">
     <Field Label="Your ZIP code" For="@InputId">
         <input id="@InputId" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="5 digits" />
     </Field>
@@ -13,5 +13,4 @@
     [Parameter, EditorRequired] public string BrowserApiUrl { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter, EditorRequired] public string InputId { get; set; } = default!;
-    [Parameter] public string View { get; set; } = string.Empty;
 }
