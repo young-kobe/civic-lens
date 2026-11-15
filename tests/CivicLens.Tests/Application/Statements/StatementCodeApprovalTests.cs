@@ -25,11 +25,23 @@ public sealed class StatementCodeApprovalTests
     public async Task AShortReleaseOfTheOwnOfficeIsApprovedByCodeFromItsCheckedSourceWithNoGradeCheckBecauseNoModelWroteIt()
     {
         const string hardText = "Bipartisan appropriations reauthorization notwithstanding\nSenator Warren characterized intergovernmental administrative " +
-            "accountability considerations, \"Comprehensive infrastructure revitalization necessitates extraordinary interdepartmental collaboration.\"\n";
+            "accountability considerations. Senator Warren said, \"Comprehensive infrastructure revitalization necessitates extraordinary interdepartmental collaboration.\"\n";
         var store = await DraftAsync(DraftEvidence(configuration: OwnOfficeOf(Warren)), "{}", hardText);
 
         Assert.Equal("civic-lens:code", Assert.Single(store.Revisions).AuthorSubject);
         Assert.Equal([store.Evidence.Article.CandidateId], store.CodeApproved);
+    }
+
+    [Fact]
+    public async Task AShortReleaseOfTheOwnOfficeThatQuotesAnotherPersonWaitsForAPersonLikeAModelDraftWithOtherSpeakers()
+    {
+        var quotesOwner = await DraftAsync(DraftEvidence(configuration: OwnOfficeOf(Warren)), "{}", ShortRelease);
+        var quotesOther = await DraftAsync(DraftEvidence(configuration: OwnOfficeOf(Warren)), "{}", ShortRelease.Replace("said Senator Warren", "said Jo Rivera"));
+
+        Assert.Equal([quotesOwner.Evidence.Article.CandidateId], quotesOwner.CodeApproved);
+        Assert.Equal("civic-lens:code", Assert.Single(quotesOther.Revisions).AuthorSubject);
+        Assert.Empty(quotesOther.Revisions.Single().SpeakerOfficialIds);
+        Assert.Empty(quotesOther.CodeApproved);
     }
 
     [Fact]

@@ -64,13 +64,43 @@ public sealed class StatementSourceTextTests
     {
         var evidence = DraftEvidence(ShortRelease);
 
-        var revision = StatementSourceText.Read(evidence.Article.Extraction)!.Revision(evidence, [Warren], DateTimeOffset.UnixEpoch);
+        var revision = StatementSourceText.Read(evidence.Article.Extraction)!.Revision(evidence, Officials(Warren)[0], DateTimeOffset.UnixEpoch);
 
         Assert.Equal((ShortRelease, "civic-lens:code", (DateOnly?)null), (revision.Summary, revision.AuthorSubject, revision.StatementDate));
         Assert.Equal(evidence.CarryOver.IssueIds, revision.IssueIds);
         revision.ValidateAsWorkerRevision();
         revision.ValidateAgainst(evidence.Article.Extraction);
         Assert.Throws<ArgumentException>(() => (revision with { Summary = "A shorter text." }).ValidateAgainst(evidence.Article.Extraction));
+    }
+
+    [Theory]
+    [InlineData("\"This cap protects families,\" said Senator Warren.")]
+    [InlineData("\"This cap protects families,\" Warren said.")]
+    [InlineData("Senator Elizabeth Warren said, \"This cap protects families.\"")]
+    [InlineData("\"This cap,\" said Warren, \"protects families.\"")]
+    [InlineData("Senator Warren announced a rent cap for tenants.")]
+    public void TheCodeRevisionNamesTheOfficialWhenCodeAttributesEveryQuotedPassageToThatOfficial(string body)
+    {
+        Assert.Equal([Warren], CodeSpeakers("Warren backs a rent cap\n" + body));
+    }
+
+    [Theory]
+    [InlineData("\"This cap protects families,\" said Jo Rivera.")]
+    [InlineData("\"This cap protects families,\" said Jo Rivera and Senator Warren.")]
+    [InlineData("\"This cap protects families,\" said Jo Rivera, an ally of Warren.")]
+    [InlineData("Senator Warren announced a rent cap. \"This cap protects families.\"")]
+    [InlineData("\"This cap protects families,\" said Senator Warren. \"It is unfair,\" said Jo Rivera.")]
+    [InlineData("\"This cap protects families,\" Warren said, quoting a tenant: \"We need it.\"")]
+    public void TheCodeRevisionHasNoSpeakerWhenAQuotedPassageMayBeAnotherPersonBecauseCodeCannotNameOtherSpeakers(string body)
+    {
+        Assert.Empty(CodeSpeakers("Warren backs a rent cap\n" + body));
+    }
+
+    private static string[] CodeSpeakers(string text)
+    {
+        var evidence = DraftEvidence(text);
+        return [.. StatementSourceText.Read(evidence.Article.Extraction)!.Revision(evidence, Officials(Warren)[0], DateTimeOffset.UnixEpoch)
+            .SpeakerOfficialIds];
     }
 
     private static string Words(int count) => string.Join(' ', Enumerable.Repeat("word", count));

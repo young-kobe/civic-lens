@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.FeedStatements;
 using CivicLens.Core.Actions;
 using CivicLens.Core.Documents;
@@ -18,8 +19,14 @@ public sealed class StatementSourceText
     /// limit counts them.</summary>
     public const int MaximumWords = 120;
 
-    private StatementSourceText(string headline, ImmutableArray<StatementQuotation> quotations) =>
-        (Headline, Quotations) = (headline, quotations);
+    private static readonly char[] ClauseEnds = ['.', '!', '?', '\n', '\r', '"', '“', '”'];
+    private static readonly string[] SaidWords = ["said", "says"];
+    private const int MaximumNameWords = 4;
+
+    private readonly IReadOnlyList<SourceSpan> passages;
+
+    private StatementSourceText(string headline, ImmutableArray<StatementQuotation> quotations, IReadOnlyList<SourceSpan> passages) =>
+        (Headline, Quotations, this.passages) = (headline, quotations, passages);
 
     public string Headline { get; }
 
@@ -35,28 +42,68 @@ public sealed class StatementSourceText
             text.Length > StatementDraftRevision.MaximumSummaryLength) return null;
         var headline = FirstLine(text);
         if (headline.Length is 0 or > StatementDraftRevision.MaximumHeadlineLength) return null;
-        var quotations = QuotationsOf(extraction, headline);
-        return quotations.IsEmpty ? null : new(headline, quotations);
+        var passages = new QuotedText(text).Passages(extraction.ExtractionId);
+        var quotations = QuotationsOf(extraction, headline, passages);
+        return quotations.IsEmpty ? null : new(headline, quotations, passages);
     }
 
-    /// <summary>The code revision. Its speaker is the office owner of the source, or the one covered official. With several officials
-    /// and no office owner, the speaker is empty and a person chooses it. Code never guesses a date.</summary>
-    public StatementDraftRevision Revision(StatementDraftEvidence evidence, ImmutableArray<string> speakers, DateTimeOffset createdAtUtc)
+    /// <summary>The code revision. Its speaker is the official that code knows, when code can attribute every quoted passage of the text
+    /// to that official. Otherwise the speaker is empty and a person chooses the speakers, because only a model or a person can name the
+    /// other speakers. Code never guesses a date.</summary>
+    public StatementDraftRevision Revision(StatementDraftEvidence evidence, AnalysisOfficial? speaker, DateTimeOffset createdAtUtc)
     {
         ArgumentNullException.ThrowIfNull(evidence);
         var text = evidence.Article.Extraction.Text;
+        ImmutableArray<string> speakers = speaker is not null && IsOnlyQuoting(text, speaker.Name) ? [speaker.Id] : [];
         var revision = new StatementDraftRevision(evidence.Article.CandidateId, evidence.NextRevisionNumber, ReviewAuthor.CodeSubject,
             createdAtUtc, Headline, text, null, null, speakers, [], evidence.CarryOver.IssueIds, evidence.CarryOver.PolicyAreaIds, Quotations, []);
         return StatementDraftResolver.WithArticleDerivedFields(revision, text);
     }
 
-    /// <summary>Each quoted passage of the text, up to the revision limit. A text with no quoted passage cites its body as release text.</summary>
-    private static ImmutableArray<StatementQuotation> QuotationsOf(DocumentExtraction extraction, string headline)
+    /// <summary>Code attributes a quoted passage only when the clause next to it is "said NAME" or "NAME said", and NAME is one to four
+    /// capitalized words that end with the last name of the official. Every passage counts, also one that is not a quotation of the
+    /// revision. A text with no quoted passage is release text of the office.</summary>
+    private bool IsOnlyQuoting(string text, string officialName)
     {
-        var passages = new QuotedText(extraction.Text).Passages(extraction.ExtractionId)
+        var lastName = officialName.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        return lastName is not null && passages.All(passage =>
+            NamesOnly(ClauseAfter(text, passage), lastName) || NamesOnly(ClauseBefore(text, passage), lastName));
+    }
+
+    /// <summary>The text after the closing mark up to the end of its clause. A passage with no closing mark has no clause after it.</summary>
+    private static string ClauseAfter(string text, SourceSpan passage)
+    {
+        var closingMark = passage.Start + passage.Length;
+        if (closingMark >= text.Length || text[closingMark] is '\n' or '\r') return "";
+        var end = text.IndexOfAny(ClauseEnds, closingMark + 1);
+        return text[(closingMark + 1)..(end < 0 ? text.Length : end)];
+    }
+
+    /// <summary>The text from the start of its clause up to the opening mark.</summary>
+    private static string ClauseBefore(string text, SourceSpan passage)
+    {
+        var openingMark = passage.Start - 1;
+        var start = openingMark == 0 ? 0 : text.LastIndexOfAny(ClauseEnds, openingMark - 1) + 1;
+        return text[start..openingMark];
+    }
+
+    private static bool NamesOnly(string clause, string lastName)
+    {
+        var words = clause.Trim().Trim(',', ':').Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length < 2) return false;
+        var name = SaidWords.Contains(words[0], StringComparer.Ordinal) ? words[1..]
+            : SaidWords.Contains(words[^1], StringComparer.Ordinal) ? words[..^1] : [];
+        return name.Length is > 0 and <= MaximumNameWords && name.All(word => char.IsUpper(word[0])) &&
+            string.Equals(name[^1], lastName, StringComparison.Ordinal);
+    }
+
+    /// <summary>Each quoted passage of the text, up to the revision limit. A text with no quoted passage cites its body as release text.</summary>
+    private static ImmutableArray<StatementQuotation> QuotationsOf(DocumentExtraction extraction, string headline, IReadOnlyList<SourceSpan> passages)
+    {
+        var quoted = passages
             .Where(span => span.Length is > 0 and <= StatementDraftRevision.MaximumQuotationLength)
             .Take(StatementDraftRevision.MaximumQuotations).ToArray();
-        if (passages.Length > 0) return [.. passages.Select(span => new StatementQuotation(span, StatementQuotationKind.DirectQuotation))];
+        if (quoted.Length > 0) return [.. quoted.Select(span => new StatementQuotation(span, StatementQuotationKind.DirectQuotation))];
         var body = BodySpan(extraction, headline);
         return body.Length is > 0 and <= StatementDraftRevision.MaximumQuotationLength
             ? [new StatementQuotation(body, StatementQuotationKind.ReleaseText)] : [];
