@@ -54,7 +54,7 @@ public sealed class PostgresReleaseBillStatusesTests(PostgresCollection postgres
         {
             Withdrawals = [],
             AddedEntries = [PublishedEntryFixtures.Action(Action1, stored.AddDays(3))],
-            Names = new ReleaseNames([], new ReleaseFacets([], [])),
+            Names = ReleaseNameFixtures.None,
             BillStatuses = [Status(Action1, "Received in the Senate.", 5)]
         };
 
@@ -97,7 +97,7 @@ public sealed class PostgresReleaseBillStatusesTests(PostgresCollection postgres
             UPDATE release_bill_statuses SET status = 'InCommittee' WHERE record_id = '{Action2}';
             """);
         var scenario = new PublicationScenario();
-        var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
+        var backfill = StoredColumnsBackfills.WithoutRosters(publications, scenario.Releases, scenario.Votes);
 
         var first = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var second = await backfill.ExecuteAsync(PublicationScenario.Owner);
@@ -121,7 +121,7 @@ public sealed class PostgresReleaseBillStatusesTests(PostgresCollection postgres
         publications.CommitAsync("auth0|owner", new PublicationCommit(number, baseNumber, $"{number:D6}-{Guid.NewGuid():N}", [], [])
         {
             Withdrawals = [],
-            Names = new ReleaseNames([], new ReleaseFacets([], [])),
+            Names = ReleaseNameFixtures.None,
             BillStatuses = [.. statuses]
         }, $"key-{++commitCount}", Convert.ToHexStringLower(BitConverter.GetBytes(commitCount)).PadLeft(64, '0'), default);
 

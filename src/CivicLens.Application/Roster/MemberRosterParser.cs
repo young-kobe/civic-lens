@@ -25,7 +25,7 @@ public static class MemberRosterParser
             throw new InvalidDataException("Every roster member must have a bioguide ID and at least one term.");
         var terms = wireTerms.Select(ToTerm).ToArray();
         var current = wireTerms[^1]!;
-        return new RosterMember(bioguideId, RosterWire.FullNameOf(wire.Name),
+        return new RosterMember(bioguideId, RosterWire.FullNameOf(wire.Name), RosterWire.LastNameOf(wire.Name),
             RosterWire.Capped(current.Office, RosterLimits.Office), RosterWire.Capped(current.Phone, RosterLimits.Phone),
             RosterWire.Capped(current.Url, RosterLimits.Url), terms);
     }

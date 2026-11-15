@@ -44,7 +44,7 @@ public sealed partial class PostgresBillStreamTests
         var first = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}",
             [new(CivicLens.Publication.Contracts.PublishedRecordKind.Action, RecordId, 1)], [])
         {
-            Names = new([], new([], [])),
+            Names = ReleaseNameFixtures.None,
             Withdrawals = [],
             AddedEntries = [PublishedEntryFixtures.Action(RecordId, UpdatedAt)]
         };
@@ -345,7 +345,7 @@ public sealed partial class PostgresBillStreamTests
         var commit = new PublicationCommit(1, null, $"000001-{Guid.NewGuid():N}",
             [new(CivicLens.Publication.Contracts.PublishedRecordKind.Action, RecordId, 1)], [])
         {
-            Names = new([], new([], [])),
+            Names = ReleaseNameFixtures.None,
             Withdrawals = [],
             BillHistories = [new(RecordId, "missing-capture", BillHistoryCapture.CurrentProjectionVersion)]
         };

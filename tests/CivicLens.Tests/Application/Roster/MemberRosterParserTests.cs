@@ -20,6 +20,21 @@ public sealed class MemberRosterParserTests
                 cantwell.Terms[1].SenateClass, cantwell.Terms[1].Party));
     }
 
+    // Names from legislators-current.json of github.com/unitedstates/congress-legislators (CC0). A last word of the full name would sort them wrong.
+    [Fact]
+    public void TheLastNameIsTheWholeRosterLastNameSoACompoundSurnameSortsAsTheSourceSpellsIt()
+    {
+        var members = Parse("""
+            [{"id":{"bioguide":"V000128"},"name":{"first":"Chris","last":"Van Hollen","official_full":"Chris Van Hollen"},"terms":[Term]},
+             {"id":{"bioguide":"B001303"},"name":{"first":"Lisa","last":"Blunt Rochester","official_full":"Lisa Blunt Rochester"},"terms":[Term]},
+             {"id":{"bioguide":"W000797"},"name":{"first":"Debbie","last":"Wasserman Schultz","official_full":"Debbie Wasserman Schultz"},"terms":[Term]},
+             {"id":{"bioguide":"X000001"},"name":{"official_full":"No Last Name"},"terms":[Term]}]
+            """.Replace("Term", """{"type":"rep","start":"2025-01-03","end":"2027-01-03","state":"MD","district":8,"party":"Democrat"}""", StringComparison.Ordinal));
+
+        Assert.Equal(["Van Hollen", "Blunt Rochester", "Wasserman Schultz", null], members.Select(member => member.LastName));
+        Assert.Equal("Norton", Parse(RosterFixtures.Json).Single(member => member.BioguideId == "N000147").LastName);
+    }
+
     [Fact]
     public void TheOfficeAndContactComeFromTheLastTerm()
     {

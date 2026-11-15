@@ -60,7 +60,7 @@ public sealed class ListPageTests(PostgresCollection postgres)
         await using var host = await StartAsync();
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Senator(1));
-        var stale = new OfficialCursor(99, "Sen 01", "p01").Encode();
+        var stale = new OfficialCursor(99, "Sen 01", "Sen 01", "p01").Encode();
 
         var response = await new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress }
             .GetAsync($"/officials.html?party=democrat&cursor={stale}");

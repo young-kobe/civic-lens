@@ -482,19 +482,19 @@ try
         var releaseRoot = Environment.GetEnvironmentVariable("CIVIC_LENS_RELEASE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(releaseRoot))
             throw new ArgumentException("Release commands require CIVIC_LENS_RELEASE_DIRECTORY.");
-        var publishConfiguration = ReleaseCommand.IsPublish(args)
+        var publishConfiguration = ReleaseCommand.ReadsCollection(args)
             ? ConfigurationFile.ReadCollectionFromEnvironment()
-                ?? throw new ArgumentException("Publishing requires CIVIC_LENS_COLLECTION_CONFIG.")
+                ?? throw new ArgumentException("This release command requires CIVIC_LENS_COLLECTION_CONFIG.")
             : new CollectionConfiguration { People = [], Sources = [] };
         var issueConfiguration = ReleaseCommand.IsPublish(args)
             ? PublicationComposition.RequireIssues(ConfigurationFile.ReadIssuesFromEnvironment())
             : IssueConfiguration.None;
-        var artifactRoot = ReleaseCommand.IsPublish(args) ? PublicationComposition.RequireArtifactRoot() : string.Empty;
+        var artifactRoot = ReleaseCommand.ReadsCollection(args) ? PublicationComposition.RequireArtifactRoot() : string.Empty;
         var publications = PostgresPublicationStore.FromConnectionString(connectionString, codeVersion);
         var voteReviews = PostgresVoteReviewStore.FromConnectionString(connectionString);
         var releases = new FileReleaseDirectory(releaseRoot);
         using var loggers = CreateLoggers();
-        var (publish, _) = PublicationComposition.Create(connectionString, codeVersion, publications, releases, publishConfiguration, issueConfiguration,
+        var (publish, _, officials) = PublicationComposition.Create(connectionString, codeVersion, publications, releases, publishConfiguration, issueConfiguration,
             artifactRoot, loggers);
         executing = true;
         var blocked = new BlockedPublishedRecords(publications, releases);
@@ -502,7 +502,10 @@ try
             new ListBlockedPublished(publications, releases, blocked),
             new ActivatePublicationRelease(publications, releases, blocked, loggers.CreateLogger<ActivatePublicationRelease>()),
             new BackfillFirstPublished(publications, releases), new BackfillPublishedEntries(publications, releases),
-            new BackfillStoredColumns(publications, releases, voteReviews), new VerifyPublishedEntries(publications, releases),
+            new BackfillStoredColumns(publications, releases, voteReviews,
+                new BackfillRosterLastNames(publishConfiguration, PostgresMemberRosterStore.FromConnectionString(connectionString),
+                    PostgresExecutiveRosterStore.FromConnectionString(connectionString), PostgresCollectionAttemptStore.FromConnectionString(connectionString),
+                    new CaptureBodyReader(), artifactRoot), officials), new VerifyPublishedEntries(publications, releases),
             new VerifyCorrectionHistories(publications, releases), new BackfillCorrectionHistories(publications, releases),
             new BackfillReleaseBillCounts(publications, releases), new VerifyReleaseBillCounts(publications, releases),
             new BackfillReleasePartyLineUps(publications, releases), new VerifyReleasePartyLineUps(publications, releases),

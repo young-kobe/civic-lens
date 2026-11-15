@@ -153,6 +153,12 @@ public sealed partial class PostgresPublicationStore : IPublicationStore
         return await ReleaseNameRows.FillPhotoPathsAsync(db, releaseNumber, photoPaths, cancellationToken);
     }
 
+    public async Task<int> FillOfficialSortNamesAsync(IReadOnlyDictionary<string, string> sortNames, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await ReleaseNameRows.FillSortNamesAsync(db, sortNames, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);

@@ -236,6 +236,25 @@ public sealed class PublishOfficialsTests
         Assert.Equal(["viceprez", "viceprez", "prez"], terms.Select(term => term.Office));
     }
 
+    [Theory]
+    [InlineData(Cantwell, null, "Cantwell")]
+    [InlineData(null, Trump, "Trump")]
+    [InlineData("B000444", "Q6279", "Biden")]
+    [InlineData("Z999999", "Q1", null)]
+    public async Task TheSortNameIsTheLastNameOfTheRosterEntryThatGivesTheTermsAndStaysOutOfTheOfficialsFile(string? bioguideId, string? wikidataId, string? expected)
+    {
+        var scenario = new PublicationScenario();
+        scenario.ExternalIds["mayor"] = (bioguideId, wikidataId);
+        scenario.RosterMembers = RosterFixtures.Members();
+        scenario.ExecutiveOfficials = ExecutiveFixtures.Officials();
+
+        var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
+
+        Assert.Equal(expected, scenario.Publications.LastCommit!.Names.SortNames.GetValueOrDefault("mayor"));
+        Assert.DoesNotContain("sortName", System.Text.Encoding.UTF8.GetString(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.OfficialsPath]),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task TheFacetNamesOfTheCommitNameEveryIssueAndPolicyAreaOfTheReleaseAndAnUnconfiguredIdNamesItself()
     {

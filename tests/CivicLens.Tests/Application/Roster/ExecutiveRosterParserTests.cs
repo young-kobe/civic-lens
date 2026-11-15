@@ -20,6 +20,12 @@ public sealed class ExecutiveRosterParserTests
     }
 
     [Fact]
+    public void TheLastNameIsTheRosterLastNameWithoutTheSuffix()
+    {
+        Assert.Equal(["Washington", "Biden", "Trump"], ExecutiveFixtures.Officials().Select(official => official.LastName));
+    }
+
+    [Fact]
     public void AnOfficialWithoutAWikidataIdIsKeptBecauseTheFileGivesOneToRecentOfficialsOnly()
     {
         var washington = Parse(ExecutiveFixtures.Json).Single(official => official.GovtrackId == 411351);

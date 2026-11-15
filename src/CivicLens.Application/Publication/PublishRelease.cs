@@ -225,13 +225,13 @@ public sealed class PublishRelease
             Compress(manifestJson, stream => new BrotliStream(stream, CompressionLevel.Optimal)), cancellationToken);
         var facets = ReleaseFacets.From(manifest, catalog);
         await ReleaseBillStatuses.WriteAsync(staging, ReleaseBillStatuses.RowsOf(ReleaseBillStatuses.ActionIdsOf(manifest.Records), statuses), cancellationToken);
-        var officials = await dataFiles.WriteAsync(staging, manifest, additions, previous, roster, settings, photos, cancellationToken);
+        var (officials, sortNames) = await dataFiles.WriteAsync(staging, manifest, additions, previous, roster, settings, photos, cancellationToken);
         if (!historyChanged && additions.Count == 0 && removed.Count == 0 && !rewriteOfficials && !rewriteEntries && !ReleaseOfficialFiles.ChangesProfiles(previous, officials) &&
             !ReleaseBillStatuses.ChangedActionIds(ReleaseBillStatuses.ActionIdsOf(manifest.Records), previous, statuses).Any())
             throw new ArgumentException("Nothing to publish: no record, official, or bill input changed.");
         await officialFiles.WriteAsync(staging, manifest, officials, additions, removed, previous, rewriteOfficials, cancellationToken);
         await staging.WriteFileAsync(PublicationProtocol.ManifestPath, manifestJson, cancellationToken);
-        return (await staging.CompleteAsync(number, cancellationToken), entries, new ReleaseNames([.. officials.Officials], facets));
+        return (await staging.CompleteAsync(number, cancellationToken), entries, new ReleaseNames([.. officials.Officials], facets, sortNames));
     }
 
     private static byte[] Compress(byte[] content, Func<Stream, Stream> compressor)
