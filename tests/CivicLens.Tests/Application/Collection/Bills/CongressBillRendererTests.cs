@@ -21,6 +21,23 @@ public sealed class CongressBillRendererTests
         Assert.Equal(expected, CongressBillRenderer.RenderDetail(Bill()));
     }
 
+    /// <summary>The introduced date of every action revision comes back from the stored detail text, so the reader and the renderer agree on its one line.</summary>
+    [Fact]
+    public void TheIntroducedDateReadsBackFromTheDetailTextEvenWhenTheTitleLooksLikeAnIntroducedLine()
+    {
+        Assert.Equal(new DateOnly(2026, 3, 2), CongressBillRenderer.ReadIntroduced(CongressBillRenderer.RenderDetail(Bill())));
+        Assert.Equal(new DateOnly(2026, 3, 2), CongressBillRenderer.ReadIntroduced(CongressBillRenderer.RenderDetail(Bill(title: "Introduced: 1999-01-01"))));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Bill: 119 hr 1234\nTitle: A bill")]
+    [InlineData("Bill: 119 hr 1234\nTitle: A bill\nIntroduced: 2026-3-2\nUpdated: 2026-10-06T14:03:00Z")]
+    [InlineData("Bill: 119 hr 1234\nTitle: A bill\nIntroduced: 2026-03-02 \nUpdated: 2026-10-06T14:03:00Z")]
+    [InlineData("Bill: 119 hr 1234\nTitle: A bill\nUpdated: 2026-10-06T14:03:00Z\nIntroduced: 2026-03-02")]
+    public void ATextWithoutAnExactThirdIntroducedLineHasNoIntroducedDate(string text) =>
+        Assert.Null(CongressBillRenderer.ReadIntroduced(text));
+
     [Fact]
     public void DetailOmitsAMissingPolicyAreaAndListsEverySponsorOnItsOwnLine()
     {

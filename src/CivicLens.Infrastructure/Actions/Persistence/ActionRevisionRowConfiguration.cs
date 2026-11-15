@@ -73,6 +73,7 @@ internal sealed class ActionRevisionRowConfiguration : IEntityTypeConfiguration<
         builder.Property(row => row.IssueCandidatesRecorded).HasColumnName("issue_candidates_recorded");
         builder.Property(row => row.EventOn).HasColumnName("event_on");
         builder.Property(row => row.CosponsorCount).HasColumnName("cosponsor_count");
+        builder.Property(row => row.IntroducedOn).HasColumnName("introduced_on");
         ReviewTextColumns.Configure(builder, "action_revisions", ActionDraftRevision.MaximumHeadlineLength, ActionDraftRevision.MaximumSummaryLength);
         SourceSpanColumns.Configure(builder, "action_revisions", "SummaryCitation", "summary_citation", optional: true);
         SourceSpanColumns.Configure(builder, "action_revisions", "PolicyAreaCitation", "policy_area_citation", optional: true);

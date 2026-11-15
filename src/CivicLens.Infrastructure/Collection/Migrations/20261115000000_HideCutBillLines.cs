@@ -29,7 +29,8 @@ public partial class HideCutBillLines : Migration
                t.version_type AS text_version_name, t.version_date AS text_version_date, t.chars_read AS text_chars_read, t.chars_total AS text_chars_total,
                h.public_law, h.observed_at_utc_ticks AS history_observed_at_utc_ticks, h.action_count AS history_action_count,
                r.crs_summary_text, CASE WHEN r.crs_summary_text IS NOT NULL THEN r.summary_version END AS crs_summary_version,
-               r.text_origin = 'Model' AND r.text_package_id IS NULL AND r.summary_version IS NOT NULL AS summary_from_crs
+               r.text_origin = 'Model' AND r.text_package_id IS NULL AND r.summary_version IS NOT NULL AS summary_from_crs,
+               r.introduced_on
           FROM public_api.active_records a
           JOIN public.action_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
          CROSS JOIN LATERAL (

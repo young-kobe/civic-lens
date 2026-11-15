@@ -15,9 +15,10 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
     private static readonly HashSet<string> NoAllowedAbsences = [];
 
     private readonly RevisionBackfill<ActionRevisionRow, ActionDraftRevision, ActionRevisionPage> backfill = new(contextFactory, new(
-        "action_revision_backfill", PostgresAdvisoryLock.ActionReview, row => row.EventOn == null || !row.CrsSummaryRead,
+        "action_revision_backfill", PostgresAdvisoryLock.ActionReview, row => row.EventOn == null || !row.CrsSummaryRead || row.IntroducedOn == null,
         ActionRevisionRows.ReadPageAsync, FillColumnsAsync, ReadMovable, DifferingFields,
-        DerivedValuesMatch: (expected, stored) => expected.CrsSummaryRead == stored.CrsSummaryRead && expected.CrsSummaryText == stored.CrsSummaryText));
+        DerivedValuesMatch: (expected, stored) => expected.CrsSummaryRead == stored.CrsSummaryRead && expected.CrsSummaryText == stored.CrsSummaryText &&
+            stored.IntroducedOn is not null && expected.IntroducedOn == stored.IntroducedOn));
 
     public Task<RevisionBackfillBatch> BackfillBatchAsync(RevisionKey? after, int size, CancellationToken cancellationToken) =>
         backfill.BackfillBatchAsync(after, size, cancellationToken);
@@ -40,6 +41,7 @@ public sealed class PostgresActionRevisionBackfillStore(IDbContextFactory<Collec
                 extractions = await PostgresDocumentExtractionStore.ReadManyAsync(db, [citation.ExtractionId], cancellationToken);
             ActionRevisionRows.FillCrsSummary(row, revision, extractions);
         }
+        row.IntroducedOn ??= await ActionRevisionRows.ReadIntroducedOnAsync(db, revision.CandidateId, cancellationToken);
     }
 
     private static async Task DeleteChildRowsAsync(CollectionAttemptDbContext db, ActionRevisionRow row, CancellationToken cancellationToken)

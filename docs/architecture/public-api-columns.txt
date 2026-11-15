@@ -71,6 +71,7 @@ bills history_action_count
 bills crs_summary_text
 bills crs_summary_version
 bills summary_from_crs
+bills introduced_on
 brief_paragraphs record_id
 brief_paragraphs revision_number
 brief_paragraphs release_number

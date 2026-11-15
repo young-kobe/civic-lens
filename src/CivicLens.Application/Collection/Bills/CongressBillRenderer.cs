@@ -7,6 +7,8 @@ namespace CivicLens.Application.Collection.Bills;
 public static class CongressBillRenderer
 {
     private const string TimeFormat = "HH:mm:ss";
+    private const string IntroducedLabel = "Introduced";
+    private const int IntroducedLineIndex = 2;
     internal const string UpdateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
     public static string RenderDetail(CongressBill bill)
@@ -16,7 +18,7 @@ public static class CongressBillRenderer
         {
             IdentityLine(bill.Congress, bill.Type, bill.Number),
             Line("Title", bill.Title),
-            Line("Introduced", Date(bill.IntroducedDate)),
+            Line(IntroducedLabel, Date(bill.IntroducedDate)),
             Line("Updated", bill.UpdateDate.UtcDateTime.ToString(UpdateFormat, CultureInfo.InvariantCulture))
         };
         if (bill.PolicyArea is not null) lines.Add(Line("Policy area", bill.PolicyArea));
@@ -24,6 +26,19 @@ public static class CongressBillRenderer
         lines.Add(Line("Cosponsors (including withdrawn)", Count(bill.CosponsorCount)));
         lines.Add(Line("Actions", Count(bill.ActionCount)));
         return string.Join('\n', lines);
+    }
+
+    /// <summary>Reads the introduced date back from a detail text that <see cref="RenderDetail"/> wrote. The date is the third line, after the identity and the title.
+    /// Null when that line is not an exact introduced line.</summary>
+    public static DateOnly? ReadIntroduced(string detailText)
+    {
+        ArgumentNullException.ThrowIfNull(detailText);
+        var lines = detailText.Split('\n', IntroducedLineIndex + 2);
+        var prefix = $"{IntroducedLabel}: ";
+        return lines.Length > IntroducedLineIndex && lines[IntroducedLineIndex].StartsWith(prefix, StringComparison.Ordinal) &&
+            DateOnly.TryParseExact(lines[IntroducedLineIndex].AsSpan(prefix.Length), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            ? day
+            : null;
     }
 
     public static string RenderCosponsors(CongressBillListItem bill, CongressBillCosponsorsPage page)

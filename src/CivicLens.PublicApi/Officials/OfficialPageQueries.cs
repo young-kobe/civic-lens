@@ -55,7 +55,11 @@ internal static class OfficialPageQueries
         """;
 
     /// <summary>The columns of one sponsored bill, in the order of <see cref="ReadBill"/>.</summary>
-    internal const string BillColumns = "b.record_id, b.bill_type, b.bill_line, b.bill_title, p.sponsored_on, t.latest_action_text, t.latest_action_date";
+    internal const string BillColumns = "b.record_id, b.bill_type, b.bill_line, b.bill_title, b.introduced_on, t.latest_action_text, t.latest_action_date";
+
+    /// <summary>The sort day of a sponsored bill: the introduced date, or the second day of year 1 until the backfill fills it, so an undated bill sorts last.
+    /// The precedent is the statement day of <see cref="OfficialRecordQueries"/>.</summary>
+    internal const string BillDay = "COALESCE(b.introduced_on, DATE '0001-01-02')";
 
     /// <summary>The bills that the official <c>@id</c> sponsored, with their status, for the bills of the official page and the record page. The one owner of that join.
     /// OFFSET 0 keeps the bill lookup correlated, so Postgres reads one bill for each sponsorship and never rebuilds the view.</summary>
@@ -71,7 +75,7 @@ internal static class OfficialPageQueries
     private const string BillsSql = $"""
         SELECT {BillColumns}
         {SponsoredBillsSql} AND b.congress = @congress
-         ORDER BY p.sponsored_on DESC, b.record_id
+         ORDER BY {BillDay} DESC, b.record_id
          LIMIT @take
         """;
 
@@ -159,7 +163,7 @@ internal static class OfficialPageQueries
     }
 
     internal static OfficialBillData ReadBill(NpgsqlDataReader reader) => new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), reader.GetString(3),
-        reader.GetFieldValue<DateOnly>(4), ViewColumns.Text(reader, 5), ViewColumns.Date(reader, 6));
+        ViewColumns.Date(reader, 4), ViewColumns.Text(reader, 5), ViewColumns.Date(reader, 6));
 
     /// <summary>Reads the newest actions of each document type and the signing span. The counts come from the official figure, so every number has one owner.</summary>
     public static async Task<OfficialExecutiveData?> ReadExecutiveAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,

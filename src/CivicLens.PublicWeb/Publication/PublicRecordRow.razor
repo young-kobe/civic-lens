@@ -10,14 +10,14 @@
             {
                 <span class="muted small">Sponsor: @Sponsor</span>
             }
-            @if (MetaParts is not null)
+            @if (MetaParts is { Length: > 0 })
             {
                 <span class="muted small record-row-meta">@foreach (var part in MetaParts)
                     {
                         <span>@part</span>
                     }</span>
             }
-            else
+            else if (MetaParts is null)
             {
                 <span class="muted small">@Meta</span>
             }
@@ -53,7 +53,7 @@
     /// <summary>The name of the bill sponsor, shown as "Sponsor: {name}" above the meta line.</summary>
     [Parameter] public string? Sponsor { get; set; }
     [Parameter] public string Meta { get; set; } = string.Empty;
-    /// <summary>A meta line of separate parts, each in its own span, as on the official page. It takes the place of <c>Meta</c>.</summary>
+    /// <summary>A meta line of separate parts, each in its own span, as on the official page. It takes the place of <c>Meta</c>. An empty array shows no meta line.</summary>
     [Parameter] public string[]? MetaParts { get; set; }
     [Parameter] public int? Yea { get; set; }
     [Parameter] public int? Nay { get; set; }

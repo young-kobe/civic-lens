@@ -739,6 +739,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("headline");
 
+                    b.Property<DateOnly?>("IntroducedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("introduced_on");
+
                     b.Property<bool?>("IssueCandidatesRecorded")
                         .HasColumnType("boolean")
                         .HasColumnName("issue_candidates_recorded");
