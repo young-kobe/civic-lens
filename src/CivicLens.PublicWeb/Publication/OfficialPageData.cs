@@ -24,9 +24,8 @@ public sealed record OfficialPageData(
     public bool BillCountsAbsent { get; init; }
     public int? IssuesCongress { get; init; }
     public OfficialIssueData[] Issues { get; init; } = [];
+    /// <summary>The latest roll calls of the official in the Congress of the figures, oldest first, for the vote strip.</summary>
     public OfficialMarkData[] Marks { get; init; } = [];
-    /// <summary>How many marks the official has in all. <c>Marks</c> holds only the newest ones.</summary>
-    public int MarksTotal { get; init; }
     public SharedVoteRowData[] Votes { get; init; } = [];
     public OfficialStatementData[] Statements { get; init; } = [];
     /// <summary>True when a reviewer linked any statement of the official to a vote or a bill. <c>Statements</c> lists only the vote links.</summary>

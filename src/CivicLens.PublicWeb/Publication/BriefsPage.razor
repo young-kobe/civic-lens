@@ -2,7 +2,7 @@
 @using CivicLens.PublicWeb.Components.Ui
 
 <PublicPage Section="null" Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Data.Page)" Page="Data.Page" PageCount="PageCount" Description="@Description" RootPath="@RootPath">
-    <PageHeader Title="Weekly briefs" Lede="@($"Release {Data.Release}, published {Moment.Full(Data.PublishedAtUtc)}.")" />
+    <PageHeader Title="Weekly briefs" Lede="@($"Updated {Moment.Full(Data.PublishedAtUtc)}.")" />
     @* The list has no page while no brief exists, so it always holds a brief. *@
     <Panel Label="Weekly briefs">
         <ul class="record-rows" role="list">

@@ -130,8 +130,8 @@ public sealed class MemberVotesEndpointsTests(PostgresCollection postgres)
             vote.GetProperty("cast").GetString(), vote.GetProperty("castWords").GetString()));
         Assert.Equal(
             [("passage", "Vote to pass or agree to", "Point of Order Sustained", "Point of Order Sustained", "Yea", "Yes (Yea)"),
-             ("nomination", "Vote to confirm", "Nomination Rejected", "Not confirmed (Nomination Rejected)", "Yea", "Yes (Yea)"),
-             ("passage", "Vote to pass or agree to", "Agreed to", "Passed (Agreed to)", "Yea", "Yes (Yea)"),
+             ("nomination", "Vote to confirm", "Nomination Rejected", "Not confirmed", "Yea", "Yes (Yea)"),
+             ("passage", "Vote to pass or agree to", "Agreed to", "Passed", "Yea", "Yes (Yea)"),
              ("suspension", "Vote to pass with limited debate", "Failed", "Failed", "Yea", "Yes (Yea)")],
             rows);
     }

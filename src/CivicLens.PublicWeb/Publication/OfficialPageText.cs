@@ -47,7 +47,7 @@ public static class OfficialPageText
         data.PartyLines.OrderByDescending(line => line.LastVotedOn).ThenBy(line => line.Chamber).FirstOrDefault();
 
     public static string VotedOn(OfficialAttendanceData figure) =>
-        $"roll calls voted on, of {figure.Held} {figure.Chamber} roll calls on this site in the {CongressCalendar.Ordinal(figure.Congress)} Congress. The count includes procedural votes.";
+        $"roll calls voted on, of {PublishedWording.Count(figure.Held)} {figure.Chamber} roll calls on this site in the {CongressCalendar.Ordinal(figure.Congress)} Congress. The count includes procedural votes.";
 
     public static string PartyLineScope(OfficialPartyLineData line) =>
         $"cast with most {PublishedPartyNames.PartyOf(line.Chamber, line.Party)}, in the {CongressCalendar.Ordinal(line.Congress)} Congress.";
@@ -55,15 +55,20 @@ public static class OfficialPageText
     public static string BillsSponsored(OfficialPageData data) =>
         $"bills and resolutions sponsored in the {CongressCalendar.Ordinal(data.BillsCongress!.Value)} Congress, counted in this release";
 
-    public static string MarkName(OfficialMarkData mark) => mark switch
-    {
-        { IsMissed: true } => PlainVoteWords.Cast(PublishedOfficialVote.NotVoting),
-        { Party: { } party } => "Voted " + VoteBreakers.AgainstMost(PublishedPartyNames.Members(party)),
-        _ => throw new InvalidDataException("A mark that is not a missed vote names the party that it broke from.")
-    };
+    /// <summary>The lede of the vote strip. It names whose roll calls the squares are, how many, the Congress, and their order.</summary>
+    public static string StripLede(string name, int count, int congress) =>
+        $"Each square is one of the latest {count} roll {(count == 1 ? "call" : "calls")} of {name} in the {CongressCalendar.Ordinal(congress)} Congress, oldest on the left. Select a square to open that vote.";
 
-    public static string AgainstPartyLegend(OfficialPartyLineData line) =>
-        $"{line.AgainstParty} {(line.AgainstParty == 1 ? "vote" : "votes")} {VoteBreakers.AgainstMost(PublishedPartyNames.PartyOf(line.Chamber, line.Party))}";
+    /// <summary>The label of one square: the day, the roll call, and the cast, then the break from the party when the cast went against most of it.
+    /// It never holds the vote title, because the title can be AI text and the square has no room for its label.</summary>
+    public static string MarkLabel(OfficialMarkData mark) =>
+        $"{Moment.Day(mark.VotedOn)}, {VoteWords.RollCall(mark.Chamber, mark.RollCall)}: {PlainVoteWords.Cast(mark.Cast)}" +
+        (mark.BreaksParty ? $". {AgainstParty(mark)}" : "");
+
+    /// <summary>The legend words of the ring around a square whose cast went against most of the party, and the end of the label of that square.</summary>
+    public static string AgainstParty(OfficialMarkData mark) => mark.Party is { } party
+        ? "Voted " + VoteBreakers.AgainstMost(PublishedPartyNames.PartyOf(mark.Chamber, party))
+        : throw new InvalidDataException("A cast against the party names the party.");
 
     public static string ExecutivePlural(PublishedExecutiveActionKind kind, int count) => (kind, count) switch
     {

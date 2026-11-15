@@ -62,27 +62,41 @@ public sealed class PlainVoteWordsTests
     [InlineData("Passed", "Passed")]
     [InlineData("passed", "Passed")]
     [InlineData("Failed", "Failed")]
-    [InlineData("Agreed to", "Passed (Agreed to)")]
-    [InlineData("Cloture Motion Agreed to", "Passed (Cloture Motion Agreed to)")]
-    [InlineData("Bill Passed", "Passed (Bill Passed)")]
+    [InlineData("Agreed to", "Passed")]
+    [InlineData("Cloture Motion Agreed to", "Passed")]
+    [InlineData("Bill Passed", "Passed")]
     [InlineData("Confirmed", "Confirmed")]
-    [InlineData("Nomination Confirmed", "Confirmed (Nomination Confirmed)")]
-    [InlineData("Nomination Rejected", "Not confirmed (Nomination Rejected)")]
-    [InlineData("Nomination Not Confirmed", "Not confirmed (Nomination Not Confirmed)")]
-    [InlineData("Not Agreed to", "Failed (Not Agreed to)")]
-    [InlineData("Rejected", "Failed (Rejected)")]
-    [InlineData("Amendment Rejected", "Failed (Amendment Rejected)")]
-    [InlineData("Cloture Motion Rejected", "Failed (Cloture Motion Rejected)")]
+    [InlineData("Nomination Confirmed", "Confirmed")]
+    [InlineData("Nomination Rejected", "Not confirmed")]
+    [InlineData("Nomination Not Confirmed", "Not confirmed")]
+    [InlineData("Not Agreed to", "Failed")]
+    [InlineData("Rejected", "Failed")]
+    [InlineData("Amendment Rejected", "Failed")]
+    [InlineData("Cloture Motion Rejected", "Failed")]
     [InlineData("  Passed ", "Passed")]
-    public void AResultShowsThePlainWordsFirstAndTheSourceWordsInBrackets(string source, string expected) =>
+    public void AResultShowsOnePlainWordAndNeverRepeatsItWithTheSourceWords(string source, string expected) =>
         Assert.Equal(expected, PlainVoteWords.Result(source));
+
+    [Theory]
+    [InlineData("Passed", "Passed")]
+    [InlineData("Agreed to", "Passed (Agreed to)")]
+    [InlineData("Bill Passed", "Passed (Bill Passed)")]
+    [InlineData("Nomination Confirmed", "Confirmed (Nomination Confirmed)")]
+    [InlineData("Amendment Rejected", "Failed (Amendment Rejected)")]
+    [InlineData("  Passed ", "Passed")]
+    public void TheResultFactOfTheSourceFoldShowsThePlainWordsFirstAndTheSourceWordsInBrackets(string source, string expected) =>
+        Assert.Equal(expected, PlainVoteWords.ResultWithSource(source));
 
     [Theory]
     [InlineData("Point of Order Sustained")]
     [InlineData("Not Passed")]
     [InlineData("Unpassed")]
     [InlineData("Passed <b>")]
-    public void AnUnknownResultShowsTheSourceWordsAlone(string source) => Assert.Equal(source, PlainVoteWords.Result(source));
+    public void AnUnknownResultShowsTheSourceWordsAlone(string source)
+    {
+        Assert.Equal(source, PlainVoteWords.Result(source));
+        Assert.Equal(source, PlainVoteWords.ResultWithSource(source));
+    }
 
     [Fact]
     public void ResultsNeverUseTheWordApprovedBecauseThatWordIsForReviewStatus()

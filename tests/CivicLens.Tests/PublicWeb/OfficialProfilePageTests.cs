@@ -19,12 +19,12 @@ public sealed class OfficialProfilePageTests
     private static readonly string MissedId = new('c', 64);
     private static readonly string StatementId = new('d', 64);
     private static readonly string BillId = new('e', 64);
+    private static readonly string YesId = new('f', 64);
 
     private static OfficialPageData Member() => new(7, "p1", "Ann Able", PublishedOfficeKind.Representative, "House", "MA", 7, "Democrat", null, new(2027, 1, 3), null)
     {
         PublishedOn = new(2026, 11, 1),
         HasLinkedStatements = true,
-        MarksTotal = 2,
         Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
         PartyLines = [new(PublishedChamber.House, 119, "Democrat", 248, 1, 249, new(2025, 1, 3), new(2026, 9, 16))],
         BillsCongress = 119,
@@ -32,8 +32,9 @@ public sealed class OfficialProfilePageTests
         SponsoredBills = 43,
         RecordBills = 44,
         Issues = [new("tax", "Federal taxes", 8)],
-        Marks = [new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"),
-                 new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
+        Marks = [new(MissedId, new(2026, 9, 15), PublishedChamber.House, 305, "Not Voting", false, "Democrat"),
+                 new(BreakId, new(2026, 9, 16), PublishedChamber.House, 309, "Nay", true, "Democrat"),
+                 new(YesId, new(2026, 9, 16), PublishedChamber.House, 314, "Yea", false, "Democrat")],
         Votes = [new(VoteId, new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", PublishedTextOrigin.Model, "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
         Statements = [new(StatementId, new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", VoteId, "House agrees to Senate changes", "AI linked vote label",
             new(2026, 9, 16), PublishedChamber.House, 308, "Nay")],
@@ -95,38 +96,53 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task TheStripHoldsOnlyLinksToPartyBreaksAndMissedVotes()
+    public async Task TheStripShowsEachLatestRollCallAsAYesOrNoSquareOldestFirstWithBreaksAndMissesMarkedAndLabeled()
     {
         var page = await RenderAsync<OfficialProfilePage>(Member());
         var marks = page.QuerySelectorAll(".official-strip a");
 
-        Assert.Equal([Root + "records/" + BreakId + ".html", Root + "records/" + MissedId + ".html"], marks.Select(mark => mark.GetAttribute("href")!).ToArray());
-        Assert.True(marks[0].ClassList.Contains("against"));
-        Assert.True(marks[1].ClassList.Contains("missed"));
-        Assert.Contains("Voted against most Democrats", marks[0].TextContent);
-        Assert.DoesNotContain(page.QuerySelectorAll(".official-strip a"), mark => mark.GetAttribute("href")!.Contains(VoteId));
-        var legend = page.QuerySelector(".official-legend")!.TextContent;
-        Assert.Contains("1 vote against most House Democrats", legend);
-        Assert.Contains("5 missed House roll calls", legend);
+        Assert.Equal([MissedId, BreakId, YesId], marks.Select(mark => mark.GetAttribute("href")!).Select(href => href[(Root + "records/").Length..^".html".Length]));
+        Assert.Equal(["not-voting", "no", "yes"], marks.Select(mark => mark.GetAttribute("data-mark")));
+        Assert.Equal([null, "party", null], marks.Select(mark => mark.GetAttribute("data-breaks")));
+        Assert.Equal("16 Sep 2026, House roll call 309: No (Nay). Voted against most House Democrats", marks[1].QuerySelector(".visually-hidden")!.TextContent);
+        Assert.Equal(marks[1].QuerySelector(".visually-hidden")!.TextContent, marks[1].GetAttribute("title"));
+        Assert.Equal("15 Sep 2026, House roll call 305: Not voting", marks[0].QuerySelector(".visually-hidden")!.TextContent);
+        Assert.Equal("Each square is one of the latest 3 roll calls of Ann Able in the 119th Congress, oldest on the left. Select a square to open that vote.",
+            page.QuerySelector("#votes .official-lede")!.TextContent);
+        Assert.Equal(["Yes", "No", "Not voting", "Voted against most House Democrats"], page.QuerySelectorAll(".official-legend li").Select(item => item.TextContent));
+        Assert.DoesNotContain("Each square is one vote", page.DocumentElement.TextContent);
     }
 
     [Fact]
-    public async Task AMemberWhoSwitchedPartiesGetsOneLegendLineForEachPartyTheMarksBrokeFrom()
+    public async Task FiguresOverOneThousandUseThePublishedNumberFormat()
+    {
+        var page = await RenderAsync<OfficialProfilePage>(Member() with
+        {
+            Attendance = [new(PublishedChamber.House, 119, 5, 1592, new(2025, 1, 3), new(2026, 9, 16))],
+            PartyLines = [new(PublishedChamber.House, 119, "Democrat", 1248, 1, 1249, new(2025, 1, 3), new(2026, 9, 16))]
+        });
+        var figures = page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent).ToArray();
+
+        Assert.StartsWith("1,587roll calls voted on, of 1,592 House roll calls", figures[0]);
+        Assert.StartsWith("1,248of 1,249 split votes", figures[1]);
+    }
+
+    [Fact]
+    public async Task AMemberWhoSwitchedPartiesGetsOneRingLegendLineForEachPartyTheSquaresBrokeFrom()
     {
         var data = Member() with
         {
-            PartyLines =
+            Marks =
             [
-                new(PublishedChamber.House, 119, "Democrat", 100, 2, 102, new(2025, 1, 3), new(2025, 6, 1)),
-                new(PublishedChamber.House, 119, "Republican", 50, 1, 51, new(2025, 6, 2), new(2026, 9, 16))
+                new(BreakId, new(2025, 6, 1), PublishedChamber.House, 100, "Yea", true, "Democrat"),
+                new(MissedId, new(2026, 9, 16), PublishedChamber.House, 300, "Nay", true, "Republican")
             ]
         };
         var page = await RenderAsync<OfficialProfilePage>(data);
 
         var legend = page.QuerySelectorAll(".official-legend li").Select(item => item.TextContent).ToArray();
 
-        Assert.Contains(legend, line => line.Contains("2 votes against most House Democrats"));
-        Assert.Contains(legend, line => line.Contains("1 vote against most House Republicans"));
+        Assert.Equal(["Yes", "No", "Voted against most House Democrats", "Voted against most House Republicans"], legend);
     }
 
     [Fact]
@@ -485,19 +501,6 @@ public sealed class OfficialProfilePageTests
     }
 
     [Fact]
-    public async Task TheStripSaysHowManyMarksItShowsOfTheTotalAndLinksTheFullRecordOnlyWhenItIsCut()
-    {
-        var marks = Enumerable.Range(0, 12).Select(day => new OfficialMarkData(new string((char)('a' + day), 64), new(2026, 9, 1 + day), PublishedChamber.House, 100 + day, false, "Democrat")).ToArray();
-        var cut = await RenderAsync<OfficialProfilePage>(Member() with { Marks = marks, MarksTotal = 40 });
-        var whole = await RenderAsync<OfficialProfilePage>(Member() with { Marks = marks, MarksTotal = 12 });
-
-        var note = cut.QuerySelector("#votes p.muted")!;
-        Assert.StartsWith("The 12 newest of 40.", note.TextContent);
-        Assert.Equal(Root + "officials/p1/record.html?kind=votes", note.QuerySelector("a")!.GetAttribute("href"));
-        Assert.DoesNotContain("newest of", whole.QuerySelector("#votes")!.TextContent);
-    }
-
-    [Fact]
     public async Task TheNoLinksMessageShowsOnlyWhenNoStatementLinksToAVoteOrABill()
     {
         var onlyBillLinks = await RenderAsync<OfficialProfilePage>(Member() with { Statements = [], HasLinkedStatements = true });
@@ -532,9 +535,9 @@ public sealed class OfficialProfilePageTests
     [Fact]
     public void ABreakMarkWithoutAPartyIsAnInvalidMarkAndNoFallbackWordHidesIt()
     {
-        var invalid = new OfficialMarkData(BreakId, new(2026, 9, 16), PublishedChamber.House, 1, false, null);
+        var invalid = new OfficialMarkData(BreakId, new(2026, 9, 16), PublishedChamber.House, 1, "Nay", true, null);
 
-        Assert.Throws<InvalidDataException>(() => OfficialPageText.MarkName(invalid));
+        Assert.Throws<InvalidDataException>(() => OfficialPageText.MarkLabel(invalid));
     }
 
     [Fact]

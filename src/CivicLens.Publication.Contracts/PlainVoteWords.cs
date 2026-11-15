@@ -90,8 +90,11 @@ public static class PlainVoteWords
         return null;
     }
 
-    /// <summary>The result line: plain words, then the source result in brackets. An unknown result shows alone.</summary>
-    public static string Result(string result) => PlainWithSource(ResultWord(result), result.Trim());
+    /// <summary>The one result word of every page and list, such as "Passed". The source result shows only when no plain word knows it, so the words never repeat.</summary>
+    public static string Result(string result) => ResultWord(result) ?? result.Trim();
+
+    /// <summary>The result fact of the source fold: plain words, then the source result in brackets, because that fact quotes the source. An unknown result shows alone.</summary>
+    public static string ResultWithSource(string result) => PlainWithSource(ResultWord(result), result.Trim());
 
     /// <summary>"Yes 210, No 200, Not voting 5". Present shows only when it is not zero.</summary>
     public static string Totals(PublishedVoteTotals totals) =>

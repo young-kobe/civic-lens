@@ -23,7 +23,7 @@
         @foreach (var vote in Data.Votes)
         {
             <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label" LabelOrigin="vote.TextOrigin"
-                             Meta="@Meta(vote)" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@(PlainVoteWords.ResultWord(vote.Result) ?? vote.Result)">
+                             Meta="@Meta(vote)" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@PlainVoteWords.Result(vote.Result)">
                 @if (VoteWords.Badge(vote.Alignment) is { } badge)
                 {
                     <p><StatusBadge Text="@badge.Text" /></p>
