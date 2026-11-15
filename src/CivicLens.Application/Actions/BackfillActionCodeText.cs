@@ -11,7 +11,8 @@ namespace CivicLens.Application.Actions;
 /// Moves published bill records from retired text to code text, with no model call. The retired text is model text that no bill text backs
 /// (a CRS rewrite or a title-only draft), and a code headline that names the sponsor instead of the title. For each such record it appends
 /// a code revision with the same facts and the same issues, so code approves it and the next release publishes it. The revision cites a
-/// Bypassed <c>codeWritten</c> run, as the worker does. A record whose facts changed is left to the worker. A moved record holds current code
+/// Bypassed <c>codeWritten</c> run, as the worker does. It checks the newest candidate of the bill, because an unchanged update writes no revision.
+/// A record whose newest candidate changed the facts, or waits in the queue, is left to the worker. A moved record holds current code
 /// text, so a second run finds nothing. The precedent is <c>BackfillVoteCodeText</c> of the votes code text change.
 /// </summary>
 public sealed class BackfillActionCodeText(IActionDraftStore store, ActionBillReader reader, IssueConfigurationRevision issues, TimeProvider clock)
@@ -48,6 +49,7 @@ public sealed class BackfillActionCodeText(IActionDraftStore store, ActionBillRe
         // The bill text is not read: a retired draft cites none, and the worker drafts from bill text when the gate names new text.
         var evidence = await store.ReadEvidenceAsync(target.CandidateId, withBillText: false, cancellationToken);
         if (evidence is null) return ActionDraftErrorCodes.EvidenceUnavailable;
+        // The list names the newest candidate, so the facts and queue checks below apply to it. A candidate that arrives after the list supersedes it.
         if (evidence.HasNewerCandidate) return ActionDraftErrorCodes.SupersededByNewerCandidate;
         if (evidence.IsRejected) return ActionDraftErrorCodes.RecordRejected;
         // The list is read before this record. A worker draft or another backfill run can replace the retired text in between, so it is checked again.

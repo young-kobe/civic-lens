@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using CivicLens.Application;
 using CivicLens.Application.Actions;
 using CivicLens.Application.Collection.Bills;
@@ -123,11 +124,18 @@ internal static class ActionDraftRows
             draft.Congress == candidate.Congress && draft.BillType == candidate.BillType && draft.BillNumber == candidate.BillNumber, cancellationToken);
     }
 
+    public static Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, CongressBillListItem bill, CancellationToken cancellationToken) =>
+        NewestCandidateIdAsync(db, row => row.Congress == bill.Congress && row.BillType == bill.Type && row.BillNumber == bill.Number, cancellationToken);
+
+    public static Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, ActionCodeTextRecord record, CancellationToken cancellationToken) =>
+        NewestCandidateIdAsync(db, row => row.SourceId == record.SourceId && row.Congress == record.Congress && row.BillType == record.BillType &&
+            row.BillNumber == record.BillNumber, cancellationToken);
+
     /// <summary>The newest candidate of a bill is one that no other candidate of its source supersedes. When several stand, the last one created wins.</summary>
-    public static async Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, CongressBillListItem bill, CancellationToken cancellationToken)
+    private static async Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, Expression<Func<ActionCandidateRow, bool>> bill,
+        CancellationToken cancellationToken)
     {
-        var rows = await db.Set<ActionCandidateRow>().AsNoTracking()
-            .Where(row => row.Congress == bill.Congress && row.BillType == bill.Type && row.BillNumber == bill.Number)
+        var rows = await db.Set<ActionCandidateRow>().AsNoTracking().Where(bill)
             .OrderByDescending(row => row.CreatedAtUtcTicks).ToListAsync(cancellationToken);
         foreach (var row in rows)
             if (!await HasNewerCandidateAsync(db, ToCandidate(row), cancellationToken)) return row.CandidateId;
