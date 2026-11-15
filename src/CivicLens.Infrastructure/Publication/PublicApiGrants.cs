@@ -32,7 +32,7 @@ internal static class PublicApiGrants
 
         GRANT SELECT (release_number, published_at_utc_ticks, is_active) ON publication_releases TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_release, last_release, withdrawn_revision_number, withdrawn_at_utc_ticks, note) ON publication_withdrawals TO civic_lens_public_owner;
-        GRANT SELECT (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) ON publication_withdrawal_corrections TO civic_lens_public_owner;
+        GRANT SELECT (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, text_rewrite) ON publication_withdrawal_corrections TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_published_at_utc_ticks) ON published_records TO civic_lens_public_owner;
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
@@ -134,7 +134,7 @@ internal static class PublicApiGrants
 
         GRANT SELECT (release_number, kind, record_id, revision_number, history_id) ON release_correction_histories TO civic_lens_public_owner;
         GRANT SELECT (history_id, encoding_version, correction_count) ON published_correction_histories TO civic_lens_public_owner;
-        GRANT SELECT (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged)
+        GRANT SELECT (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, text_rewrite)
             ON published_correction_history_entries TO civic_lens_public_owner;
 
         GRANT USAGE ON SCHEMA public_api TO civic_lens_public;

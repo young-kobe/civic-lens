@@ -217,6 +217,35 @@ public sealed class VerifyCorrectionHistoriesTests
     }
 
     [Fact]
+    public async Task AnEarlierVoteFileWithTheFactsUnchangedMarkStillVerifiesAgainstItsStoredModelRewriteHistory()
+    {
+        var scenario = new PublicationScenario();
+        var corrections = new[]
+        {
+            new PublishedCorrection { ReplacedRevisionNumber = 1, PublishedAtUtc = DateTimeOffset.UnixEpoch, TextRewrite = PublishedTextRewrite.Model }
+        };
+        var vote = PublishedSamples.Vote("Headline", "Summary.", "Question: On Passage");
+        var voteBody = (PublishedVote)vote.Body with { RevisionNumber = 2, Corrections = corrections };
+        vote = vote with { Entry = voteBody.ToEntry(), Body = voteBody };
+        var release = Release(13);
+        Add(scenario, release, vote);
+        var path = PublicationProtocol.RecordDataPath(vote.Entry.RecordId);
+        var file = System.Text.Encoding.UTF8.GetString(scenario.Releases.Directories[release.DirectoryName][path]);
+        Assert.Contains("\"textRewrite\":\"model\"", file);
+        scenario.Releases.Directories[release.DirectoryName][path] =
+            System.Text.Encoding.UTF8.GetBytes(file.Replace("\"textRewrite\":\"model\"", "\"factsUnchanged\":true", StringComparison.Ordinal));
+        scenario.Publications.CorrectionHistories[13] = new Dictionary<PublishedRecordReference, StoredCorrectionHistory>
+        {
+            [new(vote.Entry.Kind, vote.Entry.RecordId)] = History(vote.Entry, corrections)
+        };
+
+        var result = await new VerifyCorrectionHistories(scenario.Publications, scenario.Releases)
+            .ExecuteAsync(PublicationScenario.Owner, 1, null);
+
+        Assert.Equal((1, 1, 0), (result.Examined, result.Verified, result.Failed));
+    }
+
+    [Fact]
     public async Task ReleaseAddedAfterTheWalkEndedIsListedAndVerifiedOnItsOwnFromItsSelectionCursor()
     {
         var scenario = new PublicationScenario();
@@ -407,6 +436,7 @@ public sealed class VerifyCorrectionHistoriesTests
         {
             case PublishedStatement statement: statement.Validate(); break;
             case PublishedAction action: action.Validate(); break;
+            case PublishedVote vote: vote.Validate(); break;
             default: throw new InvalidOperationException("The fixture needs a supported published record type.");
         }
         files[PublicationProtocol.RecordDataPath(sample.Entry.RecordId)] = json;

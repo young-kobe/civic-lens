@@ -5,17 +5,30 @@ namespace CivicLens.Tests.Publication.Contracts;
 public sealed class PublishedCorrectionHistoryIdentityTests
 {
     [Fact]
-    public void MatchesTheVersionOneBinaryProtocolVector()
+    public void AModelRewriteKeepsTheHashOfTheEarlierFactsUnchangedBoolSoStoredHistoriesStayVerifiable()
     {
         var entries = new PublishedCorrection[]
         {
             Entry(9, new DateTimeOffset(2026, 5, 6, 7, 8, 9, 123, TimeSpan.FromMinutes(90)).AddTicks(4560), "Café\u001fe\u0301\nline"),
-            Entry(3, new DateTimeOffset(2026, 8, 2, 3, 4, 5, 678, TimeSpan.FromMinutes(-240)).AddTicks(9010), factsUnchanged: true)
+            Entry(3, new DateTimeOffset(2026, 8, 2, 3, 4, 5, 678, TimeSpan.FromMinutes(-240)).AddTicks(9010), rewrite: PublishedTextRewrite.Model)
         };
 
         PublishedCorrection.ValidateAll(entries, 10, PublishedRecordKind.Vote);
 
         Assert.Equal("471b703c6e65089c328d2639d44f8b9bdbedb4a74adc29e6ccbac365efddefeb", PublishedCorrectionHistoryIdentity.Of(entries));
+    }
+
+    [Fact]
+    public void ACodeRewriteWritesItsOwnByteAndMatchesItsProtocolVector()
+    {
+        var entries = new PublishedCorrection[]
+        {
+            Entry(3, new DateTimeOffset(2026, 8, 2, 3, 4, 5, 678, TimeSpan.FromMinutes(-240)).AddTicks(9010), rewrite: PublishedTextRewrite.Code)
+        };
+
+        PublishedCorrection.ValidateAll(entries, 10, PublishedRecordKind.Vote);
+
+        Assert.Equal("6f5536fe86f0bbd3e8df597031fabd4d7d8cc401e3b3ceb300a02e129e9d3d6f", PublishedCorrectionHistoryIdentity.Of(entries));
     }
 
     [Fact]
@@ -43,10 +56,10 @@ public sealed class PublishedCorrectionHistoryIdentityTests
         Assert.NotEqual(id, PublishedCorrectionHistoryIdentity.Of([baseline with { PublishedAtUtc = timestamp.AddTicks(1) }]));
         Assert.NotEqual(id, PublishedCorrectionHistoryIdentity.Of([baseline with { Note = "note" }]));
         Assert.NotEqual(id, PublishedCorrectionHistoryIdentity.Of([baseline with { Note = null }]));
-        var other = Entry(1, timestamp, factsUnchanged: true);
+        var other = Entry(1, timestamp, rewrite: PublishedTextRewrite.Model);
         Assert.NotEqual(id, PublishedCorrectionHistoryIdentity.Of([baseline, other]));
-        Assert.NotEqual(PublishedCorrectionHistoryIdentity.Of([other]),
-            PublishedCorrectionHistoryIdentity.Of([other with { FactsUnchanged = false }]));
+        var byKind = Enum.GetValues<PublishedTextRewrite>().Select(kind => PublishedCorrectionHistoryIdentity.Of([other with { TextRewrite = kind }]));
+        Assert.Equal(3, byKind.Distinct().Count());
     }
 
     [Fact]
@@ -78,6 +91,7 @@ public sealed class PublishedCorrectionHistoryIdentityTests
         Assert.Throws<InvalidDataException>(() => PublishedCorrectionHistoryIdentity.Of([Entry(1, DateTimeOffset.UnixEpoch, "bad\uD800note")]));
     }
 
-    private static PublishedCorrection Entry(int replaced, DateTimeOffset publishedAt, string? note = null, bool factsUnchanged = false) =>
-        new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = publishedAt, Note = note, FactsUnchanged = factsUnchanged };
+    private static PublishedCorrection Entry(int replaced, DateTimeOffset publishedAt, string? note = null,
+        PublishedTextRewrite rewrite = PublishedTextRewrite.None) =>
+        new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = publishedAt, Note = note, TextRewrite = rewrite };
 }

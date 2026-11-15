@@ -60,7 +60,7 @@ internal static class PublicationWithdrawalRows
                     ReplacedRevisionNumber = correction.ReplacedRevisionNumber,
                     PublishedAtUtc = new DateTimeOffset(correction.PublishedAtUtcTicks, TimeSpan.Zero),
                     Note = correction.Note,
-                    FactsUnchanged = correction.FactsUnchanged
+                    TextRewrite = correction.TextRewrite
                 })]
         })];
     }
@@ -91,7 +91,7 @@ internal static class PublicationWithdrawalRows
             ReplacedRevisionNumber = correction.ReplacedRevisionNumber,
             PublishedAtUtcTicks = correction.PublishedAtUtc.UtcTicks,
             Note = correction.Note,
-            FactsUnchanged = correction.FactsUnchanged
+            TextRewrite = correction.TextRewrite
         })));
         await db.SaveChangesAsync(cancellationToken);
     }

@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.Infrastructure.Publication.Persistence;
 
 internal sealed class PublishedCorrectionHistoryEntryRow
@@ -8,5 +10,5 @@ internal sealed class PublishedCorrectionHistoryEntryRow
     public long PublishedAtUtcTicks { get; set; }
     public short PublishedOffsetMinutes { get; set; }
     public string? Note { get; set; }
-    public bool FactsUnchanged { get; set; }
+    public PublishedTextRewrite TextRewrite { get; set; }
 }

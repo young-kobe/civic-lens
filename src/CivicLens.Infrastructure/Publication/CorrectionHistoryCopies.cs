@@ -156,7 +156,7 @@ internal static class CorrectionHistoryCopies
             UtcTicks = correction.PublishedAtUtc.UtcTicks,
             OffsetMinutes = checked((short)correction.PublishedAtUtc.Offset.TotalMinutes),
             correction.Note,
-            correction.FactsUnchanged
+            TextRewrite = correction.TextRewrite.ToString()
         })).ToArray();
         await db.Database.ExecuteSqlRawAsync("""
             WITH inserted AS (
@@ -167,17 +167,17 @@ internal static class CorrectionHistoryCopies
                 ON CONFLICT DO NOTHING
                 RETURNING history_id)
             INSERT INTO published_correction_history_entries
-                (history_id, position, replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged)
-            SELECT inserted.history_id, k.position, k.replaced_revision_number, k.utc_ticks, k.offset_minutes, k.note, k.facts_unchanged
+                (history_id, position, replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, text_rewrite)
+            SELECT inserted.history_id, k.position, k.replaced_revision_number, k.utc_ticks, k.offset_minutes, k.note, k.text_rewrite
               FROM inserted
-              JOIN unnest({3}::text[], {4}::smallint[], {5}::int[], {6}::bigint[], {7}::smallint[], {8}::text[], {9}::boolean[])
-                AS k(history_id, position, replaced_revision_number, utc_ticks, offset_minutes, note, facts_unchanged)
+              JOIN unnest({3}::text[], {4}::smallint[], {5}::int[], {6}::bigint[], {7}::smallint[], {8}::text[], {9}::text[])
+                AS k(history_id, position, replaced_revision_number, utc_ticks, offset_minutes, note, text_rewrite)
                 ON k.history_id = inserted.history_id
             """, new object[] { EncodingVersion, ordered.Select(history => history.HistoryId).ToArray(),
                 ordered.Select(history => (short)history.Corrections.Length).ToArray(), entries.Select(entry => entry.HistoryId).ToArray(),
                 entries.Select(entry => entry.Position).ToArray(), entries.Select(entry => entry.ReplacedRevisionNumber).ToArray(),
                 entries.Select(entry => entry.UtcTicks).ToArray(), entries.Select(entry => entry.OffsetMinutes).ToArray(),
-                entries.Select(entry => entry.Note).ToArray(), entries.Select(entry => entry.FactsUnchanged).ToArray() }, cancellationToken);
+                entries.Select(entry => entry.Note).ToArray(), entries.Select(entry => entry.TextRewrite).ToArray() }, cancellationToken);
     }
 
     private static async Task RequireBodiesMatchAsync(CollectionAttemptDbContext db, IReadOnlyCollection<PreparedHistory> histories,
@@ -233,7 +233,7 @@ internal static class CorrectionHistoryCopies
             ReplacedRevisionNumber = row.ReplacedRevisionNumber,
             PublishedAtUtc = new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero).ToOffset(TimeSpan.FromMinutes(row.PublishedOffsetMinutes)),
             Note = row.Note,
-            FactsUnchanged = row.FactsUnchanged
+            TextRewrite = row.TextRewrite
         }).ToArray();
     }
 
@@ -247,14 +247,14 @@ internal static class CorrectionHistoryCopies
             ReplacedRevisionNumber = row.ReplacedRevisionNumber,
             PublishedAtUtc = new DateTimeOffset(row.PublishedAtUtcTicks, TimeSpan.Zero).ToOffset(TimeSpan.FromMinutes(row.PublishedOffsetMinutes)),
             Note = row.Note,
-            FactsUnchanged = row.FactsUnchanged
+            TextRewrite = row.TextRewrite
         }).ToArray();
     }
 
     private static bool Same(PublishedCorrection[] left, PublishedCorrection[] right) => left.Length == right.Length &&
         left.Zip(right).All(pair => pair.First.ReplacedRevisionNumber == pair.Second.ReplacedRevisionNumber &&
             pair.First.PublishedAtUtc.UtcTicks == pair.Second.PublishedAtUtc.UtcTicks && pair.First.PublishedAtUtc.Offset == pair.Second.PublishedAtUtc.Offset &&
-            string.Equals(pair.First.Note, pair.Second.Note, StringComparison.Ordinal) && pair.First.FactsUnchanged == pair.Second.FactsUnchanged);
+            string.Equals(pair.First.Note, pair.Second.Note, StringComparison.Ordinal) && pair.First.TextRewrite == pair.Second.TextRewrite);
 
     private static PreparedHistory[] Deduplicate(IReadOnlyCollection<PreparedHistory> histories)
     {

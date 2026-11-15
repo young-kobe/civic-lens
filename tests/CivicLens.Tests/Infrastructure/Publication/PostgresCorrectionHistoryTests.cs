@@ -628,7 +628,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
-            SELECT position, replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged
+            SELECT position, replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, text_rewrite
               FROM published_correction_history_entries WHERE history_id = @history_id ORDER BY position
             """, connection);
         command.Parameters.AddWithValue("history_id", historyId);
@@ -636,7 +636,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         var rows = new List<CorrectionRow>();
         while (await reader.ReadAsync())
             rows.Add(new(reader.GetInt16(0), reader.GetInt32(1), reader.GetInt64(2), reader.GetInt16(3),
-                reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetBoolean(5)));
+                reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5)));
         return rows;
     }
 
@@ -657,23 +657,24 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
 
     private static PublishedRevisionBinding Binding(string recordId, int revision) => new(PublishedRecordKind.Action, recordId, revision);
 
-    // Only a vote correction can say that the facts did not change, so a history that holds that mark binds a vote.
+    // Only a vote correction can name a text rewrite, so a history that holds one binds a vote.
     private static PublishedRevisionBinding VoteBinding(string recordId, int revision) => new(PublishedRecordKind.Vote, recordId, revision);
 
     private static PublishedCorrection[] OrderedCorrections() =>
     [
-        Correction(9, PublishedAt.ToOffset(TimeSpan.FromMinutes(345)), null, factsUnchanged: true),
-        Correction(8, PublishedAt.AddMinutes(-1), "Corrected caf\u00e9 quote\u001f\nSecond line", factsUnchanged: false),
-        Correction(7, PublishedAt.AddMinutes(-2), null, factsUnchanged: false)
+        Correction(9, PublishedAt.ToOffset(TimeSpan.FromMinutes(345)), null, PublishedTextRewrite.Code),
+        Correction(8, PublishedAt.AddMinutes(-1), "Corrected caf\u00e9 quote\u001f\nSecond line"),
+        Correction(7, PublishedAt.AddMinutes(-2), null)
     ];
 
-    private static PublishedCorrection Correction(int replacedRevision, DateTimeOffset at, string? note, bool factsUnchanged = false) => new()
-    {
-        ReplacedRevisionNumber = replacedRevision,
-        PublishedAtUtc = at,
-        Note = note,
-        FactsUnchanged = factsUnchanged
-    };
+    private static PublishedCorrection Correction(int replacedRevision, DateTimeOffset at, string? note, PublishedTextRewrite rewrite = PublishedTextRewrite.None) =>
+        new()
+        {
+            ReplacedRevisionNumber = replacedRevision,
+            PublishedAtUtc = at,
+            Note = note,
+            TextRewrite = rewrite
+        };
 
     private static void AssertCorrection(CorrectionRow row, int position, PublishedCorrection expected)
     {
@@ -682,9 +683,9 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
         Assert.Equal(expected.PublishedAtUtc.UtcTicks, row.UtcTicks);
         Assert.Equal((short)expected.PublishedAtUtc.Offset.TotalMinutes, row.OffsetMinutes);
         Assert.Equal(expected.Note, row.Note);
-        Assert.Equal(expected.FactsUnchanged, row.FactsUnchanged);
+        Assert.Equal(expected.TextRewrite.ToString(), row.TextRewrite);
     }
 
     private sealed record CorrectionRow(short Position, int ReplacedRevisionNumber, long UtcTicks, short OffsetMinutes,
-        string? Note, bool FactsUnchanged);
+        string? Note, string TextRewrite);
 }

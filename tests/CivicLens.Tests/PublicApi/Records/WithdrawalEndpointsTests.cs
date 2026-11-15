@@ -17,7 +17,7 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task NoticeUsesOnlyTheActiveReleaseEpisodeAndKeepsEveryTypedCorrection()
     {
-        // Only a vote correction can carry factsUnchanged, so the typed correction list belongs to a vote.
+        // Only a vote correction can name a text rewrite, so the typed correction list belongs to a vote.
         var host = await ApiHost.StartAsync(postgres);
         await using (host)
         {
@@ -28,8 +28,8 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
             var correctionRows = string.Join(",\n", Enumerable.Range(0, 62).Select(position =>
             {
                 var note = position % 3 == 2 ? $"'Correction {position}'" : "NULL";
-                var unchanged = position % 3 == 1 ? "true" : "false";
-                return $"('vote', '{Id}', 6, {position}, {100 - position}, {edit}, {note}, {unchanged})";
+                var rewrite = position % 3 != 1 ? "None" : position % 2 == 1 ? "Code" : "Model";
+                return $"('vote', '{Id}', 6, {position}, {100 - position}, {edit}, {note}, '{rewrite}')";
             }));
             await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
                 SET session_replication_role = replica;
@@ -39,8 +39,8 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
                     ('vote', '{Id}', 3, {withdrawn}, 'Old notice', 2, 3),
                     ('vote', '{Id}', 101, {withdrawn}, 'Current notice', 6, NULL),
                     ('action', '{Id}', 2, {withdrawn}, 'Other kind', 6, NULL);
-                INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) VALUES
-                    ('vote', '{Id}', 2, 0, 2, {edit}, 'Old correction', false),
+                INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, text_rewrite) VALUES
+                    ('vote', '{Id}', 2, 0, 2, {edit}, 'Old correction', 'None'),
                     {correctionRows};
                 """);
 
@@ -68,7 +68,9 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
             Assert.Equal(Enumerable.Range(0, 62).Select(position => 100 - position),
                 corrections.Select(item => item.GetProperty("replacedRevisionNumber").GetInt32()));
             Assert.Equal("Correction 2", corrections[2].GetProperty("note").GetString());
-            Assert.True(corrections[1].GetProperty("factsUnchanged").GetBoolean());
+            Assert.Equal("code", corrections[1].GetProperty("textRewrite").GetString());
+            Assert.Equal("model", corrections[4].GetProperty("textRewrite").GetString());
+            Assert.False(corrections[0].TryGetProperty("textRewrite", out _));
             Assert.Equal("2026-06-03T03:04:05+00:00", corrections[0].GetProperty("publishedAtUtc").GetString());
 
             await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, new DateTimeOffset(2026, 6, 3, 0, 0, 0, TimeSpan.Zero));

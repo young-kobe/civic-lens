@@ -302,7 +302,7 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
-    public async Task ACodeRevisionThatOnlyRewritesTheTextOfThePublishedVoteIsMarkedAsFactsUnchanged()
+    public async Task ACodeApprovedRevisionThatOnlyRewritesTheModelTextOfThePublishedVoteIsAModelRewrite()
     {
         var (scenario, vote) = await PublishedVoteAsync();
         scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
@@ -311,7 +311,35 @@ public sealed class PublishCorrectionsTests
         var second = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote));
 
         var entry = Assert.Single(ReadVote(scenario, second.DirectoryName, vote).Corrections);
-        Assert.Equal((1, null, true), (entry.ReplacedRevisionNumber, entry.Note, entry.FactsUnchanged));
+        Assert.Equal((1, null, PublishedTextRewrite.Model), (entry.ReplacedRevisionNumber, entry.Note, entry.TextRewrite));
+    }
+
+    [Fact]
+    public async Task ARevisionThatMovesThePublishedVoteToCodeTextAndChangesNothingElseIsACodeRewrite()
+    {
+        var (scenario, vote) = await PublishedVoteAsync();
+        scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Headline = "The House voted on passage of H.R. 7.", Summary = "The bill passed.", TextOrigin = ReviewTextOrigin.Code });
+
+        var second = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote));
+
+        var entry = Assert.Single(ReadVote(scenario, second.DirectoryName, vote).Corrections);
+        Assert.Equal((1, null, PublishedTextRewrite.Code), (entry.ReplacedRevisionNumber, entry.Note, entry.TextRewrite));
+    }
+
+    [Fact]
+    public async Task ACodeRewriteAfterAModelRewriteReplacesItInTheRunSoTheRunHoldsOneTextRewrite()
+    {
+        var (scenario, vote) = await PublishedVoteAsync();
+        scenario.ReviseVote(vote, 2, approverSubject: ReviewAuthor.CodeSubject, change: revision => revision with { Summary = "New summary." });
+        await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote));
+        scenario.ReviseVote(vote, 3, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Summary = "The bill passed.", TextOrigin = ReviewTextOrigin.Code });
+
+        var third = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k3", vote));
+
+        var entry = Assert.Single(ReadVote(scenario, third.DirectoryName, vote).Corrections);
+        Assert.Equal((2, PublishedTextRewrite.Code), (entry.ReplacedRevisionNumber, entry.TextRewrite));
     }
 
     [Fact]
@@ -324,7 +352,7 @@ public sealed class PublishCorrectionsTests
         var second = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote));
 
         var entry = Assert.Single(ReadVote(scenario, second.DirectoryName, vote).Corrections);
-        Assert.False(entry.FactsUnchanged);
+        Assert.Equal(PublishedTextRewrite.None, entry.TextRewrite);
     }
 
     [Fact]
@@ -339,7 +367,8 @@ public sealed class PublishCorrectionsTests
         var third = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k3", vote));
 
         var corrections = ReadVote(scenario, third.DirectoryName, vote).Corrections;
-        Assert.Equal([(2, false), (1, true)], corrections.Select(item => (item.ReplacedRevisionNumber, item.FactsUnchanged)));
+        Assert.Equal([(2, PublishedTextRewrite.None), (1, PublishedTextRewrite.Model)],
+            corrections.Select(item => (item.ReplacedRevisionNumber, item.TextRewrite)));
     }
 
     [Fact]
@@ -351,7 +380,7 @@ public sealed class PublishCorrectionsTests
 
         var second = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k2", vote));
 
-        Assert.False(Assert.Single(ReadVote(scenario, second.DirectoryName, vote).Corrections).FactsUnchanged);
+        Assert.Equal(PublishedTextRewrite.None, Assert.Single(ReadVote(scenario, second.DirectoryName, vote).Corrections).TextRewrite);
     }
 
     [Fact]
@@ -366,7 +395,7 @@ public sealed class PublishCorrectionsTests
         var third = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k3", vote));
 
         var entry = Assert.Single(ReadVote(scenario, third.DirectoryName, vote).Corrections);
-        Assert.Equal((1, false), (entry.ReplacedRevisionNumber, entry.FactsUnchanged));
+        Assert.Equal((1, PublishedTextRewrite.None), (entry.ReplacedRevisionNumber, entry.TextRewrite));
     }
 
     [Fact]
@@ -381,7 +410,7 @@ public sealed class PublishCorrectionsTests
         var third = await scenario.Publisher().ExecuteAsync(Code, VoteRequest("k3", vote));
 
         var entry = Assert.Single(ReadVote(scenario, third.DirectoryName, vote).Corrections);
-        Assert.Equal((1, true), (entry.ReplacedRevisionNumber, entry.FactsUnchanged));
+        Assert.Equal((1, PublishedTextRewrite.Model), (entry.ReplacedRevisionNumber, entry.TextRewrite));
     }
 
     private static async Task<(PublicationScenario Scenario, string Vote)> PublishedVoteAsync()

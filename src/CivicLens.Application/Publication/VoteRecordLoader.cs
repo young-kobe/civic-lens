@@ -36,10 +36,12 @@ internal sealed class VoteRecordLoader(IVoteReviewStore votes)
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
         var built = new PublishedVoteBuilder(build.Rules).Build(review.CurrentRevision, review.Decisions, addition.Vote.Extractions,
             build.FirstPublishedAt(Kind, recordId), [], build.Now, addition.Parties);
-        var textRewritten = build.Corrections.EarlierVote(recordId) is { } earlier && built.IsTextRewriteOf(earlier);
+        var textRewrite = build.Corrections.EarlierVote(recordId) is { } earlier && built.IsTextRewriteOf(earlier)
+            ? PublishedCorrection.RewriteBy(built.TextOrigin)
+            : PublishedTextRewrite.None;
         var record = built with
         {
-            Corrections = build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions, textRewritten)
+            Corrections = build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions, textRewrite)
         };
         PublishedCorrection.ValidateAll(record.Corrections, record.RevisionNumber, Kind);
         return PendingRecord.Create(record.ToEntry(), review.ReviewStateVersion, record, record.Corrections);
