@@ -206,6 +206,28 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.DoesNotContain("in all", first.QuerySelector(".pager")!.TextContent);
     }
 
+    // p0 has no votes and twenty-seven statements, so a vote filter falls back to the statements tab and that tab needs a second page.
+    [Fact]
+    public async Task AVoteFilterForAnOfficialWithNoVotesFallsBackWithoutTheFiltersAndEveryNextLinkParses()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, [.. Enumerable.Range(0, 27)
+            .Select(number => new SeededStatement('0', null, ["p0"], [], "Person", "Person") { RecordId = Id(number) })]);
+
+        var first = await GetPageAsync(host, "/officials/p0/record.html?cast=yes&party=against");
+        var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
+        var second = await GetPageAsync(host, next.Replace("https://civic-lens.test/", "/"));
+
+        Assert.Equal(["Statements27"], Tabs(first));
+        Assert.Null(first.QuerySelector("details.list-fold"));
+        Assert.Null(first.QuerySelector(".list-status"));
+        Assert.Contains("kind=statements&cursor=r.1.", next);
+        Assert.DoesNotContain("cast=", next);
+        Assert.DoesNotContain("party=", next);
+        Assert.Equal((25, 2), (first.QuerySelectorAll(".record-row").Length, second.QuerySelectorAll(".record-row").Length));
+        Assert.Equal("25 on this page. 27 in all.", first.QuerySelector(".pager span")!.TextContent);
+    }
+
     [Fact]
     public async Task ANoMatchShowsTheEmptyLineAndARefusedFilterAnswers400WithTheMarkedFieldAndNoRows()
     {

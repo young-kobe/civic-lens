@@ -25,7 +25,10 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
         var counts = await OfficialRecordQueries.ReadCountsAsync(connection, transaction, officialId, cancellationToken);
         var tabs = TabOrder.Where(kind => counts[kind] > 0).Select(kind => new OfficialRecordCountData(kind, counts[kind])).ToArray();
         var selected = request.Kind is { } asked && counts[asked] > 0 ? asked : tabs.FirstOrDefault()?.Kind ?? OfficialRecordKind.Votes;
-        var page = new OfficialRecordPageData(release, official.OfficialId, official.Name, official.Kind, tabs, selected) { VoteFilter = request.Filter };
+        var page = new OfficialRecordPageData(release, official.OfficialId, official.Name, official.Kind, tabs, selected);
+        // A vote filter selects the votes tab. When the official has no votes, the page falls back to another tab and drops the filters,
+        // so the shown tab, the form, and the next page link agree.
+        if (selected == OfficialRecordKind.Votes) page = page with { VoteFilter = request.Filter };
         if (request.Cursor is { } stale && stale.Release != release) return page;
         page = page with { Offices = await ReadOfficesAsync(connection, transaction, officialId, cancellationToken) };
         var after = request.Kind == selected ? request.Cursor : null;
