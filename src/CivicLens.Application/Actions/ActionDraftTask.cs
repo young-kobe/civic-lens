@@ -7,6 +7,8 @@ public static class ActionDraftTask
 {
     public const string Task = "action-draft";
     public const string TaskVersion = "action-draft-v1";
+    /// <summary>The retired prompt that rewrote the CRS summary. No request sends it now. Its drafts stay current, so a stale redraft never pays
+    /// an issue call for each of them. How those published records move is an owner choice.</summary>
     public const string PromptVersion = "action-draft-prompt-v7";
     public const string SchemaVersion = "action-draft-schema-v2";
     public const string IssuePromptVersion = "action-issue-prompt-v4";
@@ -18,7 +20,6 @@ public static class ActionDraftTask
     public const string KeyTermTextPromptVersion = "action-text-prompt-v11";
     public const string KeyTermTextSchemaVersion = "action-text-schema-v2";
     public const string Model = "claude-haiku-5-5";
-    public const int MaximumOutputTokens = 4_000;
     public const int MaximumTextOutputTokens = 16_000;
     public const int MaximumIssueOutputTokens = 3_000;
     public const int MaximumPromptBytes = AnalysisRunInput.MaximumPromptBytes;

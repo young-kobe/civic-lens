@@ -5,6 +5,7 @@ using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Infrastructure.Actions.Persistence;
+using CivicLens.Core.Actions;
 using CivicLens.Core.Analysis;
 using CivicLens.Core.Relationships;
 using CivicLens.Core.Review;
@@ -27,19 +28,29 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
     private readonly IDbContextFactory<CollectionAttemptDbContext> contextFactory;
     private readonly PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue;
     private readonly AnalysisCurrentVersions currentVersions;
+    private readonly Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision;
+    private readonly CodeVersion codeVersion;
 
     /// <summary><paramref name="draftsKeyTerms"/> is the key term setting. It picks the current versions, so a draft is stale only against the prompt that the setting sends.</summary>
     public PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory, CodeVersion codeVersion, bool draftsKeyTerms)
-        : this(contextFactory, new PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun>(contextFactory, new ActionDraftQueueMapping(
-            AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action), codeVersion)),
+        : this(contextFactory, AfterDecisionHooks.ForRecordKind(contextFactory, RelationshipRecordKind.Action, PublishedRecordKind.Action), codeVersion,
             ActionDraftTask.CurrentVersions(draftsKeyTerms))
     { }
 
     private PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
-        PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue, AnalysisCurrentVersions currentVersions) : base(queue)
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CodeVersion codeVersion, AnalysisCurrentVersions currentVersions)
+        : this(contextFactory, new(contextFactory, new ActionDraftQueueMapping(afterDecision, codeVersion)), afterDecision, codeVersion, currentVersions)
+    { }
+
+    private PostgresActionDraftStore(IDbContextFactory<CollectionAttemptDbContext> contextFactory,
+        PostgresAnalysisQueue<ActionAnalysisRow, ActionAnalysisBudgetRow, ActionDraftRun> queue,
+        Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CodeVersion codeVersion, AnalysisCurrentVersions currentVersions)
+        : base(queue)
     {
         this.contextFactory = contextFactory;
         this.queue = queue;
+        this.afterDecision = afterDecision;
+        this.codeVersion = codeVersion;
         this.currentVersions = currentVersions;
     }
 
@@ -97,6 +108,40 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             var stale = await StaleCandidateIdsAsync(db, ids, currentVersions, token);
             return settled.Where(row => stale.Contains(row.CandidateId));
         }, cancellationToken);
+
+    // Model text with no bill text package is a CRS rewrite or a title-only draft. A code headline from before the title headline read
+    // "{number}: introduced by {sponsors}" or "{number}: introduced in Congress".
+    public async Task<IReadOnlyList<ActionCodeTextTarget>> ListPublishedRetiredTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Database.SqlQuery<ActionCodeTextTarget>($"""
+            SELECT d.record_id AS "RecordId", r.candidate_id AS "CandidateId"
+            FROM action_drafts d
+            JOIN action_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
+            WHERE (r.text_origin = 'Model' AND r.text_package_id IS NULL
+                   OR r.text_origin = 'Code' AND (r.headline LIKE '%: introduced by %' OR r.headline LIKE '%: introduced in Congress'))
+              AND (CAST({afterRecordId} AS text) IS NULL OR d.record_id COLLATE "C" > {afterRecordId})
+              AND EXISTS (SELECT 1 FROM publication_record_states s
+                          WHERE s.kind = 'action' AND s.record_id = d.record_id AND s.last_release IS NULL)
+            ORDER BY d.record_id COLLATE "C"
+            LIMIT {limit}
+            """).ToListAsync(cancellationToken);
+    }
+
+    // The queue entry is locked first, as a worker settlement does, so the lock order stays the queue row and then the action review key.
+    public Task<string?> AppendCodeTextAsync(ActionDraftRevision revision, ActionDraftRun run, int readStateVersion, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        if (revision is not { AuthorKind: ReviewAuthorKind.Code, TextOrigin: ReviewTextOrigin.Code })
+            throw new ArgumentException("Only a code revision with code text is appended outside the worker.", nameof(revision));
+        return queue.AddBypassedRunAsync(run, ActionCodeTextSkip.DraftPending, async (db, token) =>
+        {
+            var refusal = await ActionDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, codeVersion, readStateVersion, token);
+            if (refusal is null) await PostgresActionReviewStore.Records.AfterCodeApprovalAsync(db, revision.RecordId, revision.RevisionNumber, afterDecision, token);
+            return refusal;
+        }, cancellationToken);
+    }
 
     public async Task<IReadOnlyList<ActionDraftListItem>> ListAsync(ActionDraftView? view, int limit, CancellationToken cancellationToken)
     {

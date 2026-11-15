@@ -6,7 +6,7 @@ namespace CivicLens.PublicApi.Ingest;
 
 /// <summary>
 /// One read of the active release inside one REPEATABLE READ snapshot. The release, its list, the entries and the texts all come from that snapshot.
-/// One statement reads the release and its list. The batch read runs one query for each view, over the revisions that the ingest asks for.
+/// One statement reads the release and its list. The batch read runs one query for each view, for each part of the revisions that the ingest asks for.
 /// </summary>
 public sealed class TypedReleaseRead : IAsyncDisposable
 {
@@ -66,18 +66,28 @@ public sealed class TypedReleaseRead : IAsyncDisposable
         return number is { } release ? new(release, published, records) : null;
     }
 
-    /// <summary>Reads the index documents of the given revisions of the release.</summary>
+    /// <summary>
+    /// Reads the index documents of the given revisions of the release. Each part of at most <see cref="RevisionKeys.MaxCount"/> revisions has its own queries.
+    /// All parts read the one snapshot, so the result is the same as one read of all revisions.
+    /// </summary>
     public async Task<RecordBatch> ReadRecordsAsync(IReadOnlyCollection<ListedRecord> wanted, CancellationToken cancellationToken)
     {
-        var found = await new TypedEntryReader(snapshot).ReadAsync(new RevisionKeys(wanted), Release.ReleaseNumber, cancellationToken);
-        var texts = new TypedTextReader(snapshot);
-        var byKind = new Dictionary<PublishedRecordKind, Dictionary<string, RecordTexts>>();
-        foreach (var kind in wanted.Select(record => record.Kind).Distinct())
-            byKind[kind] = await texts.ReadAsync(kind, new RevisionKeys([.. wanted.Where(record => record.Kind == kind)]), cancellationToken);
-
         var records = new List<IndexedRecord>();
         var failures = new List<RecordFailure>();
-        foreach (var record in wanted)
+        foreach (var part in wanted.Chunk(RevisionKeys.MaxCount))
+            await ReadPartAsync(part, records, failures, cancellationToken);
+        return new(records, failures);
+    }
+
+    private async Task ReadPartAsync(ListedRecord[] part, List<IndexedRecord> records, List<RecordFailure> failures, CancellationToken cancellationToken)
+    {
+        var found = await new TypedEntryReader(snapshot).ReadAsync(new RevisionKeys(part), Release.ReleaseNumber, cancellationToken);
+        var texts = new TypedTextReader(snapshot);
+        var byKind = new Dictionary<PublishedRecordKind, Dictionary<string, RecordTexts>>();
+        foreach (var kind in part.Select(record => record.Kind).Distinct())
+            byKind[kind] = await texts.ReadAsync(kind, new RevisionKeys([.. part.Where(record => record.Kind == kind)]), cancellationToken);
+
+        foreach (var record in part)
             try
             {
                 records.Add(Build(record, found, byKind[record.Kind]));
@@ -86,7 +96,6 @@ public sealed class TypedReleaseRead : IAsyncDisposable
             {
                 failures.Add(new(record.RecordId, exception.Message));
             }
-        return new(records, failures);
     }
 
     public async ValueTask DisposeAsync()

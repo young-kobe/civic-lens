@@ -249,10 +249,10 @@ public sealed class BillPageTests(PostgresCollection postgres)
 
     [Theory]
     [InlineData("Model", "A summary.", "An AI summary of the official record")]
-    [InlineData("Code", "A summary.", "Written automatically from Congress.gov data, with no AI")]
+    [InlineData("Code", "A summary.", null)]
     [InlineData("Person", "A summary.", null)]
     [InlineData("Model", " ", null)]
-    public async Task TheSourceFoldStatesTheWordingOfTheSummaryByItsStoredOriginAndAPersonSummaryOrNoSummaryHasNoWordingRow(string origin, string summary, string? wording)
+    public async Task TheSourceFoldStatesTheWordingOfTheSummaryByItsStoredOriginAndAPersonCodeOrNoSummaryHasNoWordingRow(string origin, string summary, string? wording)
     {
         await using var host = await StartAsync();
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase,

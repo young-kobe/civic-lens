@@ -21,31 +21,6 @@ public static class ActionDraftResolver
             new(revision.TextPackageId, revision.WhyItMatters, revision.TextCitations, revision.KeyTerms);
     }
 
-    public static AnalysisResolution<ActionDraftRevision> Resolve(string outputJson, ActionDraftContext context, string runId,
-        DateTimeOffset createdAtUtc)
-    {
-        var snapshot = context.Snapshot;
-        var output = HeadlineSummaryOutput.Parse(outputJson);
-        if (output is null)
-            return AnalysisResolution<ActionDraftRevision>.Reject(["The output is not valid JSON for the action schema."], false);
-        var errors = new List<string>();
-        CheckText(output.Headline.Text, ActionDraftRevision.MaximumHeadlineLength, "headline", required: true, errors);
-        CheckText(output.Summary.Text, ActionDraftRevision.MaximumSummaryLength, "summary", required: true, errors);
-        CheckConfidence(output.Headline.Confidence, "headline confidence", errors);
-        CheckConfidence(output.Summary.Confidence, "summary confidence", errors);
-        CheckNames(output.Headline.Text, "headline", snapshot, errors);
-        CheckNames(output.Summary.Text, "summary", snapshot, errors);
-        CheckNoSummarySentence(output.Headline.Text, "headline", errors);
-        CheckNoSummarySentence(output.Summary.Text, "summary", errors);
-        errors.AddRange(AiTextPhrases.Errors([output.Headline.Text, output.Summary.Text]));
-        if (AiTextRules.PassageGradeError([output.Headline.Text, output.Summary.Text]) is { } passageGrade) errors.Add(passageGrade);
-        var issueIds = context.Issues.Check(output.IssueIds, errors);
-        if (errors.Count > 0) return AnalysisResolution<ActionDraftRevision>.Reject(Bound(errors), false);
-        return AnalysisResolution<ActionDraftRevision>.Accept(Assemble(context, createdAtUtc, ReviewText.AfterModelDraft(context.Evidence.Current,
-            output.Headline.Text, output.Summary.Text, runId, snapshot.Fingerprint), issueIds, context.Issues.SubjectsHash,
-            snapshot.SummaryVersion, snapshot.SummaryCitation, default));
-    }
-
     /// <summary>Key terms are resolved only with a scope, which exists when the key term setting is on and the bill text has a definitions section.
     /// With no scope the draft has no key terms, whatever the model wrote. With <paramref name="dropFailingKeyTerms"/>, which the last pass sets,
     /// a key term that fails a check is left out and its error is not sent, so the checked summary is kept.</summary>

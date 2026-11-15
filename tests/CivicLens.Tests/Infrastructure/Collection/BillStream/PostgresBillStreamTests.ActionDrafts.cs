@@ -991,7 +991,8 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal([PostgresErrorCodes.UniqueViolation, PostgresErrorCodes.CheckViolation], [duplicate.SqlState, badId.SqlState]);
     }
 
-    private static readonly string DraftableOutput = HeadlineSummaryOutputs.Output(headline: "A sponsored a housing measure", summary: "A filed this measure.", issueIds: ["rent"]);
+    /// <summary>The answer of the issue-only call. A bill with a summary gets code text and this one call.</summary>
+    private static readonly string DraftableOutput = JsonSerializer.Serialize(new { issueIds = new[] { "rent" }, confidence = 0.8 });
 
     private static string RecordId => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{SourceId.Length}:{SourceId}119:hr:7")));
 
@@ -1058,11 +1059,11 @@ public sealed partial class PostgresBillStreamTests
         return await ExtractionAsync(jobId, body, ActionBillWorld.RenderedText(resource, url, body), ActionBillWorld.ExtractionVersionOf(resource));
     }
 
-    private async Task<FakeHeadlineSummaryModel> RunActionWorkerAsync(FakeHeadlineSummaryModel model)
+    private async Task<FakeHeadlineSummaryModel> RunActionWorkerAsync(FakeHeadlineSummaryModel model, ActionDraftSettings? settings = null)
     {
         var reader = new ActionBillReader(store, new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString),
             new CaptureBodyReader()), new ActionBillWorld.FragmentExtractor(), captureRoot);
-        await AnalysisWorkers.ActionDrafting(ActionStore(), new FakeAnalysisStatusStore(), reader, model, new ActionDraftSettings(10_000_000, concurrency: 1),
+        await AnalysisWorkers.ActionDrafting(ActionStore(), new FakeAnalysisStatusStore(), reader, model, settings ?? new ActionDraftSettings(10_000_000, concurrency: 1),
             BillGateFixtures.Revision(), TimeProvider.System).ExecuteAsync(once: true);
         return model;
     }
