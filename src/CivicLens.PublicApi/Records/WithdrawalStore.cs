@@ -9,7 +9,7 @@ public sealed class WithdrawalStore(NpgsqlDataSource views)
     private const string Select = """
         SELECT w.release_number, w.kind, w.record_id, w.withdrawn_revision_number,
                w.first_published_at_utc_ticks, w.withdrawn_at_utc_ticks, w.note,
-               c."position", c.replaced_revision_number, c.published_at_utc_ticks, c.note, c.facts_unchanged
+               c."position", c.replaced_revision_number, c.published_at_utc_ticks, c.note, c.text_rewrite
           FROM public_api.withdrawals w
           LEFT JOIN public_api.withdrawal_corrections c
             ON c.release_number = w.release_number AND c.kind = w.kind AND c.record_id = w.record_id AND c.first_release = w.first_release
@@ -70,7 +70,7 @@ public sealed class WithdrawalStore(NpgsqlDataSource views)
                     ReplacedRevisionNumber = reader.GetInt32(8),
                     PublishedAtUtc = Utc(reader.GetInt64(9)),
                     Note = reader.IsDBNull(10) ? null : reader.GetString(10),
-                    FactsUnchanged = reader.GetBoolean(11)
+                    TextRewrite = TextRewriteColumn.Read(reader, 11)
                 });
         }
         if (withdrawal is null || release is null) return null;

@@ -71,7 +71,7 @@ internal sealed class PublicationCorrections
     // A code approval needs no note. A person approval that replaces a published record needs the note that its approval holds.
     // A note on a first publication is dropped.
     public PublishedCorrection[] For(PublishedRecordKind kind, string recordId, int revisionNumber, ImmutableArray<ReviewDecision> decisions,
-        bool textRewritten = false)
+        PublishedTextRewrite textRewrite = PublishedTextRewrite.None)
     {
         var reference = new PublishedRecordReference(kind, recordId);
         var replacedRevision = previous.Find(kind, recordId)?.RevisionNumber ?? previous.FindWithdrawal(recordId)?.WithdrawnRevisionNumber;
@@ -87,7 +87,7 @@ internal sealed class PublicationCorrections
             ReplacedRevisionNumber = replaced,
             PublishedAtUtc = now,
             Note = note,
-            FactsUnchanged = note is null && textRewritten
+            TextRewrite = note is null ? textRewrite : PublishedTextRewrite.None
         });
     }
 

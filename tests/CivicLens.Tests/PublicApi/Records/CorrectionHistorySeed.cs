@@ -31,9 +31,9 @@ internal static class CorrectionHistorySeed
         var historyId = PublishedCorrectionHistoryIdentity.Of(corrections);
         var kindText = PublicationProtocol.KindText(kind);
         var entries = corrections.Length == 0 ? "" : $"""
-            INSERT INTO published_correction_history_entries (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged)
+            INSERT INTO published_correction_history_entries (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, text_rewrite)
             VALUES {string.Join(", ", corrections.Select((entry, position) =>
-                $"('{historyId}', {position}, {entry.ReplacedRevisionNumber}, {entry.PublishedAtUtc.UtcTicks.ToString(CultureInfo.InvariantCulture)}, {(int)entry.PublishedAtUtc.Offset.TotalMinutes}, {(entry.Note is null ? "NULL" : $"'{entry.Note.Replace("'", "''", StringComparison.Ordinal)}'")}, {(entry.FactsUnchanged ? "true" : "false")})"))}
+                $"('{historyId}', {position}, {entry.ReplacedRevisionNumber}, {entry.PublishedAtUtc.UtcTicks.ToString(CultureInfo.InvariantCulture)}, {(int)entry.PublishedAtUtc.Offset.TotalMinutes}, {(entry.Note is null ? "NULL" : $"'{entry.Note.Replace("'", "''", StringComparison.Ordinal)}'")}, '{entry.TextRewrite}')"))}
             ON CONFLICT DO NOTHING;
             """;
         return ViewsSeed.ExecuteAsync(database, $"""

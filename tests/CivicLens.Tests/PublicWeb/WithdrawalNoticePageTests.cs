@@ -24,7 +24,7 @@ public sealed class WithdrawalNoticePageTests
         Corrections =
         [
             new() { ReplacedRevisionNumber = 3, PublishedAtUtc = new(2026, 11, 2, 9, 0, 0, TimeSpan.Zero), Note = "A person fixed the date." },
-            new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new(2026, 11, 1, 9, 0, 0, TimeSpan.Zero), FactsUnchanged = false },
+            new() { ReplacedRevisionNumber = 2, PublishedAtUtc = new(2026, 11, 1, 9, 0, 0, TimeSpan.Zero) },
             new() { ReplacedRevisionNumber = 1, PublishedAtUtc = new(2026, 10, 31, 9, 0, 0, TimeSpan.Zero) }
         ]
     };

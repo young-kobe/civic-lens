@@ -84,7 +84,8 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         Assert.Equal(62, entries[0].GetProperty("replacedRevisionNumber").GetInt32());
         Assert.Equal("2022-06-05T04:03:02-04:00", entries[0].GetProperty("publishedAtUtc").GetString());
         Assert.Equal(JsonValueKind.Null, entries[0].GetProperty("note").ValueKind);
-        Assert.True(entries[0].GetProperty("factsUnchanged").GetBoolean());
+        Assert.Equal("code", entries[0].GetProperty("textRewrite").GetString());
+        Assert.False(entries[1].TryGetProperty("textRewrite", out _));
         Assert.Equal(61, entries[1].GetProperty("replacedRevisionNumber").GetInt32());
         Assert.Equal("2021-04-03T01:02:03.0000007+05:00", entries[2].GetProperty("publishedAtUtc").GetString());
         Assert.Equal("Corrected the date.", entries[2].GetProperty("note").GetString());
@@ -109,24 +110,24 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         using var wrongPosition = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.InternalServerError, wrongPosition.StatusCode);
 
-        PublishedCorrection[] actionHistory = [new() { ReplacedRevisionNumber = 1, PublishedAtUtc = DateTimeOffset.UnixEpoch, FactsUnchanged = true }];
+        PublishedCorrection[] actionHistory = [new() { ReplacedRevisionNumber = 1, PublishedAtUtc = DateTimeOffset.UnixEpoch, TextRewrite = PublishedTextRewrite.Code }];
         await SeedAsync(host.OperationalDatabase, 2, "action", 2, PublishedCorrectionHistoryIdentity.Of(actionHistory), actionHistory);
-        using var actionFactsUnchanged = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
-        Assert.Equal(HttpStatusCode.InternalServerError, actionFactsUnchanged.StatusCode);
+        using var actionTextRewrite = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        Assert.Equal(HttpStatusCode.InternalServerError, actionTextRewrite.StatusCode);
     }
 
     /// <summary>Seeds a record of the kind with its correction history. The history view needs no published entry, so none is seeded.</summary>
     private static Task SeedAsync(string database, int release, string kind, int revision, string historyId, PublishedCorrection[] corrections)
     {
         var rows = string.Join(",\n", corrections.Select((entry, position) =>
-            $"('{historyId}', {position}, {entry.ReplacedRevisionNumber}, {entry.PublishedAtUtc.UtcTicks}, {(int)entry.PublishedAtUtc.Offset.TotalMinutes}, {(entry.Note is null ? "NULL" : $"'{entry.Note}'")}, {entry.FactsUnchanged.ToString().ToLowerInvariant()})"));
+            $"('{historyId}', {position}, {entry.ReplacedRevisionNumber}, {entry.PublishedAtUtc.UtcTicks}, {(int)entry.PublishedAtUtc.Offset.TotalMinutes}, {(entry.Note is null ? "NULL" : $"'{entry.Note}'")}, '{entry.TextRewrite}')"));
         return ViewsSeed.ExecuteAsync(database, $"""
             SET session_replication_role = replica;
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
             VALUES ('{kind}', '{Id}', 1, {revision}, NULL);
             INSERT INTO published_correction_histories (history_id, encoding_version, correction_count)
             VALUES ('{historyId}', {PublishedCorrectionHistoryIdentity.CurrentVersion}, {corrections.Length});
-            INSERT INTO published_correction_history_entries (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, facts_unchanged)
+            INSERT INTO published_correction_history_entries (history_id, "position", replaced_revision_number, published_at_utc_ticks, published_offset_minutes, note, text_rewrite)
             VALUES {rows};
             INSERT INTO release_correction_histories (release_number, kind, record_id, revision_number, history_id)
             VALUES ({release}, '{kind}', '{Id}', {revision}, '{historyId}');
@@ -143,7 +144,7 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
             {
                 ReplacedRevisionNumber = revision--,
                 PublishedAtUtc = gap == 0 ? new DateTimeOffset(2022, 6, 5, 4, 3, 2, TimeSpan.FromHours(-4)) : DateTimeOffset.UnixEpoch,
-                FactsUnchanged = true
+                TextRewrite = gap % 2 == 0 ? PublishedTextRewrite.Code : PublishedTextRewrite.Model
             });
             corrections.Add(new PublishedCorrection
             {

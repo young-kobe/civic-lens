@@ -5,39 +5,57 @@ namespace CivicLens.Tests.Publication.Contracts;
 
 public sealed class PublishedCorrectionTests
 {
-    private static PublishedCorrection Entry(int replaced, string? note = null, bool factsUnchanged = false) =>
-        new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = DateTimeOffset.UnixEpoch, Note = note, FactsUnchanged = factsUnchanged };
+    private const PublishedTextRewrite Model = PublishedTextRewrite.Model;
+    private const PublishedTextRewrite Code = PublishedTextRewrite.Code;
+
+    private static PublishedCorrection Entry(int replaced, string? note = null, PublishedTextRewrite rewrite = PublishedTextRewrite.None) =>
+        new() { ReplacedRevisionNumber = replaced, PublishedAtUtc = DateTimeOffset.UnixEpoch, Note = note, TextRewrite = rewrite };
 
     [Fact]
-    public void AFactsUnchangedUpdateAndASourceUpdateKeepTheirOwnEntriesNextToEachOther()
+    public void ATextRewriteAndASourceUpdateKeepTheirOwnEntriesNextToEachOther()
     {
-        PublishedCorrection.ValidateAll([Entry(2, factsUnchanged: true), Entry(1)], 3, PublishedRecordKind.Vote);
-        PublishedCorrection.ValidateAll([Entry(2), Entry(1, factsUnchanged: true)], 3, PublishedRecordKind.Vote);
-        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2, factsUnchanged: true), Entry(1, factsUnchanged: true)], 3, PublishedRecordKind.Vote));
+        PublishedCorrection.ValidateAll([Entry(2, rewrite: Model), Entry(1)], 3, PublishedRecordKind.Vote);
+        PublishedCorrection.ValidateAll([Entry(2), Entry(1, rewrite: Code)], 3, PublishedRecordKind.Vote);
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2, rewrite: Model), Entry(1, rewrite: Model)], 3, PublishedRecordKind.Vote));
+    }
+
+    [Fact]
+    public void AModelRewriteAndACodeRewriteAreOneKindSoARunHoldsOnlyOneOfThemAndTheEntryCapStays()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(2, rewrite: Code), Entry(1, rewrite: Model)], 3, PublishedRecordKind.Vote));
+        PublishedCorrection.ValidateAll([Entry(3, rewrite: Code), Entry(2, "Fix."), Entry(1, rewrite: Model)], 4, PublishedRecordKind.Vote);
+    }
+
+    [Fact]
+    public void AnUnknownTextRewriteIsRefused()
+    {
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, rewrite: (PublishedTextRewrite)3)], 2, PublishedRecordKind.Vote));
     }
 
     [Fact]
     public void ARunBetweenPersonCorrectionsHoldsAtMostOneCodeUpdateOfEachKind()
     {
-        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(3), Entry(2, factsUnchanged: true), Entry(1)], 4, PublishedRecordKind.Vote));
-        PublishedCorrection.ValidateAll([Entry(4), Entry(3, factsUnchanged: true), Entry(2, "Fix."), Entry(1)], 5, PublishedRecordKind.Vote);
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(3), Entry(2, rewrite: Model), Entry(1)], 4, PublishedRecordKind.Vote));
+        PublishedCorrection.ValidateAll([Entry(4), Entry(3, rewrite: Model), Entry(2, "Fix."), Entry(1)], 5, PublishedRecordKind.Vote);
     }
 
     [Fact]
-    public void ANotedEntryCannotClaimThatTheFactsDidNotChange()
+    public void ANotedEntryCannotNameATextRewrite()
     {
-        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, "Fix.", factsUnchanged: true)], 2, PublishedRecordKind.Vote));
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, "Fix.", rewrite: Model)], 2, PublishedRecordKind.Vote));
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, "Fix.", rewrite: Code)], 2, PublishedRecordKind.Vote));
     }
 
     [Fact]
     public void PrependKeepsOneCodeUpdateOfEachKindInTheNewestRun()
     {
-        var textOnly = Entry(2, factsUnchanged: true);
+        var textOnly = Entry(2, rewrite: Model);
 
-        Assert.Equal([textOnly], PublishedCorrection.Prepend([Entry(1, factsUnchanged: true)], textOnly));
+        Assert.Equal([textOnly], PublishedCorrection.Prepend([Entry(1, rewrite: Model)], textOnly));
         Assert.Equal([textOnly, Entry(1)], PublishedCorrection.Prepend([Entry(1)], textOnly));
         Assert.Equal([Entry(3), textOnly], PublishedCorrection.Prepend([textOnly, Entry(1)], Entry(3)));
         Assert.Equal([Entry(3), Entry(2, "Fix.")], PublishedCorrection.Prepend([Entry(2, "Fix.")], Entry(3)));
+        Assert.Equal([Entry(3, rewrite: Code), Entry(1)], PublishedCorrection.Prepend([textOnly, Entry(1)], Entry(3, rewrite: Code)));
     }
 
     [Fact]
@@ -47,9 +65,25 @@ public sealed class PublishedCorrectionTests
 
         var read = JsonSerializer.Deserialize<PublishedCorrection>(older, PublicationProtocol.JsonOptions)!;
 
-        Assert.False(read.FactsUnchanged);
-        Assert.DoesNotContain("factsUnchanged", JsonSerializer.Serialize(read, PublicationProtocol.JsonOptions));
-        Assert.Contains("\"factsUnchanged\":true", JsonSerializer.Serialize(Entry(1, factsUnchanged: true), PublicationProtocol.JsonOptions));
+        Assert.Equal(PublishedTextRewrite.None, read.TextRewrite);
+        Assert.DoesNotContain("textRewrite", JsonSerializer.Serialize(read, PublicationProtocol.JsonOptions));
+        Assert.Contains("\"textRewrite\":\"model\"", JsonSerializer.Serialize(Entry(1, rewrite: Model), PublicationProtocol.JsonOptions));
+        Assert.Contains("\"textRewrite\":\"code\"", JsonSerializer.Serialize(Entry(1, rewrite: Code), PublicationProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public void AnEarlierRecordFileWithFactsUnchangedReadsAsAModelRewriteAndAWriteNeverWritesTheOldField()
+    {
+        const string earlier = """{"replacedRevisionNumber":1,"publishedAtUtc":"2026-02-02T09:00:00+00:00","factsUnchanged":true}""";
+        const string plain = """{"replacedRevisionNumber":1,"publishedAtUtc":"2026-02-02T09:00:00+00:00","factsUnchanged":false}""";
+
+        var read = JsonSerializer.Deserialize<PublishedCorrection>(earlier, PublicationProtocol.JsonOptions)!;
+
+        Assert.Equal(Entry(1, rewrite: Model) with { PublishedAtUtc = read.PublishedAtUtc }, read);
+        Assert.Equal(PublishedTextRewrite.None, JsonSerializer.Deserialize<PublishedCorrection>(plain, PublicationProtocol.JsonOptions)!.TextRewrite);
+        var written = JsonSerializer.Serialize(read, PublicationProtocol.JsonOptions);
+        Assert.DoesNotContain("factsUnchanged", written);
+        Assert.Contains("\"textRewrite\":\"model\"", written);
     }
 
     [Fact]
@@ -96,7 +130,7 @@ public sealed class PublishedCorrectionTests
         var number = 62;
         for (var gap = 0; gap <= PublishedCorrection.MaximumNotedEntries; gap++)
         {
-            list.Add(Entry(number--, factsUnchanged: true));
+            list.Add(Entry(number--, rewrite: Model));
             list.Add(Entry(number--));
             if (gap < PublishedCorrection.MaximumNotedEntries) list.Add(Entry(number--, "Fix."));
         }
@@ -123,13 +157,23 @@ public sealed class PublishedCorrectionTests
     }
 
     [Fact]
-    public void OnlyAVoteCorrectionCanSayThatTheFactsDidNotChangeBecauseTheWordsNameTheVoteFacts()
+    public void OnlyAVoteCorrectionCanNameATextRewriteBecauseTheWordsNameTheVoteFacts()
     {
-        PublishedCorrection.ValidateAll([Entry(1, factsUnchanged: true)], 2, PublishedRecordKind.Vote);
+        PublishedCorrection.ValidateAll([Entry(1, rewrite: Model)], 2, PublishedRecordKind.Vote);
+        PublishedCorrection.ValidateAll([Entry(1, rewrite: Code)], 2, PublishedRecordKind.Vote);
         foreach (var kind in Enum.GetValues<PublishedRecordKind>().Where(kind => kind != PublishedRecordKind.Vote))
         {
             PublishedCorrection.ValidateAll([Entry(1)], 2, kind);
-            Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, factsUnchanged: true)], 2, kind));
+            Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, rewrite: Model)], 2, kind));
+            Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, rewrite: Code)], 2, kind));
         }
+    }
+
+    [Theory]
+    [InlineData(PublishedTextOrigin.Code, PublishedTextRewrite.Code)]
+    [InlineData(PublishedTextOrigin.Model, PublishedTextRewrite.Model)]
+    public void TheOriginOfTheNewTextNamesWhoRewroteIt(PublishedTextOrigin origin, PublishedTextRewrite expected)
+    {
+        Assert.Equal(expected, PublishedCorrection.RewriteBy(origin));
     }
 }

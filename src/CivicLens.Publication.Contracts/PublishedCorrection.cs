@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace CivicLens.Publication.Contracts;
 
-/// <summary>A null note means a code update. A note means a person correction. FactsUnchanged marks a code update that changed only the headline or the summary of a vote.</summary>
+/// <summary>A null note means a code update. A note means a person correction. TextRewrite names who rewrote the headline or the summary of a vote in a code
+/// update that changed nothing else.</summary>
 public sealed record PublishedCorrection
 {
     public const int MaximumNoteLength = 500;
@@ -14,21 +15,43 @@ public sealed record PublishedCorrection
     public string? Note { get; init; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public bool FactsUnchanged { get; init; }
+    public PublishedTextRewrite TextRewrite { get; init; }
+
+    [JsonIgnore]
+    public bool IsTextRewrite => TextRewrite != PublishedTextRewrite.None;
+
+    // Release files are immutable. Files written before the rewrite kind hold "factsUnchanged": true for a model rewrite, and every vote rewrite then was
+    // model text. A read maps the field, and a write never writes it.
+    [JsonInclude]
+    [JsonPropertyName("factsUnchanged")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    private bool FactsUnchangedOfEarlierFiles
+    {
+        get => false;
+        init
+        {
+            if (value) TextRewrite = PublishedTextRewrite.Model;
+        }
+    }
+
+    /// <summary>The rewrite kind of a code update that changed only the text. The origin of the new text names who rewrote it.</summary>
+    public static PublishedTextRewrite RewriteBy(PublishedTextOrigin origin) =>
+        origin == PublishedTextOrigin.Code ? PublishedTextRewrite.Code : PublishedTextRewrite.Model;
 
     public static int NotedCount(IEnumerable<PublishedCorrection> corrections) => corrections.Count(item => item.Note is not null);
 
     public static bool IsAtNoteLimit(IEnumerable<PublishedCorrection> corrections) => NotedCount(corrections) >= MaximumNotedEntries;
 
-    /// <summary>A code update replaces the code update of its kind in the newest run of code updates, so a run holds at most one of each kind.</summary>
+    /// <summary>A code update replaces the code update of its kind in the newest run of code updates, so a run holds at most one of each kind. The two
+    /// kinds are a source update and a text rewrite. A text rewrite by code replaces a text rewrite by the model, so the entry cap stays.</summary>
     public static PublishedCorrection[] Prepend(PublishedCorrection[] kept, PublishedCorrection entry)
     {
         if (entry.Note is not null) return [entry, .. kept];
         var run = kept.TakeWhile(item => item.Note is null).Count();
-        return [entry, .. kept[..run].Where(item => item.FactsUnchanged != entry.FactsUnchanged), .. kept[run..]];
+        return [entry, .. kept[..run].Where(item => item.IsTextRewrite != entry.IsTextRewrite), .. kept[run..]];
     }
 
-    /// <summary>Checks the correction list of a record of the given kind. Only a vote can say that its facts did not change, because the page words name the vote facts.</summary>
+    /// <summary>Checks the correction list of a record of the given kind. Only a vote can name a text rewrite, because the page words name the vote facts.</summary>
     public static void ValidateAll(PublishedCorrection[]? corrections, int revisionNumber, PublishedRecordKind kind)
     {
         if (corrections is null || corrections.Any(item => item is null) || NotedCount(corrections) > MaximumNotedEntries)
@@ -41,12 +64,14 @@ public sealed record PublishedCorrection
                 throw new InvalidDataException("Corrections list replaced revisions from the newest to the oldest.");
             if (correction.Note is not null && !IsNote(correction.Note))
                 throw new InvalidDataException($"A correction note has 1 to {MaximumNoteLength} characters and no NUL.");
-            if (correction.Note is not null && correction.FactsUnchanged)
-                throw new InvalidDataException("Only a code update can say that the facts did not change.");
-            if (correction.FactsUnchanged && kind != PublishedRecordKind.Vote)
-                throw new InvalidDataException("Only a vote correction can say that the facts did not change.");
+            if (!Enum.IsDefined(correction.TextRewrite))
+                throw new InvalidDataException("A correction names an unknown text rewrite.");
+            if (correction.Note is not null && correction.IsTextRewrite)
+                throw new InvalidDataException("Only a code update can name a text rewrite.");
+            if (correction.IsTextRewrite && kind != PublishedRecordKind.Vote)
+                throw new InvalidDataException("Only a vote correction can name a text rewrite.");
             if (correction.Note is not null) kindsInRun.Clear();
-            else if (!kindsInRun.Add(correction.FactsUnchanged))
+            else if (!kindsInRun.Add(correction.IsTextRewrite))
                 throw new InvalidDataException("Between two person corrections the list holds at most one code update of each kind.");
             newerRevision = correction.ReplacedRevisionNumber;
         }

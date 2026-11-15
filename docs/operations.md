@@ -753,7 +753,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 Published votes from before code text hold model text. `votes text backfill` moves them to code text. It makes no model call and spends no tokens. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
 
-Do not run this command in production yet. The history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. A separate later PR adds a text rewrite kind to the correction history. Run the command in production only after that PR lands.
+Run this command in production only after the correction text rewrite kind deploys, with the migration `CorrectionTextRewrite`. Before it, the history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. After it, the entry reads "Wording rewritten by code".
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes text backfill 500

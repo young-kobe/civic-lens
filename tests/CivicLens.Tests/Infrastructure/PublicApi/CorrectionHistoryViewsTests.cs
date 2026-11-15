@@ -46,9 +46,9 @@ public sealed class CorrectionHistoryViewsTests(PostgresCollection postgres) : I
     {
         PublishedCorrection[] corrections =
         [
-            Correction(3, CorrectionOneAt, "Corrected account", factsUnchanged: false),
-            // Only a vote correction can say that the facts did not change, and these records are an action and a document change.
-            Correction(2, CorrectionTwoAt, null, factsUnchanged: false)
+            Correction(3, CorrectionOneAt, "Corrected account"),
+            // Only a vote correction can name a text rewrite, and these records are an action and a document change.
+            Correction(2, CorrectionTwoAt, null)
         ];
         var oldBinding = new PublishedRevisionBinding(PublishedRecordKind.Action, ActionA, 3);
         var currentAction = new PublishedRevisionBinding(PublishedRecordKind.Action, ActionA, 4);
@@ -118,12 +118,12 @@ public sealed class CorrectionHistoryViewsTests(PostgresCollection postgres) : I
 
         Assert.Equal(
             [
-                $"action 0 3 {CorrectionOneAt.UtcTicks} 345 Corrected account false",
-                $"action 1 2 {CorrectionTwoAt.UtcTicks} -240 none false",
-                $"documentChange 0 3 {CorrectionOneAt.UtcTicks} 345 Corrected account false",
-                $"documentChange 1 2 {CorrectionTwoAt.UtcTicks} -240 none false"
+                $"action 0 3 {CorrectionOneAt.UtcTicks} 345 Corrected account None",
+                $"action 1 2 {CorrectionTwoAt.UtcTicks} -240 none None",
+                $"documentChange 0 3 {CorrectionOneAt.UtcTicks} 345 Corrected account None",
+                $"documentChange 1 2 {CorrectionTwoAt.UtcTicks} -240 none None"
             ],
-            await PublicAsync("SELECT kind || ' ' || position || ' ' || replaced_revision_number || ' ' || published_at_utc_ticks || ' ' || published_offset_minutes || ' ' || coalesce(note, 'none') || ' ' || facts_unchanged FROM public_api.record_correction_history_entries ORDER BY kind, position"));
+            await PublicAsync("SELECT kind || ' ' || position || ' ' || replaced_revision_number || ' ' || published_at_utc_ticks || ' ' || published_offset_minutes || ' ' || coalesce(note, 'none') || ' ' || text_rewrite FROM public_api.record_correction_history_entries ORDER BY kind, position"));
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
         Assert.Equal(
@@ -153,11 +153,10 @@ public sealed class CorrectionHistoryViewsTests(PostgresCollection postgres) : I
         return [.. values];
     }
 
-    private static PublishedCorrection Correction(int replacedRevisionNumber, DateTimeOffset publishedAtUtc, string? note, bool factsUnchanged) => new()
+    private static PublishedCorrection Correction(int replacedRevisionNumber, DateTimeOffset publishedAtUtc, string? note) => new()
     {
         ReplacedRevisionNumber = replacedRevisionNumber,
         PublishedAtUtc = publishedAtUtc,
-        Note = note,
-        FactsUnchanged = factsUnchanged
+        Note = note
     };
 }

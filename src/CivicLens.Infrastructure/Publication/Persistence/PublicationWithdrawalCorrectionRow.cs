@@ -1,3 +1,5 @@
+using CivicLens.Publication.Contracts;
+
 namespace CivicLens.Infrastructure.Publication.Persistence;
 
 internal sealed class PublicationWithdrawalCorrectionRow
@@ -9,5 +11,5 @@ internal sealed class PublicationWithdrawalCorrectionRow
     public int ReplacedRevisionNumber { get; set; }
     public long PublishedAtUtcTicks { get; set; }
     public string? Note { get; set; }
-    public bool FactsUnchanged { get; set; }
+    public PublishedTextRewrite TextRewrite { get; set; }
 }

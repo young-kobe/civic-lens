@@ -54,10 +54,12 @@ public sealed class PublishedUpdateLineTests
         Assert.Null((await RenderAsync(PublishedCorrectionBannerTests.Newest, OlderSourceUpdate)).QuerySelector(".update-line"));
     }
 
-    [Fact]
-    public async Task ASummaryRewriteOfAVoteIsNotAnUpdateFromTheSourceSoOnlyAnOlderSourceUpdateShows()
+    [Theory]
+    [InlineData(PublishedTextRewrite.Model)]
+    [InlineData(PublishedTextRewrite.Code)]
+    public async Task ATextRewriteOfAVoteIsNotAnUpdateFromTheSourceSoOnlyAnOlderSourceUpdateShows(PublishedTextRewrite kind)
     {
-        var rewrite = SourceUpdate with { FactsUnchanged = true };
+        var rewrite = SourceUpdate with { TextRewrite = kind };
 
         Assert.Null((await RenderAsync(rewrite)).QuerySelector(".update-line"));
         Assert.Equal("Updated from the source, 2 Nov 2026.", (await RenderAsync(rewrite, OlderSourceUpdate)).QuerySelector(".update-line")!.TextContent);
