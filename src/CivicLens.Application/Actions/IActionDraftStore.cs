@@ -1,5 +1,6 @@
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Collection.Bills;
+using CivicLens.Core.Actions;
 
 namespace CivicLens.Application.Actions;
 
@@ -15,4 +16,11 @@ public interface IActionDraftStore : IAnalysisQueueStore<ActionDraftRun, ActionD
 
     /// <summary>Requeues the candidates that the worker refused while their record was rejected.</summary>
     Task<int> RequeueRefusedAsync(CancellationToken cancellationToken);
+
+    /// <summary>Published records whose current revision holds retired text, by record ID after <paramref name="afterRecordId"/>, at most
+    /// <paramref name="limit"/>. Retired text is model text with no bill text package, or a code headline that reads "introduced".</summary>
+    Task<IReadOnlyList<ActionCodeTextTarget>> ListPublishedRetiredTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken);
+
+    /// <summary>Appends a code revision and its Bypassed run outside the worker, with the queue entry settled. Returns null when it appended, else the reason.</summary>
+    Task<string?> AppendCodeTextAsync(ActionDraftRevision revision, ActionDraftRun run, int readStateVersion, CancellationToken cancellationToken);
 }

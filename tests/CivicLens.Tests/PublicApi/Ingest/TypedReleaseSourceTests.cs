@@ -154,6 +154,30 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
         finally { await postgres.DropDatabaseAsync(database); }
     }
 
+    [Fact]
+    public async Task ReadsInPartsOfOneRevisionGiveTheSameDocumentsAndFailuresAsOneReadOfTheWholeRelease()
+    {
+        var records = Records(Texts.Short);
+        var database = await postgres.CreateMigratedDatabaseAsync();
+        try
+        {
+            await new TypedReleaseSite(database).PublishAsync(1, records);
+            await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica; DELETE FROM statement_candidates");
+            await using var views = await ViewsReaderAsync(database);
+            await using var read = (await new TypedReleaseSource(new RecordSnapshot(views)).ReadActiveAsync(CancellationToken.None))!;
+
+            var whole = await read.ReadRecordsAsync(read.Release.Records, CancellationToken.None);
+            var parts = new List<RecordBatch>();
+            foreach (var record in read.Release.Records) parts.Add(await read.ReadRecordsAsync([record], CancellationToken.None));
+
+            Assert.Equal([new string('1', 64), new string('9', 64)], whole.Failures.Select(failure => failure.RecordId).Order(StringComparer.Ordinal));
+            Assert.Equal(whole.Failures, parts.SelectMany(part => part.Failures));
+            Assert.Equal(records.Length - 2, whole.Records.Count);
+            Assert.Equal(whole.Records.Select(Project), parts.SelectMany(part => part.Records).Select(Project));
+        }
+        finally { await postgres.DropDatabaseAsync(database); }
+    }
+
     private static async Task<IndexedRecord[]> ReadTypedAsync(string database)
     {
         await using var views = await ViewsReaderAsync(database);

@@ -33,7 +33,7 @@
 
         <div class="bill-layout">
             <div class="bill-main">
-                @if (!string.IsNullOrWhiteSpace(Data.Summary))
+                @if (Data.ShowsSummary)
                 {
                     <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label" Check="CrsCheck">
                         <p>@Data.Summary</p>
@@ -46,14 +46,22 @@
                         }
                     </AiSummary>
                 }
-                @if (Data.CrsText is not null)
+                @if (Data.CrsText is not null && Data.ShowsSummary)
                 {
-                    <SourceFold Summary="From the Congressional Research Service (CRS)" FoldId="@CrsFoldId">
-                        @foreach (var paragraph in Data.CrsText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                        {
-                            <p>@paragraph</p>
-                        }
+                    <SourceFold Summary="@PublishedWording.CrsTextTag" FoldId="@CrsFoldId">
+                        @CrsParagraphs(Data.CrsText)
                     </SourceFold>
+                }
+                else if (Data.CrsText is not null)
+                {
+                    <section class="bill-crs" aria-labelledby="bill-crs-title">
+                        <h2 id="bill-crs-title" class="bill-crs-tag">@PublishedWording.CrsTextTag</h2>
+                        @CrsParagraphs(Data.CrsText)
+                    </section>
+                }
+                else if (!Data.ShowsSummary)
+                {
+                    <p class="bill-no-summary">@PublishedWording.NoBillSummary</p>
                 }
                 @if (Data.KeyTerms.Length > 0)
                 {
@@ -141,7 +149,7 @@
                             <dt>Checked</dt>
                             <dd>@Moment.Full(checkedAt). First published @Moment.Full(firstPublished).</dd>
                         }
-                        @if (!string.IsNullOrWhiteSpace(Data.Summary) && Data.Label is not null)
+                        @if (Data.ShowsSummary && Data.Label is not null)
                         {
                             <dt>@PublishedRecordLabels.WordingFact</dt>
                             <dd><AiLabel Text="@Data.Label" Origin="Data.TextOrigin" /></dd>
@@ -186,6 +194,13 @@
             parts.Add(Data.BecameLawOn is { } on ? $"Became law on {Moment.Day(on)} as Public Law {law}." : $"Became law as Public Law {law}.");
         return string.Join(' ', parts);
     }
+
+    private static RenderFragment CrsParagraphs(string text) => @<text>
+        @foreach (var paragraph in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            <p>@paragraph</p>
+        }
+    </text>;
 
     /// <summary>The exact quote of each sentence of one part, in view order, so each quote stands under the text that it supports.</summary>
     private RenderFragment SentenceQuotes(PublishedTextPart part) => @<text>
