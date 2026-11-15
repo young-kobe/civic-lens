@@ -53,6 +53,9 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
         SELECT 'statement', lpad(to_hex(n), 64, '0'), 1, 1, NULL FROM generate_series(1, {count}) n;
         """);
 
+    /// <summary>The fixed pages of a release with no brief: home, officials, boards, the four board lists, issues, the four lists, vote kinds, glossary, method, and about.</summary>
+    private const int FixedPages = 16;
+
     [Fact]
     public async Task TheSitemapListsEveryPublicPageOfTheReleaseAtItsPublicPathAndLeavesOutSearchReportAndWithdrawnRecords()
     {
@@ -74,7 +77,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
         string[] pages =
         [
             "", "officials.html", "boards.html", "board-house-democrat.html", "board-house-republican.html", "board-senate-democrat.html",
-            "board-senate-republican.html", "issues.html", "votes.html", "bills.html", "statements.html", "executive-actions.html", "compare.html",
+            "board-senate-republican.html", "issues.html", "votes.html", "bills.html", "statements.html", "executive-actions.html",
             "vote-kinds.html", "glossary.html", "method.html", "about.html", "briefs.html", "briefs-2.html",
             "officials/a0.html", "officials/b0.html", "officials/a0/record.html", "officials/b0/record.html", "issues/tax.html",
             .. briefs.Select(brief => $"records/{brief.RecordId}.html").Order(StringComparer.Ordinal),
@@ -82,6 +85,17 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
         ];
         Assert.Equal(pages.Select(page => Root + page), urls);
         Assert.DoesNotContain(urls, url => url.Contains(Withdrawn, StringComparison.Ordinal) || url.Contains("/web", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AReleaseWithNoBriefListsNoBriefsPage()
+    {
+        await using var host = await StartAsync();
+
+        var urls = Locations(await XmlAsync(host, PublicationProtocol.SitemapPath), "url");
+
+        Assert.Equal(FixedPages, urls.Length);
+        Assert.DoesNotContain(urls, url => url.Contains("briefs", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -129,7 +143,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
         Assert.Equal([Root + "sitemap-1.xml", Root + "sitemap-2.xml"], index);
         Assert.Equal(SitemapReader.MaximumUrls, first.Length);
         Assert.Equal(Root, first[0]);
-        Assert.Equal(SitemapReader.MaximumUrls + 18, first.Length + second.Length);
+        Assert.Equal(SitemapReader.MaximumUrls + FixedPages, first.Length + second.Length);
         Assert.Equal(first.Length + second.Length, first.Concat(second).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(SitemapReader.MaximumUrls.ToString("x64")), second[^1]);
         Assert.Equal(HttpStatusCode.NotFound, third.StatusCode);
@@ -139,7 +153,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
     public async Task AtTheProtocolLimitTheSitemapIsOneFileAndNoNumberedFileExists()
     {
         await using var host = await StartAsync();
-        await SeedStatementsAsync(host, SitemapReader.MaximumUrls - 18);
+        await SeedStatementsAsync(host, SitemapReader.MaximumUrls - FixedPages);
 
         var urls = Locations(await XmlAsync(host, PublicationProtocol.SitemapPath), "url");
         using var numbered = await GetAsync(host, PublicationProtocol.SitemapPagePath(1));

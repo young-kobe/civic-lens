@@ -1,4 +1,5 @@
 using System.Data;
+using CivicLens.PublicApi.Briefs;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Npgsql;
@@ -36,7 +37,6 @@ public sealed class SitemapReader(NpgsqlDataSource views)
         .. OfficialBoard.All.Select(board => board.PagePath),
         PublicationProtocol.FacetsPath,
         .. PublicSections.RecordLists.Select(list => list.Path),
-        PublicationProtocol.ComparePagePath,
         PublicationProtocol.VoteKindsPagePath,
         PublicationProtocol.GlossaryPagePath,
         PublicationProtocol.MethodPagePath,
@@ -71,7 +71,7 @@ public sealed class SitemapReader(NpgsqlDataSource views)
     }
 
     private static List<string> HeadPaths(long briefs) =>
-        [.. FixedPaths, .. Enumerable.Range(1, PublicationProtocol.PageCount(checked((int)briefs))).Select(PublicationProtocol.BriefsPagePath)];
+        [.. FixedPaths, .. Enumerable.Range(1, BriefListReader.PageCount(briefs)).Select(PublicationProtocol.BriefsPagePath)];
 
     private static async Task<(int Release, long Briefs, long Rows)?> ReadCountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
         CancellationToken cancellationToken)

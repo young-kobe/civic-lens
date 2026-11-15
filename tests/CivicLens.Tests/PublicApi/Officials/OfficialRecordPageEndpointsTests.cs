@@ -113,6 +113,121 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Equal(Enumerable.Range(0, 27).Select(number => BaseUrl.Join($"records/{Id(number)}.html")).ToArray(), seen);
     }
 
+    // Four votes of p0, a Democrat: a split vote against the party on a tagged bill, a split vote with the party, a No on another bill, and a Senate vote.
+    private static async Task AddFilteredVotesAsync(ApiHost host)
+    {
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            new SeededVote('a', "2026-02-01") { Casts = ["Nay", "Yea"], PersonIds = ["p0", "p1"], RollCall = 1, BillNumber = 5334, Issues = ["health"] },
+            new SeededVote('b', "2026-02-02") { Casts = ["Yea", "Nay"], PersonIds = ["p0", "p1"], RollCall = 2, BillNumber = 5334 },
+            new SeededVote('c', "2026-02-03") { Casts = ["Nay"], PersonIds = ["p0"], RollCall = 3, BillType = "s", BillNumber = 12 },
+            new SeededVote('d', "2026-02-04") { Casts = ["Aye"], PersonIds = ["p0"], RollCall = 4, BillNumber = 7, Issues = ["health"] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = CASE person_id WHEN 'p0' THEN 'Democrat' WHEN 'p1' THEN 'Republican' END;
+            UPDATE vote_revisions SET columns_written = true, alignment = 'Split', democrat_majority = 'Yea', republican_majority = 'Nay'
+              WHERE record_id IN ('{new string('a', 64)}', '{new string('b', 64)}');
+            INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'health', 'Health care', 'Defined');
+            """);
+    }
+
+    private static string[] Rows(IDocument page) => [.. page.QuerySelectorAll(".shared-vote-row h2 a").Select(link => link.GetAttribute("href")![^69..^64])];
+
+    private static string[] Chips(IDocument page) => [.. page.QuerySelectorAll(".list-chips li").Select(chip => chip.TextContent.Trim())];
+
+    [Theory]
+    [InlineData("issue=health", "da", "Health care")]
+    [InlineData("bill=H.R.%205334", "ba", "Bill H.R. 5334")]
+    [InlineData("bill=5334", "ba", "Bill 5334")]
+    [InlineData("party=against", "a", "Against their party")]
+    [InlineData("cast=yes", "db", "Voted Yes")]
+    [InlineData("cast=no", "ca", "Voted No")]
+    public async Task EachVoteFilterNarrowsTheVotesTabAndNamesItselfInAChip(string query, string expected, string chip)
+    {
+        await using var host = await StartAsync();
+        await AddFilteredVotesAsync(host);
+
+        var page = await GetPageAsync(host, "/officials/p0/record.html?kind=votes&" + query);
+
+        Assert.Equal([.. expected.Select(id => new string(id, 5))], Rows(page));
+        Assert.Equal([chip], Chips(page));
+        Assert.Equal($"Showing {expected.Length} {(expected.Length == 1 ? "vote" : "votes")} on this page.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.Equal(["Votes4"], Tabs(page));
+    }
+
+    [Fact]
+    public async Task TheFiltersCombineAndAFilterWithoutAKindSelectsTheVotesTab()
+    {
+        await using var host = await StartAsync();
+        await AddFilteredVotesAsync(host);
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase, new SeededBill('9', "2026-03-02") { Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
+
+        var page = await GetPageAsync(host, "/officials/p0/record.html?issue=health&cast=yes");
+
+        Assert.Equal(["ddddd"], Rows(page));
+        Assert.Equal(["Health care", "Voted Yes"], Chips(page));
+        Assert.StartsWith("Votes", page.QuerySelector(".segmented-item[aria-current=true]")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task TheFormHoldsTheFourApprovedFieldsKeepsTheTabAndClosesOnceAFilterApplies()
+    {
+        await using var host = await StartAsync();
+        await AddFilteredVotesAsync(host);
+
+        var plain = await GetPageAsync(host, "/officials/p0/record.html");
+        var filtered = await GetPageAsync(host, "/officials/p0/record.html?kind=votes&party=against");
+
+        var form = plain.QuerySelector(".list-fold form[method=get]")!;
+        Assert.Equal(["kind", "issue", "bill", "party", "cast"], form.QuerySelectorAll("input[name], select[name]").Select(field => field.GetAttribute("name")));
+        Assert.Equal("votes", form.QuerySelector("input[type=hidden][name=kind]")!.GetAttribute("value"));
+        Assert.Equal(["Issue", "Bill number", "Party line", "Vote"], form.QuerySelectorAll(".field-label").Select(label => label.TextContent));
+        Assert.Equal(["", "health"], form.QuerySelectorAll("select[name=issue] option").Select(option => option.GetAttribute("value")));
+        Assert.Null(plain.QuerySelector(".list-status"));
+        Assert.NotNull(plain.QuerySelector("details.list-fold[data-wide-open]:not([open])"));
+        Assert.NotNull(filtered.QuerySelector("details.list-fold:not([open]):not([data-wide-open])"));
+        Assert.True(filtered.QuerySelector("select[name=party] option[value=against]")!.HasAttribute("selected"));
+        Assert.Equal(BaseUrl.Join("officials/p0/record.html?kind=votes"), filtered.QuerySelector(".lists-filter-actions a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task TheNextPageKeepsTheFiltersAndAFilteredPagerNamesNoTotal()
+    {
+        await using var host = await StartAsync();
+        await AddManyVotesAsync(host);
+
+        var first = await GetPageAsync(host, "/officials/p0/record.html?kind=votes&cast=yes");
+        var next = first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!;
+        var second = await GetPageAsync(host, next.Replace("https://civic-lens.test/", "/"));
+
+        Assert.Contains("kind=votes&cast=yes&cursor=r.1.", next);
+        Assert.Equal((25, 2), (first.QuerySelectorAll(".shared-vote-row").Length, second.QuerySelectorAll(".shared-vote-row").Length));
+        Assert.Equal(["Voted Yes"], Chips(second));
+        Assert.Null(second.QuerySelector(".pager"));
+        Assert.DoesNotContain("in all", first.QuerySelector(".pager")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ANoMatchShowsTheEmptyLineAndARefusedFilterAnswers400WithTheMarkedFieldAndNoRows()
+    {
+        await using var host = await StartAsync();
+        await AddFilteredVotesAsync(host);
+
+        var none = await GetPageAsync(host, "/officials/p0/record.html?kind=votes&bill=S.%2012&cast=yes");
+        var refused = await GetPageAsync(host, "/officials/p0/record.html?kind=votes&bill=not-a-bill&cast=yes", HttpStatusCode.BadRequest);
+        var wrongTab = await GetPageAsync(host, "/officials/p0/record.html?kind=bills&cast=yes", HttpStatusCode.BadRequest);
+        await GetPageAsync(host, "/officials/p0/record.html?cast=maybe", HttpStatusCode.BadRequest);
+
+        Assert.Equal("No vote matches these filters.", none.QuerySelector(".empty h2")!.TextContent.Trim());
+        Assert.Empty(none.QuerySelectorAll(".shared-vote-row"));
+        Assert.Empty(refused.QuerySelectorAll(".shared-vote-row"));
+        Assert.Null(refused.QuerySelector(".list-status"));
+        Assert.NotNull(refused.QuerySelector("details.list-fold[open]"));
+        Assert.Equal("true", refused.QuerySelector("input[name=bill]")!.GetAttribute("aria-invalid"));
+        Assert.Equal("not-a-bill", refused.QuerySelector("input[name=bill]")!.GetAttribute("value"));
+        Assert.Equal(RecordListFilter.BillNumberError, refused.QuerySelector(".field-error")!.TextContent);
+        Assert.Empty(wrongTab.QuerySelectorAll(".shared-vote-row"));
+    }
+
     [Fact]
     public async Task AListOfOnePageShowsNoPagerLine()
     {

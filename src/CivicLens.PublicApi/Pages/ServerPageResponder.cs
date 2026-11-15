@@ -12,11 +12,16 @@ namespace CivicLens.PublicApi.Pages;
 /// its release number skips that read until it renders. A caller that already holds the freshness, such as Home, skips that read. One private method holds the 304 rule.</summary>
 public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache cache, PageRenderer renderer)
 {
-    public async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, IReadOnlyDictionary<string, object?> parameters,
+    public Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken cancellationToken) where TComponent : IComponent =>
+        RespondAsync<TComponent>(context, statusCode, () => Task.FromResult(parameters), cancellationToken);
+
+    /// <summary>For a page with no release of its own whose reads belong after the 304 check, such as About, which asks whether a brief exists.</summary>
+    public async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, Func<Task<IReadOnlyDictionary<string, object?>>> parameters,
         CancellationToken cancellationToken) where TComponent : IComponent
     {
         if (await releases.FindFreshnessAsync(cancellationToken) is not { } release) return ApiResults.NoRelease();
-        return await RespondAsync<TComponent>(context, statusCode, release.ReleaseNumber, () => Task.FromResult(parameters), release, cancellationToken);
+        return await RespondAsync<TComponent>(context, statusCode, release.ReleaseNumber, parameters, release, cancellationToken);
     }
 
     public Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
