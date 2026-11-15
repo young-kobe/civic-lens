@@ -18,6 +18,7 @@ public sealed record BillRequest
     public BillStatusStage? Status { get; init; }
     public string? Issue { get; init; }
     public string? PolicyArea { get; init; }
+    /// <summary>The inclusive bounds on the latest official action date of <c>bill_keys</c>, the date that the list sorts and shows. A bill with no stored status never matches a bound.</summary>
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }
     public BillCursor? Cursor { get; init; }
