@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
@@ -424,7 +425,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?type=s")));
         Assert.Equal(["a", "b"], Ids(await GetPageAsync(host, "/bills.html?bill=4")).Order());
         Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?bill=4&type=hr")));
-        Assert.Equal(["c"], Ids(await GetPageAsync(host, "/bills.html?from=2026-03-03")));
+        Assert.Equal(["a", "c"], Ids(await GetPageAsync(host, "/bills.html?to=2026-02-13")));
+        Assert.Empty(Ids(await GetPageAsync(host, "/bills.html?from=2026-03-03")));
         Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?status=passedHouse")));
         Assert.Empty(Ids(await GetPageAsync(host, "/bills.html?status=becameLaw")));
         Assert.Equal(["a"], Ids(await GetPageAsync(host, "/bills.html?sponsor=ab")));
@@ -449,6 +451,34 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Empty(Titles(first).Intersect(Titles(second)));
     }
 
+    // Bill a has its sponsorship in February and its latest action in March. Bill b has the reverse. Bill c has no stored status. Bill d has both in March.
+    [Theory]
+    [InlineData("from=2026-03-15&to=2026-03-31", "ad")]
+    [InlineData("from=2026-02-01&to=2026-02-28", "b")]
+    [InlineData("to=2026-03-16", "db")]
+    public async Task TheBillListPageAndTheJsonListFilterTheLatestActionDateAndGiveTheSameBillsInTheSameOrder(string query, string expected)
+    {
+        await using var host = await StartAsync();
+        await AddBillsAsync(host,
+            new SeededBill('a', "2026-02-02") { BillNumber = 1, Sponsorships = [new("p1", "Sponsor", "2026-02-02")] },
+            new SeededBill('b', "2026-03-20") { BillNumber = 2, Sponsorships = [new("p1", "Sponsor", "2026-03-20")] },
+            new SeededBill('c', "2026-03-20") { BillNumber = 3, Sponsorships = [new("p1", "Sponsor", "2026-03-20")] },
+            new SeededBill('d', "2026-03-16") { BillNumber = 4, Sponsorships = [new("p1", "Sponsor", "2026-03-16")] });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n"
+            + PublicRecordPageRows.PinnedStatus(1, BillId('a'), "Referred.", "2026-03-20", PublishedAt.UtcTicks, "InCommittee") + "\n"
+            + PublicRecordPageRows.PinnedStatus(1, BillId('b'), "Referred.", "2026-02-02", PublishedAt.UtcTicks, "InCommittee") + "\n"
+            + PublicRecordPageRows.PinnedStatus(1, BillId('d'), "Referred.", "2026-03-16", PublishedAt.UtcTicks, "InCommittee"));
+
+        var page = Ids(await GetPageAsync(host, "/bills.html?" + query));
+        using var response = await host.Client.GetAsync("/v1/bills?" + query);
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var listed = json.RootElement.GetProperty("bills").EnumerateArray().Select(bill => bill.GetProperty("recordId").GetString()![..1]).ToArray();
+
+        Assert.Equal([.. expected.Select(id => id.ToString())], page);
+        Assert.Equal(page, listed);
+    }
+
     [Fact]
     public async Task ACursorOfTheEarlierSponsorshipSortAnswersTheRefusedListPage()
     {
@@ -464,6 +494,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     // The list once joined each filter as a semi join to a view. The oracle keeps that form, so the test proves that the keyed read gives the same bills.
     // The oracle orders them by the latest action of bill_status, the view of the status badge, so it also proves the order of the keys.
+    // The date filters of the oracle test that latest action too, so they prove the date that the From and To filters test.
     private static string OracleFilter(string name, string value) => name switch
     {
         "status" => $"EXISTS (SELECT 1 FROM public_api.bill_status t WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number AND t.status = '{char.ToUpperInvariant(value[0])}{value[1..]}')",
@@ -475,8 +506,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             """,
         "type" => $"b.bill_type = '{value}'",
         "policyArea" => $"b.policy_area_id = '{value}'",
-        "from" => $"b.event_date >= '{value}'",
-        "to" => $"b.event_date <= '{value}'",
+        "from" => $"t.latest_action_date >= '{value}'",
+        "to" => $"t.latest_action_date <= '{value}'",
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null)
     };
 
@@ -505,12 +536,12 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     [InlineData("sponsor=zed")]
     [InlineData("type=s")]
     [InlineData("policyArea=tax")]
-    [InlineData("from=2026-02-04&to=2026-02-09")]
+    [InlineData("from=2026-03-02&to=2026-03-03")]
     [InlineData("issue=health&status=inCommittee")]
     [InlineData("issue=health&sponsor=ann")]
     [InlineData("sponsor=bo&status=passedHouse")]
     [InlineData("type=s&status=passedSenate&policyArea=tax")]
-    [InlineData("issue=energy&sponsor=zed&status=inCommittee&from=2026-02-03")]
+    [InlineData("issue=energy&sponsor=zed&status=inCommittee&from=2026-03-02")]
     public async Task EachBillListFilterGivesTheBillsOfTheNewestCongressThatTheViewsMatchInListOrderOnEveryPage(string query)
     {
         await using var host = await StartAsync();
