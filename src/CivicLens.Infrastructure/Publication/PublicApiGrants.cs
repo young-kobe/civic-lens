@@ -56,7 +56,7 @@ internal static class PublicApiGrants
             ON vote_member_lists TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, congress, bill_type, bill_number, bill_title, headline, summary, text_origin,
-            policy_area, policy_area_id, event_on, cosponsor_count, text_package_id, why_it_matters) ON action_revisions TO civic_lens_public_owner;
+            policy_area, policy_area_id, event_on, cosponsor_count, text_package_id, why_it_matters, introduced_on) ON action_revisions TO civic_lens_public_owner;
         GRANT SELECT (congress, bill_type, bill_number, package_id, version_type, version_date, chars_read, chars_total)
             ON bill_text_versions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, "position", person_id, role, is_original, sponsored_on, withdrawn_on)
@@ -113,7 +113,7 @@ internal static class PublicApiGrants
         GRANT SELECT (source_id, document_number, published_on, notice_url, notice_citation_extraction_id,
             notice_citation_start, notice_citation_length) ON executive_action_documents TO civic_lens_public_owner;
         GRANT SELECT (zcta, state, district, land_area_square_meters, attempt_id) ON zcta_districts TO civic_lens_public_owner;
-        GRANT SELECT (release_number, official_id, name, wikidata_id, website, photo_path) ON release_officials TO civic_lens_public_owner;
+        GRANT SELECT (release_number, official_id, name, sort_name, wikidata_id, website, photo_path) ON release_officials TO civic_lens_public_owner;
         GRANT SELECT (release_number, official_id, "position", office, kind, state, district, party, caucus, start_on, end_on)
             ON release_official_terms TO civic_lens_public_owner;
         GRANT SELECT (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) ON release_issues TO civic_lens_public_owner;

@@ -161,11 +161,14 @@
                                     <div>
                                         <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))">@bill.BillTitle</a>
                                         <PublishedBillLine Line="@bill.BillLine" />
-                                        <p class="official-meta">@foreach (var part in OfficialPageText.BillMeta(bill))
-                                            {
-                                                <span>@part</span>
-                                            }
-                                        </p>
+                                        @if (OfficialPageText.BillMeta(bill) is { Length: > 0 } meta)
+                                        {
+                                            <p class="official-meta">@foreach (var part in meta)
+                                                {
+                                                    <span>@part</span>
+                                                }
+                                            </p>
+                                        }
                                     </div>
                                     @if (status is not null)
                                     {

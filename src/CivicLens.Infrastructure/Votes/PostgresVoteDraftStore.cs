@@ -97,12 +97,13 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             return settled.Where(row => stale.Contains(row.CandidateId));
         }, cancellationToken);
 
+    // The worker writes no revision for an unchanged update, so the candidate of the current revision can be old. The newest candidate is the one to check.
     public async Task<IReadOnlyList<VoteCodeTextTarget>> ListPublishedModelTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Database.SqlQuery<VoteCodeTextTarget>($"""
-            SELECT d.record_id AS "RecordId", r.candidate_id AS "CandidateId"
+        var recordIds = await db.Database.SqlQuery<string>($"""
+            SELECT d.record_id AS "Value"
             FROM vote_drafts d
             JOIN vote_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE r.text_origin = 'Model' AND (CAST({afterRecordId} AS text) IS NULL OR d.record_id COLLATE "C" > {afterRecordId})
@@ -111,6 +112,13 @@ public sealed class PostgresVoteDraftStore : PostgresAnalysisStore<VoteDraftRun>
             ORDER BY d.record_id COLLATE "C"
             LIMIT {limit}
             """).ToListAsync(cancellationToken);
+        var drafts = await db.Set<VoteDraftRow>().AsNoTracking().Where(draft => recordIds.Contains(draft.RecordId))
+            .ToDictionaryAsync(draft => draft.RecordId, StringComparer.Ordinal, cancellationToken);
+        var targets = new List<VoteCodeTextTarget>(recordIds.Count);
+        foreach (var recordId in recordIds)
+            targets.Add(new(recordId, await VoteDraftRows.NewestCandidateIdAsync(db, drafts[recordId], cancellationToken) ??
+                throw new InvalidOperationException($"Vote record {recordId} has a revision but no candidate.")));
+        return targets;
     }
 
     // The queue entry is locked first, as a worker settlement does, so the lock order stays the queue row and then the vote review key.

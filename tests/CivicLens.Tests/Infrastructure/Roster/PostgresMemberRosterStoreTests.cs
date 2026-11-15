@@ -46,6 +46,22 @@ public sealed class PostgresMemberRosterStoreTests(PostgresCollection postgres) 
     }
 
     [Fact]
+    public async Task TheLastNameRoundTripsAndAFillWritesOnlyTheRowsOfTheLatestSnapshotThatHoldNone()
+    {
+        var attemptId = await ImportAsync('a', 0);
+        var parsed = RosterFixtures.Members();
+        await roster.AdmitAsync(attemptId, [.. parsed.Select(member => member with { LastName = member.BioguideId == "C000127" ? "Kept" : null })], null, default);
+
+        Assert.Equal(attemptId, await roster.ReadLatestSnapshotAttemptIdAsync(RosterFixtures.SourceId, default));
+        Assert.Equal(2, await roster.FillLastNamesAsync(attemptId, parsed, default));
+        Assert.Equal(0, await roster.FillLastNamesAsync(attemptId, parsed, default));
+
+        var latest = await roster.ReadLatestAsync(RosterFixtures.SourceId, default);
+        Assert.Equal(["Kept", "Norton", "Wahab"], latest.Select(member => member.LastName));
+        Assert.Null(await roster.ReadLatestSnapshotAttemptIdAsync("no-such-source", default));
+    }
+
+    [Fact]
     public async Task ATermCaucusRoundTripsSoAnIndependentComparesWithTheCaucusParty()
     {
         var attemptId = await ImportAsync('a', 0);

@@ -270,6 +270,39 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Null(page.QuerySelector("#bills .official-more"));
     }
 
+    /// <summary>The row date and its order come from the introduced date of the bill record, never from the sponsorship row, even when the two differ.</summary>
+    [Fact]
+    public async Task BillRowsPrintAndOrderByTheIntroducedDateOfTheBillRecordAndNotTheSponsorshipRow()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('8', "2026-04-01") { BillNumber = 8, IntroducedOn = "2026-02-14", Sponsorships = [new("p0", "Sponsor", "2026-04-01")] });
+
+        var page = await GetPageAsync(host, "/officials/p0.html");
+
+        var rows = page.QuerySelectorAll("#bills .official-rows li").ToArray();
+        Assert.Equal(BaseUrl.Join($"records/{new string('8', 64)}.html"), rows[1].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Contains("Introduced 14 Feb 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
+        Assert.DoesNotContain("1 Apr 2026", rows[1].QuerySelector(".official-meta")!.TextContent);
+    }
+
+    /// <summary>A revision that the backfill has not reached has no introduced date. Its row stays, prints no introduction date, and sorts after every dated row.</summary>
+    [Fact]
+    public async Task ABillWithNoIntroducedDateKeepsItsRowWithNoIntroductionDateAndSortsLast()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('8', "2026-09-01") { BillNumber = 8, Undated = true, Sponsorships = [new("p0", "Sponsor", "2026-09-01")] });
+
+        var page = await GetPageAsync(host, "/officials/p0.html");
+
+        var last = page.QuerySelectorAll("#bills .official-rows li").Last();
+        Assert.Equal(BaseUrl.Join($"records/{new string('8', 64)}.html"), last.QuerySelector("a")!.GetAttribute("href"));
+        Assert.DoesNotContain("Introduced", last.TextContent);
+        Assert.DoesNotContain("1 Sep 2026", last.TextContent);
+        Assert.Null(last.QuerySelector(".official-meta"));
+    }
+
     [Fact]
     public async Task BillRowsShowEachSponsoredBillOfTheCongressOnceWithItsOwnStatusAndSkipOtherCongressesAndOtherSponsors()
     {

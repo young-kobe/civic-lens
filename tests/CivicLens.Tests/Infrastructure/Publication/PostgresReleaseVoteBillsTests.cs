@@ -68,7 +68,7 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         await CommitAsync(1, null, KeepFolder(scenario, summary), [.. scenario.Publications.LastCommit!.VoteBills]);
         var written = await ReadAsync(Rows);
         await ExecuteAsync("DELETE FROM release_vote_bills");
-        var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
+        var backfill = StoredColumnsBackfills.WithoutRosters(publications, scenario.Releases, scenario.Votes);
 
         var first = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var second = await backfill.ExecuteAsync(PublicationScenario.Owner);
@@ -89,7 +89,7 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         await CommitAsync(1, null, KeepFolder(scenario, summary), []);
         await CommitAsync(2, 1, Directory(2), []);
 
-        var result = await new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+        var result = await StoredColumnsBackfills.WithoutRosters(publications, scenario.Releases, scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal(1, result.VoteBillLinksFilled);
         Assert.Equal(["1|d|c"], await ReadAsync(Rows));
@@ -102,7 +102,7 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         var broken = Directory(2);
         scenario.Releases.Directories[broken] = new() { [PublicationProtocol.ManifestPath] = "{"u8.ToArray() };
         await CommitAsync(2, 1, broken, []);
-        var backfill = new BackfillStoredColumns(publications, scenario.Releases, scenario.Votes);
+        var backfill = StoredColumnsBackfills.WithoutRosters(publications, scenario.Releases, scenario.Votes);
 
         var result = await backfill.ExecuteAsync(PublicationScenario.Owner);
         var exit = await ReleaseCommand.ExecuteAsync(["releases", "columns", "backfill"], null!, null!, null!, null!, null!, null!, backfill, null!, null!, null!, null!, null!, null!, null!, null!, null!,

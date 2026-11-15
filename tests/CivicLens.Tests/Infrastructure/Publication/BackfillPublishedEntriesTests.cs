@@ -541,7 +541,7 @@ public sealed class BackfillPublishedEntriesTests(PostgresCollection postgres) :
         {
             Withdrawals = [],
             AddedEntries = [incoming],
-            Names = new ReleaseNames([], new ReleaseFacets([], []))
+            Names = ReleaseNameFixtures.None
         };
         var refused = await Assert.ThrowsAsync<PublicationConflictException>(() => publications.CommitAsync(
             "auth0|owner", commit, "historical-statement", new string('0', 64), default));

@@ -25,7 +25,7 @@ public static class ExecutiveRosterParser
     {
         if (wire?.Id is not { Govtrack: { } govtrackId and > 0 } id || wire.Terms is not { Length: > 0 } wireTerms)
             throw new InvalidDataException("Every executive official must have a GovTrack ID and at least one term.");
-        return new ExecutiveOfficial(govtrackId, WikidataOf(id), RosterWire.FullNameOf(wire.Name),
+        return new ExecutiveOfficial(govtrackId, WikidataOf(id), RosterWire.FullNameOf(wire.Name), RosterWire.LastNameOf(wire.Name),
             [.. wireTerms.Select(ToTerm)]);
     }
 

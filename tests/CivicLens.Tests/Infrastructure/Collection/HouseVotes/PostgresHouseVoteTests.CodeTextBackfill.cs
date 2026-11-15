@@ -4,6 +4,7 @@ using CivicLens.Application.Review;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Infrastructure.Collection.HouseVotes;
@@ -58,6 +59,60 @@ public sealed partial class PostgresHouseVoteTests
         Assert.Equal((1, 0, 1), (skipped.Examined, skipped.Moved, skipped.Skipped));
         Assert.Equal([new VoteCodeTextSkip(recordId, VoteCodeTextSkip.FactsChanged)], skipped.Skips);
         Assert.Equal("Model", await ScalarAsync("SELECT string_agg(text_origin, ',') FROM vote_revisions"));
+    }
+
+    [Fact]
+    public async Task TheTextBackfillMovesAVoteWhoseNewerCandidateSettledUnchangedBecauseTheWorkerWritesNoRevisionForIt()
+    {
+        var candidate = await ReadableCandidateAsync();
+        var (recordId, codeText) = await SettleModelTextAsync(candidate, TaxIssues);
+        var newer = await ReadableCandidateAsync(Updated.AddDays(1));
+        var model = new FakeHeadlineSummaryModel();
+        await AnalysisWorkers.VoteDrafting(VoteStore(), new FakeAnalysisStatusStore(), Reader(), model, new VoteDraftSettings(10_000_000, concurrency: 1),
+            TaxIssues, TimeProvider.System).ExecuteAsync(once: true);
+        Assert.Empty(model.Requests);
+        Assert.Contains((newer, "Succeeded", VoteDraftErrorCodes.Unchanged), (await QueueAsync()).Select(row => (row.CandidateId, row.Status, row.ErrorCode)));
+        await PublishAsync(recordId);
+
+        var moved = await BackfillCodeTextAsync(TaxIssues);
+
+        Assert.Equal((1, 1, 0), (moved.Examined, moved.Moved, moved.Skipped));
+        Assert.Equal($"{newer}|Code|{codeText}", await ScalarAsync("""
+            SELECT r.candidate_id || '|' || r.text_origin || '|' || r.headline
+            FROM vote_revisions r JOIN vote_drafts d ON d.record_id = r.record_id AND d.current_revision_number = r.revision_number
+            """));
+        AssertFoundNothing(await BackfillCodeTextAsync(TaxIssues));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM vote_revisions"));
+    }
+
+    [Fact]
+    public async Task TheTextBackfillLeavesAVoteWhoseNewerCandidateChangedTheFactsToTheWorkerEvenWhenItsEntrySettled()
+    {
+        var candidate = await ReadableCandidateAsync();
+        var (recordId, _) = await SettleModelTextAsync(candidate, TaxIssues);
+        var newer = await ReadableCandidateAsync(Updated.AddDays(1), position: "Nay");
+        await ExecuteAsync($"UPDATE vote_analysis SET status = 'Succeeded' WHERE candidate_id = '{newer}'");
+        await PublishAsync(recordId);
+
+        var skipped = await BackfillCodeTextAsync(TaxIssues);
+
+        Assert.Equal([new VoteCodeTextSkip(recordId, VoteCodeTextSkip.FactsChanged)], skipped.Skips);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions"));
+    }
+
+    [Fact]
+    public async Task TheTextBackfillLeavesAVoteWhoseNewerCandidateWaitsInTheQueueToTheWorker()
+    {
+        var candidate = await ReadableCandidateAsync();
+        var (recordId, _) = await SettleModelTextAsync(candidate, TaxIssues);
+        var newer = await ReadableCandidateAsync(Updated.AddDays(1));
+        await PublishAsync(recordId);
+
+        var skipped = await BackfillCodeTextAsync(TaxIssues);
+
+        Assert.Equal([new VoteCodeTextSkip(recordId, VoteCodeTextSkip.DraftPending)], skipped.Skips);
+        Assert.Contains((newer, "Pending"), (await QueueAsync()).Select(row => (row.CandidateId, row.Status)));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM vote_revisions"));
     }
 
     [Fact]

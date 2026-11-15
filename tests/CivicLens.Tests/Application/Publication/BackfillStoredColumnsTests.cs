@@ -1,3 +1,4 @@
+using CivicLens.Tests.Fixtures;
 using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
@@ -31,7 +32,7 @@ public sealed class BackfillStoredColumnsTests
         expectedScenario.Releases.Directories[expectedRelease.DirectoryName][PublicationProtocol.RecordDataPath(expectedId)] = wrongRecordFile;
         expectedScenario.Publications.VoteColumnGaps.Add(new(expectedId, expectedVote.RevisionNumber, new string('a', 64), new(1, null)));
 
-        var result = await new BackfillStoredColumns(expectedScenario.Publications, expectedScenario.Releases, expectedScenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+        var result = await StoredColumnsBackfills.WithoutRosters(expectedScenario.Publications, expectedScenario.Releases, expectedScenario.Votes).ExecuteAsync(PublicationScenario.Owner);
 
         Assert.Equal(1, result.OpenVoteRevisionsWithoutKeptFile);
         Assert.Empty(expectedScenario.Publications.VoteColumnWrites.SelectMany(write => write));

@@ -12,8 +12,11 @@ internal sealed record SeededTerm(string Office, string Kind, string StartsOn)
     public string? EndsOn { get; init; }
 }
 
-/// <summary>An official of release 1 as the name tables hold it. The position of a term is its index.</summary>
-internal sealed record SeededOfficial(string Id, string Name, params SeededTerm[] Terms);
+/// <summary>An official of release 1 as the name tables hold it. The position of a term is its index. A null sort name is a row that no roster names.</summary>
+internal sealed record SeededOfficial(string Id, string Name, params SeededTerm[] Terms)
+{
+    public string? SortName { get; init; }
+}
 
 /// <summary>A published entry that names officials, as the entry tables hold it. Only the kinds that the officials views read are supported.</summary>
 internal sealed record SeededEntry(string Kind, char Id, params string[] Officials)
@@ -31,8 +34,9 @@ internal static class OfficialsSeed
     {
         foreach (var official in officials)
             await ViewsSeed.ExecuteAsync(database, $"""
-                INSERT INTO release_officials (release_number, official_id, name) VALUES (1, '{official.Id}', '{official.Name.Replace("'", "''")}')
-                  ON CONFLICT (release_number, official_id) DO UPDATE SET name = EXCLUDED.name;
+                INSERT INTO release_officials (release_number, official_id, name, sort_name)
+                  VALUES (1, '{official.Id}', '{official.Name.Replace("'", "''")}', {Text(official.SortName?.Replace("'", "''"))})
+                  ON CONFLICT (release_number, official_id) DO UPDATE SET name = EXCLUDED.name, sort_name = EXCLUDED.sort_name;
                 {string.Join('\n', official.Terms.Select((term, position) => TermRow(official.Id, position, term)))}
                 """);
     }

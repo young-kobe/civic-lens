@@ -360,7 +360,7 @@ public sealed class PublishEntryRewriteTests
     }
 
     private static RosterMember Member(string id, string party) =>
-        new(id, id, null, null, null, [new(0, "rep", new(2025, 1, 3), new(2027, 1, 3), "MA", 1, null, party, null)]);
+        new(id, id, null, null, null, null, [new(0, "rep", new(2025, 1, 3), new(2027, 1, 3), "MA", 1, null, party, null)]);
 
     private static void AsReleaseFromBeforeTheNewFields(PublicationScenario scenario, PublicationReleaseSummary release)
     {

@@ -288,10 +288,11 @@ END
 
 - pk (release_number, official_id)
 - fk (release_number) -> publication_releases (release_number) on delete restrict
-- cols release_number integer, official_id varchar(256), name varchar(256), wikidata_id varchar(256) null, website text null, photo_path varchar(256) null
+- cols release_number integer, official_id varchar(256), name varchar(256), wikidata_id varchar(256) null, website text null, photo_path varchar(256) null, sort_name varchar(256) null
 - check ck_release_officials_name: length(btrim(name)) > 0
 - check ck_release_officials_official_id: length(btrim(official_id)) > 0
 - check ck_release_officials_photo_path: photo_path IS NULL OR length(btrim(photo_path)) > 0
+- check ck_release_officials_sort_name: sort_name IS NULL OR length(btrim(sort_name)) > 0
 
 ## release_policy_areas
 

@@ -18,7 +18,8 @@ public interface IActionDraftStore : IAnalysisQueueStore<ActionDraftRun, ActionD
     Task<int> RequeueRefusedAsync(CancellationToken cancellationToken);
 
     /// <summary>Published records whose current revision holds retired text, by record ID after <paramref name="afterRecordId"/>, at most
-    /// <paramref name="limit"/>. Retired text is model text with no bill text package, or a code headline that reads "introduced".</summary>
+    /// <paramref name="limit"/>. Retired text is model text with no bill text package, or a code headline that reads "introduced". Each target names
+    /// the newest candidate of the bill.</summary>
     Task<IReadOnlyList<ActionCodeTextTarget>> ListPublishedRetiredTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken);
 
     /// <summary>Appends a code revision and its Bypassed run outside the worker, with the queue entry settled. Returns null when it appended, else the reason.</summary>

@@ -48,9 +48,9 @@ internal static class OfficialRecordQueries
         """;
 
     private static readonly string BillsSql = $"""
-        SELECT {OfficialPageQueries.BillColumns}
-        {OfficialPageQueries.SponsoredBillsSql}{After("p.sponsored_on", "b.record_id")}
-         ORDER BY p.sponsored_on DESC, b.record_id LIMIT @take
+        SELECT {OfficialPageQueries.BillColumns}, {OfficialPageQueries.BillDay}
+        {OfficialPageQueries.SponsoredBillsSql}{After(OfficialPageQueries.BillDay, "b.record_id")}
+         ORDER BY {OfficialPageQueries.BillDay} DESC, b.record_id LIMIT @take
         """;
 
     private static readonly string StatementsSql = $"""
@@ -108,7 +108,7 @@ internal static class OfficialRecordQueries
         ReadPageAsync(connection, transaction, BillsSql, officialId, after, reader =>
         {
             var bill = OfficialPageQueries.ReadBill(reader);
-            return (bill, bill.IntroducedOn, bill.RecordId);
+            return (bill, reader.GetFieldValue<DateOnly>(7), bill.RecordId);
         }, cancellationToken);
 
     public static Task<Page<OfficialRecordStatementData>> ReadStatementsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,

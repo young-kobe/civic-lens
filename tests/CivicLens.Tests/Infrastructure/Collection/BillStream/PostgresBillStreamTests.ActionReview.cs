@@ -259,6 +259,18 @@ public sealed partial class PostgresBillStreamTests
         Assert.Equal(("Person", "none"), await TupleAsync($"SELECT author_kind, coalesce(code_version, 'none') FROM action_revisions WHERE record_id = '{RecordId}' AND revision_number = 2"));
     }
 
+    /// <summary>Both writers read the introduced date from the stored detail page of the candidate, the Congress.gov bill record. No tracked sponsor is needed.</summary>
+    [Fact]
+    public async Task AWorkerRevisionAndAPersonEditBothStoreTheIntroducedDateOfTheStoredBillRecord()
+    {
+        await DraftAsync(UpdatedAt, DraftableOutput);
+
+        await SaveAsync(1, SuggestionChoice.Keep, "save-2");
+
+        Assert.Equal("1 2025-01-03,2 2025-01-03", await ScalarAsync(
+            $"SELECT string_agg(revision_number || ' ' || introduced_on, ',' ORDER BY revision_number) FROM action_revisions WHERE record_id = '{RecordId}'"));
+    }
+
     [Fact]
     public async Task AWorkerRevisionWithTextAPersonWroteStaysForAPersonWhenNoPersonApprovedThatText()
     {

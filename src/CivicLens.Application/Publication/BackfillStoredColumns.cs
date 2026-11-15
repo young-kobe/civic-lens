@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CivicLens.Application.Review;
+using CivicLens.Application.Roster;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
@@ -10,11 +11,14 @@ namespace CivicLens.Application.Publication;
 /// Fills the stored columns that C# writes at publication, for rows that earlier releases wrote. Each fill calls the rule of the commit writer.
 /// A vote revision takes <see cref="VoteStoredColumns.From"/> of its own vote record file, which the newest kept folder in its release range holds. Its columns
 /// and its written marker go in together. A member list pins the parties of its published revision with the lowest revision number that has a kept file, so a later revision of the
-/// list never changes them. A revision with no kept file stays unwritten. An official takes the photo path of the officials file of its release. An entry takes
+/// list never changes them. A revision with no kept file stays unwritten. An official takes the photo path of the officials file of its release.
+/// The latest roster snapshots take their last names from their saved captures first. Then an official of any release takes the sort name that
+/// <see cref="PublicationOfficials"/> gives from those rosters. A release never stored the roster it read, so an old release takes the names of the latest roster. An entry takes
 /// <see cref="ReleaseRecordOrder.CongressOf(DateOnly?, DateTimeOffset)"/>. A release takes the vote links of <see cref="ReleaseVoteBills"/> over its manifest. A bill status row takes <see cref="BillStatusMeaning.StageOf"/> of its text and bill type. A release whose folder is gone is skipped. A release whose manifest cannot be read is skipped and counted. Every write fills only what is not filled yet, so a second run changes nothing.
 /// Work runs in batches of <see cref="BatchSize"/> rows.
 /// </summary>
-public sealed class BackfillStoredColumns(IPublicationStore publications, IReleaseDirectory releases, IVoteReviewStore votes)
+public sealed class BackfillStoredColumns(IPublicationStore publications, IReleaseDirectory releases, IVoteReviewStore votes,
+    BackfillRosterLastNames rosterLastNames, PublicationOfficials officials)
 {
     private const int BatchSize = 25;
 
@@ -24,11 +28,13 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
         var releaseRows = (await publications.ListAllAsync(cancellationToken)).OrderByDescending(release => release.ReleaseNumber).ToArray();
         var revisions = await BackfillVotesAsync(releaseRows, cancellationToken);
         var photos = await BackfillPhotoPathsAsync(releaseRows, cancellationToken);
+        var lastNames = await rosterLastNames.ExecuteAsync(cancellationToken);
+        var sortNames = await BackfillSortNamesAsync(cancellationToken);
         var congresses = await BackfillCongressesAsync(cancellationToken);
         var voteBills = await BackfillVoteBillsAsync(releaseRows, cancellationToken);
         var billStatuses = await BackfillBillStatusesAsync(cancellationToken);
         return new(revisions.Examined, revisions.Written, revisions.OpenWithoutFile, revisions.ClosedWithoutFile, photos, congresses, voteBills.Filled, voteBills.UnreadableManifests,
-            billStatuses);
+            billStatuses, lastNames, sortNames);
     }
 
     private async Task<(int Examined, int Written, int OpenWithoutFile, int ClosedWithoutFile)> BackfillVotesAsync(PublicationReleaseSummary[] releaseRows,
@@ -80,6 +86,14 @@ public sealed class BackfillStoredColumns(IPublicationStore publications, IRelea
             foreach (var batch in paths.Chunk(BatchSize))
                 filled += await publications.FillOfficialPhotoPathsAsync(release.ReleaseNumber, batch.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal), cancellationToken);
         }
+        return filled;
+    }
+
+    private async Task<int> BackfillSortNamesAsync(CancellationToken cancellationToken)
+    {
+        var filled = 0;
+        foreach (var batch in (await officials.ReadSortNamesAsync(cancellationToken)).Chunk(BatchSize))
+            filled += await publications.FillOfficialSortNamesAsync(batch.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal), cancellationToken);
         return filled;
     }
 

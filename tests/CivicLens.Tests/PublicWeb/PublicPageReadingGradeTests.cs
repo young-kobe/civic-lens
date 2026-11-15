@@ -381,7 +381,7 @@ public sealed class PublicPageReadingGradeTests
             [new(new string('a', 64), "House passes H.R. 5334", "AI vote label", PublishedTextOrigin.Model, PublishedChamber.House, 314, new(2026, 9, 16), PublishedVoteKind.Passage, "H.R. 5334", "Passed", PublishedVoteAlignment.Split, 216, 214)],
             RecordListFilter.Of(null, null), "next", [new("passage", "Vote to pass")], [new("health", "Health")]);
         var billList = new BillListPageData(7, 119, 9000,
-            [new(new string('b', 64), "H.R. 5334 would impose sanctions", "AI bill label", PublishedTextOrigin.Model, "hr", "Jimmy Panetta", new(2026, 2, 23), "Became Public Law No: 119-111.", new(2026, 9, 18), BillStatusStage.BecameLaw)],
+            [new(new string('b', 64), "H.R. 5334 would impose sanctions", "AI bill label", PublishedTextOrigin.Model, "hr", "Jimmy Panetta", "Became Public Law No: 119-111.", new(2026, 9, 18), BillStatusStage.BecameLaw)],
             RecordListFilter.Of(null, null), "next", [new("law", "Became law")], [new("international-affairs", "International Affairs")], [new("health", "Health")]);
         var statementList = new StatementListPageData(7, 300,
             [new(new string('d', 64), "Kelly announces a bill", "AI statement label", PublishedTextOrigin.Model, new(2026, 9, 12), [new("Mark Kelly", PublishedOfficeKind.Senator, "Senator", "AZ", null, "Democrat")], "kelly.senate.gov", true)],

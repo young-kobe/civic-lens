@@ -111,12 +111,13 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
 
     // Model text with no bill text package is a CRS rewrite or a title-only draft. A code headline from before the title headline read
     // "{number}: introduced by {sponsors}" or "{number}: introduced in Congress".
+    // The worker writes no revision for an unchanged update, so the candidate of the current revision can be old. The newest candidate is the one to check.
     public async Task<IReadOnlyList<ActionCodeTextTarget>> ListPublishedRetiredTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Database.SqlQuery<ActionCodeTextTarget>($"""
-            SELECT d.record_id AS "RecordId", r.candidate_id AS "CandidateId"
+        var records = await db.Database.SqlQuery<ActionCodeTextRecord>($"""
+            SELECT d.record_id AS "RecordId", d.source_id AS "SourceId", d.congress AS "Congress", d.bill_type AS "BillType", d.bill_number AS "BillNumber"
             FROM action_drafts d
             JOIN action_revisions r ON r.record_id = d.record_id AND r.revision_number = d.current_revision_number
             WHERE (r.text_origin = 'Model' AND r.text_package_id IS NULL
@@ -127,6 +128,11 @@ public sealed class PostgresActionDraftStore : PostgresAnalysisStore<ActionDraft
             ORDER BY d.record_id COLLATE "C"
             LIMIT {limit}
             """).ToListAsync(cancellationToken);
+        var targets = new List<ActionCodeTextTarget>(records.Count);
+        foreach (var record in records)
+            targets.Add(new(record.RecordId, await ActionDraftRows.NewestCandidateIdAsync(db, record, cancellationToken) ??
+                throw new InvalidOperationException($"Action record {record.RecordId} has a revision but no candidate.")));
+        return targets;
     }
 
     // The queue entry is locked first, as a worker settlement does, so the lock order stays the queue row and then the action review key.

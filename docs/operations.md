@@ -268,6 +268,8 @@ The first full run drafts every roll call that has a tracked senator. Code appro
 
 `PublishedEntryApprovalTime` adds `published_entries.approved_at_utc_ticks`. Run `releases entries backfill` after this migration, and then `releases entries verify`. The backfill reads the kept record files. Until it runs, a publish of a revision that has an entry without a time stops with a conflict, and the correction commands report a stored time that differs. New manifests include `approvedAtUtc`; older images reject that field. Before rolling back an image, activate a kept release from before this field was written.
 
+`ActionRevisionIntroducedOn` adds `action_revisions.introduced_on` and the column `public_api.bills.introduced_on`. Run `actions revisions backfill` after this migration, and then `actions revisions verify`. The column is nullable, and no public bill view leaves out a revision without a date. Until the backfill fills a revision, its pages print no introduction date.
+
 `RelationshipApprover` lets relationship entries hold `approved_by` and adds `public_api.record_links.approver`. Run `releases entries backfill` again after this migration. Until then, no link shows who checked it.
 
 `PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
@@ -786,9 +788,9 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ac
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions revisions verify
 ```
 
-`backfill <limit>` moves at most `limit` revisions with no event date or an unfinished CRS derivation (`crs_summary_read = false`). It walks the table in key order in batches of 25. Each batch holds the action review lock. Legacy rows get their columns and issue, sponsorship, and citation rows rebuilt from JSON. Already typed rows keep those values and children. Unread CRS bodies use only the revision's exact pinned extraction and summary version. A null body is a completed result. Each row is read back inside its savepoint. The rebuilt revision must equal its stored JSON, and the body and marker must equal the computed values. This comparison reuses the computed body, without reading its extraction again. A mismatch rolls the row back with `RebuildMismatch`. Completed rows are skipped on a rerun. The command prints `examined`, `moved`, `skipped`, `skippedByReason`, and the first 50 skipped revision keys and reasons. Its exit code is 1 when any row was skipped. Reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`. A skipped row keeps its earlier columns and children.
+`backfill <limit>` moves at most `limit` revisions with no event date, an unfinished CRS derivation (`crs_summary_read = false`), or no introduced date. It walks the table in key order in batches of 25. Each batch holds the action review lock. Legacy rows get their columns and issue, sponsorship, and citation rows rebuilt from JSON. Already typed rows keep those values and children. Unread CRS bodies use only the revision's exact pinned extraction and summary version. A null body is a completed result. A missing introduced date comes from the stored detail page of the candidate of the revision. A detail page with no exact introduced line gives no date, and the row is skipped with `RebuildMismatch`. Until a row has its date, its bill stays public and its pages print no introduction date. Each row is read back inside its savepoint. The rebuilt revision must equal its stored JSON, and the body and marker must equal the computed values. This comparison reuses the computed body, without reading its extraction again. A mismatch rolls the row back with `RebuildMismatch`. Completed rows are skipped on a rerun. The command prints `examined`, `moved`, `skipped`, `skippedByReason`, and the first 50 skipped revision keys and reasons. Its exit code is 1 when any row was skipped. Reasons are `UnreadableJson`, `InvalidShape`, `RebuildMismatch`, and `database:<constraint>`. A skipped row keeps its earlier columns and children.
 
-`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It reports unfinished CRS derivations as legacy. Completed CRS bodies are checked during the backfill write; verification does not derive them again. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. No key is allowed to be absent.
+`verify` rebuilds every revision from its rows and compares it to its JSON as trees. It reports unfinished CRS derivations and revisions with no introduced date as legacy. Completed CRS bodies are checked during the backfill write; verification does not derive them again. It writes nothing and takes no lock. It prints `checked`, `legacy`, `mismatched`, and the first 20 mismatches as record ID, revision number, and JSON key names. It never prints text. The exit code is 1 while `legacy` or `mismatched` is above 0. No key is allowed to be absent.
 
 Run order: `db migrate`, then `backfill`, then `verify`. Every action reader reads the columns and fails on a row with null columns. That includes the review pages, the queue, the relationship and brief readers, and the redraft skip. On production, `deploy` restarts the worker and the review host, so run `backfill` right after the deploy. For a manual run, start the new code only when `verify` exits 0, so `legacy` and `mismatched` are both 0.
 
@@ -1219,7 +1221,7 @@ The verifier writes nothing. It repeats the file checks of the backfill. Then it
 
 ### Stored columns backfill
 
-The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, the bill link of each vote of a release, and the stage of each bill status. This command fills them for rows that earlier releases wrote.
+The release commit writes some columns once, from the records that the release builder made. These are the party of each vote member, the alignment and party majorities of each vote revision, the photo path of each release official, the Congress of each entry, the bill link of each vote of a release, the stage of each bill status, and the sort name of each release official. This command fills them for rows that earlier releases wrote. It also fills the last names of the latest roster snapshots from their saved captures. The command needs `CIVIC_LENS_COLLECTION_CONFIG` and `CIVIC_LENS_ARTIFACT_DIRECTORY`, as a publish does.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases columns backfill
@@ -1237,13 +1239,15 @@ The command prints JSON with these keys:
 - `closedVoteRevisionsWithoutKeptFile`: the revisions that left the active release and that no kept folder holds. They stay unwritten. This is expected after a prune.
 - `officialPhotoPathsFilled`, `entryCongressesFilled`, and `voteBillLinksFilled`: the rows that this run filled.
 - `billStatusesFilled`: the bill status rows that got a stage in this run.
+- `rosterLastNamesFilled`: the rows of the latest member and executive snapshots that got a last name from their saved capture.
+- `officialSortNamesFilled`: the release official rows that got a sort name. An official that no roster names keeps no sort name, and the list sorts that official by name.
 - `releasesWithUnreadableManifest`: the kept releases whose manifest is invalid. The run wrote no vote link for them. Restore the folder, then run the command again.
 
 The exit code is 0 only when `openVoteRevisionsWithoutKeptFile` and `releasesWithUnreadableManifest` are both 0. Otherwise it is 1.
 
 ### Vote bills verify
 
-This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs the same three variables as the backfill.
+This command proves that the stored vote links of each kept release equal the links that the rule gives over its manifest. Run it after `releases columns backfill` exits with 0. It writes nothing and takes no lock, so it is safe beside the worker. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases vote-bills verify

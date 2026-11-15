@@ -20,7 +20,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CivicLens.Host.Publication;
 
-internal sealed record PublicationParts(PublishRelease Publish, PublishedRecordLoaders Loaders);
+internal sealed record PublicationParts(PublishRelease Publish, PublishedRecordLoaders Loaders, PublicationOfficials Officials);
 
 internal static class PublicationComposition
 {
@@ -46,14 +46,13 @@ internal static class PublicationComposition
             new PostgresRelationshipReviewStore(AnalysisDbContextFactory.Create(connectionString)),
             new PostgresBriefReviewStore(AnalysisDbContextFactory.Create(connectionString)),
             PostgresExecutiveActionReviewStore.FromConnectionString(connectionString, codeVersion));
+        var officials = new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
+            PostgresExecutiveRosterStore.FromConnectionString(connectionString), PostgresPersonRegistryStore.FromConnectionString(connectionString));
         var publish = new PublishRelease(publications, releases, loaders,
-            new PublicationCatalog(ReviewOfficials.From(collection).Names, issues),
-            new PublicationOfficials(collection, PostgresMemberRosterStore.FromConnectionString(connectionString),
-                PostgresExecutiveRosterStore.FromConnectionString(connectionString),
-                PostgresPersonRegistryStore.FromConnectionString(connectionString)),
+            new PublicationCatalog(ReviewOfficials.From(collection).Names, issues), officials,
             new ReleasePhotos(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader(), artifactRoot,
                 loggers.CreateLogger<ReleasePhotos>()),
             TimeProvider.System, new PruneReleases(publications, releases, loggers.CreateLogger<PruneReleases>()));
-        return new(publish, loaders);
+        return new(publish, loaders, officials);
     }
 }

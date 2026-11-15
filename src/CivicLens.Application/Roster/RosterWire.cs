@@ -16,5 +16,8 @@ internal static class RosterWire
         Capped(name?.OfficialFull, RosterLimits.FullName) ?? Capped($"{name?.First} {name?.Last}", RosterLimits.FullName)
         ?? throw new InvalidDataException("Every roster entry must have a name.");
 
+    /// <summary>The roster last name, kept whole, so a compound surname such as Van Hollen sorts as the source spells it. Null when the roster gives none.</summary>
+    public static string? LastNameOf(WireName? name) => Capped(name?.Last, RosterLimits.FullName);
+
     public sealed record WireName(string? First, string? Last, [property: JsonPropertyName("official_full")] string? OfficialFull);
 }

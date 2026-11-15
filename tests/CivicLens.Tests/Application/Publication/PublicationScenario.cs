@@ -648,6 +648,9 @@ internal sealed class FakePublicationStore : IPublicationStore
     public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
 
+    public Task<int> FillOfficialSortNamesAsync(IReadOnlyDictionary<string, string> sortNames, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     public Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<PublishedEntryDay>>([]);
 
