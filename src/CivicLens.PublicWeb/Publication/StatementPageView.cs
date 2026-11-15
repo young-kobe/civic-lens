@@ -62,7 +62,17 @@ public static class StatementPageView
 
     public static string QuotationNote(PublishedQuotation quotation) => $"{PublishedRecordLabels.Quotation(quotation.Kind)} in the source.";
 
-    public static string AllQuotationsLink(StatementPageData data) => $"See all {data.Quotations.Length} quotes in the source fold";
+    /// <summary>The target of the link under the shown quotes. Inline source text sits above the quotes, so the link goes to the mark of
+    /// the first quote that the list leaves out. A longer release keeps its marked text in the source fold.</summary>
+    public static string AllQuotationsHref(StatementPageData data) => ShowsSourceText(data) ? "#" + CitedText.Anchor(ShownQuotations) : "#source";
+
+    public static string AllQuotationsLink(StatementPageData data) => ShowsSourceText(data)
+        ? OmittedQuotationsLink(data.Quotations.Length)
+        : $"See all {data.Quotations.Length} quotes in the source fold";
+
+    private static string OmittedQuotationsLink(int count) => count == ShownQuotations + 1
+        ? $"See quote {count} in the source text above"
+        : $"See quotes {ShownQuotations + 1} to {count} in the source text above";
 
     /// <summary>The marks of the saved text: one per quote and one for the date evidence. The static page and the server page both call it.</summary>
     public static IReadOnlyList<CitedRange> Ranges(PublishedQuotation[] quotations, PublishedCitation? dateEvidence)

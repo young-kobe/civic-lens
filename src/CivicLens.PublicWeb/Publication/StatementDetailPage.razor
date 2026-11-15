@@ -44,7 +44,7 @@
                     </ul>
                     @if (Data.Quotations.Length > StatementPageView.ShownQuotations)
                     {
-                        <p class="small"><a href="#source">@StatementPageView.AllQuotationsLink(Data)</a></p>
+                        <p class="small"><a href="@StatementPageView.AllQuotationsHref(Data)">@StatementPageView.AllQuotationsLink(Data)</a></p>
                     }
                 </section>
             </div>
