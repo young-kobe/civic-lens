@@ -51,7 +51,7 @@
     </form>
     @if (Data.Officials.Count > 0)
     {
-        <p class="list-status" role="status">Showing @Data.Officials.Count @(Data.Officials.Count == 1 ? "official" : "officials") on this page. Release @Data.Release.</p>
+        <ListStatus Count="Data.Officials.Count" Singular="official" Plural="officials" Chips="Chips" />
         <p class="list-scope muted small">The officials count covers this whole release. Each record count leaves out votes.</p>
         <ul class="list-rows" role="list">
             @foreach (var official in Data.Officials)
@@ -86,6 +86,15 @@
 
     [Parameter, EditorRequired] public OfficialsPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    /// <summary>The chips of the active filters in form order: the chamber and party as their choices name them, the state code, and the typed name.</summary>
+    private IReadOnlyList<string> Chips => [.. new[]
+    {
+        Chambers.FirstOrDefault(choice => choice.Value.Length > 0 && choice.Value == Data.Filter.Chamber).Label,
+        Data.Filter.State,
+        Parties.FirstOrDefault(party => party.ToLowerInvariant() == Data.Filter.Party),
+        Data.Filter.Name is { } name ? $"Name: {name}" : null
+    }.OfType<string>()];
 
     private string? NextHref => Data.NextCursor is null ? null : "?" + string.Join('&', new (string Name, string? Value)[]
         {

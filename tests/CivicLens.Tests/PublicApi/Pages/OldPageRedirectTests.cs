@@ -81,4 +81,46 @@ public sealed class OldPageRedirectTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.NotFound, status);
         Assert.Null(location);
     }
+
+    [Theory]
+    [InlineData("officials", "officials.html")]
+    [InlineData("votes", "votes.html")]
+    [InlineData("bills", "bills.html")]
+    [InlineData("statements", "statements.html")]
+    [InlineData("executive-actions", "executive-actions.html")]
+    [InlineData("issues", "issues.html")]
+    [InlineData("search", "search.html")]
+    [InlineData("officials/henry-cuellar", "officials/henry-cuellar.html")]
+    [InlineData("issues/health-care", "issues/health-care.html")]
+    public async Task AnAddressWithoutTheHtmlEndingMovesPermanentlyToItsPageAndKeepsTheQuery(string path, string target)
+    {
+        var (status, location) = await GetAsync(path + "?q=tax");
+
+        Assert.Equal(HttpStatusCode.MovedPermanently, status);
+        Assert.Equal(Root + target + "?q=tax", location);
+    }
+
+    [Fact]
+    public async Task TheOldComparePageMovesToTheZipResultsOfTheHomePage()
+    {
+        var (status, location) = await GetAsync(PublicationProtocol.ComparePagePath + "?zip=55401");
+
+        Assert.Equal(HttpStatusCode.MovedPermanently, status);
+        Assert.Equal(Root + "index.html?zip=55401#zip-results", location);
+    }
+
+    [Theory]
+    [InlineData("web/officials")]
+    [InlineData("web/officials.html")]
+    [InlineData("web/records/" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.html")]
+    [InlineData("officials/Henry_Cuellar")]
+    [InlineData("issues/Health")]
+    [InlineData("compare")]
+    public async Task AnOldPreviewAddressOrABadSegmentWithoutTheEndingStillAnswersTheNotFoundPage(string path)
+    {
+        var (status, location) = await GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.NotFound, status);
+        Assert.Null(location);
+    }
 }

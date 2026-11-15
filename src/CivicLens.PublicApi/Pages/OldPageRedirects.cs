@@ -9,13 +9,23 @@ using Microsoft.AspNetCore.WebUtilities;
 namespace CivicLens.PublicApi.Pages;
 
 /// <summary>
-/// The permanent redirects of the old static paths that have no server page: the pages of older Congresses of an official, the policy area pages,
-/// the all records list, and the later issue pages. Each keeps the query of the old URL and names the public address of its target.
-/// A path that the static site never wrote answers the not found page.
+/// The permanent redirects of the paths that have no server page: the pages of older Congresses of an official, the policy area pages,
+/// the all records list, the later issue pages, the old Compare page, and the addresses of the section pages without their <c>.html</c> ending.
+/// Each keeps the query of the old URL and names the public address of its target. A path that the static site never wrote answers the not found page.
 /// </summary>
 public static class OldPageRedirects
 {
     private const string PolicyAreaFilter = "policyArea";
+
+    /// <summary>A path segment with no dot, so the route of an extensionless page never takes a file name such as <c>{id}.html</c>.</summary>
+    private const string Segment = "regex(^[a-z0-9-]+$)";
+
+    /// <summary>The section pages that a reader may type without the <c>.html</c> ending: the header pages and the search page.</summary>
+    private static readonly string[] ExtensionlessPages =
+    [
+        PublicationProtocol.OfficialsPagePath, PublicationProtocol.FacetsPath, PublicationProtocol.SearchPagePath,
+        .. PublicSections.RecordLists.Select(list => list.Path)
+    ];
 
     public static void MapOldPageRedirects(this IEndpointRouteBuilder routes, PublicBaseUrl baseUrl)
     {
@@ -35,6 +45,17 @@ public static class OldPageRedirects
             CancellationToken cancellationToken) => RedirectAsync(context, responder, rootPath,
                 PublicationProtocol.IsPathSegment(id) ? rootPath + IssueRecordWords.ListPath(PublishedRecordKind.Vote, id) : null, cancellationToken))
             .WithOrder(-1);
+        // The Compare page merged into the ZIP results of the home page, which compare the members of one ZIP area.
+        routes.MapGet(ServerPageEndpoints.Route(PublicationProtocol.ComparePagePath), (HttpContext context) =>
+            Moved(rootPath + PublicationProtocol.YourMembersPath, context.Request.Query));
+        foreach (var page in ExtensionlessPages)
+            routes.MapGet(ServerPageEndpoints.Route(System.IO.Path.ChangeExtension(page, null)), (HttpContext context) => Moved(rootPath + page, context.Request.Query));
+        routes.MapGet(ServerPageEndpoints.Route($"officials/{{id:{Segment}}}"), (string id, HttpContext context, ServerPageResponder responder,
+            CancellationToken cancellationToken) => RedirectAsync(context, responder, rootPath,
+                PublicationProtocol.IsPathSegment(id) ? rootPath + PublicationProtocol.OfficialPagePath(id) : null, cancellationToken));
+        routes.MapGet(ServerPageEndpoints.Route($"issues/{{id:{Segment}}}"), (string id, HttpContext context, ServerPageResponder responder,
+            CancellationToken cancellationToken) => RedirectAsync(context, responder, rootPath,
+                PublicationProtocol.IsPathSegment(id) ? rootPath + PublicationProtocol.IssuePagePath(id, 1) : null, cancellationToken));
     }
 
     /// <summary>The policy area of an old file name, "{id}" for the first page or "{id}.page-{n}" for a later page. Null when the static site never wrote that name.

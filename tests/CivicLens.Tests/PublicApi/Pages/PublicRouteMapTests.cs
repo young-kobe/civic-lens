@@ -37,12 +37,12 @@ public sealed class PublicRouteMapTests(PostgresCollection postgres)
         return host;
     }
 
-    /// <summary>Every page path that the protocol names and the release can fill. Search and report pages are included, though the sitemap leaves them out.</summary>
+    /// <summary>Every page path that the protocol names and the release can fill. Search and report pages are included, though the sitemap leaves them out.
+    /// The briefs list is left out, because the release holds no brief, and the old Compare page redirects.</summary>
     private static IEnumerable<string> PagePaths() =>
     [
         string.Empty,
         PublicationProtocol.HomePath,
-        PublicationProtocol.ComparePagePath,
         PublicationProtocol.OfficialsPagePath,
         PublicationProtocol.BoardsPagePath,
         .. OfficialBoard.All.Select(board => board.PagePath),
@@ -54,7 +54,6 @@ public sealed class PublicRouteMapTests(PostgresCollection postgres)
         PublicationProtocol.ReportPagePath,
         PublicationProtocol.MethodPagePath,
         PublicationProtocol.AboutPagePath,
-        PublicationProtocol.BriefsPagePath(1),
         PublicationProtocol.OfficialPagePath(OfficialId),
         PublicationProtocol.OfficialRecordPagePath(OfficialId),
         PublicationProtocol.IssuePagePath(IssueId, 1),
