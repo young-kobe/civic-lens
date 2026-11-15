@@ -123,6 +123,14 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         Assert.Equal(["p0 3", "p1 1", "p2 0"], expected);
     }
 
+    [Fact]
+    public async Task TheSortNameIsTheStoredRosterLastNameAndANameWithNoStoredSortNameSortsByTheName()
+    {
+        await OfficialsSeed.AddOfficialsAsync(database, new SeededOfficial("p0", "Chris Van Hollen") { SortName = "Van Hollen" }, new SeededOfficial("p1", "Mia Vance"));
+
+        Assert.Equal(["p0 Van Hollen", "p1 Mia Vance"], await QueryAsync("SELECT official_id || ' ' || sort_name FROM public_api.officials ORDER BY official_id"));
+    }
+
     // The release entry counts a sponsored bill in the Congress of its last event date. The view counts it in the Congress of the bill number.
     [Fact]
     public async Task ABillIssueCountIsInTheCongressOfItsBillNumberAndNotInTheCongressOfItsLastSponsorshipEvent()

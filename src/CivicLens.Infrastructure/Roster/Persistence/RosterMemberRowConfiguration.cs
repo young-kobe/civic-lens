@@ -12,11 +12,13 @@ internal sealed class RosterMemberRowConfiguration : IEntityTypeConfiguration<Ro
         {
             table.HasCheckConstraint("ck_roster_members_identity",
                 "bioguide_id ~ '^[A-Z][0-9]{6}$' AND length(btrim(full_name)) > 0");
+            table.HasCheckConstraint("ck_roster_members_last_name", "last_name IS NULL OR length(btrim(last_name)) > 0");
         });
         builder.HasKey(row => new { row.AttemptId, row.BioguideId });
         builder.Property(row => row.AttemptId).HasColumnName("attempt_id").IsRequired();
         builder.Property(row => row.BioguideId).HasColumnName("bioguide_id").HasMaxLength(7);
         builder.Property(row => row.FullName).HasColumnName("full_name").HasMaxLength(RosterLimits.FullName).IsRequired();
+        builder.Property(row => row.LastName).HasColumnName("last_name").HasMaxLength(RosterLimits.FullName);
         builder.Property(row => row.Office).HasColumnName("office").HasMaxLength(RosterLimits.Office);
         builder.Property(row => row.Phone).HasColumnName("phone").HasMaxLength(RosterLimits.Phone);
         builder.Property(row => row.Url).HasColumnName("url").HasMaxLength(RosterLimits.Url);

@@ -1195,7 +1195,7 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
 
     private async Task<DiscoveryAdmissionResult> AdmitDetailAsync(string detailJobId, CongressBill bill, BillGateOutcome gate) =>
         await store.AdmitDetailAsync(Source(), detailJobId, bill, gate, BillGateFixtures.Revision().Id,
-            await ExtractionAsync(detailJobId), default);
+            await ExtractionAsync(detailJobId, CongressBillRenderer.RenderDetail(bill)), default);
 
     private async Task<DiscoveryAdmissionResult> AdmitCosponsorPageAsync(string pageJobId, CongressBillCosponsorsPage page) =>
         await store.AdmitCosponsorPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
@@ -1209,10 +1209,12 @@ public sealed partial class PostgresBillStreamTests(PostgresCollection postgres)
     private async Task<DiscoveryAdmissionResult> AdmitSubjectsAsync(string pageJobId, CongressBillSubjectsPage page) =>
         await store.AdmitSubjectsPageAsync(Source(), pageJobId, page, await ExtractionAsync(pageJobId), default);
 
-    private async Task<string> ExtractionAsync(string jobId)
+    private Task<string> ExtractionAsync(string jobId) => ExtractionAsync(jobId, "Bill page extraction for " + jobId);
+
+    /// <summary>A detail page stores its rendered text, so each action revision reads the introduced date of its bill from it.</summary>
+    private async Task<string> ExtractionAsync(string jobId, string text)
     {
         if (seededExtractionIds.TryGetValue(jobId, out var existing)) return existing;
-        var text = "Bill page extraction for " + jobId;
         var extractionId = await ExtractionAsync(jobId, text, text, "extraction");
         seededExtractionIds.Add(jobId, extractionId);
         return extractionId;

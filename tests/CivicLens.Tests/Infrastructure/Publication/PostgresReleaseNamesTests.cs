@@ -34,7 +34,7 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
     {
         await CommitAsync(1, null, Names("Rent and home prices.", ["Rent caps", "Eviction rules"], ["Zoning votes"]));
 
-        Assert.Equal(["1|mayor|Mayor Example|Q1"], await ReadAsync("SELECT release_number || '|' || official_id || '|' || name || '|' || wikidata_id FROM release_officials"));
+        Assert.Equal(["1|mayor|Mayor Example|Example|Q1"], await ReadAsync("SELECT release_number || '|' || official_id || '|' || name || '|' || sort_name || '|' || wikidata_id FROM release_officials"));
         Assert.Equal(["1|mayor|0|Mayor|Executive||||2024-01-01|", "1|mayor|1|Senator|Senator|WA||Democratic|2020-01-03|2023-01-03"],
             await ReadAsync("""
                 SELECT release_number || '|' || official_id || '|' || "position" || '|' || office || '|' || kind || '|' || coalesce(state, '') || '|' || coalesce(district::text, '')
@@ -149,7 +149,7 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         };
         var issue = new ReleaseFacet("housing", "Housing costs", new IssueDefinition(definition, [.. includes], [.. excludes]));
         var area = new ReleaseFacet("land-use", "Land use", null);
-        return new ReleaseNames([official], new ReleaseFacets([issue], [area]));
+        return new ReleaseNames([official], new ReleaseFacets([issue], [area]), new Dictionary<string, string> { ["mayor"] = "Example" });
     }
 
     private Task CommitAsync(int number, int? baseNumber, ReleaseNames names) =>

@@ -192,6 +192,24 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Contains("2 bills and resolutions that Ann Able sponsored in this release", page.QuerySelector(".records-lead p")!.TextContent);
     }
 
+    /// <summary>A revision that the backfill has not reached has no introduced date. The bills tab keeps it, prints no introduction date for it, and lists it after every dated bill.</summary>
+    [Fact]
+    public async Task TheBillsTabKeepsABillWithNoIntroducedDateAfterEveryDatedBillAndPrintsNoIntroductionDateForIt()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('1', "2026-03-02") { BillNumber = 1, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] },
+            new SeededBill('2', "2026-09-01") { BillNumber = 2, Undated = true, Sponsorships = [new("p0", "Sponsor", "2026-09-01")] });
+
+        var page = await GetPageAsync(host, "/officials/p0/record.html?kind=bills");
+
+        var rows = page.QuerySelectorAll(".record-row").ToArray();
+        Assert.Equal([.. "12".Select(id => BaseUrl.Join($"records/{new string(id, 64)}.html"))], rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!).ToArray());
+        Assert.Contains("Introduced 10 Jan 2026", rows[0].TextContent);
+        Assert.DoesNotContain("Introduced", rows[1].TextContent);
+        Assert.DoesNotContain(rows[1].QuerySelectorAll("span"), span => span.Children.Length == 0 && span.TextContent.Trim().Length == 0);
+    }
+
     [Fact]
     public async Task TheBillsTabCountsAndListsEverySponsoredBillOfEachCongressOnceWithItsOwnStatusInSponsorshipOrder()
     {

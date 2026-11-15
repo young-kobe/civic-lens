@@ -83,6 +83,57 @@ public sealed partial class PostgresBillStreamTests
     }
 
     [Fact]
+    public async Task TheTextBackfillMovesARecordWhoseNewerCandidateSettledUnchangedBecauseTheWorkerWritesNoRevisionForIt()
+    {
+        var candidate = await ReadableCandidateAsync("A000001");
+        var codeHeadline = await SettleRetiredTextAsync(candidate, RetiredText.CrsRewrite);
+        var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1));
+        Assert.Empty((await RunActionWorkerAsync(new FakeHeadlineSummaryModel())).Requests);
+        Assert.Contains((newer, "Succeeded", ActionDraftErrorCodes.Unchanged), (await QueueAsync()).Select(row => (row.CandidateId, row.Status, row.ErrorCode)));
+        await PublishActionAsync();
+
+        var moved = await BackfillCodeTextAsync(BillGateFixtures.Revision());
+
+        Assert.Equal((1, 1, 0), (moved.Examined, moved.Moved, moved.Skipped));
+        Assert.Equal($"{newer}|Code|{codeHeadline}", await ScalarAsync("""
+            SELECT r.candidate_id || '|' || r.text_origin || '|' || r.headline
+            FROM action_revisions r JOIN action_drafts d ON d.record_id = r.record_id AND d.current_revision_number = r.revision_number
+            """));
+        AssertFoundNothing(await BackfillCodeTextAsync(BillGateFixtures.Revision()));
+        Assert.Equal(2L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Fact]
+    public async Task TheTextBackfillLeavesARecordWhoseNewerCandidateChangedTheFactsToTheWorkerEvenWhenItsEntrySettled()
+    {
+        var candidate = await ReadableCandidateAsync("A000001");
+        await SettleRetiredTextAsync(candidate, RetiredText.CrsRewrite);
+        var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1), title: "A bill to fund rent aid and housing repairs.");
+        await ExecuteAsync(connectionString, $"UPDATE action_analysis SET status = 'Succeeded' WHERE candidate_id = '{newer}'");
+        await PublishActionAsync();
+
+        var skipped = await BackfillCodeTextAsync(BillGateFixtures.Revision());
+
+        Assert.Equal([new ActionCodeTextSkip(RecordId, ActionCodeTextSkip.FactsChanged)], skipped.Skips);
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Fact]
+    public async Task TheTextBackfillLeavesARecordWhoseNewerCandidateWaitsInTheQueueToTheWorker()
+    {
+        var candidate = await ReadableCandidateAsync("A000001");
+        await SettleRetiredTextAsync(candidate, RetiredText.CrsRewrite);
+        var newer = await ReadableCandidateAsync("A000001", UpdatedAt.AddDays(1));
+        await PublishActionAsync();
+
+        var skipped = await BackfillCodeTextAsync(BillGateFixtures.Revision());
+
+        Assert.Equal([new ActionCodeTextSkip(RecordId, ActionCodeTextSkip.DraftPending)], skipped.Skips);
+        Assert.Contains((newer, "Pending"), (await QueueAsync()).Select(row => (row.CandidateId, row.Status)));
+        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM action_revisions"));
+    }
+
+    [Fact]
     public async Task TheTextBackfillPagesByRecordIdSoACursorPassesTheRecordsOfThePageBefore()
     {
         var candidate = await ReadableCandidateAsync("A000001");

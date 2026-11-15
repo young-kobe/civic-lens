@@ -71,6 +71,7 @@ bills history_action_count
 bills crs_summary_text
 bills crs_summary_version
 bills summary_from_crs
+bills introduced_on
 brief_paragraphs record_id
 brief_paragraphs revision_number
 brief_paragraphs release_number
@@ -248,6 +249,7 @@ bill_keys bill_number
 bill_keys policy_area_id
 bill_keys event_date
 bill_keys status
+bill_keys latest_action_date
 bill_text_sentences part
 bill_text_sentences position
 bill_text_sentences quote
@@ -464,6 +466,7 @@ officials photo_path
 officials caucus
 officials term_end_on
 officials record_count
+officials sort_name
 party_agreement agreed
 party_agreement chamber
 party_agreement congress

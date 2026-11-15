@@ -64,7 +64,7 @@ public sealed class ReleaseHomeIssueCountsMigrationTests(PostgresCollection post
                 new SeededVote('c', "2026-05-03") { LastRelease = 1, Issues = ["health"] },
                 new SeededVote('d', "2026-05-04") { Congress = 118, Issues = ["health"] },
                 new SeededVote('e', "2026-05-05") { UntrackedIssues = ["health"] });
-            await BillsSeed.AddBillsAsync(database,
+            await BillsSeed.AddBillsBeforeIntroducedOnAsync(database,
                 new SeededBill('1', "2026-05-01") { LastRelease = 1, Issues = ["health"] },
                 new SeededBill('2', "2026-05-02") { FirstRelease = 2, Issues = ["health"] },
                 new SeededBill('3', "2026-05-03") { Congress = 118, Issues = ["health"] },

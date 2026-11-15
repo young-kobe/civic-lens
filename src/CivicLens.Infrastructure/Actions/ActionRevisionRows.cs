@@ -7,6 +7,8 @@ using CivicLens.Core.Documents;
 using CivicLens.Core.Review;
 using CivicLens.Infrastructure.Actions.Persistence;
 using CivicLens.Infrastructure.Collection;
+using CivicLens.Infrastructure.Collection.BillStream;
+using CivicLens.Infrastructure.Documents.Persistence;
 using CivicLens.Infrastructure.Review;
 using CivicLens.Publication.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -90,6 +92,18 @@ internal static class ActionRevisionRows
         if (span.Start > 0 && (span.Start < 2 || text.AsSpan(span.Start - 2, 2) is not "\n\n")) return null;
         if (end < text.Length && (text.Length - end < 2 || text.AsSpan(end, 2) is not "\n\n")) return null;
         return CongressBillRenderer.ReadSummaryBody(span.Quote, version);
+    }
+
+    /// <summary>The introduced date of the bill of a revision, from the stored detail page of its candidate. Every writer and the backfill read this one source,
+    /// so a person revision and a legacy revision get the date of the same Congress.gov bill record as a worker revision. Null when the page has no exact introduced line.</summary>
+    public static async Task<DateOnly?> ReadIntroducedOnAsync(CollectionAttemptDbContext db, string candidateId, CancellationToken cancellationToken)
+    {
+        var text = await db.Set<ActionCandidateRow>().AsNoTracking().Where(candidate => candidate.CandidateId == candidateId)
+            .Join(db.Set<BillPageRow>().AsNoTracking().Where(page => page.Role == BillPageRole.Detail), candidate => candidate.DetailJobId, page => page.JobId,
+                (_, page) => page.ExtractionId)
+            .Join(db.Set<DocumentExtractionRow>().AsNoTracking(), extractionId => extractionId, extraction => extraction.ExtractionId, (_, extraction) => extraction.Text)
+            .SingleOrDefaultAsync(cancellationToken);
+        return text is null ? null : CongressBillRenderer.ReadIntroduced(text);
     }
 
     /// <summary>Reads the rows of a query, then their issues, sponsorships, and citations, in a fixed number of queries. The child rows come

@@ -1236,6 +1236,11 @@ public sealed class JobPreparationTests
 
         public Task<IReadOnlyList<CivicLens.Application.Roster.RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<string?> ReadLatestSnapshotAttemptIdAsync(string sourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> FillLastNamesAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.RosterMember> parsed, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class RecordingExecutive : CivicLens.Application.Roster.IExecutiveRosterStore
@@ -1253,6 +1258,11 @@ public sealed class JobPreparationTests
         }
 
         public Task<IReadOnlyList<CivicLens.Application.Roster.ExecutiveOfficial>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<string?> ReadLatestSnapshotAttemptIdAsync(string sourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> FillLastNamesAsync(string attemptId, IReadOnlyList<CivicLens.Application.Roster.ExecutiveOfficial> parsed, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 

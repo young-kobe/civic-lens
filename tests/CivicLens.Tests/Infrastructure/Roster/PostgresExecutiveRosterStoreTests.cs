@@ -29,6 +29,21 @@ public sealed class PostgresExecutiveRosterStoreTests(PostgresCollection postgre
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
+    public async Task TheLastNameRoundTripsAndAFillWritesOnlyTheRowsThatHoldNone()
+    {
+        var attemptId = await ImportExecutiveAsync('a', 0);
+        var parsed = ExecutiveFixtures.Officials();
+        await executives.AdmitAsync(attemptId, [.. parsed.Select(official => official with { LastName = official.GovtrackId == 300008 ? "Kept" : null })], default);
+
+        Assert.Equal(attemptId, await executives.ReadLatestSnapshotAttemptIdAsync(ExecutiveFixtures.SourceId, default));
+        Assert.Equal(2, await executives.FillLastNamesAsync(attemptId, parsed, default));
+        Assert.Equal(0, await executives.FillLastNamesAsync(attemptId, parsed, default));
+
+        var latest = await executives.ReadLatestAsync(ExecutiveFixtures.SourceId, default);
+        Assert.Equal(["Kept", "Washington", "Trump"], latest.Select(official => official.LastName));
+    }
+
+    [Fact]
     public async Task ACaptureWritesOneHeaderWithEveryOfficialAndDatedTermThatCiteItsAttempt()
     {
         var attemptId = await ImportExecutiveAsync('a', 0);
@@ -101,7 +116,7 @@ public sealed class PostgresExecutiveRosterStoreTests(PostgresCollection postgre
     public async Task AMalformedWikidataIdIsRefusedByTheDatabase(string wikidata)
     {
         var attemptId = await ImportExecutiveAsync('a', 0);
-        await executives.AdmitAsync(attemptId, [new ExecutiveOfficial(1, null, "A", [])], default);
+        await executives.AdmitAsync(attemptId, [new ExecutiveOfficial(1, null, "A", null, [])], default);
 
         var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
             INSERT INTO executive_officials (attempt_id, govtrack_id, wikidata_id, full_name) VALUES ('{attemptId}', 2, {wikidata}, 'B')

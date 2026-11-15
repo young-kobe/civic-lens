@@ -104,6 +104,25 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         return [.. members.Select(member => ToMember(member, terms[member.BioguideId]))];
     }
 
+    public async Task<string?> ReadLatestSnapshotAttemptIdAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await RosterSnapshotRules.ReadLatestSnapshotAttemptIdAsync(db, sourceId, cancellationToken);
+    }
+
+    public async Task<int> FillLastNamesAsync(string attemptId, IReadOnlyList<RosterMember> parsed, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(attemptId);
+        var named = parsed.Where(member => member.LastName is not null).ToArray();
+        if (named.Length == 0) return 0;
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Database.ExecuteSqlRawAsync("""
+            UPDATE roster_members m SET last_name = k.last_name
+            FROM unnest({1}::text[], {2}::text[]) AS k(bioguide_id, last_name)
+            WHERE m.attempt_id = {0} AND m.bioguide_id = k.bioguide_id AND m.last_name IS NULL
+            """, [attemptId, named.Select(member => member.BioguideId).ToArray(), named.Select(member => member.LastName!).ToArray()], cancellationToken);
+    }
+
     // A member with no person row gets one in the snapshot transaction. People are matched by bioguide ID. The roster has no other key.
     // The read is not repeated for correctness: the unique keys of people refuse a concurrent mint of the same member.
     private static async Task AddNewPeopleAsync(CollectionAttemptDbContext db, string attemptId, IReadOnlyList<RosterMember> members,
@@ -141,6 +160,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
         AttemptId = attemptId,
         BioguideId = member.BioguideId,
         FullName = member.FullName,
+        LastName = member.LastName,
         Office = member.Office,
         Phone = member.Phone,
         Url = member.Url
@@ -162,7 +182,7 @@ public sealed class PostgresMemberRosterStore(IDbContextFactory<CollectionAttemp
     };
 
     private static RosterMember ToMember(RosterMemberRow member, IEnumerable<RosterTermRow> terms) =>
-        new(member.BioguideId, member.FullName, member.Office, member.Phone, member.Url,
+        new(member.BioguideId, member.FullName, member.LastName, member.Office, member.Phone, member.Url,
             [.. terms.Select(term => new RosterTerm(term.TermIndex, term.Chamber, term.StartsOn, term.EndsOn, term.State,
                 term.District, term.SenateClass, term.Party, term.Caucus))]);
 }

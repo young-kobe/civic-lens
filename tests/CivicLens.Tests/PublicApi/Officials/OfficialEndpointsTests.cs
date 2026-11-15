@@ -208,12 +208,44 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task OfficialsSortByTheWholeRosterLastNameThenTheNameThenTheIdAndAWalkKeepsThatOrder()
+    {
+        await using var host = await ApiHost.StartAsync(postgres);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("vh", "Chris Van Hollen") { SortName = "Van Hollen" },
+            new SeededOfficial("ho", "Bob Hollen") { SortName = "Hollen" },
+            new SeededOfficial("br", "Lisa Blunt Rochester") { SortName = "Blunt Rochester" },
+            new SeededOfficial("ro", "Zed Rochester") { SortName = "Rochester" },
+            new SeededOfficial("ws", "Debbie Wasserman Schultz") { SortName = "Wasserman Schultz" },
+            new SeededOfficial("sc", "Amy Schultz") { SortName = "Schultz" },
+            new SeededOfficial("s3", "Jason Smith") { SortName = "Smith" },
+            new SeededOfficial("s2", "Adam Smith") { SortName = "Smith" },
+            new SeededOfficial("s1", "Adam Smith") { SortName = "Smith" },
+            new SeededOfficial("nv", "Mia Vance"));
+        string[] expected = ["br", "ho", "nv", "ro", "sc", "s1", "s2", "s3", "vh", "ws"];
+
+        using (var whole = await GetAsync(host, "/v1/officials")) Assert.Equal(expected, Ids(whole));
+        var seen = new List<string>();
+        string? cursor = null;
+        do
+        {
+            using var page = await GetAsync(host, "/v1/officials?limit=2" + (cursor is null ? "" : "&cursor=" + Uri.EscapeDataString(cursor)));
+            seen.AddRange(Ids(page));
+            cursor = page.RootElement.GetProperty("nextCursor").GetString();
+        }
+        while (cursor is not null);
+        Assert.Equal(expected, seen);
+    }
+
+    [Fact]
     public async Task AWalkOverOfficialsWithNamesAndIdsOfTheFullColumnLengthFollowsEveryCursorTheServerWrites()
     {
         await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         string[] ids = [.. "abc".Select(letter => new string(letter, 256))];
-        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, [.. ids.Select(id => new SeededOfficial(id, new string(id[0], 255) + "é"))]);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            [.. ids.Select(id => new SeededOfficial(id, new string(id[0], 255) + "é") { SortName = new string(id[0], 255) + "é" })]);
         await OfficialsSeed.AddEntriesAsync(host.OperationalDatabase, new SeededEntry("statement", 'a', ids[0]));
         var seen = new List<string>();
         string? cursor = null;
