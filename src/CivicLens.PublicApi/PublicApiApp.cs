@@ -60,6 +60,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new BillStore(views));
         builder.Services.AddSingleton<BillPageReader>();
         builder.Services.AddSingleton<BillMembersReader>();
+        builder.Services.AddSingleton<VoteMembersReader>();
         builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(snapshot);
         builder.Services.AddSingleton(new StatementStore(views));

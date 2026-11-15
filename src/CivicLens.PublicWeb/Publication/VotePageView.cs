@@ -17,6 +17,35 @@ public static class VotePageView
     public const string StatementsNoteTag = "How to read this";
     public const string StatementsNote = "A linked statement is the record's own words. It is not a reason Civic Lens gives for the vote.";
     public const string CastOnThisVote = "Cast on this vote";
+    public const string ZipMembersHeading = "Your members on this vote";
+
+    /// <summary>The line that the members card shows to a reader with no saved ZIP. The device fills the card from the private fragment when a ZIP is saved.</summary>
+    public static string ZipMembersPrompt(PublishedChamber chamber) => chamber == PublishedChamber.Senate
+        ? "Enter your ZIP to see how your senators voted."
+        : "Enter your ZIP to see how your House member voted.";
+
+    /// <summary>The party of the member on the vote and the seat that the member holds now. A member with no recorded position has no party on the vote.</summary>
+    public static string ZipMemberSeat(VoteZipMemberData member) =>
+        member.Cast is null ? $"{member.SeatTitle}." : $"{member.Party ?? VoteWords.NoKnownParty}. {member.SeatTitle}.";
+
+    /// <summary>The party line of the member from <see cref="VoteZipMemberData.BreaksParty"/>, or null when the vote gives the member no party line.</summary>
+    public static string? ZipMemberPartyLine(VoteZipMemberData member) => (member.BreaksParty, member.Party) switch
+    {
+        (true, { } party) => "Voted " + VoteBreakers.AgainstMost(PublishedPartyNames.Members(party)),
+        (false, { } party) => "Voted " + VoteBreakers.WithMost(PublishedPartyNames.Members(party)),
+        _ => null
+    };
+
+    public static string ZipMemberNoPosition(VoteZipMemberData member) => $"{member.Name} has no recorded position on this vote.";
+
+    /// <summary>Says that the members of the other chamber do not vote on this roll call.</summary>
+    public static string OtherChamberNote(PublishedChamber chamber, int count) => (chamber, count) switch
+    {
+        (PublishedChamber.Senate, 1) => "Your House member does not vote in the Senate.",
+        (PublishedChamber.Senate, _) => "Your House members do not vote in the Senate.",
+        (_, 1) => "Your senator does not vote in the House.",
+        _ => "Your senators do not vote in the House."
+    };
 
     /// <summary>The most linked statements that the page lists, newest first.</summary>
     public const int StatementLimit = 10;

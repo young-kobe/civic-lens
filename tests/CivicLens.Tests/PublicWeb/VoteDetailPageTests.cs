@@ -12,7 +12,7 @@ public sealed class VoteDetailPageTests
     {
         var page = await RenderAsync(Vote());
 
-        var order = new[] { "h1.vote-headline", ".ai-summary", ".vote-result", ".vote-explain", ".vote-parties", ".vote-breakers", ".vote-members" }
+        var order = new[] { "h1.vote-headline", ".ai-summary", ".vote-result", ".vote-zip", ".vote-explain", ".vote-parties", ".vote-breakers", ".vote-members" }
             .Select(selector => Position(page, selector)).ToArray();
 
         Assert.All(order, position => Assert.True(position >= 0));
@@ -232,6 +232,67 @@ public sealed class VoteDetailPageTests
         Assert.NotNull(byCast.QuerySelector(".vote-members details")!.GetAttribute("open"));
         Assert.Contains("2 of 5 tracked members shown.", byCast.QuerySelector(".vote-members")!.TextContent);
         Assert.Contains("No tracked member matches these filters.", none.QuerySelector(".vote-members")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheMembersCardFollowsTheResultWithTheApprovedHeadingAndPromptAndHoldsNoZipOrMemberData()
+    {
+        var house = await RenderAsync(Vote());
+        var senate = await RenderAsync(Vote() with { Chamber = PublishedChamber.Senate });
+
+        var card = house.QuerySelector(".vote-zip")!;
+        Assert.Same(house.QuerySelector(".vote-result")!.NextElementSibling, card);
+        Assert.Equal("Your members on this vote", card.QuerySelector("h2")!.TextContent);
+        Assert.Equal(RecordId, card.GetAttribute("data-record-id"));
+        Assert.Equal(Vote().Release.ToString(System.Globalization.CultureInfo.InvariantCulture), card.GetAttribute("data-release"));
+        Assert.Equal("Enter your ZIP to see how your House member voted. Find my members", card.QuerySelector("[data-vote-members-prompt]")!.TextContent);
+        Assert.Equal(Root + "index.html#zip-results", card.QuerySelector("[data-vote-members-prompt] a")!.GetAttribute("href"));
+        Assert.Equal("Enter your ZIP to see how your senators voted. Find my members", senate.QuerySelector("[data-vote-members-prompt]")!.TextContent);
+        Assert.Equal(0, card.QuerySelector("[data-vote-members-body]")!.ChildElementCount);
+        Assert.Null(house.QuerySelector("[data-zcta]"));
+        Assert.DoesNotContain(Vote().Members, member => card.TextContent.Contains(member.Name, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheScriptFillsTheVoteCardFromThePrivateVoteFragmentOfThePageReleaseOnly()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+
+        Assert.Contains("document.querySelectorAll(\"[data-vote-members]\").forEach(card => initRecordMembers(rememberedMembers, card, membersStrip, \"vote\"));", script, StringComparison.Ordinal);
+        Assert.Contains("${api}/v1/zip-districts/${zip}/${kind}s/", script, StringComparison.Ordinal);
+        Assert.Contains("if (fragment.dataset.release !== card.dataset.release) { clear(); return; }", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheFinderFiltersWhileTypingOnlyWhenTheTableHoldsEveryMemberAndEachRowCarriesItsCastAndPartyKeys()
+    {
+        var vote = Vote() with { Members = [.. Members, new("o6", "Fay Fox", "Not Voting", null, Cite(Lines[4]))] };
+
+        var all = await RenderAsync(vote);
+        var filtered = await RenderAsync(vote, new(Cast: "Nay"));
+
+        Assert.NotNull(all.QuerySelector("form.vote-filter")!.GetAttribute("data-member-finder"));
+        Assert.Null(filtered.QuerySelector("form.vote-filter")!.GetAttribute("data-member-finder"));
+        Assert.Equal(VoteMemberFilter.NoMatch, all.QuerySelector("[data-member-finder-status]")!.GetAttribute("data-no-match"));
+        var keys = all.QuerySelectorAll(".vote-members tbody tr").ToDictionary(row => row.QuerySelector("td:first-child")!.TextContent, row => row.GetAttribute("data-filter-keys"));
+        Assert.Equal("cast:Aye party:Democrat", keys["Ada Able"]);
+        Assert.Equal("cast:Not%20Voting party:none", keys["Fay Fox"]);
+        var castValues = all.QuerySelectorAll("#vote-filter-cast option").Select(option => option.GetAttribute("value")).Where(value => value != "");
+        Assert.All(castValues, value => Assert.Contains(keys.Values, key => key!.StartsWith($"cast:{Uri.EscapeDataString(value!)} ", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void TheFinderScriptMatchesTheNameCastAndPartyAsTheServerFilterDoesAndPagesTheMatchingRows()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
+
+        Assert.Contains("document.querySelectorAll(\"form[data-member-finder]\").forEach(initMemberFinder);", script, StringComparison.Ordinal);
+        Assert.Contains("(wanted !== \"\" && !row.cells[0].textContent.toLowerCase().includes(wanted))", script, StringComparison.Ordinal);
+        Assert.Contains("(cast.value !== \"\" && rowKeys.get(\"cast\") !== cast.value)", script, StringComparison.Ordinal);
+        Assert.Contains("(party.value !== \"\" && rowKeys.get(\"party\") !== party.value)", script, StringComparison.Ordinal);
+        Assert.Contains("name.addEventListener(\"input\", apply);", script, StringComparison.Ordinal);
+        Assert.Contains("form.addEventListener(\"submit\", event => { event.preventDefault(); apply(); });", script, StringComparison.Ordinal);
+        Assert.True(script.IndexOf("forEach(initPaged);", StringComparison.Ordinal) < script.IndexOf("forEach(initMemberFinder);", StringComparison.Ordinal));
     }
 
     [Fact]

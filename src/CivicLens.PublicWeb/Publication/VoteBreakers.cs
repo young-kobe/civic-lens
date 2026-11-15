@@ -6,6 +6,9 @@ public static class VoteBreakers
     /// <summary>The phrase after "voted": against most of a group, such as "against most Democrats".</summary>
     public static string AgainstMost(string group) => $"against most {group}";
 
+    /// <summary>The phrase after "voted": with most of a group, such as "with most Democrats".</summary>
+    public static string WithMost(string group) => $"with most {group}";
+
     public static string Headline(int count) => $"{count} tracked {(count == 1 ? "member" : "members")} voted {AgainstMost("of the party")}";
 
     public const string None = "no tracked member voted against most of the party.";
