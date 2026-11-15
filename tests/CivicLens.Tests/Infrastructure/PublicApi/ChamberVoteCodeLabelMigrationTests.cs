@@ -48,6 +48,19 @@ public sealed class ChamberVoteCodeLabelMigrationTests(PostgresCollection postgr
         await AssertLabelsAsync(ByChamber);
     }
 
+    [Fact]
+    public async Task TheLaterStatementViewKeepsTheSenateLabelInRecordHeadlinesAndItsRollbackReturnsTheHouseLabel()
+    {
+        var migration = new ChamberRecordHeadlineLabel();
+        await ApplyAsync(migration.DownOperations);
+        Assert.Equal(HouseText, await LabelsAsync("record_headlines WHERE kind = 'vote'"));
+
+        await ApplyAsync(migration.UpOperations);
+        Assert.Equal(ByChamber, await LabelsAsync("record_headlines WHERE kind = 'vote'"));
+        Assert.Contains("The source text of this press release", Assert.Single(await ViewsSeed.QueryAsync(database,
+            "SELECT pg_get_viewdef('public_api.record_headlines'::regclass)")), StringComparison.Ordinal);
+    }
+
     private async Task AssertLabelsAsync(string[] expected)
     {
         Assert.Equal(expected, await LabelsAsync("votes"));

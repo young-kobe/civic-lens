@@ -68,7 +68,11 @@ public partial class ShortStatementSourceText : Migration
          WHERE a.kind = 'statement' AND r.headline IS NOT NULL AND r.summary IS NOT NULL AND e.approved_by IS NOT NULL
            AND EXISTS (SELECT 1 FROM public.statement_revision_speakers s
                         WHERE s.candidate_id = r.candidate_id AND s.revision_number = r.revision_number);
+        """ + RecordHeadlinesView(ChamberVoteCodeLabel.VoteCodeLabel("r", byChamber: false));
 
+    /// <summary>The record headlines view with the statement label of this migration. The vote code label is a SQL expression, so a later
+    /// migration can give it the chamber rule of <c>ChamberVoteCodeLabel</c>.</summary>
+    internal static string RecordHeadlinesView(string voteCodeLabel) => $$"""
         CREATE OR REPLACE VIEW public_api.record_headlines WITH (security_barrier = true) AS
         SELECT a.kind, a.record_id, r.headline, r.text_origin, CASE r.text_origin
                  WHEN 'Model' THEN 'An AI summary of the official record'
@@ -80,7 +84,7 @@ public partial class ShortStatementSourceText : Migration
         UNION ALL
         SELECT a.kind, a.record_id, r.headline, r.text_origin, CASE r.text_origin
                  WHEN 'Model' THEN 'An AI summary of the official record'
-                 WHEN 'Code' THEN 'Written automatically from Congress.gov data, with no AI'
+                 WHEN 'Code' THEN {{voteCodeLabel}}
                END
           FROM public_api.active_records a
           JOIN public.vote_revisions r ON r.record_id = a.record_id AND r.revision_number = a.revision_number
