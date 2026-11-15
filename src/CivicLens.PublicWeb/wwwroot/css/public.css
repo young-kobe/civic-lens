@@ -723,6 +723,10 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .official-strip [data-mark="other"], .official-legend [data-mark="other"] { background: linear-gradient(var(--ink-2) 1px, transparent 1px) 0 0 / 6px 6px, linear-gradient(90deg, var(--ink-2) 1px, transparent 1px) 0 0 / 6px 6px; }
 .official-strip [data-breaks="party"], .official-legend [data-breaks="party"] { box-shadow: 0 0 0 2px var(--vote-surface), 0 0 0 4px var(--ink); }
 .official-legend [data-breaks="party"]:not([data-mark]) { background: transparent; }
+.vote-zip-member-line .against { background: var(--against); }
+.vote-zip-member-line .against[data-tone="democrat"] { --against: var(--party-dem); background: repeating-linear-gradient(135deg, var(--party-dem) 0 4px, color-mix(in srgb, var(--party-dem) 72%, var(--surface)) 4px 7px); }
+.vote-zip-member-line .against[data-tone="republican"] { --against: var(--party-rep); background: repeating-linear-gradient(135deg, var(--party-rep) 0 4px, color-mix(in srgb, var(--party-rep) 72%, var(--surface)) 4px 7px); }
+.vote-zip-member-line .against[data-tone="neutral"] { --against: var(--muted); background: repeating-linear-gradient(135deg, var(--against) 0 4px, color-mix(in srgb, var(--against) 72%, var(--surface)) 4px 7px); }
 .official-legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin: 0 0 var(--s4); padding: 0; list-style: none; color: var(--ink-2); font-size: var(--t-sm); }
 .official-legend li { display: flex; align-items: center; gap: var(--s2); }
 .official-legend .swatch { width: 16px; height: 16px; flex: none; border-radius: 4px; }
@@ -816,6 +820,17 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .vote-layout h3 { margin: var(--s4) 0 var(--s2); font-size: var(--t-lg); font-weight: 800; }
 .vote-layout p { max-width: var(--measure); }
 .vote-result { box-shadow: inset 0 4px 0 var(--vote-ink), var(--e1); }
+/* The members card takes the accent ring of the bill page members card, the one raised card of the page. */
+.vote-layout .vote-zip { box-shadow: inset 0 0 0 2px var(--marigold), var(--e1); }
+.vote-layout .vote-zip h2 { font-family: var(--heading); font-size: 1.25rem; letter-spacing: -.015em; }
+.vote-zip p { margin: 0; }
+.vote-zip [data-vote-members-body]:empty { display: none; }
+.vote-zip [data-vote-members-fragment] { display: grid; gap: var(--s3); }
+.vote-zip-members { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.vote-zip-members li { display: grid; gap: var(--s1); }
+.vote-zip-member { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.vote-zip-member-line { display: flex; align-items: center; gap: var(--s2); }
+.vote-zip-member-line .swatch { width: 16px; height: 16px; flex: none; border-radius: 4px; }
 .vote-result-word { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin: 0 0 var(--s3); font-family: var(--display); font-size: clamp(3.5rem, 6vw, 4.75rem); font-weight: 900; font-stretch: 62%; letter-spacing: -.01em; line-height: .95; }
 .vote-result-word .badge { font-family: var(--ui); font-size: .8rem; font-stretch: 100%; letter-spacing: 0; }
 .vote-result .party-bar { margin-top: var(--s4); }
@@ -899,10 +914,11 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 
 @media (min-width: 1280px) {
     .public-main:has(> .content > .vote) { padding: var(--s6) var(--frame-pad) var(--s7); }
-    .vote-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto 1fr; gap: var(--s4) 32px; align-items: start; }
-    .vote-main { grid-column: 1; grid-row: 1 / span 2; }
+    .vote-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto auto 1fr; gap: var(--s4) 32px; align-items: start; }
+    .vote-main { grid-column: 1; grid-row: 1 / span 3; }
     .vote-result { grid-column: 2; grid-row: 1; }
-    .vote-rail { grid-column: 2; grid-row: 2; position: sticky; top: 88px; max-height: calc(100vh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 4px; margin: -4px; }
+    .vote-zip { grid-column: 2; grid-row: 2; }
+    .vote-rail { grid-column: 2; grid-row: 3; position: sticky; top: 88px; max-height: calc(100vh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 4px; margin: -4px; }
 }
 
 /* Lists, boards and search */

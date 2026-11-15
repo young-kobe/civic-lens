@@ -13,7 +13,7 @@
     <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
     @if (AChamberHasOnlyVacantSeats)
     {
-        <p class="muted" data-member-votes-empty>No current member is in our records.</p>
+        <p class="muted" data-member-votes-empty>@ZipMemberCard.NoCurrentMember</p>
     }
     @if (MemberRows.Length == 0 && Data.Seats.Any(seat => seat.Member is not null))
     {

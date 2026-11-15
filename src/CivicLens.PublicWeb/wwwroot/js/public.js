@@ -579,12 +579,13 @@
         }
     };
 
-    // The bill page card holds no ZIP or member data in the cached page. A remembered ZIP fills it from the private fragment of the browser API.
-    // A failed read shows the shared lookup failure text, because the reader already gave a ZIP. Only a reader with no ZIP sees the prompt.
-    const initBillMembers = (remembered, card, strip) => {
+    // The members card of a bill page or a vote page holds no ZIP or member data in the cached page. A remembered ZIP fills it from the private fragment of the browser API.
+    // The kind is "bill" or "vote". It names the card attributes, the fragment marker, and the route. A failed read shows the shared lookup failure text,
+    // because the reader already gave a ZIP. Only a reader with no ZIP sees the prompt.
+    const initRecordMembers = (remembered, card, strip, kind) => {
         const api = strip?.dataset.membersApi;
-        const body = card.querySelector("[data-bill-members-body]");
-        const prompt = card.querySelector("[data-bill-members-prompt]");
+        const body = card.querySelector(`[data-${kind}-members-body]`);
+        const prompt = card.querySelector(`[data-${kind}-members-prompt]`);
         let request = 0;
         const clear = () => { request++; body.replaceChildren(); prompt.hidden = false; };
         const fail = (zip, status) => { body.replaceChildren(memberFailure(zip, status, strip.dataset.officialsPage)); prompt.hidden = true; };
@@ -593,17 +594,17 @@
             if (!validZip(zip) || !api) { clear(); return; }
             const mine = ++request;
             try {
-                const response = await fetch(`${api}/v1/zip-districts/${zip}/bills/${encodeURIComponent(card.dataset.recordId)}`, { headers: { Accept: "text/html" } });
+                const response = await fetch(`${api}/v1/zip-districts/${zip}/${kind}s/${encodeURIComponent(card.dataset.recordId)}`, { headers: { Accept: "text/html" } });
                 if (!response.ok) { if (mine === request) fail(zip, response.status); return; }
-                if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? "")) throw new TypeError("Invalid bill members answer.");
+                if (!/^text\/html(?:;|$)/i.test(response.headers.get("Content-Type") ?? "")) throw new TypeError("Invalid record members answer.");
                 const template = document.createElement("template");
                 template.innerHTML = await response.text();
                 const fragment = template.content.firstElementChild;
                 if (mine !== request) return;
-                if (template.content.childElementCount !== 1 || !fragment.matches("div[data-bill-members-fragment]")
+                if (template.content.childElementCount !== 1 || !fragment.matches(`div[data-${kind}-members-fragment]`)
                     || fragment.dataset.zcta !== zip || fragment.dataset.recordId !== card.dataset.recordId || !positiveRelease(fragment.dataset.release))
-                    throw new TypeError("Invalid bill members answer.");
-                // The backers and votes of the page cover one release. A fragment of another release would disagree with them.
+                    throw new TypeError("Invalid record members answer.");
+                // The page covers one release. A fragment of another release would disagree with it.
                 if (fragment.dataset.release !== card.dataset.release) { clear(); return; }
                 body.replaceChildren(fragment);
                 prompt.hidden = true;
@@ -1061,6 +1062,45 @@
     window.addEventListener("hashchange", openFoldOfHash);
     openFoldOfHash();
 
+    // The member finder of a vote page filters the folded member table while the reader types or picks a cast or a party. Without script the GET form reloads the page.
+    // The server marks the form only when the table holds every member. A name matches any part of the member name, ignoring case, as VoteMemberFilter does.
+    // The cast and party keys of each row come from VoteMemberFilter.Keys. The filtered rows go through the pager of the table.
+    const initMemberFinder = form => {
+        const section = form.closest(".vote-members");
+        const table = section.querySelector("table[data-paged]");
+        const status = section.querySelector("[data-member-finder-status]");
+        if (!table || !status) return;
+        const rows = Array.from(table.tBodies[0].rows);
+        const name = form.elements.namedItem("q");
+        const cast = form.elements.namedItem("cast");
+        const party = form.elements.namedItem("party");
+        const keysOf = row => new Map((row.dataset.filterKeys ?? "").split(" ").map(key => {
+            const split = key.indexOf(":");
+            return [key.slice(0, split), decodeURIComponent(key.slice(split + 1))];
+        }));
+        const keys = new Map(rows.map(row => [row, keysOf(row)]));
+        const apply = () => {
+            const wanted = name.value.trim().toLowerCase();
+            let shown = 0;
+            for (const row of rows) {
+                const rowKeys = keys.get(row);
+                const hides = (wanted !== "" && !row.cells[0].textContent.toLowerCase().includes(wanted))
+                    || (cast.value !== "" && rowKeys.get("cast") !== cast.value)
+                    || (party.value !== "" && rowKeys.get("party") !== party.value);
+                row.toggleAttribute("data-filtered-out", hides);
+                if (!hides) shown++;
+            }
+            showRows(table, true);
+            table.closest(".table-wrap").hidden = shown === 0;
+            status.textContent = `${shown} of ${rows.length} tracked members shown.` + (shown === 0 ? ` ${status.dataset.noMatch}` : "");
+        };
+        name.addEventListener("input", apply);
+        cast.addEventListener("change", apply);
+        party.addEventListener("change", apply);
+        form.addEventListener("submit", event => { event.preventDefault(); apply(); });
+        form.querySelector(".vote-filter-actions").hidden = true;
+    };
+
     // The filter fold of a record list opens on a wide screen, as the approved mockup does. The server opens it when a filter is active.
     if (matchMedia("(min-width: 720px)").matches) document.querySelectorAll("details[data-wide-open]").forEach(fold => { fold.open = true; });
 
@@ -1095,6 +1135,7 @@
     };
 
     document.querySelectorAll("table[data-paged]").forEach(initPaged);
+    document.querySelectorAll("form[data-member-finder]").forEach(initMemberFinder);
     document.querySelectorAll("[data-vote-map]:not([data-compact])").forEach(initVoteMapView);
     document.querySelectorAll("[data-records]").forEach(initRecordFilters);
     document.querySelectorAll("[data-officials-filters]").forEach(initOfficialsFilter);
@@ -1104,7 +1145,8 @@
     document.querySelectorAll("[data-zip-api]").forEach(form => initZipLookup(form, rememberedMembers));
     const membersStrip = document.querySelector("#members-strip");
     if (membersStrip) initMemberStrip(rememberedMembers, membersStrip);
-    document.querySelectorAll("[data-bill-members]").forEach(card => initBillMembers(rememberedMembers, card, membersStrip));
+    document.querySelectorAll("[data-bill-members]").forEach(card => initRecordMembers(rememberedMembers, card, membersStrip, "bill"));
+    document.querySelectorAll("[data-vote-members]").forEach(card => initRecordMembers(rememberedMembers, card, membersStrip, "vote"));
     const issueMembers = document.querySelector("[data-issue-members]");
     if (issueMembers) initIssueMembers(rememberedMembers, issueMembers);
     document.querySelectorAll("[data-official-members]").forEach(slot => initOfficialMembers(rememberedMembers, slot));

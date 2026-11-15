@@ -99,11 +99,14 @@
     else
     {
         <h3>@Seat.Title</h3>
-        <p>No current member is in our records.</p>
+        <p>@NoCurrentMember</p>
     }
 </li>
 
 @code {
+    /// <summary>The line for a seat that no current member holds. The issue votes and the vote members fragments show it too.</summary>
+    public const string NoCurrentMember = "No current member is in our records.";
+
     [Parameter, EditorRequired] public ZipMemberSeatData Seat { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
     [Parameter, EditorRequired] public string IdPrefix { get; set; } = default!;

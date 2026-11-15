@@ -2,8 +2,10 @@ using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Net.Http.Headers;
@@ -27,7 +29,18 @@ public static class ZipDistrictEndpoints
             return ApiResults.Json(answer);
         }));
         v1.MapGet("/zip-districts/{zcta}/members", MembersAsync);
-        v1.MapGet("/zip-districts/{zcta}/bills/{recordId}", BillMembersAsync);
+        v1.MapGet("/zip-districts/{zcta}/bills/{recordId}", (string zcta, string recordId, HttpContext http, BillMembersReader reader, PageRenderer renderer, CancellationToken cancellationToken) =>
+            RecordMembersAsync<BillMembersFragment>(zcta, recordId, http, renderer, async request =>
+            {
+                var answer = await reader.ReadAsync(request, recordId, cancellationToken);
+                return (answer.Data, answer.Miss);
+            }));
+        v1.MapGet("/zip-districts/{zcta}/votes/{recordId}", (string zcta, string recordId, HttpContext http, VoteMembersReader reader, PageRenderer renderer, CancellationToken cancellationToken) =>
+            RecordMembersAsync<VoteMembersFragment>(zcta, recordId, http, renderer, async request =>
+            {
+                var answer = await reader.ReadAsync(request, recordId, cancellationToken);
+                return (answer.Data, answer.Miss);
+            }));
     }
 
     private static Task<IResult> MembersAsync(string zcta, HttpContext http, ZipDistrictStore zips, PageRenderer renderer, PublicApiOptions options,
@@ -87,18 +100,22 @@ public static class ZipDistrictEndpoints
         });
     }
 
-    /// <summary>The private fragment of the bill page card "Your members and this bill". Like the member cards, it names the members of one ZIP area, so no cache keeps it.</summary>
-    private static Task<IResult> BillMembersAsync(string zcta, string recordId, HttpContext http, BillMembersReader reader, PageRenderer renderer, CancellationToken cancellationToken)
+    /// <summary>
+    /// The private fragment of a record page card: "Your members and this bill" on the bill page and "Your members on this vote" on the vote page.
+    /// Like the member cards, it names the members of one ZIP area, so no cache keeps it. The fragment component takes the read data as its <c>Data</c> parameter.
+    /// </summary>
+    private static Task<IResult> RecordMembersAsync<TFragment>(string zcta, string recordId, HttpContext http, PageRenderer renderer,
+        Func<ZipDistrictRequest, Task<(object? Data, ZipLookupMiss? Miss)>> read) where TFragment : IComponent
     {
         http.Response.Headers.CacheControl = "private, no-store";
         return ApiResults.GuardAsync(async () =>
         {
             var request = ZipDistrictRequest.Parse(zcta, http.Request.Query);
             if (!PublicationProtocol.IsAnyRecordId(recordId)) return ApiResults.RecordNotFound();
-            var answer = await reader.ReadAsync(request, recordId, cancellationToken);
-            if (answer.Miss is { } miss) return Miss(miss);
-            if (answer.Data is not { } data) return ApiResults.RecordNotFound();
-            var html = await renderer.RenderAsync<BillMembersFragment>(new Dictionary<string, object?> { [nameof(BillMembersFragment.Data)] = data });
+            var (data, miss) = await read(request);
+            if (miss is { } found) return Miss(found);
+            if (data is null) return ApiResults.RecordNotFound();
+            var html = await renderer.RenderAsync<TFragment>(new Dictionary<string, object?> { ["Data"] = data });
             return Results.Content(html, "text/html; charset=utf-8");
         });
     }
