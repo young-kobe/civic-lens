@@ -17,7 +17,7 @@ public sealed class WithdrawalEndpointsTests(PostgresCollection postgres)
     [Fact]
     public async Task NoticeUsesOnlyTheActiveReleaseEpisodeAndKeepsEveryTypedCorrection()
     {
-        // Only a vote correction can name a text rewrite, so the typed correction list belongs to a vote.
+        // Only a vote correction can name a model rewrite, so the typed correction list belongs to a vote.
         var host = await ApiHost.StartAsync(postgres);
         await using (host)
         {

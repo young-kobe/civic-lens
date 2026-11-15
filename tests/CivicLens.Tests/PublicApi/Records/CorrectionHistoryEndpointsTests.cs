@@ -110,10 +110,11 @@ public sealed class CorrectionHistoryEndpointsTests(PostgresCollection postgres)
         using var wrongPosition = await host.Client.GetAsync($"/v1/records/vote/{Id}/corrections");
         Assert.Equal(HttpStatusCode.InternalServerError, wrongPosition.StatusCode);
 
-        PublishedCorrection[] actionHistory = [new() { ReplacedRevisionNumber = 1, PublishedAtUtc = DateTimeOffset.UnixEpoch, TextRewrite = PublishedTextRewrite.Code }];
+        // Only a vote correction can name a model rewrite.
+        PublishedCorrection[] actionHistory = [new() { ReplacedRevisionNumber = 1, PublishedAtUtc = DateTimeOffset.UnixEpoch, TextRewrite = PublishedTextRewrite.Model }];
         await SeedAsync(host.OperationalDatabase, 2, "action", 2, PublishedCorrectionHistoryIdentity.Of(actionHistory), actionHistory);
-        using var actionTextRewrite = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
-        Assert.Equal(HttpStatusCode.InternalServerError, actionTextRewrite.StatusCode);
+        using var actionModelRewrite = await host.Client.GetAsync($"/v1/records/action/{Id}/corrections");
+        Assert.Equal(HttpStatusCode.InternalServerError, actionModelRewrite.StatusCode);
     }
 
     /// <summary>Seeds a record of the kind with its correction history. The history view needs no published entry, so none is seeded.</summary>

@@ -157,11 +157,13 @@ public sealed class PublishedCorrectionTests
     }
 
     [Fact]
-    public void OnlyAVoteCorrectionCanNameATextRewriteBecauseTheWordsNameTheVoteFacts()
+    public void OnlyAVoteCorrectionCanNameAModelRewriteAndOnlyAVoteOrABillActionCorrectionACodeRewrite()
     {
         PublishedCorrection.ValidateAll([Entry(1, rewrite: Model)], 2, PublishedRecordKind.Vote);
         PublishedCorrection.ValidateAll([Entry(1, rewrite: Code)], 2, PublishedRecordKind.Vote);
-        foreach (var kind in Enum.GetValues<PublishedRecordKind>().Where(kind => kind != PublishedRecordKind.Vote))
+        PublishedCorrection.ValidateAll([Entry(1, rewrite: Code)], 2, PublishedRecordKind.Action);
+        Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, rewrite: Model)], 2, PublishedRecordKind.Action));
+        foreach (var kind in Enum.GetValues<PublishedRecordKind>().Where(kind => kind is not (PublishedRecordKind.Vote or PublishedRecordKind.Action)))
         {
             PublishedCorrection.ValidateAll([Entry(1)], 2, kind);
             Assert.Throws<InvalidDataException>(() => PublishedCorrection.ValidateAll([Entry(1, rewrite: Model)], 2, kind));
