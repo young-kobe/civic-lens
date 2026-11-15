@@ -29,6 +29,8 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
         if (officials.IsEmpty)
             return await attempt.CompleteAsync(State.Blocked, StatementDraftErrorCodes.SpeakersUnavailable, cancellationToken);
         attempt.ContextJson = StatementDraftPrompt.SerializeContext(officials, evidence.CarryOver);
+        if (StatementSourceText.Read(evidence.Article.Extraction) is { } sourceText)
+            return await SettleSourceTextAsync(attempt, evidence, sourceText, allowed, SpeakersOf(officials, officeOf), officeOf, cancellationToken);
 
         var loop = new AnalysisValidationLoop<StatementDraftRun, StatementDraftRevision>(Wrap, attempt, AnalysisRunOutcome.Drafted,
             AiTextRules.MaximumValidationPasses, errors => StatementDraftPrompt.Build(evidence, officials, settings.PromptByteCap, errors),
@@ -43,6 +45,22 @@ public sealed class StatementDraftStep(IStatementDraftStore store, IStatementDra
             _ => result.Progress
         };
     }
+
+    /// <summary>A short release makes no model call. Code writes its source text as the revision, with a Bypassed run, and the code
+    /// approval checks it as it checks a model draft. This follows the code text of an action.</summary>
+    private static Task<bool> SettleSourceTextAsync(IAnalysisAttempt<StatementDraftRun> attempt, StatementDraftEvidence evidence,
+        StatementSourceText sourceText, StatementAllowedSelections allowed, ImmutableArray<string> speakers, string? officeOf,
+        CancellationToken cancellationToken)
+    {
+        var run = attempt.BypassRun(StatementDraftTask.Model, evidence.Article.Extraction.TextSha256, null);
+        var revision = sourceText.Revision(evidence, speakers, run.FinishedAtUtc);
+        return attempt.SettleAsync(new StatementDraftRun(run, StatementDraftErrorCodes.SourceText), StatementDraftCheckpoint.From(attempt.Claim,
+            revision, StatementCodeApproval.Check(evidence, allowed, officeOf, revision)), cancellationToken);
+    }
+
+    /// <summary>Code knows the speaker only from the office owner of the source or from its one covered official.</summary>
+    private static ImmutableArray<string> SpeakersOf(ImmutableArray<AnalysisOfficial> officials, string? officeOf) =>
+        officials.Any(official => official.Id == officeOf) ? [officeOf!] : officials is [var only] ? [only.Id] : [];
 
     private static AnalysisResolution<StatementDraftRevision> Resolve(string outputJson, StatementDraftEvidence evidence,
         ImmutableArray<AnalysisOfficial> officials, AnalysisRun run)

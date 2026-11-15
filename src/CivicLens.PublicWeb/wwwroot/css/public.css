@@ -636,6 +636,7 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .shared-vote-meta .ai-label { display: inline-block; margin-inline-start: var(--s1); }
 .official-row-title + .ai-label { margin-inline-start: var(--s2); }
 .ai-summary-check { font-size: var(--t-sm); }
+.ai-summary .doc-text { max-height: none; margin: 0 0 var(--s3); padding: 0; background: none; color: var(--ink); }
 .link-chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 550; text-decoration: none; }
 .link-chip:hover { border-color: var(--info); }
 .link-chip:focus-visible, .source-fold > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }

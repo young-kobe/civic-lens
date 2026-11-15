@@ -10,12 +10,12 @@ namespace CivicLens.Infrastructure.Statements;
 
 internal static class StatementDraftRows
 {
-    /// <summary>Appends the revision of the worker under the review lock. The revision must follow the current revision of the draft, so a
+    /// <summary>Appends the model or code revision of the worker under the review lock. The revision must follow the current revision of the draft, so a
     /// person save that came first makes the append fail and write nothing. A draft with a final decision of a person takes no revision.</summary>
-    public static async Task<bool> TryAppendAnalysisRevisionAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
+    public static async Task<bool> TryAppendWorkerRevisionAsync(CollectionAttemptDbContext db, StatementDraftRevision revision, string runId,
         ApprovalCheck codeApproval, CancellationToken cancellationToken)
     {
-        revision.ValidateAsAnalysisRevision();
+        revision.ValidateAsWorkerRevision();
         await PostgresAdvisoryLock.AcquireAsync(db, PostgresAdvisoryLock.StatementReview, cancellationToken);
         var draft = await db.Set<StatementDraftRow>().SingleOrDefaultAsync(row => row.CandidateId == revision.CandidateId, cancellationToken);
         if (!FollowsUntouchedDraft(draft, revision)) return false;

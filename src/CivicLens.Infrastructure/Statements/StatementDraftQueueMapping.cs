@@ -41,11 +41,12 @@ internal sealed class StatementDraftQueueMapping(Func<CollectionAttemptDbContext
     {
         if (settlement.Checkpoint is not StatementDraftCheckpoint { Revision: { } revision } checkpoint || settlement.Run is not { } run)
             return settlement;
-        if (run.Run.Outcome != AnalysisRunOutcome.Drafted) throw new ArgumentException("A draft needs its drafted run.", nameof(settlement));
+        if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
+            throw new ArgumentException("A draft needs its drafted or bypassed run.", nameof(settlement));
         if (checkpoint.CodeApproval is not { } codeApproval) throw new ArgumentException("A draft needs its approval check.", nameof(settlement));
-        if (await StatementDraftRows.TryAppendAnalysisRevisionAsync(db, revision, run.Run.RunId, codeApproval, cancellationToken)) return settlement;
-        return new(checkpoint with { Revision = null, ErrorCode = StatementDraftErrorCodes.DraftDiscarded },
-            run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } });
+        if (await StatementDraftRows.TryAppendWorkerRevisionAsync(db, revision, run.Run.RunId, codeApproval, cancellationToken)) return settlement;
+        var discarded = run.Run.Outcome == AnalysisRunOutcome.Drafted ? run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } } : run;
+        return new(checkpoint with { Revision = null, ErrorCode = StatementDraftErrorCodes.DraftDiscarded }, discarded);
     }
 
     public async Task AfterTransitionAsync(CollectionAttemptDbContext db, StatementAnalysisRow row, AnalysisCheckpoint checkpoint, long now,

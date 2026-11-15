@@ -32,6 +32,10 @@ public static class FeedStatementExtractions
         return new FeedStatementReading(extractions, unreadable);
     }
 
+    /// <summary>A feed item text starts with the feed lines of <see cref="FeedItemRenderer"/>, so its first line is not its title.</summary>
+    public static bool IsFeedItem(DocumentExtraction extraction) =>
+        extraction.ExtractionVersion.StartsWith(Version + "+", StringComparison.Ordinal);
+
     private static async Task<string?> TryExtractAsync(IDocumentTextExtractor extractor, string html,
         CancellationToken cancellationToken)
     {
