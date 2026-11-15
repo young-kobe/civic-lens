@@ -11,17 +11,17 @@ namespace CivicLens.Infrastructure.Collection.Migrations;
 /// </summary>
 public partial class PressReleaseStatementLabel : Migration
 {
-    private const string CodeLabel = "An AI summary of this press release.";
+    internal const string CodeLabel = "An AI summary of this press release.";
 
     private const string FormerCodeLabel = "An AI summary of this release.";
 
-    private const string PersonLabel = "Drafted by an AI model from this source. A person checked it before publication.";
+    internal const string PersonLabel = "Drafted by an AI model from this source. A person checked it before publication.";
 
     protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(StatementLabelViews(CodeLabel));
 
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(StatementLabelViews(FormerCodeLabel));
 
-    private static string StatementLabelViews(string codeLabel) => $$"""
+    internal static string StatementLabelViews(string codeLabel) => $$"""
         CREATE OR REPLACE VIEW public_api.statements WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, r.statement_date, r.headline, r.summary,
                CASE r.author_kind WHEN 'Analysis' THEN 'Model' ELSE 'Person' END AS text_origin,

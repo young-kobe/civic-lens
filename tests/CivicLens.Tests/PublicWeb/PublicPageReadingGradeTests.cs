@@ -428,6 +428,8 @@ public sealed class PublicPageReadingGradeTests
             ("official bare", Page<OfficialProfilePage>(With("Data", new OfficialPageData(7, "p9", "Una Unseen", PublishedOfficeKind.Senator, "Senate", "TX", null, null, null, null, null) { BillCountsAbsent = true })), ["Una Unseen"]),
             ("statement bare", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement(PublishedTextOrigin.Person, dated: false, quotes: 0))), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
             ("statement many quotes", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement(quotes: 2))), ["Kelly announces", "A model wrote", "Mark Kelly", "Adam Schiff"]),
+            ("statement source text", Page<StatementDetailPage>(With("Data", DetailPageFixture.Statement(PublishedTextOrigin.Code, dated: false, quotes: 5) with { Summary = DetailPageFixture.StatementText, Label = AiLabelWords.StatementSourceTextWording })),
+                ["Kelly announces", "Mark Kelly", "Adam Schiff"]),
             ("document change dated", Page<DocumentChangeDetailPage>(With("Data", DetailPageFixture.Change(changeDate: new(2026, 10, 15), passages: 12))), ["Example Agency", "The agency cut", "A shorter notice", "The text alone"]),
             ("brief empty", Page<BriefDetailPage>(With("Data", brief with { Label = null, TextOrigin = PublishedTextOrigin.Person, ApprovedAtUtc = null, FirstPublishedAtUtc = null })), ["The week in Congress", "First paragraph", "Kelly announces"]),
             ("official", Page<OfficialProfilePage>(With("Data", official, ("BrowserApiUrl", "https://api.civic-lens.test"))), ["Ann Able", "House passes", "statement about", "H.R. 40", "Referred to"]),

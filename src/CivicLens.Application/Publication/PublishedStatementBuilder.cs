@@ -18,7 +18,7 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
             RevisionNumber = revision.RevisionNumber,
             Headline = revision.Headline,
             Summary = revision.Summary,
-            TextOrigin = revision.AuthorKind == ReviewAuthorKind.Analysis ? PublishedTextOrigin.Model : PublishedTextOrigin.Person,
+            TextOrigin = TextOriginOf(revision.AuthorKind),
             StatementDate = revision.StatementDate,
             StatementDateEvidence = revision.StatementDateEvidence is null ? null : PublishedRecordRules.Cite(revision.StatementDateEvidence, extraction),
             Speakers = rules.MapOfficials(review.CandidateId, revision.SpeakerOfficialIds),
@@ -43,6 +43,14 @@ internal sealed class PublishedStatementBuilder(PublishedRecordRules rules)
         record.Validate();
         return record;
     }
+
+    /// <summary>A model writes a summary, code copies the source text of a short release, and a person writes their own text.</summary>
+    private static PublishedTextOrigin TextOriginOf(ReviewAuthorKind author) => author switch
+    {
+        ReviewAuthorKind.Analysis => PublishedTextOrigin.Model,
+        ReviewAuthorKind.Code => PublishedTextOrigin.Code,
+        _ => PublishedTextOrigin.Person
+    };
 
     private static PublishedQuotation Quote(StatementQuotation quotation, DocumentExtraction extraction)
     {

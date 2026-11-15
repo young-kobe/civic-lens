@@ -17,6 +17,13 @@ internal static class StatementDraftFixtures
         WASHINGTON, October 3, 2026 - Senator Warren announced a rent cap for tenants.
         "This cap protects families," said Senator Warren. Tenant advocate Jo Rivera said, “We welcome it.”
         The bill is S. 1234 and its House companion is H.R. 56.
+        The office will meet with local housing groups, review the comments that residents send, and report back to the committee before the end of the session. The office thanks the many families who wrote in to share their stories about rising costs, long waiting lists, and the need for safe and stable homes in every part of the state. More details will follow on the website of the office as the work moves ahead in the weeks to come. Residents can also call the office with questions about the plan.
+        """;
+
+    /// <summary>A release at the short limit, so it shows its own text and drafting makes no model call.</summary>
+    public const string ShortRelease = """
+        Warren backs new tenant protections
+        Senator Warren announced a rent cap for tenants. "This cap protects families," said Senator Warren.
         """;
 
     public static CollectionConfiguration Configuration(DateOnly? warrenEndsBefore = null) => new()

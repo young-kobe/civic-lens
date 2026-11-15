@@ -8364,7 +8364,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Classified','Bypassed')");
 
-                            t.HasCheckConstraint("ck_statement_analysis_runs_reason", "reason IS NULL OR reason IN ('passed','passed-bill-or-vote','passed-bill-number','no-tracked-issue','over-byte-cap','gate-failed-open')");
+                            t.HasCheckConstraint("ck_statement_analysis_runs_reason", "reason IS NULL OR reason IN ('passed','passed-bill-or-vote','passed-bill-number','no-tracked-issue','over-byte-cap','gate-failed-open','source-text')");
 
                             t.HasCheckConstraint("ck_statement_analysis_runs_revision", "issue_revision_id IS NOT NULL OR outcome = 'Interrupted' OR task <> 'gate'");
 
@@ -8911,7 +8911,9 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                     b.ToTable("statement_revisions", null, t =>
                         {
-                            t.HasCheckConstraint("ck_statement_revisions_author_kind", "author_kind IN ('Person','Analysis')");
+                            t.HasCheckConstraint("ck_statement_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
+
+                            t.HasCheckConstraint("ck_statement_revisions_code_date", "author_kind <> 'Code' OR statement_date IS NULL");
 
                             t.HasCheckConstraint("ck_statement_revisions_columns_written", "num_nulls(headline, summary) IN (0, 2)");
 
@@ -8923,7 +8925,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_statement_revisions_number", "revision_number >= 1");
 
-                            t.HasCheckConstraint("ck_statement_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_statement_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_statement_revisions_statement_date_evidence", "(statement_date_evidence_extraction_id IS NULL) = (statement_date_evidence_start IS NULL) AND (statement_date_evidence_extraction_id IS NULL) = (statement_date_evidence_length IS NULL) AND statement_date_evidence_start >= 0 AND statement_date_evidence_length > 0");
 

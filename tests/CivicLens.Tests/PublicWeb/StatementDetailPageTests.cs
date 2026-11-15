@@ -20,6 +20,33 @@ public sealed class StatementDetailPageTests
     }
 
     [Fact]
+    public async Task AShortReleaseShowsItsOwnSourceTextWithEachQuoteMarkedAndTheSourceTextLabelInPlaceOfASummary()
+    {
+        var data = Statement(PublishedTextOrigin.Code, dated: false) with { Summary = StatementText, Label = AiLabelWords.StatementSourceTextWording };
+
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
+
+        var summary = page.QuerySelector(".ai-summary")!;
+        Assert.Null(page.QuerySelector(".ai-summary-ai"));
+        Assert.Equal(AiLabelWords.StatementSourceTextWording, summary.QuerySelector(".ai-label")!.TextContent);
+        Assert.Equal(StatementText, summary.QuerySelector(".doc-text")!.TextContent);
+        Assert.Equal(["First quote.", "Second quote.", "Third quote.", "Fourth quote."], summary.QuerySelectorAll("mark").Select(mark => mark.TextContent));
+        Assert.Equal(1, page.QuerySelectorAll("[id='cite-1']").Length);
+        Assert.Null(page.QuerySelector("#source .doc-text"));
+        Assert.DoesNotContain("model", summary.TextContent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ALongReleaseKeepsItsAiSummaryAndTheMarkedSourceTextStaysInTheFold()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement());
+
+        Assert.Equal("A model wrote this <b>summary</b>.", page.QuerySelector(".ai-summary-ai p")!.TextContent);
+        Assert.Null(page.QuerySelector(".ai-summary .doc-text"));
+        Assert.Equal(StatementText, page.QuerySelector("#source .doc-text")!.TextContent);
+    }
+
+    [Fact]
     public async Task APersonSummaryHasNoAiLabelAndNeverSaysAModelWroteIt()
     {
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(PublishedTextOrigin.Person));
@@ -70,10 +97,27 @@ public sealed class StatementDetailPageTests
 
         Assert.Equal(["First quote.", "Second quote.", "Third quote."], page.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
         Assert.Contains("4 quotes are saved. The first 3 are shown.", page.QuerySelector("#statement-quotes-title")!.ParentElement!.TextContent);
-        Assert.Equal("See all 4 quotes in the source fold", page.QuerySelector(".detail-section > p a")!.TextContent);
+        var allQuotes = page.QuerySelector(".detail-section > p a")!;
+        Assert.Equal("See all 4 quotes in the source fold", allQuotes.TextContent);
+        Assert.Equal("#source", allQuotes.GetAttribute("href"));
         var marked = page.QuerySelectorAll("#source mark").Select(mark => mark.TextContent).ToArray();
         Assert.Equal(["First quote.", "Second quote.", "Third quote.", "Fourth quote.", "Friday"], marked);
         Assert.Equal(["cite-1", "cite-2", "cite-3", "cite-4", StatementPageView.DateEvidenceAnchor], page.QuerySelectorAll("#source mark").Select(mark => mark.Id!).ToArray());
+    }
+
+    [Theory]
+    [InlineData(4, "See quote 4 in the source text above")]
+    [InlineData(5, "See quotes 4 to 5 in the source text above")]
+    public async Task AShortReleaseLinksTheQuotesLeftOutOfTheListToTheFirstOneInItsInlineSourceText(int quotes, string wording)
+    {
+        var data = Statement(PublishedTextOrigin.Code, dated: false, quotes: quotes) with { Summary = StatementText, Label = AiLabelWords.StatementSourceTextWording };
+
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
+
+        var allQuotes = page.QuerySelector(".detail-section > p a")!;
+        Assert.Equal(wording, allQuotes.TextContent);
+        Assert.Equal("#cite-4", allQuotes.GetAttribute("href"));
+        Assert.Equal("Fourth quote.", page.QuerySelector(".ai-summary mark#cite-4")!.TextContent);
     }
 
     [Fact]
