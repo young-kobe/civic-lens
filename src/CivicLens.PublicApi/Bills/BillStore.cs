@@ -20,8 +20,9 @@ public sealed class BillStore(NpgsqlDataSource views)
         b.policy_area, b.policy_area_id, b.event_date, b.sponsor_count, b.cosponsor_count, b.bill_line,
         b.why_it_matters, b.text_version_name, b.text_version_date, b.text_chars_read, b.text_chars_total, b.public_law
         """;
-    /// <summary>The sort of every bill list: the latest official action that the active release pinned, newest first, with bills of no stored status last. The one owner of that order.</summary>
-    private const string Order = "b.latest_action_date DESC NULLS LAST, b.record_id";
+    /// <summary>The sort of every bill list and of the bills of the issue page: the latest official action that the active release pinned, newest first, with bills of no stored status last.
+    /// The one owner of that order. It reads <c>b.latest_action_date</c> and <c>b.record_id</c> of the keys or of the rows of the page.</summary>
+    internal const string Order = "b.latest_action_date DESC NULLS LAST, b.record_id";
 
     // A list row holds the bill columns and then the latest action date of its key, which the cursor of the next page takes.
     private const int LatestActionColumn = 23;

@@ -87,9 +87,7 @@ public static class OfficialPageText
     public static string[] BillMeta(OfficialBillData bill) => new[]
     {
         BillIntroducedWords.RowMeta(bill.IntroducedOn),
-        bill.LatestAction is not null && bill.LatestActionOn is { } actionOn
-            ? $"Latest official action {Moment.Day(actionOn)}: {BillStatusMeaning.Plain(bill.LatestAction, bill.BillType)}"
-            : null
+        BillLatestActionWords.Line(bill.LatestAction, bill.LatestActionOn, bill.BillType)
     }.OfType<string>().ToArray();
 
     /// <summary>The meta parts of an executive action row on the President page and on the record page: the type, then the signed date.</summary>

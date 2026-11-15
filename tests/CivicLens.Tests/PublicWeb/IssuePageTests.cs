@@ -14,7 +14,8 @@ public sealed class IssuePageTests
 {
     private const string Root = "https://civic-lens.test/";
     private static readonly IssueVoteData Vote = new(new string('a', 64), new(2026, 3, 3), PublishedChamber.Senate, "Senate passes a firearms bill", null, PublishedTextOrigin.Person, "Passed", 52, 48);
-    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", AiLabelWords.ModelWording, PublishedTextOrigin.Model, new(2026, 2, 1), "Current bill line.", "Rosa DeLauro");
+    private static readonly IssueBillData Bill = new(new string('b', 64), "H.R. 1 would set storage rules.", AiLabelWords.ModelWording, PublishedTextOrigin.Model, "hr", "Current bill line.", "Rosa DeLauro",
+        "Referred to the House Committee on the Judiciary.", new(2026, 2, 1));
 
     private static IssuePageData Data(IssueLineUpData? lineUp = null, IssueVoteData[]? votes = null, IssueBillData[]? bills = null) =>
         new(7, "firearms", "Firearms", "Federal firearms law and regulation.", ["Background checks"], ["Crime statements"], 119, 3, 2, 186, votes ?? [Vote], bills ?? [Bill], lineUp);
@@ -149,14 +150,16 @@ public sealed class IssuePageTests
     }
 
     [Fact]
-    public async Task TheDateNoteIsStatedOnceInTheSectionLeadAndNotOnEachBillRow()
+    public async Task ABillRowShowsTheLatestOfficialActionLineOfTheBillListAndNoSponsorshipDateAndABillWithNoStoredStatusShowsNoDate()
     {
-        var page = await RenderAsync(Data(bills: [Bill, Bill with { RecordId = new string('c', 64) }]));
+        var undated = Bill with { RecordId = new string('c', 64), LatestActionText = null, LatestActionDate = null };
+        var page = await RenderAsync(Data(bills: [Bill, undated]));
 
-        Assert.Equal(1, page.QuerySelectorAll("#bills .issue-note").Length);
-        Assert.Contains("not the day the bill began", page.QuerySelector("#bills .issue-note")!.TextContent);
-        Assert.DoesNotContain("not the day the bill began", page.QuerySelector("#bills .record-rows")!.TextContent);
-        Assert.All(page.QuerySelectorAll("#bills .record-row"), row => Assert.Contains("Latest sponsorship on 1 Feb 2026", row.TextContent));
+        var rows = page.QuerySelectorAll("#bills .record-row");
+        Assert.Contains("Latest official action 1 Feb 2026: In committee: sent to the House Committee on the Judiciary.", rows[0].TextContent);
+        Assert.DoesNotContain("Latest official action", rows[1].TextContent);
+        Assert.DoesNotContain("sponsorship", page.QuerySelector("#bills")!.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(page.QuerySelector("#bills .issue-note"));
     }
 
     [Fact]
@@ -255,7 +258,7 @@ public sealed class IssuePageTests
     {
         var page = await RenderAsync(Data(new IssueLineUpData(119, 5, [new("Republican", 3), new("Democrat", 1)], 1)));
 
-        foreach (var selector in new[] { "[data-issue-counts]", ".issue-hero .small", "#votes .issue-note", "#bills .issue-note", "#parties > p" })
+        foreach (var selector in new[] { "[data-issue-counts]", ".issue-hero .small", "#votes .issue-note", "#parties > p" })
         {
             var passage = page.QuerySelector(selector)!;
             var grade = PassageGrade(passage);

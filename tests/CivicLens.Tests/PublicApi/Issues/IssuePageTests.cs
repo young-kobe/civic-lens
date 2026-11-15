@@ -4,6 +4,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Pages;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
@@ -136,6 +137,29 @@ public sealed class IssuePageTests(PostgresCollection postgres)
         Assert.Equal(IssueStore.PageBills, page.QuerySelectorAll("#bills .record-row").Length);
         Assert.Contains("The 5 newest of 7.", page.QuerySelector("#bills")!.TextContent);
     }
+
+    [Fact]
+    public async Task TheBillsComeInTheOrderOfTheBillListOfTheIssueSoTheyAreTheFirstRowsOfSeeAllAndEachShowsTheSameLatestActionLine()
+    {
+        // The event dates fall in the reverse order of the latest actions. Bills 2 and 4 tie on the action date, and bill 3 has no stored status. Bill 9 has the newest action and no issue.
+        (char Id, string? ActionOn)[] stored = [('1', "2026-01-01"), ('2', "2026-02-10"), ('3', null), ('4', "2026-02-10"), ('5', "2026-02-20"), ('6', "2026-01-15"), ('7', "2026-02-01")];
+        var bills = stored.Select((bill, index) => new SeededBill(bill.Id, $"2026-03-{7 - index:00}") { BillNumber = index + 1, Issues = ["tax"] })
+            .Append(new SeededBill('9', "2026-03-09") { BillNumber = 9 }).ToArray();
+        await using var host = await StartAsync([], bills);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" + string.Concat(stored.Append((Id: '9', ActionOn: (string?)"2026-03-01")).Where(bill => bill.ActionOn is not null)
+            .Select(bill => PublicRecordPageRows.PinnedStatus(1, new string(bill.Id, 64), "Referred to the House Committee on Ways and Means.", bill.ActionOn!, 1, "InCommittee"))));
+        await StoredBillCounts.FillAsync(host.OperationalDatabase, 1, 119);
+
+        var issueRows = (await GetPageAsync(host)).QuerySelectorAll("#bills .record-row");
+        var listRows = (await GetPageAsync(host, "/bills.html?issue=tax")).QuerySelectorAll(".record-row");
+
+        Assert.Equal(["5", "2", "4", "7", "6"], issueRows.Select(BillId));
+        Assert.Equal(["5", "2", "4", "7", "6", "1", "3"], listRows.Select(BillId));
+        Assert.All(issueRows.Zip(listRows), pair => Assert.Contains(pair.Second.QuerySelector("p.small.muted")!.TextContent, pair.First.TextContent));
+        Assert.Contains("Latest official action 20 Feb 2026: In committee: sent to the House Committee on Ways and Means.", issueRows[0].TextContent);
+    }
+
+    private static string BillId(IElement row) => row.QuerySelector("a")!.GetAttribute("href")!.Split("records/")[1][..1];
 
     [Fact]
     public async Task ABillShowsItsBillLineWithTheSourceAndLinksToItsRecordPage()
