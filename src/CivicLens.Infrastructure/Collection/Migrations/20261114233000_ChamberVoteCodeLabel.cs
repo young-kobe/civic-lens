@@ -26,7 +26,7 @@ public partial class ChamberVoteCodeLabel : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(VoteLabelViews(byChamber: false));
 
-    private static string VoteCodeLabel(string revision, bool byChamber) => byChamber
+    internal static string VoteCodeLabel(string revision, bool byChamber) => byChamber
         ? $"CASE {revision}.chamber WHEN 'Senate' THEN '{SenateCodeLabel}' ELSE '{HouseCodeLabel}' END"
         : $"'{HouseCodeLabel}'";
 
