@@ -13,6 +13,7 @@
             <h1 class="detail-headline">@Data.Headline</h1>
             <p class="detail-lede">@ExecutiveActionWords.Lede(Data)</p>
             <p class="small muted">@ExecutiveActionWords.Approval(Data)</p>
+            <PublishedUpdateLine Corrections="Data.Corrections" />
         </header>
         <PublishedCorrectionBanner Kind="PublishedRecordKind.ExecutiveAction" Corrections="Data.Corrections" />
         <div class="detail-layout">

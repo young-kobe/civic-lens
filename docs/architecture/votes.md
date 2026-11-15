@@ -485,8 +485,6 @@ A reader asks `VoteRevisionRows` for the rows of a query with their facts, issue
 - Published votes from before code text keep their model text and its AI label until `votes text backfill` moves them. No redraft runs by itself.
 - The history entry of a moved vote reads "Summary rewritten by the AI model". A correction entry does not record who wrote the new text. The approved title "Wording rewritten by code" needs a stored correction kind first.
 - The House source holds no description of an amendment. The House Clerk XML has one, but the vote stream does not capture it.
-- The approved "what this vote decides" work is planned work under R-68. Use the stored bill line and supporting CRS quote from the current approved action revision, retaining its evidence span. Reuse the existing queue and run-context pattern. Summary completion requeues affected votes, and settlement checks the input version so a stale in-flight draft retries. Procedure votes name the bill only. The freshness workflow adds no schema or model call. Never acquire `ActionReview` while holding `VoteAnalysis`.
-
 - A stored party of an old vote cannot change. A correction needs an explicit owner command. That command is not built.
 - Only the members of the member list are pinned. They are the tracked members. The other member lines of the roll call still take their party from the roster rule at each build. So the party majorities and the alignment of a new revision count those members by the roster of that day.
 - A newer update that Blocks before the rejection check sets no block. Code cannot tell whether that update changed facts. A blocked update shows in the blocked list, and old facts can publish until someone clears the blocked update.

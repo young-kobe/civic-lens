@@ -100,8 +100,14 @@ internal static class TypedSearchSeed
                   {Q(record.Headline)}, '2025-01-20', '2025-01-28', '90 FR 8235', 'Jane Roe', 'o1', {Q(record.DocumentUrl)});
             INSERT INTO executive_action_revision_facts (record_id, revision_number, position, citation_extraction_id, citation_start, citation_length)
               VALUES ('{record.RecordId}', {record.RevisionNumber}, 0, '{extraction}', 0, 10);
+            {ExecutiveSummary(record, extraction)}
             """;
     }
+
+    private static string ExecutiveSummary(PublishedExecutiveAction record, string extraction) => record.Summary is not { } summary ? "" : $"""
+        UPDATE executive_action_revisions SET summary_text_origin = 'Model', summary_cut = false WHERE record_id = '{record.RecordId}' AND revision_number = {record.RevisionNumber};
+        {string.Join('\n', summary.Sentences.Select((sentence, position) => $"INSERT INTO executive_action_revision_summary_sentences (record_id, revision_number, \"position\", sentence, quote_extraction_id, quote_start, quote_length) VALUES ('{record.RecordId}', {record.RevisionNumber}, {position}, {Q(sentence.Sentence)}, '{extraction}', {sentence.Citation.Start}, {sentence.Citation.Length});"))}
+        """;
 
     private static string Brief(PublishedBrief record) => $"""
         INSERT INTO brief_revisions (record_id, revision_number, author_subject, author_kind, revision_json, created_at_utc_ticks, headline, text_origin, week_start,

@@ -95,20 +95,18 @@ public static class VotePageView
         _ => null
     };
 
-    /// <summary>The members who voted against most of their party, for each major party. Only a split vote with party counts has them.</summary>
-    public static IReadOnlyList<VoteBreakerGroup> Breakers(VotePageData vote)
-    {
-        if (vote.Alignment != PublishedVoteAlignment.Split || vote.PartyTallies is null) return [];
-        return [.. new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }
-            .Select(party => BreakersOf(vote, party)).OfType<VoteBreakerGroup>()];
-    }
+    /// <summary>
+    /// The members who voted against most of their party, for each major party, as <see cref="VoteMemberData.BreaksParty"/> gives them. A party has a group only when
+    /// one of its tracked members has a party line on this vote, so a vote that is not split has no groups.
+    /// </summary>
+    public static IReadOnlyList<VoteBreakerGroup> Breakers(VotePageData vote) =>
+        [.. new[] { PublishedPartyMajority.Democrat, PublishedPartyMajority.Republican }.Select(party => BreakersOf(vote, party)).OfType<VoteBreakerGroup>()];
 
     private static VoteBreakerGroup? BreakersOf(VotePageData vote, string party)
     {
-        var tally = vote.PartyTallies!.SingleOrDefault(item => item.Party == party);
-        if (tally is null || PublishedPartyMajority.Of(party, tally.Yea, tally.Nay).Majority is not { } majority) return null;
-        var members = ByName(vote.Members.Where(member => member.Party == party && PublishedPartyMajority.IsAgainstPartyMajority(party, member.Cast, majority)));
-        return new(party, PublishedPartyNames.PartyOf(vote.Chamber, party), [.. members]);
+        var lined = vote.Members.Where(member => member.Party == party && member.BreaksParty is not null).ToArray();
+        return lined.Length == 0 ? null
+            : new(party, PublishedPartyNames.PartyOf(vote.Chamber, party), [.. ByName(lined.Where(member => member.BreaksParty == true))]);
     }
 
     public static IReadOnlyList<VoteMemberData> Filtered(VotePageData vote, VoteMemberFilter filter) =>

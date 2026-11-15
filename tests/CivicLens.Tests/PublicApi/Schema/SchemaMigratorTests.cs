@@ -40,10 +40,10 @@ public sealed class SchemaMigratorTests(PostgresCollection postgres)
             await Execute(database, """
                 INSERT INTO releases (release_number, published_at_utc) VALUES (1, now());
                 INSERT INTO records (record_id, revision_number, kind, headline, first_published_at_utc, officials, official_ids, issue_ids, policy_area_ids,
-                                     bill_line, summary, body, search, first_release)
-                SELECT id, 1, 'action', 'H', now(), '[]', '{}', '{}', '{}', line, line, 'Body', to_tsvector('Body'), 1
+                                     bill_line, summary, search, first_release)
+                SELECT id, 1, 'action', 'H', now(), '[]', '{}', '{}', '{}', line, line, to_tsvector('Body'), 1
                   FROM (VALUES ('cut', 'The Department reports on sanctions that are' || chr(8230)), ('whole', 'The Department reports.')) AS rows (id, line);
-                DELETE FROM schema_migrations WHERE name = '006_hide_cut_bill_lines';
+                DELETE FROM schema_migrations WHERE name = '007_hide_cut_bill_lines';
                 """);
 
             await new SchemaMigrator(database).ApplyAsync(CancellationToken.None);

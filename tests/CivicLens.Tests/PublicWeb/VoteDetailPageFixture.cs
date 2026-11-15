@@ -44,12 +44,13 @@ internal static class VoteDetailPageFixture
         Text = Text
     };
 
+    /// <summary>The breaks_party value of each member follows the majorities of <see cref="Tallies"/>, as the view gives it. Ed Eaton did not vote, so he has no party line.</summary>
     public static readonly VoteMemberData[] Members =
     [
-        new("o1", "Ada Able", "Aye", "Democrat", Cite(Lines[4])),
-        new("o2", "Ben Baker", "Nay", "Democrat", Cite(Lines[5])),
-        new("o3", "Cy Cole", "Aye", "Republican", Cite(Lines[6])),
-        new("o4", "Di Dole", "Nay", "Republican", Cite(Lines[7])),
+        new("o1", "Ada Able", "Aye", "Democrat", Cite(Lines[4])) { BreaksParty = true },
+        new("o2", "Ben Baker", "Nay", "Democrat", Cite(Lines[5])) { BreaksParty = false },
+        new("o3", "Cy Cole", "Aye", "Republican", Cite(Lines[6])) { BreaksParty = false },
+        new("o4", "Di Dole", "Nay", "Republican", Cite(Lines[7])) { BreaksParty = true },
         new("o5", "Ed Eaton", "Not Voting", "Republican", Cite(Lines[8]))
     ];
 

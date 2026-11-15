@@ -37,9 +37,9 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
         Row[] expected =
         [
             new("action", "Doe sponsored it.\nA housing bill", "Sponsor: D000001 and more.", "This bill funds housing."),
-            new("brief", "A brief paragraph.", "", null),
+            new("brief", "A brief paragraph.", "", "A brief paragraph."),
             new("documentChange", "The rule changed.", "Newer words.\nOlder words.", "The rule changed."),
-            new("executiveAction", "", ExecutiveSourceHead + "Tail text.", null),
+            new("executiveAction", "The order ends a program.\nIt starts today.", ExecutiveSourceHead + "Tail text.", "The order ends a program. It starts today."),
             new("relationship", "The statement describes the bill.\nthe source", "", null),
             new("statement", "A short account.\nXq", "Xq the source text.", "A short account."),
             new("vote", "The House passed it.", VoteSourceHead + "Roll call raw text.", "The House passed it.")
@@ -89,9 +89,9 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
         Row[] expected =
         [
             new("action", longSummary + "\nA title", splitSource[..(Limit - 1)], "This bill funds housing."),
-            new("brief", "A brief paragraph.", "", null),
+            new("brief", "A brief paragraph.", "", "A brief paragraph."),
             new("documentChange", longSummary, longSource[..Limit], longSummary),
-            new("executiveAction", "", (ExecutiveSourceHead + longSource)[..Limit], null),
+            new("executiveAction", "The order ends a program.\nIt starts today.", (ExecutiveSourceHead + longSource)[..Limit], "The order ends a program. It starts today."),
             // The relationship quote cuts ten characters from the statement source.
             new("relationship", "The statement describes the bill.\nssssssssss", "", null),
             new("statement", longSummary + "\nXq", splitSource[..(Limit - 1)], longSummary),
@@ -181,7 +181,7 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
     private static SampleRecord[] Records(Texts texts)
     {
         var action = PublishedSamples.Action("Doe sponsors a bill", texts.ActionSummary, texts.BillTitle, texts.ActionSource);
-        var executive = PublishedSamples.ExecutiveAction("Ending the Weaponization", texts.ExecutiveTail);
+        var executive = PublishedSamples.ExecutiveAction("Ending the Weaponization", texts.ExecutiveTail, ["The order ends a program.", "It starts today."]);
         var executiveId = new string('d', 64);
         executive = executive with
         {

@@ -7,6 +7,7 @@ using CivicLens.PublicApi.Votes;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
@@ -23,6 +24,13 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly SeededVote House = new('a', "2026-03-02") { Casts = ["Yea", "Nay", "Nay", "Not Voting"], PersonIds = ["p0", "p1", "p2", "p3"], Issues = ["health"] };
     private static readonly string Path = $"/records/{House.RecordId}.html";
+    private static readonly SeededVote Senate = new('c', "2026-03-03")
+    {
+        Chamber = "Senate",
+        RollCall = 5,
+        Casts = ["Yea", "Yea", "Nay", "Nay", "Nay", "Not Voting"],
+        PersonIds = ["s0", "s1", "s2", "s3", "s4", "s5"]
+    };
 
     private async Task<ApiHost> StartAsync(bool withTallies = true)
     {
@@ -79,6 +87,83 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(House.RecordId)) + "#members", page.QuerySelector("form.vote-filter")!.GetAttribute("action"));
         Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(House.RecordId)) + "#members", page.QuerySelector(".vote-filter-actions a")!.GetAttribute("href"));
     }
+
+    // The Senate vote has no stored party tallies, as a Voteview revision published before them keeps a zero marker. The member list holds the party of each senator.
+    // Democrats: 2 Yes, 1 No, so most Democrats voted Yes and Cal Carr broke. Republicans: 2 No, 1 not voting, so no Republican broke.
+    [Fact]
+    public async Task ASenateSplitVoteDrawsItsPartyBarsFromTheMemberListAndListsTheBreakersOfThePartyLineView()
+    {
+        await using var host = await StartAsync();
+        await SeedSenateAsync(host);
+
+        var page = await GetPageAsync(host, $"/records/{Senate.RecordId}.html");
+
+        Assert.Null(page.QuerySelector(".vote-parties-unknown"));
+        Assert.Equal(["Senate Democrats: Yes 2, No 1, Not voting 0", "Senate Republicans: Yes 0, No 2, Not voting 1"],
+            page.QuerySelectorAll(".vote-parties svg.party-bar-chart").Select(bar => bar.GetAttribute("aria-label")));
+        var groups = page.QuerySelectorAll(".vote-breaker-group").ToArray();
+        Assert.Equal(["Cal Carr"], groups[0].QuerySelectorAll("li a").Select(link => link.TextContent));
+        Assert.Contains(VoteBreakers.None, groups[1].TextContent);
+        var viewBreakers = await ViewsSeed.QueryAsPublicAsync(host.OperationalDatabase,
+            $"SELECT o.name FROM public_api.member_votes m JOIN public_api.officials o ON o.official_id = m.official_id WHERE m.record_id = '{Senate.RecordId}' AND m.breaks_party ORDER BY o.name");
+        Assert.Equal(viewBreakers, page.QuerySelectorAll(".vote-breakers li a").Select(link => link.TextContent));
+    }
+
+    // The House bars keep the stored whole-party tallies, and the breakers that breaks_party gives equal those of the tally rule that the page used before.
+    [Fact]
+    public async Task AHouseSplitVoteKeepsItsStoredPartyBarsAndTheBreakersOfTheTallyRule()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_revision_party_tallies SET yea = 3 WHERE record_id = '{House.RecordId}' AND party = 'Democrat';
+            {SplitColumns(House.RecordId, "Yea", "Nay")}
+            """);
+        var tallies = new[] { ("Democrat", 3, 1), ("Republican", 0, 2) };
+        var casts = new[] { ("Ann Able", "Democrat", "Yea"), ("Ben Baker", "Democrat", "Nay"), ("Cy Cole", "Republican", "Nay"), ("Di Dole", "Republican", "Not Voting") };
+        string[] before = [.. tallies.Select(tally => PublishedPartyMajority.Of(tally.Item1, tally.Item2, tally.Item3))
+            .SelectMany(majority => casts.Where(member => member.Item2 == majority.Party && majority.Majority is { } line
+                && PublishedPartyMajority.IsAgainstPartyMajority(majority.Party, member.Item3, line)).Select(member => member.Item1))];
+
+        var page = await GetPageAsync(host, Path);
+
+        Assert.Equal(["House Democrats: Yes 3, No 1, Not voting 0", "House Republicans: Yes 0, No 2, Not voting 1"],
+            page.QuerySelectorAll(".vote-parties svg.party-bar-chart").Select(bar => bar.GetAttribute("aria-label")));
+        Assert.Equal(["Ben Baker"], before);
+        Assert.Equal(before, page.QuerySelectorAll(".vote-breakers li a").Select(link => link.TextContent));
+    }
+
+    // A list entry with no stored party has no party group, so the counts would leave out a cast of the vote totals.
+    [Fact]
+    public async Task ASenateVoteWithAMemberOfNoStoredPartyShowsNoPartyCounts()
+    {
+        await using var host = await StartAsync();
+        await SeedSenateAsync(host);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE vote_member_list_entries SET party = NULL WHERE list_id = '{Senate.RecordId}' AND person_id = 's5';");
+
+        var page = await GetPageAsync(host, $"/records/{Senate.RecordId}.html");
+
+        Assert.Null(page.QuerySelector(".vote-parties"));
+        Assert.NotNull(page.QuerySelector(".vote-parties-unknown"));
+    }
+
+    private static async Task SeedSenateAsync(ApiHost host)
+    {
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Senate);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("s0", "Abe Ames"), new SeededOfficial("s1", "Bo Best"),
+            new SeededOfficial("s2", "Cal Carr"), new SeededOfficial("s3", "Dee Dunn"), new SeededOfficial("s4", "Eve Eck"), new SeededOfficial("s5", "Flo Fox"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_member_list_entries SET party = CASE WHEN person_id IN ('s0', 's1', 's2') THEN 'Democrat' ELSE 'Republican' END WHERE list_id = '{Senate.RecordId}';
+            UPDATE vote_revisions SET party_tally_count = 0 WHERE record_id = '{Senate.RecordId}';
+            {SplitColumns(Senate.RecordId, "Yea", "Nay")}
+            """);
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
+    }
+
+    private static string SplitColumns(string recordId, string democratMajority, string republicanMajority) => $"""
+        UPDATE vote_revisions SET alignment = 'Split', democrat_majority = '{democratMajority}', republican_majority = '{republicanMajority}', columns_written = true
+         WHERE record_id = '{recordId}';
+        """;
 
     [Fact]
     public async Task ARetainedReleaseWithoutPartyCountsShowsNoPartyCardAndNoZeros()
