@@ -35,6 +35,16 @@ public static class BoardWords
     private static string Kept(int newer, int kept, string place) =>
         $"The {CongressCalendar.Ordinal(newer)} Congress has no member with {OfficialBoardPage.MinimumSplitVotes} split votes yet, so {place} keeps the {CongressCalendar.Ordinal(kept)} Congress.";
 
+    /// <summary>The share chip of a board row. It names its base, the split votes the member cast, so the percent never stands alone.</summary>
+    public static string Share(int breaks, int cast)
+    {
+        var percent = 100.0 * breaks / cast;
+        var share = breaks > 0 && percent < 0.5 ? "under 1%"
+            : breaks < cast && percent >= 99.5 ? "over 99%"
+            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{percent:0}%");
+        return $"{share} of split votes cast";
+    }
+
     public const string CaucusRule = "An independent who caucuses with a party counts with that party.";
 
     public const string AgreementId = "parties-agreed";

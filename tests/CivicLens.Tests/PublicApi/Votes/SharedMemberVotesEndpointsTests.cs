@@ -55,7 +55,7 @@ public sealed class SharedMemberVotesEndpointsTests(PostgresCollection postgres)
         Assert.Equal("No", Votes(answer)[0].GetProperty("casts")[0].GetProperty("cast").GetString());
         Assert.Equal("Aye", Votes(answer)[0].GetProperty("casts")[1].GetProperty("cast").GetString());
         Assert.Equal("Agreed to", Votes(answer)[0].GetProperty("result").GetString());
-        Assert.Equal("Passed (Agreed to)", Votes(answer)[0].GetProperty("resultWords").GetString());
+        Assert.Equal("Passed", Votes(answer)[0].GetProperty("resultWords").GetString());
     }
 
     [Fact]

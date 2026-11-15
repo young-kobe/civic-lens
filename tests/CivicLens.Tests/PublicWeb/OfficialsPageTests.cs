@@ -6,8 +6,6 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class OfficialsPageTests
 {
-    private const string Scope = "The officials count covers this whole release. Each record count leaves out votes.";
-
     private static OfficialListRowData Row(string id, string name, PublishedOfficeKind kind, string? state, int? district, string? party,
         DateOnly? end, int count) => new(id, name, kind, kind.ToString(), state, district, party, end, count);
 
@@ -18,29 +16,29 @@ public sealed class OfficialsPageTests
         ListPageRender.RenderAsync<OfficialsPage>(data, nameof(OfficialsPage.Data));
 
     [Fact]
-    public async Task EachRowNamesSeatPartyTermEndAndOneRecordCountWhileTheScopeAppearsOnce()
+    public async Task EachRowNamesSeatPartyTermEndAndOneRecordCountThatNamesWhatItCountsAndNoReleaseNumber()
     {
         var page = await RenderAsync(Page([
-            Row("aaron-bean", "Aaron Bean", PublishedOfficeKind.Representative, "FL", 4, "Republican", new(2027, 1, 3), 25),
+            Row("aaron-bean", "Aaron Bean", PublishedOfficeKind.Representative, "FL", 4, "Republican", new(2027, 1, 3), 1250),
             Row("adam-schiff", "Adam B. Schiff", PublishedOfficeKind.Senator, "CA", null, "Democrat", null, 1)]));
 
         var rows = page.QuerySelectorAll(".list-row");
         Assert.Equal(2, rows.Length);
         Assert.Equal(["Representative for FL, district 4", "Republican", "Term ends 3 Jan 2027"],
             rows[0].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
-        Assert.Equal("25 records other than votes", rows[0].QuerySelector(".list-row-side")!.TextContent);
+        Assert.Equal("1,250 published records name this official, not counting votes", rows[0].QuerySelector(".list-row-side")!.TextContent);
         Assert.Equal(["Senator for CA", "Democrat", "Our records show no end date for this term."],
             rows[1].QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
-        Assert.Equal("1 record other than votes", rows[1].QuerySelector(".list-row-side")!.TextContent);
+        Assert.Equal("1 published record names this official, not counting votes", rows[1].QuerySelector(".list-row-side")!.TextContent);
         Assert.Equal(Root + "officials/aaron-bean.html", rows[0].QuerySelector("a")!.GetAttribute("href"));
-        var scope = Assert.Single(page.QuerySelectorAll(".list-scope"));
-        Assert.Equal(Scope, scope.TextContent);
+        Assert.Equal("Showing 2 officials on this page.", page.QuerySelector(".list-status")!.TextContent);
+        Assert.DoesNotContain("Release", page.Body!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("entry row", page.Body!.TextContent);
-        Assert.Single(page.Body!.TextContent.Split(Scope).Skip(1));
     }
 
     [Theory]
     [InlineData(542, "542 officials have a page. Each page lists")]
+    [InlineData(1542, "1,542 officials have a page. Each page lists")]
     [InlineData(1, "1 official has a page. Each page lists")]
     public async Task TheLedeStartsWithTheTotalOfTheReleaseWhateverTheFilter(int total, string start)
     {

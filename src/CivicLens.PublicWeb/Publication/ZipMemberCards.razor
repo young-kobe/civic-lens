@@ -9,13 +9,7 @@
             <MembersStrip Data="Data" RootPath="@RootPath" NewVoteCount="NewVoteCount" />
         </template>
         <ZipDistrictCountNote DistrictCount="Data.DistrictCount" />
-        <ul class="zip-member-cards" role="list">
-            @for (var seatIndex = 0; seatIndex < Data.Seats.Length; seatIndex++)
-            {
-                <ZipMemberCard Seat="Data.Seats[seatIndex]" RootPath="@RootPath" IdPrefix="@($"zip-member-{seatIndex}")" />
-            }
-        </ul>
-        <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
+        @* The answer leads with how the members voted. The member cards and their figures follow it. *@
         @if (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null)
         {
             <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />
@@ -28,6 +22,13 @@
         {
             <SharedVoteRows Data="votes" RootPath="@RootPath" />
         }
+        <ul class="zip-member-cards" role="list">
+            @for (var seatIndex = 0; seatIndex < Data.Seats.Length; seatIndex++)
+            {
+                <ZipMemberCard Seat="Data.Seats[seatIndex]" RootPath="@RootPath" IdPrefix="@($"zip-member-{seatIndex}")" />
+            }
+        </ul>
+        <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
     }
 </div>
 

@@ -133,6 +133,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(actions[0].RecordId, order.GetProperty("newestRecordId").GetString()!);
         Assert.Equal("Pinned active title", order.GetProperty("newestTitle").GetString());
         Assert.Equal("2026-05-20", order.GetProperty("newestSignedOn").GetString());
+        Assert.Equal("2026-05-19", order.GetProperty("oldestSignedOn").GetString());
         var proclamation = Assert.Single(groups, group => group.GetProperty("kind").GetString() == "proclamation");
         Assert.Equal(1, proclamation.GetProperty("count").GetInt32());
         Assert.Equal(actions[3].RecordId, proclamation.GetProperty("newestRecordId").GetString()!);
@@ -149,6 +150,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(actions[0].RecordId, pageOrder.NewestRecordId);
         Assert.Equal("Pinned active title", pageOrder.NewestTitle);
         Assert.Equal(new DateOnly(2026, 5, 20), pageOrder.NewestSignedOn);
+        Assert.Equal(new DateOnly(2026, 5, 19), pageOrder.OldestSignedOn);
         var pageProclamation = Assert.Single(page.ExecutiveActions, group => group.Kind == PublishedExecutiveActionKind.Proclamation);
         Assert.Equal(1, pageProclamation.Count);
         Assert.Equal(actions[3].RecordId, pageProclamation.NewestRecordId);

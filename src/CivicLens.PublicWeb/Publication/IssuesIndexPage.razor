@@ -12,13 +12,7 @@
     {
         @* The tiles carry their own border, so no panel frames them: a card inside a card costs width at 360 px. *@
         <section aria-label="Issues">
-            <ul class="home-issue-list" role="list">
-                @foreach (var issue in Data.Issues)
-                {
-                    <li><IssueTile Href="@(RootPath + PublicationProtocol.IssuePagePath(issue.IssueId, 1))" Name="@issue.Name" Congress="issue.Congress"
-                                   SubstantiveVotes="issue.SubstantiveVotes" Bills="issue.Bills" /></li>
-                }
-            </ul>
+            <IssueTileList Issues="Data.Issues" RootPath="@RootPath" />
         </section>
     }
 </PublicPage>

@@ -198,10 +198,20 @@ public sealed class BillDetailPageTests
 
         Assert.Contains("This site tracks 4 House members who cosponsored it: 2 on the day it was introduced and 2 who joined later.", section.QuerySelector(".bill-lede")!.TextContent);
         Assert.Equal("Tracked House cosponsors by party on the day each one joined", bar.QuerySelector("figcaption")!.TextContent);
-        Assert.Equal(["2 Democrats", "1 Republicans", "1 No party listed"], bar.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
+        Assert.Equal(["2 Democrats", "1 Republican", "1 No party listed"], bar.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
         Assert.Equal(["solid", "stripes", "open"], bar.QuerySelectorAll(".party-bar-legend rect").Select(rect => rect.GetAttribute("data-fill")));
         Assert.Single(section.QuerySelectorAll(".party-bar"));
         Assert.Contains("Cy Four (2 Oct 2025)", section.QuerySelector("dd:last-of-type")!.TextContent);
+    }
+
+    [Fact]
+    public async Task OneCosponsorReadsAsOneMemberAndOnePartyMemberInTheSingular()
+    {
+        var page = await RenderAsync(Bill with { Cosponsors = new(PublishedChamber.Senate, [new("s1", "Sam One", "Republican", new DateOnly(2025, 9, 1))], []) });
+        var section = page.QuerySelector("#bill-backers-title")!.ParentElement!;
+
+        Assert.Contains("This site tracks 1 Senate member who cosponsored it:", section.QuerySelector(".bill-lede")!.TextContent);
+        Assert.Equal(["1 Republican"], section.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
     }
 
     [Fact]
