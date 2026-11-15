@@ -14,6 +14,24 @@ public static class OfficialRecordText
     public const string TabsLabel = "Filter records";
     public const string PagerLabel = "Records pages";
     public const string OfficesAnchor = "offices";
+    public const string VoteFilterSummary = "Filter by issue, bill or vote";
+    public const string VoteFilterLabel = "Filter votes";
+    public const string PartyLineLabel = "Party line";
+    public const string CastLabel = "Vote";
+
+    /// <summary>The one choice of the party line filter. Its label is the approved name of the static record page filter.</summary>
+    public static readonly SearchChoiceData[] PartyLineChoices = [new("against", "Against their party")];
+
+    public static readonly SearchChoiceData[] CastChoices = [new("yes", "Yes"), new("no", "No")];
+
+    /// <summary>The chips of the active vote filters, in form order: issue, bill, party line, and vote.</summary>
+    public static IReadOnlyList<string> VoteChips(RecordListFilter filter, IReadOnlyList<SearchChoiceData> issues) => [.. new[]
+    {
+        RecordListSelect.LabelOf(issues, filter.Value("issue")),
+        filter.Value("bill") is { } bill ? $"Bill {bill}" : null,
+        RecordListSelect.LabelOf(PartyLineChoices, filter.Value("party")),
+        RecordListSelect.LabelOf(CastChoices, filter.Value("cast")) is { } cast ? $"Voted {cast}" : null
+    }.OfType<string>()];
 
     /// <summary>The value of the <c>kind</c> query parameter of a tab.</summary>
     public static string Query(OfficialRecordKind kind) => kind switch
@@ -34,11 +52,12 @@ public static class OfficialRecordText
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no tab label.")
     };
 
-    /// <summary>The path of the record page of an official. A kind selects a tab and a cursor selects a later page of it.</summary>
-    public static string Path(string rootPath, string officialId, OfficialRecordKind? kind = null, string? cursor = null)
+    /// <summary>The path of the record page of an official. A kind selects a tab, the filters narrow it, and a cursor selects a later page of it.</summary>
+    public static string Path(string rootPath, string officialId, OfficialRecordKind? kind = null, string? cursor = null, RecordListFilter? filter = null)
     {
         var query = new List<string>();
         if (kind is { } selected) query.Add("kind=" + Query(selected));
+        if (filter is not null) query.AddRange(filter.Values.Select(pair => $"{pair.Key}={Uri.EscapeDataString(pair.Value)}"));
         if (cursor is not null) query.Add("cursor=" + Uri.EscapeDataString(cursor));
         return rootPath + PublicationProtocol.OfficialRecordPagePath(officialId) + (query.Count == 0 ? "" : "?" + string.Join('&', query));
     }

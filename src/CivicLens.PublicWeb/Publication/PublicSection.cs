@@ -6,8 +6,10 @@ public enum PublicSection
     Issues,
     Votes,
     Bills,
+    Statements,
     ExecutiveActions,
     Boards,
+    Search,
     AllRecords,
     About,
     Glossary

@@ -213,7 +213,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
 
-        foreach (var path in new[] { "/", UnknownPage, "/" + PublicationProtocol.ComparePagePath, VoteKindsRoute, "/" + PublicationProtocol.OfficialsPagePath })
+        foreach (var path in new[] { "/", UnknownPage, "/" + PublicationProtocol.AboutPagePath, VoteKindsRoute, "/" + PublicationProtocol.OfficialsPagePath })
         {
             using var response = await host.Client.GetAsync(path);
             var page = Parse(await response.Content.ReadAsStringAsync());
@@ -323,29 +323,6 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task ComparePageIsPublicAndQueryFreeWhileItsFormUsesTheConfiguredApiOrigin()
-    {
-        await using var host = await StartWithBrowserApiAsync();
-        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
-        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-        using var response = await host.Client.GetAsync("/compare.html?zip=55401");
-        var html = await response.Content.ReadAsStringAsync();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("https://civic-lens.test/compare.html", Parse(html).QuerySelector("link[rel=canonical]")!.GetAttribute("href"));
-        Assert.Contains("data-zip-api=\"https://api.civic-lens.test\"", html);
-        Assert.Contains("data-zip-view=\"compare\"", html);
-        Assert.DoesNotContain("55401", html);
-        Assert.Equal(PageCache.CacheControl, response.Headers.CacheControl?.ToString());
-        Assert.NotNull(response.Headers.ETag);
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/compare.html");
-        request.Headers.IfNoneMatch.Add(response.Headers.ETag!);
-        using var revalidated = await host.Client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NotModified, revalidated.StatusCode);
-    }
-
-    [Fact]
     public async Task TheVoteKindIndexIsServedWithItsCanonicalPathAndTheReleaseETagAndRevalidatesTo304()
     {
         await using var host = await StartAsync();
@@ -381,36 +358,6 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("Page not found", page.QuerySelector("main h1")!.TextContent.Trim());
         Assert.Empty(page.QuerySelectorAll("tbody tr"));
-    }
-
-    [Fact]
-    public async Task ComparePageNeedsOnlyReleaseIdentityEvenWhenTheReleaseIsEmpty()
-    {
-        await using var host = await StartWithBrowserApiAsync();
-        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "REVOKE SELECT ON public_api.bills FROM civic_lens_public");
-
-        using var response = await host.Client.GetAsync("/compare.html");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("r4-", response.Headers.ETag!.ToString());
-        Assert.Empty(Parse(await response.Content.ReadAsStringAsync()).QuerySelectorAll(".zip-member-card"));
-    }
-
-    [Fact]
-    public async Task ComparePageKeepsItsBrowseRouteWhenBrowserApiIsNotConfigured()
-    {
-        await using var host = await StartAsync();
-        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 4, PublishedAt);
-        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote);
-
-        var html = await host.Client.GetStringAsync("/compare.html");
-        var page = Parse(html);
-
-        Assert.Equal("Compare your members", page.QuerySelector("h1")!.TextContent);
-        Assert.Null(page.QuerySelector("[data-zip-api]"));
-        Assert.Equal(BaseUrl.Join(PublicationProtocol.FacetsPath), page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));
-        Assert.Equal("https://civic-lens.test/officials.html", page.QuerySelector(".home-browse a")!.GetAttribute("href"));
     }
 
     [Fact]

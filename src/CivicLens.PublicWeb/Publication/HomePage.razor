@@ -9,7 +9,6 @@
                 @if (BrowserApiUrl is not null)
                 {
                     <ZipLookupForm BrowserApiUrl="@BrowserApiUrl" RootPath="@RootPath" InputId="@ZipInputId" />
-                    <p class="home-browse"><a href="@(RootPath + PublicationProtocol.ComparePagePath)">Compare your members</a></p>
                 }
                 <p class="home-browse">Or <a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">browse all officials</a></p>
             </div>
@@ -197,7 +196,7 @@
                     </li>
                     <li>
                         <h3>3. AI text is labeled</h3>
-                        <p>Where a model drafts plain words, the page says so, and the official source stays one click away. <a href="@(RootPath + PublicationProtocol.MethodPagePath)">How we check records</a></p>
+                        <p>Where a model drafts plain words, the page says so, and the official source stays one click away. <a href="@(RootPath + PublicSections.Method.Path)">@PublicSections.Method.Text</a></p>
                     </li>
                 </ol>
             </section>

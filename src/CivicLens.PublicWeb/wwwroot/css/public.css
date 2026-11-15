@@ -328,6 +328,8 @@ body.public .correction-banner h2 { margin: 0; font: 650 .8rem/1.3 var(--ui); le
 .public-nav + .topbar-tools { margin-left: auto; }
 .your-members { display: flex; align-items: center; gap: var(--s2); }
 .your-members[hidden] { display: none; }
+/* One members bar: the header chip steps aside while the members strip shows its own Forget control. */
+.public:has(#members-strip [data-forget-members]) .your-members { display: none; }
 .your-members a, .your-members button { display: inline-flex; align-items: center; min-height: 44px; }
 .your-members a { color: var(--ink); font-weight: 600; text-decoration: none; }
 .your-members a:hover { text-decoration: underline; text-decoration-color: var(--marigold); text-decoration-thickness: 2px; text-underline-offset: 4px; }
@@ -352,6 +354,7 @@ body.public .correction-banner h2 { margin: 0; font: 650 .8rem/1.3 var(--ui); le
 .public-search input::placeholder { color: var(--muted); opacity: 1; }
 .public-search:focus-within { box-shadow: 0 0 0 2px var(--focus); }
 .public-search .icon { width: 18px; height: 18px; stroke-width: 2; }
+@media (min-width: 1280px) { .public-header [data-narrow-only] { display: none; } }
 body.public { display: flex; flex-direction: column; min-height: 100dvh; }
 body.public > main { flex: 1 0 auto; }
 .public-main { padding: var(--s6) var(--frame-pad) var(--s7); overflow-wrap: break-word; }
