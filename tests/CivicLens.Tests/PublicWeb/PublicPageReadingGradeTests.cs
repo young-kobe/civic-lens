@@ -364,6 +364,12 @@ public sealed class PublicPageReadingGradeTests
             new("Sam Member", PublishedChamber.House, BillMemberRelation.Cosponsor, new(2025, 10, 2), []),
             new("Sue Senator", PublishedChamber.Senate, BillMemberRelation.None, null, [])
         ], [PublishedChamber.House]);
+        var voteMembers = new VoteMembersData("36009", new string('a', 64), 7, PublishedChamber.House,
+        [
+            new("pat", "Pat Member", "Representative for Alabama, district 2", "Nay", "Democrat", true),
+            new("sam", "Sam Member", "Representative for Alabama, district 1", "Yea", "Republican", false),
+            new("sue", "Sue Senator", "Representative for Alabama, district 3", null, null, null)
+        ], 2, false);
         var voteList = new VoteListPageData(7, 1250,
             [new(new string('a', 64), "House passes H.R. 5334", "AI vote label", PublishedTextOrigin.Model, PublishedChamber.House, 314, new(2026, 9, 16), PublishedVoteKind.Passage, "H.R. 5334", "Passed", PublishedVoteAlignment.Split, 216, 214)],
             RecordListFilter.Of(null, null), "next", [new("passage", "Vote to pass")], [new("health", "Health")]);
@@ -474,6 +480,7 @@ public sealed class PublicPageReadingGradeTests
             ("zip cards", Page<ZipMemberCards>(With("Data", zip)), ["Pat Member"]),
             ("zip issue", Page<IssueMemberVotes>(With("Data", zipCompare)), ZipRecordData),
             ("bill members", Page<BillMembersFragment>(With("Data", billMembers)), ZipRecordData),
+            ("vote members", Page<VoteMembersFragment>(With("Data", voteMembers)), [.. ZipRecordData, "Representative for Alabama"]),
         ];
     }
 

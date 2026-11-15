@@ -42,6 +42,11 @@
                     <PartyBar Id="chamber" Data="chamberBar" />
                 }
             </section>
+            <section class="vote-zip" data-vote-members data-record-id="@Data.RecordId" data-release="@Data.Release" aria-labelledby="vote-zip-title">
+                <h2 id="vote-zip-title">@VotePageView.ZipMembersHeading</h2>
+                <div data-vote-members-body></div>
+                <p class="small muted" data-vote-members-prompt>@VotePageView.ZipMembersPrompt(Data.Chamber) <a href="@(RootPath + PublicationProtocol.HomePath)#zip-results">Find my members</a></p>
+            </section>
             <div class="vote-main">
                 <section class="vote-explain" aria-labelledby="vote-meaning-title">
                     <h2 id="vote-meaning-title">@VoteMeaning.Heading</h2>
@@ -157,7 +162,7 @@
                     <p class="muted small">@VoteWords.TrackedOnly @Data.Members.Length tracked @(Data.Members.Length == 1 ? "member has" : "members have") a recorded position, including those who did not vote.</p>
                     <details class="vote-fold" open="@(Filter.IsActive ? true : null)">
                         <summary>Find a member</summary>
-                        <form class="vote-filter" method="get" action="@(PagePath + "#members")">
+                        <form class="vote-filter" method="get" action="@(PagePath + "#members")" data-member-finder="@(Filter.IsActive ? null : "")">
                             <div class="vote-filter-field">
                                 <label for="vote-filter-name">Member name</label>
                                 <input id="vote-filter-name" type="search" name="q" maxlength="@PublishedRecordEntry.MaximumFilterValueLength" value="@Filter.Name" placeholder="Type a name" />
@@ -194,8 +199,8 @@
                                 }
                             </div>
                         </form>
-                        <p class="small muted" role="status">@rows.Count of @Data.Members.Length tracked members shown.</p>
-                        <DataTable TItem="VoteMemberData" Items="rows" Caption="Tracked members and their votes" Scroll="true" PagedRows="members">
+                        <p class="small muted" role="status" data-member-finder-status data-no-match="@VoteMemberFilter.NoMatch">@rows.Count of @Data.Members.Length tracked members shown.</p>
+                        <DataTable TItem="VoteMemberData" Items="rows" Caption="Tracked members and their votes" Scroll="true" PagedRows="members" RowFilterKeys="VoteMemberFilter.Keys">
                             <Head>
                                 <TableCell Header>Member</TableCell>
                                 <TableCell Header>Party</TableCell>
@@ -206,7 +211,7 @@
                                 <VoteMemberCells Member="member" RootPath="@RootPath" MemberIsMain="true" />
                                 <TableCell Label="Source"><SourceLineLink Anchor="@anchors.Anchor(member.Citation)" Target="@($"{member.Name}, member line")" /></TableCell>
                             </Row>
-                            <Empty><p class="small">No tracked member matches these filters.</p></Empty>
+                            <Empty><p class="small">@VoteMemberFilter.NoMatch</p></Empty>
                         </DataTable>
                     </details>
                 </section>

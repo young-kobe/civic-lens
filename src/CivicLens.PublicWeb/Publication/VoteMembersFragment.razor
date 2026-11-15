@@ -1,0 +1,34 @@
+<div data-vote-members-fragment data-zcta="@Data.Zcta" data-record-id="@Data.RecordId" data-release="@Data.Release">
+    @if (Data.Members.Length > 0)
+    {
+        <ul class="vote-zip-members" role="list">
+            @foreach (var member in Data.Members)
+            {
+                <li>
+                    <p class="vote-zip-member"><b>@member.Name</b>@if (member.Cast is { } cast){@(" ")<SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)">@PlainVoteWords.Cast(cast)</SharedVoteCast>}</p>
+                    <p class="small muted">@VotePageView.ZipMemberSeat(member)</p>
+                    @if (member.Cast is null)
+                    {
+                        <p class="small">@VotePageView.ZipMemberNoPosition(member)</p>
+                    }
+                    else if (VotePageView.ZipMemberPartyLine(member) is { } line)
+                    {
+                        <p class="small vote-zip-member-line">@if (member.BreaksParty == true){<span class="swatch against" data-tone="@PartyTones.Of(member.Party!).ToString().ToLowerInvariant()" aria-hidden="true"></span>}@line</p>
+                    }
+                </li>
+            }
+        </ul>
+    }
+    @if (Data.VacantSeats)
+    {
+        <p class="small muted">@ZipMemberCard.NoCurrentMember</p>
+    }
+    @if (Data.OtherChamberMembers > 0)
+    {
+        <p class="small muted">@VotePageView.OtherChamberNote(Data.Chamber, Data.OtherChamberMembers)</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VoteMembersData Data { get; set; } = default!;
+}

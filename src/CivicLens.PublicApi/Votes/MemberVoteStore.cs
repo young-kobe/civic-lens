@@ -141,6 +141,37 @@ public sealed class MemberVoteStore(NpgsqlDataSource views)
         return release is { } active ? new(active, [.. casts]) : null;
     }
 
+    // The vote row gives the chamber and shows that the active release holds the vote. A vote with no cast of the asked officials keeps one row with no official.
+    private const string CastsOnVoteSql = """
+        SELECT a.release_number, x.chamber, m.official_id, m.vote_cast, m.party, m.breaks_party
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN public_api.votes x ON x.record_id = @id
+          LEFT JOIN public_api.member_votes m ON m.record_id = x.record_id AND m.official_id = ANY(@officials)
+         ORDER BY m.official_id
+        """;
+
+    /// <summary>Reads the recorded cast, the party, and the party line of each asked official on one vote, with the chamber of the vote. Null means that no release is active.
+    /// One statement reads the release, the vote, and the casts. The rows are bounded by the asked officials.</summary>
+    public async Task<MemberVoteCastAnswer?> FindVoteCastsAsync(string[] officials, string recordId, CancellationToken cancellationToken)
+    {
+        await using var command = views.CreateCommand(CastsOnVoteSql);
+        command.Parameters.AddWithValue("officials", officials);
+        command.Parameters.AddWithValue("id", recordId);
+        var casts = new List<MemberVoteCast>();
+        int? release = null;
+        PublishedChamber? chamber = null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            release = reader.GetInt32(0);
+            if (reader.IsDBNull(1)) continue;
+            chamber = ViewColumns.Enum<PublishedChamber>(reader, 1);
+            if (reader.IsDBNull(2)) continue;
+            casts.Add(new(reader.GetString(2), reader.GetString(3), ViewColumns.Text(reader, 4), reader.IsDBNull(5) ? null : reader.GetBoolean(5)));
+        }
+        return release is { } active ? new(active, chamber, [.. casts]) : null;
+    }
+
     /// <summary>Reads a bounded shared set and every requested official's recorded cast in one release snapshot.</summary>
     public async Task<SharedMemberVoteAnswer?> FindSharedAsync(MemberVoteRequest request, CancellationToken cancellationToken)
     {
