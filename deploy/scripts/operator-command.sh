@@ -145,6 +145,13 @@ case "$*" in
     number "$4"
     "$compose" run --rm cli releases tallies verify "$4" "${@:5}"
     ;;
+  # usage: votes text backfill <count> [cursor]
+  "votes text backfill "*)
+    [[ $# -eq 4 || $# -eq 5 ]] || refuse
+    [[ $1 == votes && $2 == text && $3 == backfill ]] || refuse
+    number "$4"
+    "$compose" run --rm cli votes text backfill "$4" "${@:5}"
+    ;;
   # usage: actions text backfill <count> [cursor]
   "actions text backfill "*)
     [[ $# -eq 4 || $# -eq 5 ]] || refuse

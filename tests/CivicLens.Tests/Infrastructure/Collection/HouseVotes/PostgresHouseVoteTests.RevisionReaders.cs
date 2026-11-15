@@ -47,7 +47,7 @@ public sealed partial class PostgresHouseVoteTests
         var (recordId, candidate, written) = await SettledFullRevisionAsync();
         var racing = new WriteAfterFirstVoteRevisionRead(async () => await SaveAsync(recordId, 1, SuggestionChoice.Keep, "save-race"));
         var store = new PostgresVoteDraftStore(new PooledDbContextFactory<CollectionAttemptDbContext>(
-            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(racing).Options));
+            new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).AddInterceptors(racing).Options), TestCodeVersion.Current);
 
         var evidence = await store.ReadEvidenceAsync(candidate, default);
 

@@ -254,7 +254,7 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
         await db.Database.OpenConnectionAsync();
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
-        db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.Votes.VoteRevisionRows", "Create", vote, null));
+        db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.Votes.VoteRevisionRows", "Create", vote, null, TestCodeVersion.Current));
         await InternalMethods.InvokeAsync("CivicLens.Infrastructure.Votes.VoteMemberLists", "EnsureAsync", db, vote, CancellationToken.None);
         db.Add(InternalMethods.Invoke("CivicLens.Infrastructure.ExecutiveActions.ExecutiveActionRevisionRows", "Create", executive, TestCodeVersion.Current, null));
         await db.SaveChangesAsync();

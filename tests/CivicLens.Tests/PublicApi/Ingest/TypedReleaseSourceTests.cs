@@ -52,6 +52,17 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredBillLineThatEndsWithTheCutMarkIsNeitherIndexedAsTheLineNorUsedAsTheSnippet()
+    {
+        var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");
+
+        var typed = Assert.Single(await ReadAsync([action with { Entry = action.Entry with { BillLine = PublishedSamples.CutBillLine } }]));
+
+        Assert.Null(typed.Entry.BillLine);
+        Assert.DoesNotContain("sanctions", typed.SnippetText ?? "", StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EachKindCutsItsLongTextsAtTheFixedLimitsWithoutSplittingACharacter()
     {
         var longSummary = new string('w', 8_000);

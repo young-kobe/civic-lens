@@ -70,37 +70,21 @@ public sealed class PublishActionTests
     }
 
     [Fact]
-    public async Task ALongFirstSentenceIsCutAtAWordBoundaryAndEndsWithTheCutMarkerWithinTheCap()
+    public async Task AFirstSentenceOfExactlyTheMaximumLengthIsTheWholeLine()
     {
-        var line = await PublishedLineAsync(string.Join(' ', Enumerable.Repeat("grants", 60)) + ".");
+        var sentence = string.Join(' ', Enumerable.Repeat("grants", 28)) + " " + new string('x', PublishedRecordEntry.MaximumBillLineLength - 28 * 7 - 1) + ".";
 
-        Assert.Equal(string.Join(' ', Enumerable.Repeat("grants", 28)) + "…", line);
-        Assert.True(line!.Length <= PublishedRecordEntry.MaximumBillLineLength);
-    }
-
-    [Theory]
-    [InlineData(",")]
-    [InlineData(";")]
-    [InlineData(":")]
-    public async Task ACutDropsATrailingCommaSemicolonOrColonBeforeTheCutMarker(string mark)
-    {
-        var text = string.Join(' ', Enumerable.Repeat("grants", 27)) + " aid" + mark + " grants grants.";
-
-        Assert.Equal(string.Join(' ', Enumerable.Repeat("grants", 27)) + " aid…", await PublishedLineAsync(text));
+        Assert.Equal(PublishedRecordEntry.MaximumBillLineLength, sentence.Length);
+        Assert.Equal(sentence, await PublishedLineAsync(sentence + " It adds a cap."));
     }
 
     [Fact]
-    public async Task ANonBreakingSpaceIsAWordBoundaryForTheCut()
+    public async Task AFirstSentenceOverTheMaximumLengthHasNoLineBecauseCodeNeverCutsASentence()
     {
-        var text = string.Join('\u00A0', Enumerable.Repeat("grants", 60)) + ".";
+        var sentence = string.Join(' ', Enumerable.Repeat("grants", 28)) + " " + new string('x', PublishedRecordEntry.MaximumBillLineLength - 28 * 7) + ".";
 
-        Assert.Equal(string.Join('\u00A0', Enumerable.Repeat("grants", 28)) + "…", await PublishedLineAsync(text));
-    }
-
-    [Fact]
-    public async Task ASentenceWithNoWhitespaceInsideTheCapHasNoLine()
-    {
-        Assert.Null(await PublishedLineAsync(new string('x', PublishedRecordEntry.MaximumBillLineLength + 50) + ". It adds a cap."));
+        Assert.Equal(PublishedRecordEntry.MaximumBillLineLength + 1, sentence.Length);
+        Assert.Null(await PublishedLineAsync(sentence + " It adds a cap."));
     }
 
     [Fact]

@@ -106,6 +106,7 @@ if (args is [] or ["--help"] or ["help"])
           votes draft requeue <candidate-id|--all>
           votes draft requeue --blocked --code <block-code>
           votes draft requeue --refused
+          votes text backfill <limit> [cursor]
           executive-actions revisions backfill <limit>
           executive-actions revisions verify
           executive-actions targets backfill <limit>
@@ -152,6 +153,7 @@ if (args is [] or ["--help"] or ["help"])
         actions text backfill needs CIVIC_LENS_ARTIFACT_DIRECTORY and CIVIC_LENS_ISSUES_CONFIG. It calls no model.
         bills text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled congress-bill-text source. It refuses while action draft jobs are pending.
         executive-actions text backfill also needs CIVIC_LENS_COLLECTION_CONFIG with an enabled federal-register-text source. It refuses while Federal Register jobs are pending.
+        votes text backfill needs CIVIC_LENS_ARTIFACT_DIRECTORY and CIVIC_LENS_ISSUES_CONFIG. It calls no model.
         worker also drafts House and Senate votes when CIVIC_LENS_VOTE_DRAFTING_DAILY_TOKENS, ANTHROPIC_API_KEY, and CIVIC_LENS_ISSUES_CONFIG are set.
         worker also drafts relationships when CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
         worker also drafts weekly briefs when CIVIC_LENS_BRIEF_DRAFTING_DAILY_TOKENS and ANTHROPIC_API_KEY are set.
@@ -256,7 +258,7 @@ try
         await using var actionDraftingWakeup = actionDrafting.Wakeup;
         var executiveSummary = ExecutiveSummaryComposition.Create(analysisContexts, connectionString, codeVersion, BeatOf(WorkerLoopNames.ExecutiveSummary), loggers);
         await using var executiveSummaryWakeup = executiveSummary.Wakeup;
-        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
+        var voteDrafting = VoteDraftComposition.Create(analysisContexts, connectionString, codeVersion, jobs, apiResponses, issues, artifactRoot, BeatOf(WorkerLoopNames.VoteDrafting), loggers);
         await using var voteDraftingWakeup = voteDrafting.Wakeup;
         var relationshipDrafting = RelationshipDraftComposition.Create(analysisContexts, connectionString, workerConfiguration, BeatOf(WorkerLoopNames.RelationshipDrafting), loggers);
         await using var relationshipDraftingWakeup = relationshipDrafting.Wakeup;
@@ -329,7 +331,7 @@ try
         var contexts = AnalysisDbContextFactory.Create(connectionString);
         var redraftStale = new RedraftStaleAnalyses([
             new("actions", new PostgresActionDraftStore(contexts, codeVersion, ActionDraftConfiguration.ReadDraftsKeyTerms())),
-            new("votes", new PostgresVoteDraftStore(contexts)),
+            new("votes", new PostgresVoteDraftStore(contexts, codeVersion)),
             new("statements", new PostgresStatementDraftStore(contexts)),
             new("document-changes", new PostgresDocumentChangeAnalysisStore(contexts)),
             new("briefs", new PostgresBriefDraftStore(contexts))]);
@@ -382,11 +384,14 @@ try
     {
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var contexts = AnalysisDbContextFactory.Create(connectionString);
-        var draftStore = new PostgresVoteDraftStore(contexts);
+        var draftStore = new PostgresVoteDraftStore(contexts, codeVersion);
         var draftCommands = new AnalysisQueueCommands<VoteDraftRun, VoteDraftView, VoteDraftListItem>(
             draftStore, new PostgresAnalysisStatusStore(contexts, VoteDraftTask.Task));
         var votes = new VoteCommand(draftCommands, new GetVoteDraftStatus(draftCommands.Status, draftStore),
-            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore), owner);
+            new RequeueBlockedVoteDrafts(draftStore), new RequeueRefusedVoteDrafts(draftStore),
+            () => new BackfillVoteCodeText(draftStore, new VoteReader(CreateJobs(codeVersion), new ApiResponseReader(CreateDatabase(), new CaptureBodyReader()),
+                PublicationComposition.RequireArtifactRoot()), StatementIssueRubric.FromEnvironment()
+                ?? throw new ArgumentException("The vote text backfill requires CIVIC_LENS_ISSUES_CONFIG."), TimeProvider.System), owner);
         executing = true;
         return await votes.ExecuteAsync(args, cancellation.Token);
     }

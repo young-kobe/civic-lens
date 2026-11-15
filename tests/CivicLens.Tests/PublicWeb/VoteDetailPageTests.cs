@@ -22,13 +22,77 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task ACodeWrittenVoteKeepsItsCodeLabelWithoutModelStyling()
+    public async Task ACodeWrittenVoteShowsItsCodeLabelAndNoSummaryBoxBecauseTheSummaryOnlyRepeatsTheHeadline()
     {
-        var page = await RenderAsync(Vote() with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording });
+        var page = await RenderAsync(Vote() with { TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.CodeWording, Summary = "The House passed H.R. 5334." });
 
-        var summary = page.QuerySelector(".ai-summary")!;
-        Assert.Equal(AiLabelWords.CodeWording, summary.QuerySelector(".ai-label")!.TextContent);
-        Assert.False(summary.ClassList.Contains("ai-summary-ai"));
+        Assert.Null(page.QuerySelector(".ai-summary"));
+        Assert.Equal(AiLabelWords.CodeWording, page.QuerySelector(".vote-head .ai-label")!.TextContent);
+        Assert.Equal(1, page.QuerySelector(".vote-head")!.TextContent.Split("The House passed H.R. 5334.").Length - 1);
+    }
+
+    [Fact]
+    public async Task ASenateVoteWithCodeTextShowsTheSenateLabelOfTheView()
+    {
+        var page = await RenderAsync(Vote() with { Chamber = PublishedChamber.Senate, TextOrigin = PublishedTextOrigin.Code, Label = AiLabelWords.SenateCodeWording });
+
+        Assert.Equal(AiLabelWords.SenateCodeWording, page.QuerySelector(".vote-head .ai-label")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheAboutLineIsTheWholeBillLineWithItsSourceNoteRightUnderTheHeadline()
+    {
+        var page = await RenderAsync(Vote());
+
+        var about = page.QuerySelector(".vote-head .vote-about")!;
+        Assert.Equal("A bill line. " + PublishedWording.BillLineSource, about.TextContent);
+        Assert.True(Position(page, "h1.vote-headline") < Position(page, ".vote-about"));
+        Assert.DoesNotContain("A bill line.", page.QuerySelector(".vote-bill")!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABillWithNoLineGivesTheSourceDescriptionWordForWordInItsPlace()
+    {
+        const string description = "Vote title: To strike section 2 of the bill.";
+        var vote = Vote() with
+        {
+            Bill = Vote().Bill! with { Line = null },
+            Facts = [.. Vote().Facts, new() { Text = description, Citation = Cite(Lines[1]) }]
+        };
+
+        var page = await RenderAsync(vote);
+
+        Assert.Equal("To strike section 2 of the bill.", page.QuerySelector(".vote-about")!.TextContent);
+    }
+
+    [Fact]
+    public async Task AVoteWithNoWholeBillLineAndNoDescriptionHasNoAboutLine()
+    {
+        var page = await RenderAsync(Vote() with { Bill = Vote().Bill! with { Line = null } });
+
+        Assert.Null(page.QuerySelector(".vote-about"));
+    }
+
+    [Fact]
+    public void ADescriptionThatTheHeadlineAlreadyHoldsIsNotShownTwice()
+    {
+        var vote = Vote() with
+        {
+            Bill = null,
+            Headline = "The Senate voted on a nomination: Jane Doe, to be Secretary of Labor. The nominee was confirmed.",
+            Facts = [.. Vote().Facts, new() { Text = "Vote title: Jane Doe, to be Secretary of Labor", Citation = Cite(Lines[1]) }]
+        };
+
+        Assert.Null(VotePageView.About(vote));
+    }
+
+    [Fact]
+    public void AWholeBillLineComesBeforeTheDescriptionInTheAboutOrder()
+    {
+        var vote = Vote() with { Facts = [.. Vote().Facts, new() { Text = "Vote title: A purpose.", Citation = Cite(Lines[1]) }] };
+
+        Assert.Equal(new VoteAbout("A bill line.", FromBill: true), VotePageView.About(vote));
+        Assert.Equal(new VoteAbout("A purpose.", FromBill: false), VotePageView.About(vote with { Bill = null }));
     }
 
     [Fact]
@@ -247,13 +311,12 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task TheBillCardLinksTheBillAndLabelsItsLineAndIssueChipsLinkTheirPages()
+    public async Task TheBillCardLinksTheBillAndIssueChipsLinkTheirPages()
     {
         var page = await RenderAsync(Vote());
 
         var bill = page.QuerySelector(".vote-bill")!;
         Assert.Equal(Root + "records/" + new string('b', 64) + ".html", bill.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains(PublishedWording.BillLineSource, bill.TextContent);
         Assert.Equal(Root + "issues/tax.html", page.QuerySelector(".vote-chip")!.GetAttribute("href"));
     }
 

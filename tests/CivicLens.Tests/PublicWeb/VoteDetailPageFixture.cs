@@ -63,7 +63,7 @@ internal static class VoteDetailPageFixture
     ];
 
     public static VotePageData Vote() => new(7, RecordId, 2, PublishedChamber.House, 119, 2, 308, new(2026, 9, 16), PublishedVoteKind.Passage,
-        PublishedVoteSource.CongressGov, "The House passed H.R. 5334.", "The House voted on a bill.", PublishedTextOrigin.Model, null, "Passed",
+        PublishedVoteSource.CongressGov, "The House passed H.R. 5334.", "The House voted on a bill.", PublishedTextOrigin.Model, AiLabelWords.ModelWording, "Passed",
         PublishedVoteAlignment.Split, new() { Yea = 6, Nay = 4, Present = 1, NotVoting = 3 }, Tallies, Cite(Lines[0]), Cite(Lines[1]),
         [new() { Text = Lines[1], Citation = Cite(Lines[1]) }, new() { Text = Lines[2], Citation = Cite(Lines[2]) }, new() { Text = Lines[3], Citation = Cite(Lines[3]) }],
         [Source], Members, new("b".PadRight(64, 'b'), "Sanctioning Russia and Iran Act of 2026", "A bill line."), [new("tax", "Taxes")], "hr", 5334);

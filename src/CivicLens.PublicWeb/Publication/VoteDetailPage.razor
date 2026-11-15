@@ -17,7 +17,18 @@
                 }
             </p>
             <h1 class="vote-headline">@Data.Headline</h1>
-            <AiSummary TextOrigin="@Data.TextOrigin" Label="@summaryLabel"><p>@Data.Summary</p></AiSummary>
+            @if (about is { } aboutLine)
+            {
+                <p class="vote-about">@aboutLine.Text@if (aboutLine.FromBill){<PublishedBillLineNote Inline="true" />}</p>
+            }
+            @if (Data.TextOrigin == PublishedTextOrigin.Code)
+            {
+                <AiLabel Text="@summaryLabel" Origin="Data.TextOrigin" />
+            }
+            else
+            {
+                <AiSummary TextOrigin="@Data.TextOrigin" Label="@summaryLabel"><p>@Data.Summary</p></AiSummary>
+            }
             <PublishedUpdateLine Corrections="Data.Corrections" />
         </header>
         <PublishedCorrectionBanner Kind="PublishedRecordKind.Vote" Corrections="Data.Corrections" />
@@ -210,11 +221,6 @@
                         {
                             <p class="vote-bill-status"><StatusBadge Text="@bill.StatusLabel" /></p>
                         }
-                        @if (bill.Line is not null)
-                        {
-                            <p class="small"><PublishedBillLine Line="@bill.Line" /></p>
-                            <PublishedBillLineNote />
-                        }
                     </section>
                 }
                 @if (Data.Issues.Length > 0)
@@ -249,6 +255,7 @@
     private VoteCitationAnchors anchors = default!;
     private (string Yes, string No, string NextStep)? wording;
     private string? summaryLabel;
+    private VoteAbout? about;
     private PartyBarData? chamberBar;
     private IReadOnlyList<PartyBarData> partyBars = [];
     private VoteMapData? map;
@@ -267,7 +274,8 @@
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Vote, Data.Headline, Data.ShortName);
         anchors = new VoteCitationAnchors(Data);
         wording = VoteWording.Of(Data.WordingSource);
-        summaryLabel = VotePageView.Label(Data);
+        summaryLabel = Data.Label;
+        about = VotePageView.About(Data);
         chamberBar = VotePageView.ChamberBar(Data);
         partyBars = VotePageView.PartyBars(Data);
         map = VoteMapData.Of(Data);

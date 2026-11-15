@@ -121,16 +121,23 @@ public static class VotePageView
 
     public static bool HasUnknownParty(VotePageData vote) => vote.Members.Any(member => member.Party is null);
 
-    /// <summary>The AI label of the vote summary: the label column of the view, or the label of its text origin when the view gives none.</summary>
-    public static string? Label(VotePageData vote) => vote.Label ?? (vote.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
-        ? PublishedRecordLabels.Wording(vote.TextOrigin).First().Value : null);
+    /// <summary>The one line under the headline that says what the vote is about. It is the bill line when the bill has one. Else it is
+    /// the source description of the vote, word for word, unless the headline already holds it. Else the vote has none.</summary>
+    public static VoteAbout? About(VotePageData vote)
+    {
+        if (vote.Bill?.Line is { } line) return new(line, FromBill: true);
+        var description = vote.Facts.FirstOrDefault(fact => fact.Text.StartsWith(PublishedVote.DescriptionPrefix, StringComparison.Ordinal))
+            ?.Text[PublishedVote.DescriptionPrefix.Length..].Trim();
+        return string.IsNullOrEmpty(description) || vote.Headline.Contains(description.TrimEnd('.'), StringComparison.Ordinal)
+            ? null : new(description, FromBill: false);
+    }
 
     /// <summary>The facts of the source fold: the cited facts, then the identity of the roll call, the AI label, and the revision.</summary>
     public static IReadOnlyList<Fact> Facts(VotePageData vote, VoteCitationAnchors anchors) =>
     [
         .. VoteFacts.Cited(vote.FactsSource, anchors.Anchor),
         .. VoteFacts.Identity(vote.Chamber, vote.RollCall, vote.Congress, vote.Session, vote.Source),
-        .. Label(vote) is { } label ? [new Fact(PublishedRecordLabels.WordingFact, label) { AiLabelOrigin = vote.TextOrigin }] : Array.Empty<Fact>(),
+        .. vote.Label is { } label ? [new Fact(PublishedRecordLabels.WordingFact, label) { AiLabelOrigin = vote.TextOrigin }] : Array.Empty<Fact>(),
         new("Revision", vote.RevisionNumber.ToString(System.Globalization.CultureInfo.InvariantCulture))
     ];
 }

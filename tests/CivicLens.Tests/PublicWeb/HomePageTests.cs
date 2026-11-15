@@ -55,11 +55,12 @@ public sealed class HomePageTests
     public async Task TheSummaryKeepsItsPublishedOriginAndEscapesStoredText(PublishedTextOrigin origin, string? wording)
     {
         const string text = "<script>private()</script>";
-        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Summary = text }, [], null));
+        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Label = wording, Summary = text }, [], null));
         var summary = page.QuerySelector(".home-featured-summary, .home-featured .ai-summary")!;
 
         Assert.Null(summary.QuerySelector("script"));
-        Assert.Equal(text, summary.QuerySelector("p")!.TextContent);
+        // Code text repeats the headline, so the card shows only its label.
+        Assert.Equal(origin == PublishedTextOrigin.Code ? null : text, summary.QuerySelector("p")?.TextContent);
         Assert.Equal(wording, summary.QuerySelector("span")?.TextContent);
         Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("ai-summary-ai"));
         var descriptionId = page.QuerySelector(".home-featured h2")!.GetAttribute("aria-describedby");
@@ -485,7 +486,7 @@ public sealed class HomePageTests
     public async Task TheFeaturedVoteLabelTheBriefLabelAndEachVoteRowLabelAreDrawnByAiLabel(PublishedTextOrigin origin, string featuredLabel)
     {
         const string briefLabel = "Drafted by an AI model from reviewed records.";
-        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin },
+        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Label = featuredLabel },
             [.. RecentVotes(PublishedVoteAlignment.Split).Select(vote => vote with { Label = AiLabelWords.ModelWording, TextOrigin = PublishedTextOrigin.Model })],
             new(new string('b', 64), "This week in Congress", briefLabel)));
 

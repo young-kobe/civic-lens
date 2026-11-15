@@ -9260,7 +9260,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_outcome", "outcome IN ('Drafted','DraftDiscarded','CitationRejected','OutputRejected','Refused','OutputLimitReached','UnexpectedStop','RateLimited','ProviderUnavailable','AuthenticationFailed','ProviderRejected','ConnectionFailed','BillingFailed','ModelNotFound','ProcessingFailed','InvalidResponse','Interrupted','Bypassed')");
 
-                            t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged','kindChanged','recordRejected')");
+                            t.HasCheckConstraint("ck_vote_analysis_runs_reason", "reason IS NULL OR reason IN ('unchanged','noTrackedMember','memberVotesChanged','kindChanged','recordRejected','codeWritten','textKept')");
 
                             t.HasCheckConstraint("ck_vote_analysis_runs_started_at_utc_ticks", "started_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
@@ -9786,6 +9786,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("chamber");
 
+                    b.Property<string>("CodeVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code_version");
+
                     b.Property<bool>("ColumnsWritten")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -9965,7 +9970,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         {
                             t.HasCheckConstraint("ck_vote_revisions_alignment", "alignment IS NULL OR alignment IN ('Split', 'PartiesAgree', 'Mixed')");
 
-                            t.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis')");
+                            t.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
 
                             t.HasCheckConstraint("ck_vote_revisions_bill", "(bill_type IS NULL) = (bill_number IS NULL) AND bill_number >= 1");
 
@@ -9974,6 +9979,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_revisions_chamber", "chamber IN ('House', 'Senate')");
 
                             t.HasCheckConstraint("ck_vote_revisions_chamber_source", "(chamber = 'House') = (vote_source = 'CongressGov')");
+
+                            t.HasCheckConstraint("ck_vote_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+
+                            t.HasCheckConstraint("ck_vote_revisions_code_version_author", "code_version IS NULL OR author_kind = 'Code'");
 
                             t.HasCheckConstraint("ck_vote_revisions_columns_written", "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
 
@@ -9995,7 +10004,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_revisions_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
 
-                            t.HasCheckConstraint("ck_vote_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_vote_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
 
