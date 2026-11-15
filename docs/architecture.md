@@ -294,10 +294,10 @@ The protocol, configuration, schema, parser, and behavior versions start at the 
 | Statement draft prompt | `statement-draft-prompt-v4` | same file | Statement analysis runs | Prompt text or input framing changes, for either speaker shape |
 | Statement draft schema | `statement-draft-schema-v1` | same file | Statement analysis runs | The model output schema changes, for either speaker shape |
 | Action draft task | `action-draft-v1` | `src/CivicLens.Application/Actions/ActionDraftTask.cs` | Action analysis runs | Task flow or output handling changes |
-| Action draft prompt | `action-draft-prompt-v7` | same file | Action analysis runs | Prompt text or input framing changes |
+| Action draft prompt | `action-draft-prompt-v7`, retired: no request sends it, and its drafts stay current | same file | Action analysis runs | Never; the prompt text is deleted |
 | Action issue prompt | `action-issue-prompt-v4` | same file | Action analysis runs | Prompt text or input framing changes |
 | Action text prompt | `action-text-prompt-v10`, or `action-text-prompt-v11` for a bill with a definitions section when key terms are on; v10 stays current then | same file | Action analysis runs | Prompt text or input framing changes |
-| Action draft schema | `action-draft-schema-v2` | same file | Action analysis runs | The model output schema changes |
+| Action draft schema | `action-draft-schema-v2`, retired with its prompt | same file | Action analysis runs | Never; the schema is not sent |
 | Action issue schema | `action-issue-schema-v1` | same file | Action analysis runs | The model output schema changes |
 | Action text schema | `action-text-schema-v2` | same file | Action analysis runs | The model output schema changes |
 | Vote draft task | `vote-draft-v1` | `src/CivicLens.Application/Votes/VoteDraftTask.cs` | Vote analysis runs | Task flow or output handling changes |
