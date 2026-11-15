@@ -9,7 +9,7 @@ public sealed record BillListPageData(int Release, int? Congress, int Total, IRe
     IReadOnlyList<SearchChoiceData> Statuses, IReadOnlyList<SearchChoiceData> PolicyAreas, IReadOnlyList<SearchChoiceData> Issues);
 
 /// <summary><see cref="Label"/> is the label column of the view, or null. <see cref="Sponsor"/> is the first sponsor, or null when the release names none.
-/// <see cref="EventDate"/> is the day of the latest sponsorship. The latest action is the text and day that Congress.gov last listed, or null when Civic Lens has not read them.
+/// The latest action is the text and day that Congress.gov last listed, or null when Civic Lens has not read them.
 /// <see cref="Status"/> is the stored status of that action, or null when the release has not stored it.</summary>
-public sealed record BillListRowData(string RecordId, string Headline, string? Label, PublishedTextOrigin TextOrigin, string BillType, string? Sponsor, DateOnly EventDate,
+public sealed record BillListRowData(string RecordId, string Headline, string? Label, PublishedTextOrigin TextOrigin, string BillType, string? Sponsor,
     string? LatestActionText, DateOnly? LatestActionDate, BillStatusStage? Status);

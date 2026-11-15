@@ -53,7 +53,7 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
         var rows = page.Bills.Select(bill =>
         {
             var fact = facts.GetValueOrDefault(bill.RecordId);
-            return new BillListRowData(bill.RecordId, bill.Headline, bill.Label, bill.TextOrigin, bill.BillType, fact?.Sponsor, bill.EventDate, fact?.LatestActionText,
+            return new BillListRowData(bill.RecordId, bill.Headline, bill.Label, bill.TextOrigin, bill.BillType, fact?.Sponsor, fact?.LatestActionText,
                 fact?.LatestActionDate, fact?.Status);
         }).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("type", request.BillType), ("status", request.Status is { } status ? QueryValues.ChoiceText(status) : null),

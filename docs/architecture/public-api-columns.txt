@@ -248,6 +248,7 @@ bill_keys bill_number
 bill_keys policy_area_id
 bill_keys event_date
 bill_keys status
+bill_keys latest_action_date
 bill_text_sentences part
 bill_text_sentences position
 bill_text_sentences quote
