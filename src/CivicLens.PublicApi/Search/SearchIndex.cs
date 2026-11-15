@@ -12,7 +12,6 @@ namespace CivicLens.PublicApi.Search;
 public sealed class SearchIndex(NpgsqlDataSource database)
 {
     private static readonly string SnippetOptions = $"StartSel={SearchResultsPage.MarkStart}, StopSel={SearchResultsPage.MarkEnd}, HighlightAll=true";
-    private const string TextMatch = " AND r.search @@ websearch_to_tsquery('english', @q)";
     private const string SortDate = "COALESCE(r.event_date, (r.first_published_at_utc AT TIME ZONE 'UTC')::date)";
     private const string InRelease = "r.first_release <= @release AND (r.last_release IS NULL OR r.last_release >= @release)";
     private const string RankedAfterCursor = "WHERE r.rank < @cursor_rank OR (r.rank = @cursor_rank AND r.record_id > @cursor_id)";
@@ -62,17 +61,11 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         return new(release, [.. page.Select(row => row.Hit)], hasMore ? NextCursor(release, request, page[^1]).Encode() : null);
     }
 
-    /// <summary>Counts every record of the release that the text and the filters match. The count ignores the cursor, so every page gives the same total.
-    /// The text query is a materialized CTE, as in the ranked query. With a constant query the planner prefers a sequential scan,
-    /// because it does not price reading the large stored vectors. At 22,000 rows that scan takes about 250 ms and the GIN index path at most 14 ms.</summary>
+    /// <summary>Counts every record of the release that the text and the filters match. The count ignores the cursor, so every page gives the same total.</summary>
     public async Task<int> CountAsync(int release, SearchRequest request, CancellationToken cancellationToken)
     {
-        await using var command = database.CreateCommand(request.Text is null
-            ? $"SELECT count(*)::integer FROM records r WHERE {InRelease}{FieldFilters(request)}"
-            : $"""
-                WITH q AS MATERIALIZED (SELECT websearch_to_tsquery('english', @q) AS query)
-                SELECT count(*)::integer FROM records r CROSS JOIN q WHERE {InRelease} AND r.search @@ q.query{FieldFilters(request)}
-                """);
+        await using var command = database.CreateCommand(
+            $"{TextQuery(request)}SELECT count(*)::integer FROM records r{TextJoin(request)} WHERE {InRelease}{FieldFilters(request)}");
         AddFilterParameters(command, release, request);
         return (int)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
@@ -81,7 +74,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         WITH q AS (SELECT websearch_to_tsquery('english', @q) AS query),
         ranked AS (
             SELECT r.*, ts_rank_cd(r.search, q.query) AS rank FROM records r CROSS JOIN q
-            WHERE {InRelease} AND r.search @@ q.query{Filters(request)}
+            WHERE {InRelease} AND r.search @@ q.query{FieldFilters(request)}
         ),
         page AS (
             SELECT * FROM ranked r {(request.Cursor is null ? "" : RankedAfterCursor)}
@@ -94,7 +87,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
 
     private static string DatedSql(SearchRequest request) => $"""
         SELECT {Columns}, NULL::text FROM records r
-        WHERE {InRelease}{Filters(request)}{(request.Cursor is null ? "" : DatedAfterCursor)}
+        WHERE {InRelease}{FieldFilters(request)}{(request.Cursor is null ? "" : DatedAfterCursor)}
         ORDER BY {SortDate} DESC, r.first_published_at_utc DESC, r.record_id LIMIT @take
         """;
 
@@ -107,8 +100,8 @@ public sealed class SearchIndex(NpgsqlDataSource database)
                 (SELECT {key}, r.record_id FROM records r WHERE r.record_id = @cursor_id AND {InRelease})
             """;
         return $"""
-            SELECT {Columns}, NULL::text FROM records r
-            WHERE {InRelease}{Filters(request)}{after}
+            {TextQuery(request)}SELECT {Columns}, NULL::text FROM records r{TextJoin(request)}
+            WHERE {InRelease}{FieldFilters(request)}{after}
             ORDER BY {key} {direction}, r.record_id {direction} LIMIT @take
             """;
     }
@@ -122,7 +115,13 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         _ => throw new ArgumentOutOfRangeException(nameof(sort), sort, "Sort key is not known.")
     };
 
-    private static string Filters(SearchRequest request) => (request.Text is not null && request.Sort is not null ? TextMatch : "") + FieldFilters(request);
+    /// <summary>Names the text query of a count or a sorted page as a materialized CTE, as the ranked query does. With a constant query
+    /// the planner prefers a sequential scan, because it does not price reading the large stored vectors. On a 22,000-row fixture
+    /// that scan took 420 to 560 ms and the GIN index path at most 41 ms.</summary>
+    private static string TextQuery(SearchRequest request) =>
+        request.Text is null ? "" : "WITH q AS MATERIALIZED (SELECT websearch_to_tsquery('english', @q) AS query)\n";
+
+    private static string TextJoin(SearchRequest request) => request.Text is null ? "" : " JOIN q ON r.search @@ q.query";
 
     private static string FieldFilters(SearchRequest request) =>
         (request.Kind is null ? "" : " AND r.kind = @kind") +
