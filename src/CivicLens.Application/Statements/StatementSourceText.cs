@@ -23,6 +23,11 @@ public sealed class StatementSourceText
     private static readonly string[] SaidWords = ["said", "says"];
     private const int MaximumNameWords = 4;
 
+    // The titles that may come before the name in "said NAME". Any other word of NAME must be a word of the official's own name, so
+    // "said Senator Tim Scott" never counts for Rick Scott. A title with a period, such as "Sen.", stops the clause before this check.
+    private static readonly string[] TitleWords =
+        ["Senator", "Representative", "Congressman", "Congresswoman", "Delegate", "Resident", "Commissioner", "Leader", "Whip", "Speaker", "Chair", "Chairman", "Chairwoman"];
+
     private readonly IReadOnlyList<SourceSpan> passages;
 
     private StatementSourceText(string headline, ImmutableArray<StatementQuotation> quotations, IReadOnlyList<SourceSpan> passages) =>
@@ -60,14 +65,15 @@ public sealed class StatementSourceText
         return StatementDraftResolver.WithArticleDerivedFields(revision, text);
     }
 
-    /// <summary>Code attributes a quoted passage only when the clause next to it is "said NAME" or "NAME said", and NAME is one to four
-    /// capitalized words that end with the last name of the official. Every passage counts, also one that is not a quotation of the
-    /// revision. A text with no quoted passage is release text of the office.</summary>
+    /// <summary>Code attributes a quoted passage only when the clause next to it is "said NAME" or "NAME said". NAME is one to four
+    /// capitalized words that end with the last name of the official. Each other word is a title or a word of the official's name, so a
+    /// clause that names another first name never counts. Every passage counts, also one that is not a quotation of the revision.
+    /// A text with no quoted passage is release text of the office.</summary>
     private bool IsOnlyQuoting(string text, string officialName)
     {
-        var lastName = officialName.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-        return lastName is not null && passages.All(passage =>
-            NamesOnly(ClauseAfter(text, passage), lastName) || NamesOnly(ClauseBefore(text, passage), lastName));
+        var nameWords = officialName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return nameWords.Length > 0 && passages.All(passage =>
+            NamesOnly(ClauseAfter(text, passage), nameWords) || NamesOnly(ClauseBefore(text, passage), nameWords));
     }
 
     /// <summary>The text after the closing mark up to the end of its clause. A passage with no closing mark has no clause after it.</summary>
@@ -87,14 +93,15 @@ public sealed class StatementSourceText
         return text[start..openingMark];
     }
 
-    private static bool NamesOnly(string clause, string lastName)
+    private static bool NamesOnly(string clause, string[] nameWords)
     {
         var words = clause.Trim().Trim(',', ':').Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (words.Length < 2) return false;
         var name = SaidWords.Contains(words[0], StringComparer.Ordinal) ? words[1..]
             : SaidWords.Contains(words[^1], StringComparer.Ordinal) ? words[..^1] : [];
         return name.Length is > 0 and <= MaximumNameWords && name.All(word => char.IsUpper(word[0])) &&
-            string.Equals(name[^1], lastName, StringComparison.Ordinal);
+            string.Equals(name[^1], nameWords[^1], StringComparison.Ordinal) &&
+            name[..^1].All(word => TitleWords.Contains(word, StringComparer.Ordinal) || nameWords.Contains(word, StringComparer.Ordinal));
     }
 
     /// <summary>Each quoted passage of the text, up to the revision limit. A text with no quoted passage cites its body as release text.</summary>
