@@ -5359,10 +5359,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("position");
 
-                    b.Property<bool>("FactsUnchanged")
-                        .HasColumnType("boolean")
-                        .HasColumnName("facts_unchanged");
-
                     b.Property<string>("Note")
                         .HasColumnType("text")
                         .HasColumnName("note");
@@ -5375,19 +5371,27 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("replaced_revision_number");
 
+                    b.Property<string>("TextRewrite")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("text_rewrite");
+
                     b.HasKey("Kind", "RecordId", "FirstRelease", "Position");
 
                     b.ToTable("publication_withdrawal_corrections", null, t =>
                         {
-                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
-
                             t.HasCheckConstraint("ck_publication_withdrawal_corrections_note", "note IS NULL OR char_length(note) BETWEEN 1 AND 500 AND btrim(note) <> ''");
+
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_note_text_rewrite", "note IS NULL OR text_rewrite = 'None'");
 
                             t.HasCheckConstraint("ck_publication_withdrawal_corrections_position", "\"position\" >= 0");
 
                             t.HasCheckConstraint("ck_publication_withdrawal_corrections_published_at_utc_ticks", "published_at_utc_ticks BETWEEN 0 AND 3155378975999999999");
 
                             t.HasCheckConstraint("ck_publication_withdrawal_corrections_revision", "replaced_revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_publication_withdrawal_corrections_text_rewrite", "text_rewrite IN ('None', 'Model', 'Code')");
                         });
                 });
 
@@ -5572,10 +5576,6 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("position");
 
-                    b.Property<bool>("FactsUnchanged")
-                        .HasColumnType("boolean")
-                        .HasColumnName("facts_unchanged");
-
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -5593,6 +5593,12 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("replaced_revision_number");
 
+                    b.Property<string>("TextRewrite")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("text_rewrite");
+
                     b.HasKey("HistoryId", "Position");
 
                     b.ToTable("published_correction_history_entries", null, t =>
@@ -5601,7 +5607,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_published_correction_history_entries_note", "note IS NULL OR length(note) <= 500");
 
-                            t.HasCheckConstraint("ck_published_correction_history_entries_note_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
+                            t.HasCheckConstraint("ck_published_correction_history_entries_note_text_rewrite", "note IS NULL OR text_rewrite = 'None'");
 
                             t.HasCheckConstraint("ck_published_correction_history_entries_position", "position BETWEEN 0 AND 61");
 
@@ -5610,6 +5616,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_published_correction_history_entries_published_offset_minutes", "published_offset_minutes BETWEEN -840 AND 840");
 
                             t.HasCheckConstraint("ck_published_correction_history_entries_replaced_revision_number", "replaced_revision_number >= 1");
+
+                            t.HasCheckConstraint("ck_published_correction_history_entries_text_rewrite", "text_rewrite IN ('None', 'Model', 'Code')");
                         });
                 });
 

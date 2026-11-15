@@ -14,7 +14,10 @@ internal sealed class PublicationWithdrawalCorrectionRowConfiguration : IEntityT
             table.HasCheckConstraint("ck_publication_withdrawal_corrections_revision", "replaced_revision_number >= 1");
             table.HasCheckConstraint("ck_publication_withdrawal_corrections_note",
                 $"note IS NULL OR char_length(note) BETWEEN 1 AND {PublishedCorrection.MaximumNoteLength} AND btrim(note) <> ''");
-            table.HasCheckConstraint("ck_publication_withdrawal_corrections_facts_unchanged", "note IS NULL OR NOT facts_unchanged");
+            table.HasCheckConstraint("ck_publication_withdrawal_corrections_text_rewrite",
+                EnumChecks.InList("text_rewrite", Enum.GetNames<PublishedTextRewrite>()));
+            table.HasCheckConstraint("ck_publication_withdrawal_corrections_note_text_rewrite",
+                $"note IS NULL OR text_rewrite = '{nameof(PublishedTextRewrite.None)}'");
         });
         builder.HasKey(row => new { row.Kind, row.RecordId, row.FirstRelease, row.Position });
         builder.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired();
@@ -24,7 +27,7 @@ internal sealed class PublicationWithdrawalCorrectionRowConfiguration : IEntityT
         builder.Property(row => row.ReplacedRevisionNumber).HasColumnName("replaced_revision_number").IsRequired();
         builder.Property(row => row.PublishedAtUtcTicks).HasColumnName("published_at_utc_ticks").IsRequired();
         builder.Property(row => row.Note).HasColumnName("note");
-        builder.Property(row => row.FactsUnchanged).HasColumnName("facts_unchanged").IsRequired();
+        builder.Property(row => row.TextRewrite).HasColumnName("text_rewrite").HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.HasOne<PublicationWithdrawalRow>().WithMany().HasForeignKey(row => new { row.Kind, row.RecordId, row.FirstRelease })
             .OnDelete(DeleteBehavior.Restrict);
     }

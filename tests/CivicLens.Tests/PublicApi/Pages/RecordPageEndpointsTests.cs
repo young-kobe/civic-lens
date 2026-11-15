@@ -335,9 +335,9 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
             INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ('{text}', '{id}', {first});
             INSERT INTO publication_withdrawals (kind, record_id, withdrawn_revision_number, withdrawn_at_utc_ticks, note, first_release, last_release) VALUES
                 ('{text}', '{id}', 5, {withdrawn}, 'Withdrawn after a report', 6, NULL);
-            INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) VALUES
-                ('{text}', '{id}', 6, 0, 4, {edit}, 'A person fixed the date', false),
-                ('{text}', '{id}', 6, 1, 2, {edit}, NULL, false);
+            INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, text_rewrite) VALUES
+                ('{text}', '{id}', 6, 0, 4, {edit}, 'A person fixed the date', 'None'),
+                ('{text}', '{id}', 6, 1, 2, {edit}, NULL, 'None');
             """);
 
         var page = await GetPageAsync(host, Path(id));
@@ -370,9 +370,9 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
             INSERT INTO publication_withdrawals (kind, record_id, withdrawn_revision_number, withdrawn_at_utc_ticks, note, first_release, last_release) VALUES
                 ('statement', '{id}', 3, {when}, 'Statement notice', 6, NULL),
                 ('action', '{id}', 2, {when}, 'Action notice', 6, NULL);
-            INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, facts_unchanged) VALUES
-                ('statement', '{id}', 6, 0, 1, {when}, 'Statement fix', false),
-                ('action', '{id}', 6, 0, 1, {when}, 'Action fix', false);
+            INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, "position", replaced_revision_number, published_at_utc_ticks, note, text_rewrite) VALUES
+                ('statement', '{id}', 6, 0, 1, {when}, 'Statement fix', 'None'),
+                ('action', '{id}', 6, 0, 1, {when}, 'Action fix', 'None');
             """);
 
         var page = await GetPageAsync(host, Path(id));

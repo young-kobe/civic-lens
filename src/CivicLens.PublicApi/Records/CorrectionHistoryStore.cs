@@ -10,7 +10,7 @@ public sealed class CorrectionHistoryStore(NpgsqlDataSource views)
         SELECT a.release_number, r.kind, r.record_id, r.revision_number,
                h.history_id, h.encoding_version, h.correction_count,
                e."position", e.replaced_revision_number, e.published_at_utc_ticks,
-               e.published_offset_minutes, e.note, e.facts_unchanged
+               e.published_offset_minutes, e.note, e.text_rewrite
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.active_records r
             ON r.release_number = a.release_number AND r.kind = @kind AND r.record_id = @id
@@ -126,7 +126,7 @@ public sealed class CorrectionHistoryStore(NpgsqlDataSource views)
                 ReplacedRevisionNumber = reader.GetInt32(8),
                 PublishedAtUtc = timestamp,
                 Note = reader.IsDBNull(11) ? null : reader.GetString(11),
-                FactsUnchanged = reader.GetBoolean(12)
+                TextRewrite = TextRewriteColumn.Read(reader, 12)
             });
         }
         catch (ArgumentOutOfRangeException exception)

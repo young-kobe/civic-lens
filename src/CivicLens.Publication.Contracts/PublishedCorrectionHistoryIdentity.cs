@@ -4,7 +4,10 @@ using System.Text;
 
 namespace CivicLens.Publication.Contracts;
 
-/// <summary>Creates a stable identity for the ordered content of a published correction history.</summary>
+/// <summary>
+/// Creates a stable identity for the ordered content of a published correction history. Version 1 writes the text rewrite as one byte. None and Model
+/// write the bytes that the earlier facts-unchanged bool wrote, so every stored history keeps its identity.
+/// </summary>
 public static class PublishedCorrectionHistoryIdentity
 {
     public const int CurrentVersion = 1;
@@ -46,7 +49,7 @@ public static class PublishedCorrectionHistoryIdentity
                         throw new InvalidDataException("A correction note is not valid UTF-16.", exception);
                     }
                 }
-                writer.Write(correction.FactsUnchanged);
+                writer.Write((byte)correction.TextRewrite);
             }
         }
 

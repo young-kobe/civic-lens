@@ -38,7 +38,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     {
         await SeedActionsAsync(A, B, C);
         await PublishAsync(1, null, [A, B, C], added: [A, B, C]);
-        var b = Withdrawal(B, "Wrong bill.", First.AddDays(2), Correction(2, "Fixed.", false), Correction(1, null, true));
+        var b = Withdrawal(B, "Wrong bill.", First.AddDays(2), Correction(2, "Fixed."), Correction(1, null, PublishedTextRewrite.Code));
         var a = Withdrawal(A, "Wrong date.", First.AddDays(3));
         await SetStatusAsync(B, "ApprovalWithdrawn");
         await SetStatusAsync(A, "ApprovalWithdrawn");
@@ -53,7 +53,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     {
         await SeedActionsAsync(A, B, C);
         await PublishAsync(1, null, [A, B, C], added: [A, B, C]);
-        var b = Withdrawal(B, "Wrong bill.", First.AddDays(2), Correction(1, "Fixed.", false));
+        var b = Withdrawal(B, "Wrong bill.", First.AddDays(2), Correction(1, "Fixed."));
         var a = Withdrawal(A, "Wrong date.", First.AddDays(3));
         await SetStatusAsync(B, "ApprovalWithdrawn");
         await SetStatusAsync(A, "ApprovalWithdrawn");
@@ -85,7 +85,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         await SeedActionsAsync(A, B);
         await PublishAsync(1, null, [A, B], added: [A, B]);
         await SetStatusAsync(A, "ApprovalWithdrawn");
-        var first = Withdrawal(A, "Wrong.", First.AddDays(1), Correction(1, "Early.", false));
+        var first = Withdrawal(A, "Wrong.", First.AddDays(1), Correction(1, "Early."));
         await PublishAsync(2, 1, [B], withdrawn: [first]);
         await SetStatusAsync(A, "Approved");
         await PublishAsync(3, 2, [A, B], added: [A]);
@@ -142,7 +142,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         await SeedActionsAsync(A, B);
         await PublishAsync(1, null, [A, B], added: [A, B]);
         await SetStatusAsync(A, "ApprovalWithdrawn");
-        var commit = Commit(2, 1, [B], withdrawn: [Withdrawal(A, "Wrong.", First.AddDays(1), Correction(1, "Early.", false))]);
+        var commit = Commit(2, 1, [B], withdrawn: [Withdrawal(A, "Wrong.", First.AddDays(1), Correction(1, "Early."))]);
 
         commit = await PublishedEntryFixtures.WithCorrectionHistoriesAsync(publications, commit);
         await publications.CommitAsync("auth0|owner", commit, "replay", new string('1', 64), default);
@@ -193,12 +193,13 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     }
 
     [Theory]
-    [InlineData("ck_publication_withdrawal_corrections_position", "-1, 1, 5, NULL, false")]
-    [InlineData("ck_publication_withdrawal_corrections_revision", "0, 0, 5, NULL, false")]
-    [InlineData("ck_publication_withdrawal_corrections_note", "0, 1, 5, '', false")]
-    [InlineData("ck_publication_withdrawal_corrections_note", "0, 1, 5, '   ', false")]
-    [InlineData("ck_publication_withdrawal_corrections_facts_unchanged", "0, 1, 5, 'Fixed.', true")]
-    [InlineData("ck_publication_withdrawal_corrections_published_at_utc_ticks", "0, 1, -1, NULL, false")]
+    [InlineData("ck_publication_withdrawal_corrections_position", "-1, 1, 5, NULL, 'None'")]
+    [InlineData("ck_publication_withdrawal_corrections_revision", "0, 0, 5, NULL, 'None'")]
+    [InlineData("ck_publication_withdrawal_corrections_note", "0, 1, 5, '', 'None'")]
+    [InlineData("ck_publication_withdrawal_corrections_note", "0, 1, 5, '   ', 'None'")]
+    [InlineData("ck_publication_withdrawal_corrections_note_text_rewrite", "0, 1, 5, 'Fixed.', 'Model'")]
+    [InlineData("ck_publication_withdrawal_corrections_text_rewrite", "0, 1, 5, NULL, 'Person'")]
+    [InlineData("ck_publication_withdrawal_corrections_published_at_utc_ticks", "0, 1, -1, NULL, 'None'")]
     public async Task TheCorrectionTableRefusesEachBrokenRule(string check, string values)
     {
         await SeedReleaseWithRecordAsync();
@@ -214,10 +215,10 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
     {
         await SeedReleaseWithRecordAsync();
         await InsertWithdrawalAsync($"'action', '{A}', 3, 5, 'Wrong.', 1, NULL");
-        await InsertCorrectionAsync(A, "0, 1, 5, NULL, false");
+        await InsertCorrectionAsync(A, "0, 1, 5, NULL, 'None'");
 
-        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => InsertCorrectionAsync(A, "0, 2, 5, NULL, false"));
-        var orphan = await Assert.ThrowsAsync<PostgresException>(() => InsertCorrectionAsync(B, "0, 1, 5, NULL, false"));
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => InsertCorrectionAsync(A, "0, 2, 5, NULL, 'None'"));
+        var orphan = await Assert.ThrowsAsync<PostgresException>(() => InsertCorrectionAsync(B, "0, 1, 5, NULL, 'None'"));
 
         Assert.Equal([PostgresErrorCodes.UniqueViolation, PostgresErrorCodes.ForeignKeyViolation], [duplicate.SqlState, orphan.SqlState]);
     }
@@ -252,7 +253,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         """);
 
     private Task InsertCorrectionAsync(string recordId, string values) => ExecuteAsync($"""
-        INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, position, replaced_revision_number, published_at_utc_ticks, note, facts_unchanged)
+        INSERT INTO publication_withdrawal_corrections (kind, record_id, first_release, position, replaced_revision_number, published_at_utc_ticks, note, text_rewrite)
         VALUES ('action', '{recordId}', 1, {values})
         """);
 
@@ -266,7 +267,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         foreach (var row in rows)
         {
             var corrections = await ReadAsync($"""
-                SELECT replaced_revision_number, published_at_utc_ticks, COALESCE(note, 'NULL'), facts_unchanged FROM publication_withdrawal_corrections
+                SELECT replaced_revision_number, published_at_utc_ticks, COALESCE(note, 'NULL'), text_rewrite FROM publication_withdrawal_corrections
                 WHERE record_id = '{row[0]}' AND first_release = {row[1]} ORDER BY position
                 """);
             withdrawals.Add(new()
@@ -282,7 +283,7 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
                     ReplacedRevisionNumber = int.Parse(correction[0]),
                     PublishedAtUtc = new DateTimeOffset(long.Parse(correction[1]), TimeSpan.Zero),
                     Note = correction[2] == "NULL" ? null : correction[2],
-                    FactsUnchanged = bool.Parse(correction[3])
+                    TextRewrite = Enum.Parse<PublishedTextRewrite>(correction[3])
                 })]
             });
         }
@@ -309,12 +310,12 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         Corrections = corrections
     };
 
-    private static PublishedCorrection Correction(int replaced, string? note, bool factsUnchanged) => new()
+    private static PublishedCorrection Correction(int replaced, string? note, PublishedTextRewrite rewrite = PublishedTextRewrite.None) => new()
     {
         ReplacedRevisionNumber = replaced,
         PublishedAtUtc = First.AddHours(replaced),
         Note = note,
-        FactsUnchanged = factsUnchanged
+        TextRewrite = rewrite
     };
 
     private async Task PublishAsync(int number, int? baseNumber, string[] records, string[]? added = null,
