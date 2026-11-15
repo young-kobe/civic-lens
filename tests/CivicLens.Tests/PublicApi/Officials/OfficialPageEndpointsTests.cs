@@ -141,19 +141,36 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheStripLinksOnlyThePartyBreakAndTheMissedVoteNewestFirstAndMatchesTheFigures()
+    public async Task TheStripShowsEveryLatestRollCallOldestFirstWithItsCastAndRingsOnlyTheSplitVoteBreakThatTheFiguresCount()
     {
         await using var host = await StartAsync();
 
         var page = await GetPageAsync(host, "/officials/p0.html");
 
-        var marks = page.QuerySelectorAll(".official-strip a").Select(link => (link.GetAttribute("href")!, link.ClassList.Contains("missed"))).ToArray();
-        Assert.Equal([(BaseUrl.Join($"records/{new string('b', 64)}.html"), true), (BaseUrl.Join($"records/{new string('a', 64)}.html"), false)], marks);
+        var marks = page.QuerySelectorAll(".official-strip a").ToArray();
+        Assert.Equal(new[] { 'a', 'b', 'c', 'd' }.Select(id => BaseUrl.Join($"records/{new string(id, 64)}.html")), marks.Select(link => link.GetAttribute("href")!));
+        Assert.Equal(["no", "not-voting", "yes", "no"], marks.Select(link => link.GetAttribute("data-mark")));
+        Assert.Equal(["party", null, null, null], marks.Select(link => link.GetAttribute("data-breaks")));
         var figures = string.Join('|', page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent));
         Assert.Contains("3roll calls voted on, of 4 House roll calls", figures);
         Assert.Contains("1of 2 split votes", figures);
-        Assert.Contains("1 vote against most House Democrats", page.QuerySelector(".official-legend")!.TextContent);
-        Assert.Contains("1 missed House roll call", page.QuerySelector(".official-legend")!.TextContent);
+        Assert.Equal(["Yes", "No", "Not voting", "Voted against most House Democrats"], page.QuerySelectorAll(".official-legend li").Select(item => item.TextContent));
+    }
+
+    [Fact]
+    public async Task TheStripShowsOnlyTheTenLatestRollCallsOfTheCongress()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase,
+            [.. "01489ef".Select((id, day) => new SeededVote(id, $"2026-03-{10 + day}") { Casts = ["Yea"], PersonIds = ["p0"], RollCall = 10 + day })]);
+
+        var page = await GetPageAsync(host, "/officials/p0.html");
+
+        var marks = page.QuerySelectorAll(".official-strip a").Select(link => link.GetAttribute("href")).ToArray();
+        Assert.Equal(10, marks.Length);
+        Assert.Equal(BaseUrl.Join($"records/{new string('b', 64)}.html"), marks[0]);
+        Assert.Equal(BaseUrl.Join($"records/{new string('f', 64)}.html"), marks[^1]);
+        Assert.StartsWith("Each square is one of the latest 10 roll calls of Ann Able in the 119th Congress", page.QuerySelector("#votes .official-lede")!.TextContent);
     }
 
     [Fact]
@@ -191,10 +208,10 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host, "/officials/p0.html");
 
-        Assert.Equal(2, page.QuerySelectorAll(".official-strip a").Length);
-        Assert.Equal(1, page.QuerySelectorAll(".official-strip a.against").Length);
+        Assert.Equal(7, page.QuerySelectorAll(".official-strip a").Length);
+        Assert.Equal(BaseUrl.Join($"records/{new string('a', 64)}.html"), Assert.Single(page.QuerySelectorAll(".official-strip a[data-breaks]")).GetAttribute("href"));
         Assert.Contains("1of 2 split votes", string.Join('|', page.QuerySelectorAll(".official-figs li").Select(item => item.TextContent)));
-        Assert.Contains("1 vote against most House Democrats", page.QuerySelector(".official-legend")!.TextContent);
+        Assert.Contains("Voted against most House Democrats", page.QuerySelector(".official-legend")!.TextContent);
     }
 
     [Fact]

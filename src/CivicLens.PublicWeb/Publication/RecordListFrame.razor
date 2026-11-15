@@ -87,7 +87,7 @@
 
     private string Title => Heading ?? List.Label;
 
-    private string? TotalSentence => Total is > 0 and var total ? $"{total} {(total == 1 ? Singular : Plural)}{TotalScope} {(total == 1 ? "is" : "are")} in this release. " : null;
+    private string? TotalSentence => Total is > 0 and var total ? $"{PublishedWording.Count(total)} {(total == 1 ? Singular : Plural)}{TotalScope} {(total == 1 ? "is" : "are")} in this release. " : null;
 
     /// <summary>No row and no filter: the release holds no record of this kind, so the filters and the no match tips do not apply.</summary>
     private bool IsEmptyRelease => RowCount == 0 && !Filter.IsActive;

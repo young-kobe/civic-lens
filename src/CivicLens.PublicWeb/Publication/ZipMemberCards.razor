@@ -35,6 +35,19 @@
         }
         else
         {
+            @* The answer leads with how the members voted. The member cards and their figures follow it. *@
+            @if (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null)
+            {
+                <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />
+            }
+            @if (Data.SharedVotes.Length == 0)
+            {
+                <p class="muted" data-member-votes-empty>No records match.</p>
+            }
+            @foreach (var votes in Data.SharedVotes)
+            {
+                <SharedVoteRows Data="votes" RootPath="@RootPath" />
+            }
             <ul class="zip-member-cards" role="list">
                 @for (var seatIndex = 0; seatIndex < Data.Seats.Length; seatIndex++)
                 {
@@ -43,24 +56,9 @@
             </ul>
         }
         <StatesWithoutSenatorsNote States="Data.StatesWithoutSenators" />
-        @if (View.Length == 0 && (Data.IssueOptions.Length > 0 || Data.SelectedIssue is not null))
-        {
-            <ZipMemberIssueFilter IssueOptions="Data.IssueOptions" SelectedIssue="@Data.SelectedIssue" />
-        }
         @if (ComparePageUrl is not null && View.Length == 0)
         {
-            <p class="home-browse"><a href="@ComparePageUrl">Compare your members</a></p>
-        }
-        @if (View.Length == 0 && Data.SharedVotes.Length == 0)
-        {
-            <p class="muted" data-member-votes-empty>No records match.</p>
-        }
-        @if (View.Length == 0)
-        {
-            @foreach (var votes in Data.SharedVotes)
-            {
-                <SharedVoteRows Data="votes" RootPath="@RootPath" />
-            }
+            <p class="zip-member-compare"><a href="@ComparePageUrl">Compare your members</a></p>
         }
     }
 </div>

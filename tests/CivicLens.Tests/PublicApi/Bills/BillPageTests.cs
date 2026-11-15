@@ -71,7 +71,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
         Assert.Contains("Sponsored by Pat One, a Democrat.", page.QuerySelector(".bill-head .bill-lede")!.TextContent);
         Assert.Contains("This site tracks 2 House members who cosponsored it: 1 on the day it was introduced and 1 who joined later.", page.QuerySelector("#bill-backers-title")!.ParentElement!.TextContent);
         Assert.DoesNotContain("Cy Four", page.QuerySelector("#bill-backers-title")!.ParentElement!.TextContent);
-        Assert.Equal(["1 Democrats", "1 Republicans"], page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
+        Assert.Equal(["1 Democrat", "1 Republican"], page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
         Assert.Equal("Bill on Congress.gov", page.QuerySelector("details#source a")!.TextContent);
         Assert.Equal("https://www.congress.gov/bill/119th-congress/house-bill/7", page.QuerySelector("details#source a")!.GetAttribute("href"));
         Assert.Equal(["Health care"], page.QuerySelectorAll(".link-chip").Select(chip => chip.TextContent));
@@ -97,7 +97,7 @@ public sealed class BillPageTests(PostgresCollection postgres)
             var page = await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
             var legend = page.QuerySelectorAll("[aria-labelledby=bill-backers-title] .party-bar-legend li").Select(item => System.Text.RegularExpressions.Regex.Replace(item.TextContent, @"\s+", " ").Trim());
 
-            Assert.Equal(["1 Democrats", "1 No party listed"], legend);
+            Assert.Equal(["1 Democrat", "1 No party listed"], legend);
         }
     }
 

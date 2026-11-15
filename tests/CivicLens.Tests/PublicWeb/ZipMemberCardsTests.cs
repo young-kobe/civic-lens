@@ -137,6 +137,32 @@ public sealed class ZipMemberCardsTests
     }
 
     [Fact]
+    public async Task TheHomeAnswerLeadsWithHowTheMembersVotedThenTheCardsWithTheirIssueRowsFoldedAndAReadableCompareLink()
+    {
+        var vote = new SharedVoteRowData(new string('c', 64), new(2026, 9, 16), 119, 2, 314,
+            "House passes a bill", null, PublishedTextOrigin.Model, "Vote to pass", "Passed", [new("pat", "Yes (Yea)", "Yea")]);
+        var member = new ZipMemberIdentityData("pat", "Pat Member", null, null, null, [], [])
+        {
+            Issues = [new("Firearms", 119, 0, 49, "Counts for firearms in Congress 119.", "issues/firearms.html")]
+        };
+        var document = await RenderAsync(new ZipMemberCardsData(9, 119, "36009", 1, [new("Representative for Alabama, district 2", member)], [])
+        {
+            SharedVotes = [new(PublishedChamber.House, [new("pat", "Pat Member")], [vote])],
+            IssueOptions = [new("health", "Health")]
+        }, comparePageUrl: Root + "compare.html");
+
+        var order = document.QuerySelectorAll("[data-member-issue-filter], .shared-vote-rows, .zip-member-cards, .zip-member-compare").Select(node => node.ClassName!).ToArray();
+        Assert.Equal(["zip-member-issue-filter", "shared-vote-rows", "zip-member-cards", "zip-member-compare"], order);
+        Assert.Equal("How your House members voted", document.QuerySelector(".shared-vote-rows h2")!.TextContent);
+        var fold = document.QuerySelector(".zip-member-card details.zip-member-issues")!;
+        Assert.False(fold.HasAttribute("open"));
+        Assert.Equal("Most active issues in Congress 119", fold.QuerySelector("summary")!.TextContent);
+        Assert.Contains("Firearms: 0 bills sponsored, 49 substantive votes cast.", fold.TextContent);
+        Assert.Equal(Root + "compare.html", document.QuerySelector(".zip-member-compare a")!.GetAttribute("href"));
+        Assert.Null(document.QuerySelector(".home-browse"));
+    }
+
+    [Fact]
     public async Task CompareLayoutGroupsTheFullRosterAndReusesTheSameMemberCardsAndIssueFilter()
     {
         var member = new ZipMemberIdentityData("pat", "Pat Member", "Democratic", null, null, [House], [HouseDemocrat]);
@@ -236,7 +262,7 @@ public sealed class ZipMemberCardsTests
         Assert.Contains("District of Columbia has no senators.", document.DocumentElement!.TextContent);
     }
 
-    private static async Task<IDocument> RenderAsync(ZipMemberCardsData data, string view = "")
+    private static async Task<IDocument> RenderAsync(ZipMemberCardsData data, string view = "", string? comparePageUrl = null)
     {
         await using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
@@ -247,7 +273,8 @@ public sealed class ZipMemberCardsTests
                 {
                     [nameof(ZipMemberCards.Data)] = data,
                     [nameof(ZipMemberCards.RootPath)] = Root,
-                    [nameof(ZipMemberCards.View)] = view
+                    [nameof(ZipMemberCards.View)] = view,
+                    [nameof(ZipMemberCards.ComparePageUrl)] = comparePageUrl
                 }));
             return output.ToHtmlString();
         });

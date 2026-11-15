@@ -27,7 +27,7 @@ public sealed class BoardsPageTests
 
         var row = page.QuerySelector(".board-panel .list-row")!;
         Assert.Equal("160 of 254 split votes", row.QuerySelector(".list-row-figure")!.TextContent);
-        Assert.Equal("63%", row.QuerySelector(".badge")!.TextContent);
+        Assert.Equal("63% of split votes cast", row.QuerySelector(".badge")!.TextContent);
         Assert.Equal(["House Democrats"], row.QuerySelectorAll(".list-row-meta span").Select(span => span.TextContent));
         Assert.Contains("Count first, then the base it comes from.", page.QuerySelector(".board-lede")!.TextContent);
         Assert.Equal("The newest roll call counted here, in the 119th Congress, is on 16 Sep 2026. No count includes a later day.",
@@ -189,10 +189,10 @@ public sealed class BoardsPageTests
     }
 
     [Theory]
-    [InlineData(1, 1000, "under 1%")]
-    [InlineData(999, 1000, "over 99%")]
-    [InlineData(1, 2, "50%")]
-    public async Task TheShareUsesTheRoundingWordsOfTheStaticBoards(int breaks, int cast, string share)
+    [InlineData(1, 1000, "under 1% of split votes cast")]
+    [InlineData(999, 1000, "over 99% of split votes cast")]
+    [InlineData(1, 2, "50% of split votes cast")]
+    public async Task TheShareUsesTheRoundingWordsOfTheStaticBoardsAndNamesItsBase(int breaks, int cast, string share)
     {
         var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, cast, breaks))]));
 

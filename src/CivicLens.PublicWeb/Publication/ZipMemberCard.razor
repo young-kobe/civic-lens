@@ -42,9 +42,10 @@
         }
         @if (member.Issues.Length > 0)
         {
-            <div class="zip-member-issues">
-                <h4>Most active issues in Congress @member.Issues[0].Congress</h4>
-                <ul role="list">
+            @* The issue rows fold, so the figures of the member stay short. *@
+            <details class="list-fold zip-member-issues">
+                <summary>Most active issues in Congress @member.Issues[0].Congress</summary>
+                <ul class="in" role="list">
                     @for (var issueIndex = 0; issueIndex < member.Issues.Length; issueIndex++)
                     {
                         var issue = member.Issues[issueIndex];
@@ -65,7 +66,7 @@
                         </li>
                     }
                 </ul>
-            </div>
+            </details>
         }
         @if (member.Attendance.Length == 0)
         {
@@ -75,7 +76,7 @@
         {
             var figure = member.Attendance[figureIndex];
             <div class="zip-member-figure zip-member-attendance">
-                <p>Missed <strong>@figure.Missed of @figure.Held</strong> published @figure.Chamber @(figure.Held == 1 ? "roll call" : "roll calls") listing this member in Congress @figure.Congress.</p>
+                <p>Missed <strong>@PublishedWording.Count(figure.Missed) of @PublishedWording.Count(figure.Held)</strong> published @figure.Chamber @(figure.Held == 1 ? "roll call" : "roll calls") listing this member in Congress @figure.Congress.</p>
                 <InfoPopover Id="@($"{IdPrefix}-attendance-{figureIndex}")" Label="@($"About attendance for {member.Name} in the {figure.Chamber}")">
                     <p>@figure.Scope</p>
                     <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>
@@ -87,7 +88,7 @@
             var figure = member.PartyLines[figureIndex];
             if (figure.Cast <= 0) continue;
             <div class="zip-member-figure zip-member-party-line">
-                <p>With most @PublishedPartyNames.PartyOf(figure.Chamber, figure.Party) on <strong>@figure.WithParty of @figure.Cast</strong> split @(figure.Cast == 1 ? "vote" : "votes") in Congress @figure.Congress.</p>
+                <p>With most @PublishedPartyNames.PartyOf(figure.Chamber, figure.Party) on <strong>@PublishedWording.Count(figure.WithParty) of @PublishedWording.Count(figure.Cast)</strong> split @(figure.Cast == 1 ? "vote" : "votes") in Congress @figure.Congress.</p>
                 <InfoPopover Id="@($"{IdPrefix}-party-line-{figureIndex}")" Label="@($"About party-line votes for {member.Name}, {figure.Party}, in the {figure.Chamber}")">
                     <p>@figure.Scope</p>
                     <p>From <time datetime="@Moment.Iso(figure.FirstVotedOn)">@Moment.Day(figure.FirstVotedOn)</time> to <time datetime="@Moment.Iso(figure.LastVotedOn)">@Moment.Day(figure.LastVotedOn)</time>.</p>

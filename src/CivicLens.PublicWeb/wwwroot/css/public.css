@@ -202,9 +202,10 @@ table[data-paged]:focus { outline: none; }
 .zip-member-figure p { flex: 1; }
 .zip-member-figure strong { font-variant-numeric: tabular-nums; }
 .zip-member-figure .info-button { flex: none; width: 44px; height: 44px; }
-.zip-member-issues, .zip-member-bills { display: grid; gap: var(--s1); }
-.zip-member-issues h4, .zip-member-bills h4 { margin: 0; font-size: var(--t-base); }
-.zip-member-issues ul { display: grid; gap: var(--s1); margin: 0; padding-inline-start: var(--s4); }
+.zip-member-bills { display: grid; gap: var(--s1); }
+.zip-member-bills h4 { margin: 0; font-size: var(--t-base); }
+.zip-member-issues { margin-top: 0; }
+.zip-member-issues ul { display: grid; gap: var(--s1); margin: 0; padding-inline-start: calc(var(--s4) * 2); }
 .zip-member-issues li { padding-inline-start: var(--s1); }
 .zip-member-issues li .info-button { width: 44px; height: 44px; vertical-align: middle; }
 .shared-vote-comparison { display: inline-block; margin-inline-start: var(--s1); padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink); font-weight: 700; }
@@ -217,6 +218,7 @@ table[data-paged]:focus { outline: none; }
 .home-browse { margin: 0; color: var(--bar-muted); }
 .home-browse a { color: var(--bar-ink); }
 .home-browse a:hover { color: var(--marigold); }
+.zip-member-compare { margin: var(--s4) 0 0; }
 
 .break-card { padding: var(--s5); border-radius: var(--r-panel); background: var(--surface); color: var(--ink); }
 .break-card a { color: var(--info); }
@@ -706,11 +708,14 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .official-strip a::after { content: ""; position: absolute; inset: -8px; }
 .official-strip a:hover { outline: 2px solid var(--ink); outline-offset: 2px; }
 .official-strip a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
-.official-strip .against, .official-legend .against { background: var(--against); }
-.official-strip .against[data-tone="democrat"], .official-legend .against[data-tone="democrat"] { --against: var(--party-dem); background: repeating-linear-gradient(135deg, var(--party-dem) 0 4px, color-mix(in srgb, var(--party-dem) 72%, var(--surface)) 4px 7px); }
-.official-strip .against[data-tone="republican"], .official-legend .against[data-tone="republican"] { --against: var(--party-rep); background: repeating-linear-gradient(135deg, var(--party-rep) 0 4px, color-mix(in srgb, var(--party-rep) 72%, var(--surface)) 4px 7px); }
-.official-strip .against[data-tone="neutral"], .official-legend .against[data-tone="neutral"] { --against: var(--muted); background: repeating-linear-gradient(135deg, var(--against) 0 4px, color-mix(in srgb, var(--against) 72%, var(--surface)) 4px 7px); }
-.official-strip .missed, .official-legend .missed { border: 2px dashed var(--ink-2); background: var(--surface); }
+.official-strip [data-mark], .official-legend [data-mark] { border: 2px solid var(--ink-2); background: var(--surface); }
+.official-strip [data-mark="yes"], .official-legend [data-mark="yes"] { border-color: var(--ink); background: var(--ink); }
+.official-strip [data-mark="no"], .official-legend [data-mark="no"] { border-color: var(--against); background: repeating-linear-gradient(135deg, var(--against) 0 3px, transparent 3px 6px); }
+.official-strip [data-mark="present"], .official-legend [data-mark="present"] { background: radial-gradient(circle, var(--ink-2) 1.5px, transparent 2px) 0 0 / 6px 6px; }
+.official-strip [data-mark="not-voting"], .official-legend [data-mark="not-voting"] { border-style: dashed; }
+.official-strip [data-mark="other"], .official-legend [data-mark="other"] { background: linear-gradient(var(--ink-2) 1px, transparent 1px) 0 0 / 6px 6px, linear-gradient(90deg, var(--ink-2) 1px, transparent 1px) 0 0 / 6px 6px; }
+.official-strip [data-breaks="party"], .official-legend [data-breaks="party"] { box-shadow: 0 0 0 2px var(--vote-surface), 0 0 0 4px var(--ink); }
+.official-legend [data-breaks="party"]:not([data-mark]) { background: transparent; }
 .official-legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin: 0 0 var(--s4); padding: 0; list-style: none; color: var(--ink-2); font-size: var(--t-sm); }
 .official-legend li { display: flex; align-items: center; gap: var(--s2); }
 .official-legend .swatch { width: 16px; height: 16px; flex: none; border-radius: 4px; }

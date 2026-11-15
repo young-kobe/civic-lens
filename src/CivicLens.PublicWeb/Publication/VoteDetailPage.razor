@@ -24,7 +24,7 @@
         <div class="vote-layout">
             <section class="vote-result" aria-labelledby="vote-result-title">
                 <h2 id="vote-result-title">@VotePageView.ResultHeading</h2>
-                <p class="vote-result-word">@VotePageView.ResultWords(Data)@if (VoteWords.Badge(Data.Alignment) is { } badge){@(" ")<StatusBadge Text="@badge.Text" />}</p>
+                <p class="vote-result-word">@PlainVoteWords.Result(Data.Result)@if (VoteWords.Badge(Data.Alignment) is { } badge){@(" ")<StatusBadge Text="@badge.Text" />}</p>
                 @if (chamberBar is not null)
                 {
                     <p class="muted small">@VotePageView.ChamberCaption(Data, chamberBar)</p>

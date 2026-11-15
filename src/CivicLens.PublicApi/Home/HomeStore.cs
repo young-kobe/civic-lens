@@ -20,7 +20,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
                s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
-               freshness.house, freshness.senate, s.present, s.not_voting
+               freshness.house, freshness.senate, s.present, s.not_voting, s.oldest_signed_on
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           CROSS JOIN LATERAL (
                SELECT max(v.voted_on) FILTER (WHERE v.chamber = 'House') AS house,
@@ -44,7 +44,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                         WHERE l.record_id = v.bill_record_id) AS bill_line,
                       v.summary, v.text_origin, v.alignment,
                       NULL::text AS action_kind, NULL::integer AS action_count, NULL::text AS newest_record_id,
-                      NULL::text AS newest_title, NULL::date AS newest_signed_on, v.present, v.not_voting
+                      NULL::text AS newest_title, NULL::date AS newest_signed_on, v.present, v.not_voting, NULL::date AS oldest_signed_on
                  FROM LATERAL (
                       SELECT true AS is_featured, featured.* WHERE featured.record_id IS NOT NULL
                       UNION ALL
@@ -69,10 +69,11 @@ public sealed class HomeStore(NpgsqlDataSource views)
                UNION ALL
                SELECT false, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                       NULL, NULL,
-                      e.kind, e.action_count, e.record_id, e.headline, e.signed_on, NULL::integer, NULL::integer
+                      e.kind, e.action_count, e.record_id, e.headline, e.signed_on, NULL::integer, NULL::integer, e.oldest_signed_on
                  FROM (
                       SELECT kind, record_id, headline, signed_on,
                              (count(*) OVER (PARTITION BY kind))::integer AS action_count,
+                             min(signed_on) OVER (PARTITION BY kind) AS oldest_signed_on,
                              row_number() OVER (PARTITION BY kind ORDER BY signed_on DESC, record_id) AS newest
                         FROM public_api.executive_actions
                  ) e
@@ -113,7 +114,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
                 brief ??= reader.IsDBNull(1) ? null : new(reader.GetString(1), reader.GetFieldValue<DateOnly>(2), reader.GetString(3), ViewColumns.Text(reader, 4));
                 if (!reader.IsDBNull(23))
                 {
-                    executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 23), reader.GetInt32(24), reader.GetString(25), reader.GetString(26), reader.GetFieldValue<DateOnly>(27)));
+                    executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 23), reader.GetInt32(24), reader.GetString(25), reader.GetString(26), reader.GetFieldValue<DateOnly>(27),
+                        reader.GetFieldValue<DateOnly>(32)));
                     continue;
                 }
                 if (reader.IsDBNull(5)) continue;

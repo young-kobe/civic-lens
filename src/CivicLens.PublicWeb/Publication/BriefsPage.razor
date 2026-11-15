@@ -2,7 +2,7 @@
 @using CivicLens.PublicWeb.Components.Ui
 
 <PublicPage Section="null" Title="Weekly briefs" CanonicalPath="@PublicationProtocol.BriefsPagePath(Data.Page)" Page="Data.Page" PageCount="PageCount" Description="@Description" RootPath="@RootPath">
-    <PageHeader Title="Weekly briefs" Lede="@($"Release {Data.Release}, published {Moment.Full(Data.PublishedAtUtc)}.")" />
+    <PageHeader Title="Weekly briefs" Lede="@($"Updated {Moment.Full(Data.PublishedAtUtc)}.")" />
     @if (Data.Total == 0)
     {
         <Panel Label="Weekly briefs" Padded="true">

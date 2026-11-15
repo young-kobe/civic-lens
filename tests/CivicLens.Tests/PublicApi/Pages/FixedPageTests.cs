@@ -61,6 +61,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Contains("Civic Lens is not part of any government office, party, campaign or company.", text);
         Assert.Contains($"within {PublishedCountRules.StatementDateWindowDays} days before Civic Lens saved the page", text);
         Assert.Contains(PublishedRecordLabels.ContactEmail, text);
+        Assert.Contains($"an AI model writes a summary of two or three sentences. Each sentence comes with an exact quote from the text, and code checks each quote. The summary has the label \"{ExecutiveSummaryWords.Label}\"", text);
+        Assert.DoesNotContain("does not summarize", text, StringComparison.Ordinal);
         foreach (var path in new[] { PublicationProtocol.BriefsPagePath(1), PublicationProtocol.ReportPagePath, PublicationProtocol.MethodPagePath })
             Assert.Contains(page.QuerySelectorAll("main a"), link => link.GetAttribute("href") == Root + path);
     }
@@ -161,7 +163,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(Root + PublicationProtocol.ListPagePath(PublishedRecordKind.Vote), action.GetAttribute("href"));
         Assert.Equal("Votes", action.TextContent.Trim());
         Assert.Equal(["H1", "H2"], page.QuerySelectorAll("main h1, main h2, main h3").Select(heading => heading.TagName));
-        Assert.Contains("Release 4, published 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Equal("Updated 9 Jun 2026, 12:00 UTC.", page.QuerySelector(".page-header-lede")!.TextContent);
     }
 
     [Fact]
@@ -234,7 +236,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(Root + PublicationProtocol.IssuePagePath("tax", 1), tiles[1].GetAttribute("href"));
         Assert.Contains("1 substantive vote", tiles[1].TextContent);
         Assert.Contains("3 bills", tiles[1].TextContent);
-        Assert.Contains("119th Congress", tiles[1].TextContent);
+        Assert.DoesNotContain("Congress", tiles[1].TextContent);
+        Assert.Equal("Each tile counts the substantive votes and the bills tagged with the issue in the 119th Congress.", page.QuerySelector("main .home-section-lede")!.TextContent);
         Assert.Equal("Air", tiles[0].TextContent.Trim());
         Assert.Null(page.QuerySelector(".home-issue-list")!.Closest(".panel"));
         Assert.Equal(Root + PublicationProtocol.FacetsPath, page.QuerySelectorAll(".public-nav a").Single(link => link.TextContent == "Issues").GetAttribute("href"));

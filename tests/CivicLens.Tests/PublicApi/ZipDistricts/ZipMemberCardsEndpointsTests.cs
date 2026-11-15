@@ -103,7 +103,7 @@ public sealed class ZipMemberCardsEndpointsTests(PostgresCollection postgres)
         Assert.Equal("https://civic-lens.test/compare.html", home.QuerySelectorAll(".home-browse a").Single(link => link.TextContent == "Compare your members").GetAttribute("href"));
         var fragment = await GetDocumentAsync(host, "/v1/zip-districts/36009/members");
 
-        Assert.Equal("https://civic-lens.test/compare.html", fragment.QuerySelector(".home-browse a")!.GetAttribute("href"));
+        Assert.Equal("https://civic-lens.test/compare.html", fragment.QuerySelector(".zip-member-compare a")!.GetAttribute("href"));
         Assert.Equal("", fragment.QuerySelector("[data-zip-member-fragment]")!.GetAttribute("data-view"));
         Assert.Equal("https://civic-lens.test/officials/al2.html", fragment.QuerySelector(".zip-member-card h3 a")!.GetAttribute("href"));
         Assert.Equal("https://civic-lens.test/" + photo, fragment.QuerySelector(".zip-member-card img")!.GetAttribute("src"));

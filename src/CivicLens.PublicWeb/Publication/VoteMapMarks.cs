@@ -8,7 +8,10 @@ public static class VoteMapMarks
 {
     public const string NoMember = "No member in the record";
 
-    public static VoteMapMark Of(VoteMemberData? member) => member is null ? VoteMapMark.NoMember : PlainVoteWords.CastWord(member.Cast) switch
+    public static VoteMapMark Of(VoteMemberData? member) => member is null ? VoteMapMark.NoMember : Of(member.Cast);
+
+    /// <summary>The mark of one source cast. The official vote strip draws its squares with it too.</summary>
+    public static VoteMapMark Of(string cast) => PlainVoteWords.CastWord(cast) switch
     {
         PlainVoteWords.Yes => VoteMapMark.Yes,
         PlainVoteWords.No => VoteMapMark.No,

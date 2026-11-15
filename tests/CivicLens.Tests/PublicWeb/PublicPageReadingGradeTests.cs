@@ -303,7 +303,7 @@ public sealed class PublicPageReadingGradeTests
         var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief))
         {
             Issues = [new("health", "Health", 119, 3, 12)],
-            ExecutiveActions = [new(PublishedExecutiveActionKind.Notice, 4, new string('c', 64), "Newest notice title", new(2026, 5, 31))],
+            ExecutiveActions = [new(PublishedExecutiveActionKind.Notice, 4, new string('c', 64), "Newest notice title", new(2026, 5, 31), new(2025, 1, 20))],
             FeaturedVoteDetail = VoteDetailPageFixture.Vote() with { Members = [MapMember("Ada Able", "Aye", "Democrat", "MA", 7), MapMember("Ben Baker", "Nay", "Republican", "TX", 1)] },
             Boards = fourBoards
         };
@@ -313,14 +313,13 @@ public sealed class PublicPageReadingGradeTests
             Terms = [new() { Office = "Representative", Kind = PublishedOfficeKind.Representative, State = "MA", District = 7, Party = "Democrat", Start = new(2019, 1, 3) }],
             Website = "https://able.house.gov",
             HasLinkedStatements = true,
-            MarksTotal = 2,
             Attendance = [new(PublishedChamber.House, 119, 5, 675, new(2025, 1, 3), new(2026, 9, 16))],
             PartyLines = [new(PublishedChamber.House, 119, "Democrat", 248, 1, 249, new(2025, 1, 3), new(2026, 9, 16))],
             BillsCongress = 119,
             IssuesCongress = 119,
             SponsoredBills = 43,
             Issues = [new("tax", "Federal taxes", 8)],
-            Marks = [new(new string('b', 64), new(2026, 9, 16), PublishedChamber.House, 309, false, "Democrat"), new(new string('c', 64), new(2026, 9, 15), PublishedChamber.House, 305, true, null)],
+            Marks = [new(new string('c', 64), new(2026, 9, 15), PublishedChamber.House, 305, "Not Voting", false, "Democrat"), new(new string('b', 64), new(2026, 9, 16), PublishedChamber.House, 309, "Nay", true, "Democrat")],
             Votes = [new(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes S 2403", "AI vote label", PublishedTextOrigin.Model, "Vote to pass the bill", "Passed", [new("p1", "Yes (Aye)", "Yea")])],
             Statements = [new(new string('d', 64), new(2026, 9, 12), "A statement about H.R. 5334", "AI statement label", new string('a', 64), "House agrees to Senate changes", "AI linked vote label",
                 new(2026, 9, 16), PublishedChamber.House, 308, "Nay") { LinkApprover = PublishedApprover.Person }],

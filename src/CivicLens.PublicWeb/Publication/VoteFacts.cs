@@ -26,7 +26,7 @@ public static class VoteFacts
             .. vote.KindCitation is { } kind
                 ? [new Fact("Question", PlainVoteWords.Question(vote.Kind, PublishedRecordLabels.VoteFactValue(kind.Quote))).CitedAt(anchor(kind))]
                 : Array.Empty<Fact>(),
-            new Fact("Result", PlainVoteWords.Result(vote.Result)).CitedAt(anchor(resultFact.Citation)),
+            new Fact("Result", PlainVoteWords.ResultWithSource(vote.Result)).CitedAt(anchor(resultFact.Citation)),
             .. vote.Totals is { } totals
                 ? [new Fact("Totals", $"Casts of all {noun}s: {PlainVoteWords.Totals(totals)}").CitedAt(countFact is null ? null : anchor(countFact.Citation))]
                 : Array.Empty<Fact>(),

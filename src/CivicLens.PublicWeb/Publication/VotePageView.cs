@@ -41,11 +41,6 @@ public static class VotePageView
         ? $"The bill became law as Public Law {law} on {Moment.Day(day)}, according to Congress.gov, read on {Moment.Day(read)}."
         : null;
 
-    public static string ResultWords(VotePageData vote) => PlainVoteWords.ResultWord(vote.Result) ?? vote.Result;
-
-    public const string MarkLabel = "Half of Yes and No votes";
-
-    public const string TwoThirdsMarkLabel = "Two-thirds of Yes and No votes";
 
     /// <summary>
     /// The share of the Yes and No casts that a vote kind needs, the one owner of that rule. A simple majority is known for the listed kinds only. Other and an unlisted kind need no mark.
@@ -72,11 +67,12 @@ public static class VotePageView
     public static string ChamberCaption(VotePageData vote, PartyBarData bar) =>
         $"The bar counts the {vote.Chamber} members by their vote on {Moment.Day(vote.VotedOn)}: {PlainVoteWords.Yes}, {PlainVoteWords.No}, {PlainVoteWords.Present}, or {PlainVoteWords.NotVoting}. {bar.Total} members have a recorded position, including {bar.Segments.Single(segment => segment.Label == PlainVoteWords.NotVoting).Count} who did not vote.";
 
-    /// <summary>One bar for each party group, from the whole-party counts of the exact revision. Empty when the release holds no party counts.</summary>
+    /// <summary>One bar for each party group, from the whole-party counts of the exact revision. Empty when the release holds no party counts.
+    /// A party bar has no mark, because the votes needed to pass count the whole chamber, not one party.</summary>
     public static IReadOnlyList<PartyBarData> PartyBars(VotePageData vote) =>
         [.. (vote.PartyTallies ?? []).OrderBy(tally => PartyTones.Rank(tally.Party)).ThenBy(tally => tally.Party, StringComparer.Ordinal)
             .Select(tally => CastBar(PublishedPartyNames.PartyOf(vote.Chamber, tally.Party), PartyTones.Of(tally.Party),
-                tally.Yea, tally.Nay, tally.Present, tally.NotVoting, tally.Other, VoteThreshold.Half))];
+                tally.Yea, tally.Nay, tally.Present, tally.NotVoting, tally.Other, VoteThreshold.None))];
 
     /// <summary>The casts of one group as party bar segments: Yes solid, No striped, Present dotted, Other gridded, and Not voting open. Present and Other show only when a member has them.</summary>
     public static PartyBarData CastBar(string name, PartyTone tone, int yes, int no, int present, int notVoting, int other, VoteThreshold threshold)
@@ -88,12 +84,15 @@ public static class VotePageView
         return new(name, segments, MarkOf(threshold, yes + no));
     }
 
+    /// <summary>The mark of the whole number of Yes votes that the vote needs: more than half, or at least two-thirds, of the Yes and No casts. A tie fails, so half alone is not enough.</summary>
     private static PartyBarMark? MarkOf(VoteThreshold threshold, int yesAndNo) => yesAndNo <= 0 ? null : threshold switch
     {
-        VoteThreshold.Half => new(MarkLabel, yesAndNo / 2.0),
-        VoteThreshold.TwoThirds => new(TwoThirdsMarkLabel, yesAndNo * 2.0 / 3.0),
+        VoteThreshold.Half => new(NeededLabel("more than half", yesAndNo), yesAndNo / 2 + 1),
+        VoteThreshold.TwoThirds => new(NeededLabel("two-thirds", yesAndNo), (2 * yesAndNo + 2) / 3),
         _ => null
     };
+
+    private static string NeededLabel(string share, int yesAndNo) => $"Yes votes needed: {share} of the {PublishedWording.Count(yesAndNo)} Yes and No votes";
 
     /// <summary>
     /// The members who voted against most of their party, for each major party, as <see cref="VoteMemberData.BreaksParty"/> gives them. A party has a group only when

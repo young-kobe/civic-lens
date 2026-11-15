@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicWeb.Publication;
@@ -31,7 +32,7 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
-    public async Task EveryPartyGroupGetsOneBarWithItsWholePartyCountsAndAMajorityLineAndTheChamberBarIsNeutral()
+    public async Task EveryPartyGroupGetsOneBarWithItsWholePartyCountsAndNoMarkAndTheChamberBarIsNeutral()
     {
         var page = await RenderAsync(Vote());
 
@@ -39,8 +40,8 @@ public sealed class VoteDetailPageTests
         Assert.Equal(["House Democrats", "House Republicans", "House Independents"], bars.Select(bar => bar.QuerySelector("figcaption")!.TextContent));
         Assert.Equal(["democrat", "republican", "neutral"], bars.Select(bar => bar.QuerySelector(".party-bar-fill[data-fill=solid]")!.GetAttribute("data-tone")));
         Assert.Equal("House Democrats: Yes 1, No 3, Not voting 1", bars[0].QuerySelector("svg")!.GetAttribute("aria-label"));
-        Assert.Contains("Half of Yes and No votes: 2", bars[0].TextContent);
-        Assert.Contains("Half of Yes and No votes: 2.5", bars[1].TextContent);
+        Assert.All(bars, bar => Assert.Null(bar.QuerySelector("line.party-bar-mark")));
+        Assert.All(bars, bar => Assert.DoesNotContain("needed", bar.TextContent, StringComparison.Ordinal));
         var chamber = page.QuerySelector(".vote-result .party-bar")!;
         Assert.Equal("neutral", chamber.QuerySelector(".party-bar-fill[data-fill=solid]")!.GetAttribute("data-tone"));
         Assert.Equal("House members: Yes 6, No 4, Present 1, Not voting 3", chamber.QuerySelector("svg")!.GetAttribute("aria-label"));
@@ -50,23 +51,23 @@ public sealed class VoteDetailPageTests
     }
 
     [Theory]
-    [InlineData(PublishedVoteKind.Passage, "Half of Yes and No votes", 5.0)]
-    [InlineData(PublishedVoteKind.Rule, "Half of Yes and No votes", 5.0)]
-    [InlineData(PublishedVoteKind.Nomination, "Half of Yes and No votes", 5.0)]
-    [InlineData(PublishedVoteKind.Suspension, "Two-thirds of Yes and No votes", 6.667)]
-    [InlineData(PublishedVoteKind.VetoOverride, "Two-thirds of Yes and No votes", 6.667)]
-    [InlineData(PublishedVoteKind.Cloture, null, 0.0)]
-    [InlineData(PublishedVoteKind.Other, null, 0.0)]
-    public async Task EachVoteKindDrawsOnlyTheMarkItNeedsOnTheChamberBar(PublishedVoteKind kind, string? label, double count)
+    [InlineData(PublishedVoteKind.Passage, "more than half", 6)]
+    [InlineData(PublishedVoteKind.Rule, "more than half", 6)]
+    [InlineData(PublishedVoteKind.Nomination, "more than half", 6)]
+    [InlineData(PublishedVoteKind.Suspension, "two-thirds", 7)]
+    [InlineData(PublishedVoteKind.VetoOverride, "two-thirds", 7)]
+    [InlineData(PublishedVoteKind.Cloture, null, 0)]
+    [InlineData(PublishedVoteKind.Other, null, 0)]
+    public async Task EachVoteKindDrawsOnlyTheMarkItNeedsOnTheChamberBarAndNoPartyBarHasAMark(PublishedVoteKind kind, string? share, int count)
     {
         var page = await RenderAsync(Vote() with { Kind = kind, KindCitation = null });
 
         var chamber = page.QuerySelector(".vote-result .party-bar")!;
-        Assert.Equal(label is not null, chamber.QuerySelector("line.party-bar-mark") is not null);
-        foreach (var other in new[] { "Half of Yes and No votes", "Two-thirds of Yes and No votes" })
-            Assert.Equal(other == label, chamber.TextContent.Contains(other, StringComparison.Ordinal));
-        Assert.Equal(count, VotePageView.ChamberBar(Vote() with { Kind = kind, KindCitation = null })!.Mark?.Count ?? 0.0, 3);
-        Assert.NotNull(page.QuerySelector(".vote-parties line.party-bar-mark"));
+        Assert.Equal(share is not null, chamber.QuerySelector("line.party-bar-mark") is not null);
+        foreach (var other in new[] { "more than half", "two-thirds" })
+            Assert.Equal(other == share, chamber.TextContent.Contains($"Yes votes needed: {other} of the 10 Yes and No votes", StringComparison.Ordinal));
+        Assert.Equal(count, VotePageView.ChamberBar(Vote() with { Kind = kind, KindCitation = null })!.Mark?.Count ?? 0);
+        Assert.Null(page.QuerySelector(".vote-parties line.party-bar-mark"));
     }
 
     [Fact]
@@ -78,7 +79,6 @@ public sealed class VoteDetailPageTests
         var page = await RenderAsync(vote with { Facts = [.. vote.Facts, title] });
 
         Assert.Null(page.QuerySelector(".vote-result .party-bar line.party-bar-mark"));
-        Assert.NotNull(page.QuerySelector(".vote-parties line.party-bar-mark"));
     }
 
     [Fact]
@@ -88,8 +88,8 @@ public sealed class VoteDetailPageTests
 
         var chamber = page.QuerySelector(".vote-result .party-bar")!;
         var line = chamber.QuerySelector("svg.party-bar-chart line.party-bar-mark")!;
-        Assert.Equal("35.71%", line.GetAttribute("x1"));
-        Assert.Contains("Half of Yes and No votes: 5", chamber.QuerySelector(".party-bar-legend")!.TextContent);
+        Assert.Equal("42.86%", line.GetAttribute("x1"));
+        Assert.Equal("6 Yes votes needed: more than half of the 10 Yes and No votes", Regex.Replace(chamber.QuerySelectorAll(".party-bar-legend li").Last().TextContent, @"\s+", " ").Trim());
     }
 
     [Fact]

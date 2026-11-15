@@ -441,6 +441,8 @@
         const submit = form.querySelector("[type=submit]");
         const problem = form.querySelector("[data-zip-error]");
         const heading = panel.querySelector("h2");
+        // The featured vote asks for a ZIP code only until a lookup answers, because the answer then shows how the members voted.
+        const featuredPrompt = document.querySelector("[data-featured-zip-prompt]");
         const answerFragment = "#" + heading.id;
         heading.tabIndex = -1;
         const element = (tag, text, className) => {
@@ -492,6 +494,7 @@
                 if (!call.filtered) {
                     renderedSinceRelease = call.marker;
                     if (!remembered.complete(call.zip, Number(fragment.dataset.release), call.startingState, call.persist)) return false;
+                    if (featuredPrompt) featuredPrompt.hidden = true;
                 }
                 if (call.filtered) fragment.querySelector('[data-member-issue][aria-pressed="true"]')?.focus();
                 if (call.revealAnswer) reveal();
@@ -559,6 +562,7 @@
             notes.hidden = true;
             body.replaceChildren();
             strip?.replaceChildren();
+            if (featuredPrompt) featuredPrompt.hidden = false;
         };
         remembered.onForget(clearLookup);
         remembered.onChange(value => {
