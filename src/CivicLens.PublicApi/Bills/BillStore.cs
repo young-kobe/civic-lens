@@ -383,8 +383,8 @@ public sealed class BillStore(NpgsqlDataSource views)
                           WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND {SponsorMatch(request)} OFFSET 0)
             """) +
         (request.Status is null ? "" : " AND b.status = @status") +
-        (request.From is null ? "" : " AND b.event_date >= @from") +
-        (request.To is null ? "" : " AND b.event_date <= @to");
+        (request.From is null ? "" : " AND b.latest_action_date >= @from") +
+        (request.To is null ? "" : " AND b.latest_action_date <= @to");
 
     private static string AfterCursor(BillRequest request) => request.Cursor switch
     {
