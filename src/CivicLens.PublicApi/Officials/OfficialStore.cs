@@ -13,7 +13,11 @@ namespace CivicLens.PublicApi.Officials;
 public sealed class OfficialStore(NpgsqlDataSource views)
 {
     private const string Columns = "o.official_id, o.name, o.kind, o.office, o.state, o.district, o.party, o.caucus, o.term_end_on, o.record_count, o.photo_path";
-    private const string Order = "o.name, o.official_id";
+    // The view column sort_name is the roster last name, else the name. The cursor carries the whole key.
+    private const string Order = "o.sort_name, o.name, o.official_id";
+
+    // The list reads the sort name after the columns of the row, so the cursor needs no second read.
+    private const int SortNameColumn = 13;
 
     private const string DetailSql = $"""
         SELECT a.release_number, a.published_at_utc_ticks, {Columns}
@@ -50,6 +54,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         await using var command = views.CreateCommand(ListSql(request));
         AddParameters(command, request);
         var rows = new List<OfficialRow>();
+        var sortNames = new List<string>();
         int? release = null;
         var listed = 0;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -57,11 +62,13 @@ public sealed class OfficialStore(NpgsqlDataSource views)
             {
                 release = reader.GetInt32(0);
                 listed = reader.GetInt32(1);
-                if (!reader.IsDBNull(2)) rows.Add(ReadRow(reader, 2));
+                if (reader.IsDBNull(2)) continue;
+                rows.Add(ReadRow(reader, 2));
+                sortNames.Add(reader.GetString(SortNameColumn));
             }
         if (release is not { } active) return null;
         var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? OfficialCursor.Of(active, page[^1]).Encode() : null;
+        var next = rows.Count > request.Limit ? OfficialCursor.Of(active, sortNames[page.Length - 1], page[^1]).Encode() : null;
         return new(active, OfficialScopes.RecordCount, listed, OfficialScopes.OfficialsInRelease, page, next);
     }
 
@@ -97,7 +104,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     // The view is read once. The CTE feeds both the count of the whole release and the filtered page.
     private static string ListSql(OfficialRequest request) => $"""
         WITH listed AS MATERIALIZED (SELECT * FROM public_api.officials)
-        SELECT a.release_number, (SELECT count(*) FROM listed) AS officials_in_release, {Columns}
+        SELECT a.release_number, (SELECT count(*) FROM listed) AS officials_in_release, {Columns}, o.sort_name
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT o.* FROM listed o
@@ -119,7 +126,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         (request.State is null ? "" : " AND o.state = @state") +
         (request.Party is null ? "" : " AND lower(o.party) = @party") +
         (request.NamePrefix is null ? "" : " AND " + NameMatchSql("o")) +
-        (request.Cursor is null ? "" : " AND (o.name, o.official_id) > (@cursor_name, @cursor_id)");
+        (request.Cursor is null ? "" : " AND (o.sort_name, o.name, o.official_id) > (@cursor_sort_name, @cursor_name, @cursor_id)");
 
     private static void AddParameters(NpgsqlCommand command, OfficialRequest request)
     {
@@ -130,6 +137,7 @@ public sealed class OfficialStore(NpgsqlDataSource views)
         if (request.Party is not null) parameters.AddWithValue("party", request.Party);
         if (request.NamePrefix is not null) parameters.AddWithValue("name_prefix", request.NamePrefix);
         if (request.Cursor is not { } cursor) return;
+        parameters.AddWithValue("cursor_sort_name", cursor.SortName);
         parameters.AddWithValue("cursor_name", cursor.Name);
         parameters.AddWithValue("cursor_id", cursor.OfficialId);
     }

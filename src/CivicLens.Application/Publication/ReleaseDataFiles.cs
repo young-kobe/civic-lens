@@ -12,7 +12,7 @@ namespace CivicLens.Application.Publication;
 /// </summary>
 internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoader votes, PublicationOfficials officials, ReleasePhotos photos)
 {
-    public async Task<PublishedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest,
+    public async Task<ResolvedOfficials> WriteAsync(IReleaseStaging staging, PublicationRelease manifest,
         IReadOnlyList<PendingRecord> additions, PreviousRelease previous, IReadOnlyList<RosterMember> roster,
         IReadOnlyDictionary<string, PersonSetting> settings, IReadOnlyList<OfficialPhoto> photoRows, CancellationToken cancellationToken)
     {
@@ -22,13 +22,14 @@ internal sealed class ReleaseDataFiles(IReleaseDirectory releases, VoteRecordLoa
         var ids = entryNames.Keys.Concat(members.Select(member => member.PersonId)).ToHashSet(StringComparer.Ordinal);
         var recordNames = await RecordNamesAsync(manifest, ids, entryNames, members, additions, previous, cancellationToken);
         var photoFiles = await photos.LoadAsync([.. photoRows.Where(row => ids.Contains(row.PersonId))], previous, cancellationToken);
-        var published = await officials.ResolveAsync(ids, recordNames, roster, settings, photoFiles.Profiles, cancellationToken);
+        var resolved = await officials.ResolveAsync(ids, recordNames, roster, settings, photoFiles.Profiles, cancellationToken);
+        var published = resolved.Published;
         var officialsJson = JsonSerializer.SerializeToUtf8Bytes(published, PublicationProtocol.JsonOptions);
         if (officialsJson.Length > PublishedOfficials.MaximumBytes)
             throw new ArgumentException("The officials file would exceed its size limit.", nameof(manifest));
         await staging.WriteFileAsync(PublicationProtocol.OfficialsPath, officialsJson, cancellationToken);
         await photos.WriteAsync(staging, published, photoFiles, previous, cancellationToken);
-        return published;
+        return resolved;
     }
 
     // Only an official who left the configuration needs a name from the records. A vote file gives the name of a vote-only member.

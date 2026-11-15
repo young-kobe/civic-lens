@@ -48,10 +48,21 @@ internal static class VoteDraftRows
         int sessionNumber, int rollCallNumber, long updateDateUtcTicks, CancellationToken cancellationToken) =>
         NewerCandidates(db, sourceId, chamber, congress, sessionNumber, rollCallNumber, updateDateUtcTicks).AnyAsync(cancellationToken);
 
+    /// <summary>The newest candidate of a roll call is one that no candidate with a later update date supersedes. When several share that date,
+    /// the last one created wins.</summary>
+    public static Task<string?> NewestCandidateIdAsync(CollectionAttemptDbContext db, VoteDraftRow draft, CancellationToken cancellationToken) =>
+        RollCandidates(db, draft.SourceId, draft.Chamber, draft.Congress, draft.SessionNumber, draft.RollCallNumber)
+            .OrderByDescending(row => row.UpdateDateUtcTicks).ThenByDescending(row => row.CreatedAtUtcTicks)
+            .Select(row => row.CandidateId).FirstOrDefaultAsync(cancellationToken);
+
     private static IQueryable<VoteCandidateRow> NewerCandidates(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
         int sessionNumber, int rollCallNumber, long updateDateUtcTicks) =>
-        db.Set<VoteCandidateRow>().AsNoTracking().Where(newer => newer.SourceId == sourceId && newer.Chamber == chamber && newer.Congress == congress &&
-            newer.SessionNumber == sessionNumber && newer.RollCallNumber == rollCallNumber && newer.UpdateDateUtcTicks > updateDateUtcTicks);
+        RollCandidates(db, sourceId, chamber, congress, sessionNumber, rollCallNumber).Where(newer => newer.UpdateDateUtcTicks > updateDateUtcTicks);
+
+    private static IQueryable<VoteCandidateRow> RollCandidates(CollectionAttemptDbContext db, string sourceId, Chamber chamber, int congress,
+        int sessionNumber, int rollCallNumber) =>
+        db.Set<VoteCandidateRow>().AsNoTracking().Where(row => row.SourceId == sourceId && row.Chamber == chamber && row.Congress == congress &&
+            row.SessionNumber == sessionNumber && row.RollCallNumber == rollCallNumber);
 
     /// <summary>Refuses a person approval while the draft names a refused newer update, because the revision holds old facts.</summary>
     private static Task RequireNoRefusedUpdateAsync(CollectionAttemptDbContext db, VoteDraftRow draft, CancellationToken cancellationToken) =>

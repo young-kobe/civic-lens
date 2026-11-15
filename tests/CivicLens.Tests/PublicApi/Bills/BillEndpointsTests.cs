@@ -17,7 +17,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         new("p4", "Cosponsor", "2026-02-02", null, false), new("p5", "Cosponsor", "2026-02-03", null, false)
     ];
 
-    // The order is event date desc, then record ID. A, B and C share one event date, so only the record ID orders them.
+    // The event dates of E, then A, B and C, then F run newest first. The list sorts by the latest action date of the active release, so the event date never orders it.
     private static readonly SeededBill E = new('e', "2026-03-03")
     {
         BillType = "hres",
@@ -52,13 +52,20 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
     private static readonly SeededBill F = new('f', "2026-02-20") { BillNumber = 1 };
     private static readonly SeededBill[] All = [F, C, B, A, E];
-    private static readonly char[] ExpectedOrder = ['e', 'a', 'b', 'c', 'f'];
+
+    // The order is the latest action date desc, then record ID, with the bills of no stored status last. F has the oldest event date and the newest action.
+    // A and E share one action date, and B and C have no stored status, so only the record ID orders each pair.
+    private static readonly (SeededBill Bill, string Date)[] LatestActions = [(F, "2026-03-20"), (E, "2026-03-10"), (A, "2026-03-10")];
+    private static readonly char[] ExpectedOrder = ['f', 'a', 'e', 'b', 'c'];
 
     private async Task<ApiHost> StartWithBillsAsync(params SeededBill[] bills)
     {
         var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await BillsSeed.AddBillsAsync(host.OperationalDatabase, bills);
+        var statuses = LatestActions.Where(action => bills.Contains(action.Bill))
+            .Select(action => PublicRecordPageRows.PinnedStatus(1, action.Bill.RecordId, "Referred.", action.Date, 1, "InCommittee")).ToArray();
+        if (statuses.Length > 0) await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;\n" + string.Join("\n", statuses));
         return host;
     }
 
@@ -118,7 +125,7 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task BillsComeNewestEventFirstAndATieOnTheEventDateFallsBackToTheRecordIdWithTheReleaseOfTheSameQuery()
+    public async Task BillsComeNewestLatestActionFirstWithNoStoredStatusLastAndATieFallsBackToTheRecordIdWithTheReleaseOfTheSameQuery()
     {
         await using var host = await StartWithBillsAsync(All);
 
@@ -358,22 +365,22 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
     [Theory]
     [InlineData("congress=118", "c")]
-    [InlineData("congress=119", "eabf")]
-    [InlineData("billType=hr", "acf")]
+    [InlineData("congress=119", "faeb")]
+    [InlineData("billType=hr", "fac")]
     [InlineData("billType=HR&billNumber=7", "ac")]
     [InlineData("billType=hr&billNumber=7&congress=118", "c")]
     [InlineData("billNumber=3", "b")]
-    [InlineData("sponsor=p1", "acf")]
+    [InlineData("sponsor=p1", "fac")]
     [InlineData("sponsor=p2", "b")]
     [InlineData("sponsor=p3", "")]
     [InlineData("sponsor=p4", "e")]
     [InlineData("sponsor=nobody", "")]
-    [InlineData("issue=health", "ea")]
+    [InlineData("issue=health", "ae")]
     [InlineData("issue=tax", "a")]
     [InlineData("issue=zoning", "")]
     [InlineData("issue=health&sponsor=p4", "e")]
     [InlineData("issue=health&sponsor=p1", "a")]
-    [InlineData("policyArea=health", "eaf")]
+    [InlineData("policyArea=health", "fae")]
     [InlineData("policyArea=tax", "b")]
     [InlineData("from=2026-03-02&to=2026-03-02", "abc")]
     [InlineData("from=2026-03-03", "e")]
@@ -398,8 +405,8 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
 
         using var second = await GetAsync(host, $"/v1/bills?sponsor=p1&limit=5&cursor={cursor}");
 
-        Assert.Equal(['a'], Ids(first));
-        Assert.Equal(['c', 'f'], Ids(second));
+        Assert.Equal(['f'], Ids(first));
+        Assert.Equal(['a', 'c'], Ids(second));
     }
 
     [Theory]
@@ -415,10 +422,12 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     [InlineData("congress=1&congress=2")]
     [InlineData("issue=a&issue=b")]
     [InlineData("cursor=nonsense")]
-    [InlineData("cursor=b.1.20260302")]
-    [InlineData("cursor=b.0.20260302.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
-    [InlineData("cursor=b.1.20261302.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
-    [InlineData("cursor=b.1.20260302.not-an-id")]
+    [InlineData("cursor=bl.1.20260302")]
+    [InlineData("cursor=bl.0.20260302.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("cursor=bl.1.20261302.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("cursor=bl.1.none.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("cursor=bl.1.20260302.not-an-id")]
+    [InlineData("cursor=b.1.20260302.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     [InlineData("cursor=v.1.20260302.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public async Task BadParametersAndForgedCursorsAreRefusedWith400AsProblemJsonBecauseNoQueryMayRunOnThem(string query)
     {
@@ -442,11 +451,12 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     public async Task ACursorWithAWellFormedKeyOnlyMovesTheWindowBecauseEveryRowIsPublicAnyway()
     {
         await using var host = await StartWithBillsAsync(All);
-        var forged = $"b.1.20260302.{new string('b', 64)}";
 
-        using var page = await GetAsync(host, "/v1/bills?cursor=" + forged);
+        using var dated = await GetAsync(host, $"/v1/bills?cursor=bl.1.20260310.{new string('b', 64)}");
+        using var noAction = await GetAsync(host, $"/v1/bills?cursor=bl.1.n.{new string('b', 64)}");
 
-        Assert.Equal(['c', 'f'], Ids(page));
+        Assert.Equal(['e', 'b', 'c'], Ids(dated));
+        Assert.Equal(['c'], Ids(noAction));
     }
 
     [Fact]
@@ -461,7 +471,8 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         using var restart = await GetAsync(host, "/v1/bills?limit=2");
 
         Assert.Equal(2, restart.RootElement.GetProperty("release").GetInt32());
-        Assert.Equal(['e', 'a'], Ids(restart));
+        // Release 2 pins no status, so the record ID alone orders its bills.
+        Assert.Equal(['a', 'b'], Ids(restart));
     }
 
     [Fact]

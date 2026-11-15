@@ -40,6 +40,9 @@ internal sealed class InterceptingPublicationStore(IPublicationStore inner) : IP
     public Task<int> FillOfficialPhotoPathsAsync(int releaseNumber, IReadOnlyDictionary<string, string> photoPaths, CancellationToken cancellationToken) =>
         inner.FillOfficialPhotoPathsAsync(releaseNumber, photoPaths, cancellationToken);
 
+    public Task<int> FillOfficialSortNamesAsync(IReadOnlyDictionary<string, string> sortNames, CancellationToken cancellationToken) =>
+        inner.FillOfficialSortNamesAsync(sortNames, cancellationToken);
+
     public Task<IReadOnlyList<PublishedEntryDay>> ReadEntryDaysWithoutCongressAsync(PublishedEntryDay? after, int limit, CancellationToken cancellationToken) =>
         inner.ReadEntryDaysWithoutCongressAsync(after, limit, cancellationToken);
 

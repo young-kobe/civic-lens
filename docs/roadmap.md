@@ -56,7 +56,7 @@ The production review of 2026-11-14 found trust, content, and craft defects. The
 - [ ] Rank delegates and the Resident Commissioner in their own board list, and never print district 0.
 - [ ] Show "Your members on this vote" and the "what this is about" line on vote pages.
 - [ ] Show one short AI chip on lists and cards. Record pages keep the full approved labels.
-- [ ] Fix navigation and lists. Add Statements and Search to the menu, keep one Compare page, and hide the briefs page until a brief exists. Redirect addresses without .html. Add record filters, result counts, and filter chips. Sort bills by latest action and officials by last name.
+- [ ] Fix navigation and lists. Add Statements and Search to the menu, keep one Compare page, and hide the briefs page until a brief exists. Redirect addresses without .html. Add record filters, result counts, and filter chips.
 - [ ] Fix unclear numbers and copy. Every count names who, what, and when. ZIP results lead with how the members voted.
 - [ ] Run one visual cohesion pass after the content work. It sets one type role map, one title link style, and one card style. It adds 44 px tap targets, folded long lists, and the mockup stat grid.
 

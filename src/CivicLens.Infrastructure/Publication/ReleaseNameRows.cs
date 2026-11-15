@@ -18,6 +18,7 @@ internal static class ReleaseNameRows
                 ReleaseNumber = releaseNumber,
                 OfficialId = official.Id,
                 Name = official.Name,
+                SortName = names.SortNames.GetValueOrDefault(official.Id),
                 WikidataId = official.WikidataId,
                 Website = official.Website,
                 PhotoPath = official.Photo?.Path
@@ -36,6 +37,14 @@ internal static class ReleaseNameRows
             FROM unnest({1}::text[], {2}::text[]) AS k(official_id, photo_path)
             WHERE o.release_number = {0} AND o.official_id = k.official_id AND o.photo_path IS NULL
             """, [releaseNumber, photoPaths.Keys.ToArray(), photoPaths.Values.ToArray()], cancellationToken);
+
+    /// <summary>Fills the sort name of rows that hold none, in every release. A written name never changes, because the release is immutable.</summary>
+    public static Task<int> FillSortNamesAsync(CollectionAttemptDbContext db, IReadOnlyDictionary<string, string> sortNames,
+        CancellationToken cancellationToken) => sortNames.Count == 0 ? Task.FromResult(0) : db.Database.ExecuteSqlRawAsync("""
+            UPDATE release_officials o SET sort_name = k.sort_name
+            FROM unnest({0}::text[], {1}::text[]) AS k(official_id, sort_name)
+            WHERE o.official_id = k.official_id AND o.sort_name IS NULL
+            """, [sortNames.Keys.ToArray(), sortNames.Values.ToArray()], cancellationToken);
 
     private static void AddIssue(CollectionAttemptDbContext db, int releaseNumber, ReleaseFacet issue)
     {

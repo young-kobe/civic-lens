@@ -291,13 +291,14 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host, "/bills.html");
 
-        var (other, person, model) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
+        // A and C share the latest action date, so the record ID orders them. B has no stored status, so it comes last.
+        var (model, other, person) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
         Assert.Null(Label(person));
         Assert.Equal(ModelLabel, Label(model));
         Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
         Assert.DoesNotContain("Sponsor:", Text(person));
         Assert.Contains("Sponsor: Ann Able", Text(model));
-        Assert.Contains("Latest sponsorship 2 Mar 2026", Text(model));
+        Assert.All(Rows(page), row => Assert.DoesNotContain("sponsorship", Text(row), StringComparison.OrdinalIgnoreCase));
         Assert.Contains("Latest official action 13 Feb 2026: In committee: sent to the House Committee on Energy and Commerce.", Text(model));
         Assert.Equal("In committee", model.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Null(person.QuerySelector(".badge"));
@@ -319,9 +320,9 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, "/bills.html");
         var filtered = await GetPageAsync(host, "/bills.html?policyArea=tax");
 
-        Assert.Equal(["c", "a"], Ids(page));
+        Assert.Equal(["a", "c"], Ids(page));
         Assert.Equal("2 bills and resolutions of the 119th Congress are in this release. "
-            + "Bills and resolutions in the 119th Congress, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(page));
+            + "Bills and resolutions in the 119th Congress, with the latest official action on each. The newest action comes first.", Lede(page));
         Assert.Equal(Lede(page), Lede(filtered));
         Assert.Equal(["tax"], page.QuerySelectorAll("select[name=policyArea] option").Skip(1).Select(option => option.GetAttribute("value")));
     }
@@ -345,9 +346,9 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
         var page = await GetPageAsync(host, "/bills.html");
 
-        Assert.Equal(["b", "c", "a"], Ids(page));
+        Assert.Equal(["a", "b", "c"], Ids(page));
         Assert.StartsWith("3 bills and resolutions of the 119th Congress are in this release.", Lede(page), StringComparison.Ordinal);
-        var (passed, unknown, committee) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
+        var (committee, passed, unknown) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
         Assert.Contains("Sponsor: Bo Zed", Text(passed));
         Assert.Equal("Passed the House", passed.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Contains("Sponsor: Ann Able", Text(unknown));
@@ -355,14 +356,14 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Contains("Sponsor: Ann Able", Text(committee));
         Assert.Equal("In committee", committee.QuerySelector(".badge")!.TextContent.Trim());
         Assert.Equal(["b"], Ids(await GetPageAsync(host, "/bills.html?status=passedHouse")));
-        Assert.Equal(["c", "a"], Ids(await GetPageAsync(host, "/bills.html?sponsor=ann")));
+        Assert.Equal(["a", "c"], Ids(await GetPageAsync(host, "/bills.html?sponsor=ann")));
         Assert.Empty(Ids(await GetPageAsync(host, "/bills.html?status=becameLaw")));
 
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE release_bill_counts SET bills = 40 WHERE congress = 119;");
         Assert.StartsWith("40 bills and resolutions of the 119th Congress", Lede(await GetPageAsync(host, "/bills.html")), StringComparison.Ordinal);
 
         var unstored = await GetPageAsync(unstoredHost, "/bills.html");
-        Assert.Equal("Bills and resolutions, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(unstored));
+        Assert.Equal("Bills and resolutions, with the latest official action on each. The newest action comes first.", Lede(unstored));
         Assert.Empty(Rows(unstored));
     }
 
@@ -377,7 +378,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var empty = await GetPageAsync(emptyHost, "/bills.html");
         var one = await GetPageAsync(host, "/bills.html");
 
-        Assert.Equal("Bills and resolutions, with the latest official action on each. A bill moves up the list when a member signs on to it.", Lede(empty));
+        Assert.Equal("Bills and resolutions, with the latest official action on each. The newest action comes first.", Lede(empty));
         Assert.StartsWith("1 bill or resolution of the 119th Congress is in this release. Bills and resolutions in the 119th Congress", Lede(one), StringComparison.Ordinal);
     }
 
@@ -447,7 +448,21 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Empty(Titles(first).Intersect(Titles(second)));
     }
 
-    // The list once joined each filter as a semi join to a view. The oracle keeps that form, so the test proves that the keyed read gives the same bills in the same order.
+    [Fact]
+    public async Task ACursorOfTheEarlierSponsorshipSortAnswersTheRefusedListPage()
+    {
+        await using var host = await StartAsync();
+        await AddBillsAsync(host, new SeededBill('a', "2026-03-02"));
+
+        var page = await GetPageAsync(host, $"/bills.html?status=inCommittee&cursor=b.1.20260302.{new string('a', 64)}", HttpStatusCode.BadRequest);
+
+        Assert.Empty(Rows(page));
+        Assert.Null(page.QuerySelector(".pager a[rel=next]"));
+        Assert.Equal("inCommittee", page.QuerySelector("select[name=status] option[selected]")!.GetAttribute("value"));
+    }
+
+    // The list once joined each filter as a semi join to a view. The oracle keeps that form, so the test proves that the keyed read gives the same bills.
+    // The oracle orders them by the latest action of bill_status, the view of the status badge, so it also proves the order of the keys.
     private static string OracleFilter(string name, string value) => name switch
     {
         "status" => $"EXISTS (SELECT 1 FROM public_api.bill_status t WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number AND t.status = '{char.ToUpperInvariant(value[0])}{value[1..]}')",
@@ -464,14 +479,19 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null)
     };
 
-    // Stage 4 has no status row and stage 3 has a row with no stage. An inactive release holds another stage for each bill of stage 0.
-    private static string StatusRows(SeededBill bill, int index) => (index % 5) switch
+    // Stage 4 has no status row and stage 3 has a row with no stage. An inactive release holds another stage and a newer action for each bill of stage 0.
+    // The action date repeats every four bills and the event date every twelve, so the two orders differ and a page can end inside a tie.
+    private static string StatusRows(SeededBill bill, int index)
     {
-        4 => "",
-        3 => PublicRecordPageRows.PinnedStatus(1, bill.RecordId, "Introduced.", "2026-02-13", PublishedAt.UtcTicks),
-        var stage => PublicRecordPageRows.PinnedStatus(1, bill.RecordId, "Acted on.", "2026-02-13", PublishedAt.UtcTicks, Enum.GetName((BillStatusStage)stage))
-            + (stage == 0 ? "\n" + PublicRecordPageRows.PinnedStatus(2, bill.RecordId, "Acted on.", "2026-02-13", PublishedAt.UtcTicks, nameof(BillStatusStage.PassedHouse)) : "")
-    };
+        var date = $"2026-03-{1 + index % 4:00}";
+        return (index % 5) switch
+        {
+            4 => "",
+            3 => PublicRecordPageRows.PinnedStatus(1, bill.RecordId, "Introduced.", date, PublishedAt.UtcTicks),
+            var stage => PublicRecordPageRows.PinnedStatus(1, bill.RecordId, "Acted on.", date, PublishedAt.UtcTicks, Enum.GetName((BillStatusStage)stage))
+                + (stage == 0 ? "\n" + PublicRecordPageRows.PinnedStatus(2, bill.RecordId, "Acted on.", "2026-04-01", PublishedAt.UtcTicks, nameof(BillStatusStage.PassedHouse)) : "")
+        };
+    }
 
     [Theory]
     [InlineData("")]
@@ -511,7 +531,12 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             + "\nINSERT INTO release_issues (release_number, issue_id, name) VALUES (1, 'health', 'Health care'), (1, 'energy', 'Energy');");
         var filters = query.Length == 0 ? [] : query.Split('&').Select(pair => pair.Split('=')).Select(pair => OracleFilter(pair[0], pair[1]));
         var expected = await ViewsSeed.QueryAsPublicAsync(host.OperationalDatabase,
-            $"SELECT b.record_id FROM public_api.bills b WHERE {string.Join(" AND ", filters.Prepend("b.congress = 119"))} ORDER BY b.event_date DESC, b.record_id");
+            $"""
+            SELECT b.record_id FROM public_api.bills b
+              LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+             WHERE {string.Join(" AND ", filters.Prepend("b.congress = 119"))}
+             ORDER BY t.latest_action_date DESC NULLS LAST, b.record_id
+            """);
 
         var listed = new List<string>();
         for (var path = "/bills.html?" + query; path is not null;)

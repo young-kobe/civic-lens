@@ -24,6 +24,11 @@ internal sealed class FixedMemberRoster(RosterMember[] members, OfficialPhoto[]?
 
     public Task<IReadOnlyList<RosterMember>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<RosterMember>>(members);
+
+    public Task<string?> ReadLatestSnapshotAttemptIdAsync(string sourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<int> FillLastNamesAsync(string attemptId, IReadOnlyList<RosterMember> parsed, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 }
 
 internal sealed class FixedExecutiveRoster(ExecutiveOfficial[] officials) : IExecutiveRosterStore
@@ -35,6 +40,11 @@ internal sealed class FixedExecutiveRoster(ExecutiveOfficial[] officials) : IExe
 
     public Task<IReadOnlyList<ExecutiveOfficial>> ReadLatestAsync(string sourceId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ExecutiveOfficial>>(officials);
+
+    public Task<string?> ReadLatestSnapshotAttemptIdAsync(string sourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<int> FillLastNamesAsync(string attemptId, IReadOnlyList<ExecutiveOfficial> parsed, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
 }
 
 internal static class FixedRosters

@@ -6378,6 +6378,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("photo_path");
 
+                    b.Property<string>("SortName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("sort_name");
+
                     b.Property<string>("Website")
                         .HasColumnType("text")
                         .HasColumnName("website");
@@ -6396,6 +6401,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_officials_official_id", "length(btrim(official_id)) > 0");
 
                             t.HasCheckConstraint("ck_release_officials_photo_path", "photo_path IS NULL OR length(btrim(photo_path)) > 0");
+
+                            t.HasCheckConstraint("ck_release_officials_sort_name", "sort_name IS NULL OR length(btrim(sort_name)) > 0");
                         });
                 });
 
@@ -7842,6 +7849,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("full_name");
 
+                    b.Property<string>("LastName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("last_name");
+
                     b.Property<string>("WikidataId")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -7852,6 +7864,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("executive_officials", null, t =>
                         {
                             t.HasCheckConstraint("ck_executive_officials_identity", "govtrack_id > 0 AND (wikidata_id IS NULL OR wikidata_id ~ '^Q[1-9][0-9]*$') AND length(btrim(full_name)) > 0");
+
+                            t.HasCheckConstraint("ck_executive_officials_last_name", "last_name IS NULL OR length(btrim(last_name)) > 0");
                         });
                 });
 
@@ -7947,6 +7961,11 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("full_name");
 
+                    b.Property<string>("LastName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("last_name");
+
                     b.Property<string>("Office")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
@@ -7967,6 +7986,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                     b.ToTable("roster_members", null, t =>
                         {
                             t.HasCheckConstraint("ck_roster_members_identity", "bioguide_id ~ '^[A-Z][0-9]{6}$' AND length(btrim(full_name)) > 0");
+
+                            t.HasCheckConstraint("ck_roster_members_last_name", "last_name IS NULL OR length(btrim(last_name)) > 0");
                         });
                 });
 

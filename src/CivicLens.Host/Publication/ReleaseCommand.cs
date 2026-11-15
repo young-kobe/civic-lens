@@ -15,6 +15,9 @@ public static class ReleaseCommand
 
     public static bool IsPublish(string[] args) => args is ["releases", "publish", ..];
 
+    /// <summary>True for the commands that read the collection configuration and the captures: publish, and the stored columns backfill, which fills sort names from the roster captures.</summary>
+    public static bool ReadsCollection(string[] args) => IsPublish(args) || args is ["releases", "columns", "backfill"];
+
     public static Task<int> ExecuteAsync(string[] args, PublishRelease publish,
         ListPublicationReleases list, ListBlockedPublished blocked, ActivatePublicationRelease activate, BackfillFirstPublished backfill, BackfillPublishedEntries entries,
         BackfillStoredColumns columns, VerifyPublishedEntries verify, VerifyCorrectionHistories verifyCorrections,
