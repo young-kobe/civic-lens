@@ -24,9 +24,9 @@
         {
             <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label" LabelOrigin="bill.TextOrigin"
                              Sponsor="@bill.Sponsor">
-                @if (bill.LatestActionText is { } text && bill.LatestActionDate is { } day)
+                @if (BillLatestActionWords.Line(bill.LatestActionText, bill.LatestActionDate, bill.BillType) is { } latestAction)
                 {
-                    <p class="small muted">Latest official action @Moment.Day(day): @BillStatusMeaning.Plain(text, bill.BillType)</p>
+                    <p class="small muted">@latestAction</p>
                 }
                 @if (bill.Status is { } status and not BillStatusStage.Other)
                 {
