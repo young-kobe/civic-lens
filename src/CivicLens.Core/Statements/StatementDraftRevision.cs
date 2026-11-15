@@ -26,10 +26,14 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
 
     public DateOnly EventOn(DateOnly capturedOn) => StatementDate ?? capturedOn;
 
-    public void ValidateAsAnalysisRevision()
+    /// <summary>The worker writes a model revision as the analysis author, or the source text of a short release as the code author.
+    /// Code never guesses a date, so a code revision has none.</summary>
+    public void ValidateAsWorkerRevision()
     {
-        if (RevisionNumber < 1 || AuthorKind != ReviewAuthorKind.Analysis)
-            throw new ArgumentException("An analysis statement draft must be a numbered revision by the analysis author.");
+        if (RevisionNumber < 1 || AuthorKind == ReviewAuthorKind.Person)
+            throw new ArgumentException("A worker statement draft must be a numbered revision by the analysis or the code author.");
+        if (AuthorKind == ReviewAuthorKind.Code && StatementDate is not null)
+            throw new ArgumentException("A code statement revision has no date, because code never guesses a date.");
         if ((StatementDate is null) != (StatementDateEvidence is null))
             throw new ArgumentException("A statement date requires an exact evidence span.");
         if (string.IsNullOrWhiteSpace(Headline) || string.IsNullOrWhiteSpace(Summary) || Quotations.IsDefaultOrEmpty)
@@ -92,6 +96,8 @@ public sealed record StatementDraftRevision(string CandidateId, int RevisionNumb
                 throw new ArgumentException("A statement can cite only the extraction of its candidate.");
             _ = new DocumentTextSpan(extraction, span.Start, span.Length);
         }
+        if (AuthorKind == ReviewAuthorKind.Code && Summary != extraction.Text)
+            throw new ArgumentException("The summary of a code statement revision is the exact source text.");
     }
 
     private static void ValidateSelections(ImmutableArray<string> values, string name)

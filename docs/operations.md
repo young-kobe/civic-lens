@@ -620,6 +620,16 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- an
 
 The optional stage is `actions`, `votes`, `statements`, `document-changes`, or `briefs`. The command prints the count of requeued entries for each stage. It moves only Succeeded entries whose newest drafted run used an older task, prompt, or schema version. It leaves an entry that is Running or leased, a statement draft that a person has touched or approved, a document change that a person revised or decided on, and a week whose brief a person approved or rejected. A redraft adds a new model revision to an untouched statement or document change draft. It keeps the old revision, and code checks a redrafted statement again. See [statement redraft](architecture/statements.md#statement-redraft). It calls no model. The worker drafts the entries again and spends tokens, so check the daily limit first. Each stage commits in its own transaction. A failed stage leaves the earlier stages requeued, so a rerun is safe. See the [limits](architecture/analysis.md#limits-and-planned-work).
 
+A short press release shows its own text (owner decision, 2026-11-14). Its model summary from before that rule is stale. Use this order to move such records:
+
+1. Deploy, so the migration `ShortStatementSourceText` runs.
+2. Check `statements draft status` for the daily limit. Long releases on an older version can still spend tokens.
+3. Run `analyses redraft --stale statements` as the owner.
+4. Let the worker drain the stage. A short release gets a code revision with no model call.
+5. Code approves each code revision that passes the checks. The publishing stage publishes it as a replacement with no correction note.
+
+A record with a person decision keeps its AI summary. A code revision that fails a check waits for a person, and the old revision stays published. A second run requeues nothing.
+
 The [live test](#verification) for this adapter sends one paid call. It refuses to call if the reservation is over 25,000 tokens.
 
 ## Statement issue gate

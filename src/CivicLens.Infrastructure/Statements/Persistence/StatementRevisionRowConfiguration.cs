@@ -15,8 +15,9 @@ internal sealed class StatementRevisionRowConfiguration : IEntityTypeConfigurati
         builder.ToTable("statement_revisions", table =>
         {
             table.HasCheckConstraint("ck_statement_revisions_number", "revision_number >= 1");
-            table.HasCheckConstraint("ck_statement_revisions_author_kind", "author_kind IN ('Person','Analysis')");
-            table.HasCheckConstraint("ck_statement_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_statement_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
+            table.HasCheckConstraint("ck_statement_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_statement_revisions_code_date", "author_kind <> 'Code' OR statement_date IS NULL");
             table.HasCheckConstraint("ck_statement_revisions_date_evidence", "(statement_date IS NULL) = (statement_date_evidence_extraction_id IS NULL)");
             table.HasCheckConstraint("ck_statement_revisions_date_evidence_length", $"statement_date_evidence_length <= {StatementDraftRevision.MaximumQuotationLength}");
             table.HasCheckConstraint("ck_statement_revisions_columns_written", $"num_nulls({string.Join(", ", WrittenTogether)}) IN (0, {WrittenTogether.Length})");
