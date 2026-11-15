@@ -15,8 +15,10 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.ToTable("vote_revisions", table =>
         {
             table.HasCheckConstraint("ck_vote_revisions_number", "revision_number >= 1");
-            table.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis')");
-            table.HasCheckConstraint("ck_vote_revisions_run", "(author_kind = 'Analysis') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_vote_revisions_author_kind", "author_kind IN ('Person','Analysis','Code')");
+            table.HasCheckConstraint("ck_vote_revisions_run", "(author_kind <> 'Person') = (run_id IS NOT NULL)");
+            table.HasCheckConstraint("ck_vote_revisions_code_version", "code_version ~ '^[0-9a-f]{40}$'");
+            table.HasCheckConstraint("ck_vote_revisions_code_version_author", "code_version IS NULL OR author_kind = 'Code'");
             table.HasCheckConstraint("ck_vote_revisions_vote_source", EnumChecks.InList("vote_source", Enum.GetNames<VoteSource>()));
             table.HasCheckConstraint("ck_vote_revisions_chamber", "chamber IN ('House', 'Senate')");
             table.HasCheckConstraint("ck_vote_revisions_roll", "congress >= 1 AND session_number IN (1, 2) AND roll_call_number >= 1");
@@ -38,6 +40,7 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.RevisionNumber).HasColumnName("revision_number");
         builder.Property(row => row.AuthorSubject).HasColumnName("author_subject").HasMaxLength(256).IsRequired();
         builder.Property(row => row.AuthorKind).HasColumnName("author_kind").HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(row => row.CodeVersion).HasColumnName("code_version").HasMaxLength(40);
         builder.Property(row => row.RunId).HasColumnName("run_id").HasMaxLength(32);
         builder.Property(row => row.CreatedAtUtcTicks).HasColumnName("created_at_utc_ticks");
         builder.Property(row => row.SourceId).HasColumnName("source_id").HasMaxLength(128);

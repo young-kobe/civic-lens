@@ -16,13 +16,12 @@ namespace CivicLens.Tests.Application.Votes;
 
 public sealed class VoteDraftStepTests
 {
-    private const string HeadlineText = "The House voted on a concurrent resolution";
-    private const string SummaryText = "The House decided whether to agree to a Senate amendment.";
-    private static string Output(string headline = "Warren sponsored a housing bill", string summary = "Elizabeth Warren introduced a housing bill on January 3, 2025.",
-        double headlineConfidence = 0.8, double summaryConfidence = 0.7, string[]? issueIds = null) =>
-        HeadlineSummaryOutputs.Output(headline, summary, headlineConfidence, summaryConfidence, issueIds ?? ["rent"]);
+    private const string HeadlineText = "The House voted on passage of H.Con.Res. 14, A concurrent resolution on rent. The resolution passed.";
+    private const string SummaryText = HeadlineText;
+    private static string Output(double confidence = 0.8, string[]? issueIds = null) =>
+        JsonSerializer.Serialize(new { issueIds = issueIds ?? ["rent"], confidence });
 
-    private static readonly string Drafted = Output(headline: HeadlineText, summary: SummaryText);
+    private static readonly string Drafted = Output();
 
     [Fact]
     public async Task TheFirstDraftCallsTheModelAndWritesRevisionOneWithTheCandidateIdentityAndNoGate()
@@ -30,7 +29,7 @@ public sealed class VoteDraftStepTests
         var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
 
         var revision = Assert.Single(store.Revisions);
-        Assert.Equal((1, "civic-lens:analysis", HeadlineText, SummaryText), (revision.RevisionNumber, revision.AuthorSubject, revision.Headline, revision.Summary));
+        Assert.Equal((1, "civic-lens:code", HeadlineText, SummaryText), (revision.RevisionNumber, revision.AuthorSubject, revision.Headline, revision.Summary));
         Assert.Equal(("congress-house-votes", 119, 1, 100, "hconres", 14), (revision.SourceId, revision.Congress, revision.SessionNumber,
             revision.RollCallNumber, revision.BillType, revision.BillNumber));
         Assert.Equal((CandidateId, UpdatedAt), (revision.CandidateId, revision.CandidateUpdateDate));
@@ -133,7 +132,7 @@ public sealed class VoteDraftStepTests
     [Fact]
     public async Task ConfidenceStaysInTheRunOutputAndNeverReachesTheRevision()
     {
-        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(headline: HeadlineText, summary: SummaryText, headlineConfidence: 0.77)));
+        var (store, _) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Output(confidence: 0.77)));
 
         Assert.Contains("0.77", Assert.Single(store.Runs).Run.OutputJson, StringComparison.Ordinal);
         Assert.DoesNotContain("onfidence", JsonSerializer.Serialize(Assert.Single(store.Revisions)), StringComparison.Ordinal);
@@ -260,19 +259,19 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
-    public async Task APersonsTextIsKeptAndTheModelsNewTextBecomesASuggestionBecauseAModelPredictionIsNeverAHumanEdit()
+    public async Task APersonsTextIsKeptWithNoCallAndNoSuggestionBecauseCodeTextNeverReplacesAPersonsWords()
     {
         var edited = PersonEditOf(await FirstRevisionAsync(Create()), "Edited headline", "Edited summary.");
         var changed = Create(result: "Failed");
+        var model = new FakeHeadlineSummaryModel();
 
-        var (store, _) = await RunAsync(changed, new FakeHeadlineSummaryModel().Draft(Output(headline: "Model headline", summary: "Model summary.")),
-            edited, updatedAt: UpdatedAt.AddDays(1));
+        var (store, _) = await RunAsync(changed, model, edited, updatedAt: UpdatedAt.AddDays(1));
 
+        Assert.Empty(model.Requests);
         var revision = Assert.Single(store.Revisions);
-        Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person), (revision.Headline, revision.Summary, revision.TextOrigin));
-        Assert.Equal(("Model headline", "Model summary."), (revision.Suggestion!.Headline, revision.Suggestion.Summary));
-        Assert.Equal(Assert.Single(store.Runs).Run.RunId, revision.Suggestion.RunId);
-        Assert.Equal("civic-lens:analysis", revision.AuthorSubject);
+        Assert.Equal(("Edited headline", "Edited summary.", ReviewTextOrigin.Person, null), (revision.Headline, revision.Summary, revision.TextOrigin, revision.Suggestion));
+        Assert.Equal("Result: Failed", revision.Facts.Single(fact => fact.Text.StartsWith("Result: ", StringComparison.Ordinal)).Text);
+        Assert.Equal((AnalysisRunOutcome.Bypassed, VoteDraftErrorCodes.TextKept), (Assert.Single(store.Runs).Run.Outcome, store.Runs[0].Reason));
     }
 
     [Fact]
@@ -293,16 +292,17 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
-    public async Task AMemberVoteChangeTogetherWithAChangedResultStillCallsTheModel()
+    public async Task AChangedResultRewritesTheCodeHeadlineAndTheIssueCallRunsAgainBecauseAFactChanged()
     {
         var current = await FirstRevisionAsync(Create());
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "The House rejected a concurrent resolution", summary: SummaryText));
+        var model = new FakeHeadlineSummaryModel().Draft(Drafted);
         var changed = Create(result: "Failed", members: [new(Aderholt, "Robert", "Aderholt", "Nay"), new(Auchincloss, "Jake", "Auchincloss", "Nay")]);
 
         var (store, _) = await RunAsync(changed, model, current, updatedAt: UpdatedAt.AddDays(1));
 
         Assert.Single(model.Requests);
-        Assert.Equal(("The House rejected a concurrent resolution", 2), (Assert.Single(store.Revisions).Headline, Assert.Single(store.Revisions).RevisionNumber));
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("The House voted on passage of H.Con.Res. 14, A concurrent resolution on rent. The resolution failed.", 2), (revision.Headline, revision.RevisionNumber));
     }
 
     [Fact]
@@ -321,80 +321,16 @@ public sealed class VoteDraftStepTests
     }
 
     [Theory]
-    [InlineData("Nancy Pelosi called a vote")]
-    [InlineData("NANCY PELOSI called a vote")]
-    [InlineData("Robert Aderholt voted Yea")]
-    public async Task TextThatNamesAnyConfiguredPersonIsRejectedSoNoCopiedTextCanStateAStaleVote(string headline)
-    {
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: headline, summary: SummaryText)).Draft(Drafted);
-
-        var (store, _) = await RunAsync(Create(), model);
-
-        Assert.Contains("so name no person", model.Requests[1].UserPrompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("tracked", model.Requests[1].UserPrompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
-        Assert.Single(store.Revisions);
-    }
-
-    [Fact]
-    public async Task AVoteDraftWithABannedPhraseGoesBackWithTheReasonThatNamesThePhrase()
-    {
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "The House passed a resolution that aims to cut costs", summary: SummaryText)).Draft(Drafted);
-
-        var (store, _) = await RunAsync(Create(), model);
-
-        Assert.Contains("uses the phrase \"aims to\"", model.Requests[1].UserPrompt, StringComparison.Ordinal);
-        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
-        Assert.Equal(HeadlineText, Assert.Single(store.Revisions).Headline);
-    }
-
-    [Fact]
-    public async Task AVoteDraftAtThirteenPointFiveIsAcceptedAndOneAtFourteenPointOneGoesBackWithTheOneRepairMessage()
-    {
-        var passing = Output(headline: GradePassages.PassingHeadline, summary: GradePassages.Summary);
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: GradePassages.FailingHeadline, summary: GradePassages.Summary)).Draft(passing);
-
-        var (store, _) = await RunAsync(Create(), model);
-
-        Assert.Contains(GradePassages.RepairMessageStart, model.Requests[1].UserPrompt, StringComparison.Ordinal);
-        Assert.Equal([AnalysisRunOutcome.OutputRejected, AnalysisRunOutcome.Drafted], store.Runs.Select(run => run.Run.Outcome));
-        Assert.Equal(GradePassages.PassingHeadline, Assert.Single(store.Revisions).Headline);
-    }
-
-    [Fact]
-    public async Task ANameInTheSummaryIsRejectedToo()
-    {
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: HeadlineText, summary: "Nancy Pelosi presided.")).Draft(Drafted);
-
-        var (store, _) = await RunAsync(Create(), model);
-
-        Assert.Contains("The summary names \"Nancy Pelosi\"", model.Requests[1].UserPrompt, StringComparison.Ordinal);
-        Assert.Single(store.Revisions);
-    }
-
-    [Theory]
     [InlineData(1.5)]
     [InlineData(-0.1)]
     public async Task AConfidenceOutsideZeroToOneIsRejected(double confidence)
     {
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headlineConfidence: confidence)).Draft(Output(summaryConfidence: 2));
+        var model = new FakeHeadlineSummaryModel().Draft(Output(confidence: confidence)).Draft(Output(confidence: 2));
 
         var (store, _) = await RunAsync(Create(), model);
 
         Assert.Equal((State.Failed, "outputRejected"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         Assert.Contains("must be a number from 0 to 1", model.Requests[1].UserPrompt, StringComparison.Ordinal);
-        Assert.Empty(store.Revisions);
-    }
-
-    [Fact]
-    public async Task TextWithANulOrOverTheBoundIsRejected()
-    {
-        var model = new FakeHeadlineSummaryModel().Draft(Output(headline: "bad\0text"))
-            .Draft(Output(summary: new string('x', VoteDraftRevision.MaximumSummaryLength + 1)));
-
-        var (store, _) = await RunAsync(Create(), model);
-
-        Assert.Equal((State.Failed, "outputRejected"), (store.Entries[0].Status, store.Entries[0].ErrorCode));
         Assert.Empty(store.Revisions);
     }
 
@@ -566,7 +502,7 @@ public sealed class VoteDraftStepTests
         Assert.Equal(ExtractionIdOf("bill"), facts[0].Citation.ExtractionId);
         var prompt = Assert.Single(model.Requests).UserPrompt;
         Assert.Contains($"Title: {BillTitle}", prompt, StringComparison.Ordinal);
-        Assert.Contains("title of the measure", Assert.Single(model.Requests).SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("words in the title or the subjects", Assert.Single(model.Requests).SystemPrompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -626,13 +562,34 @@ public sealed class VoteDraftStepTests
     }
 
     [Fact]
-    public async Task APolicyAreaWithNoIssueSendsTheSchemaWithoutIssueIds()
+    public async Task AVoteWithNoCandidateIssueGetsCodeTextWithNoModelCallAndNoChargeBecauseTheModelHasNothingToChoose()
     {
-        var (_, model) = await RunAsync(Create(policyArea: BillGateFixtures.UntrackedPolicyArea), new FakeHeadlineSummaryModel().Draft(Output(issueIds: [])));
+        var model = new FakeHeadlineSummaryModel();
+
+        var (store, _) = await RunAsync(Create(policyArea: BillGateFixtures.UntrackedPolicyArea), model);
+
+        Assert.Empty(model.Requests);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("civic-lens:code", ReviewTextOrigin.Code, HeadlineText), (revision.AuthorSubject, revision.TextOrigin, revision.Headline));
+        Assert.Empty(revision.TrackedIssueIds);
+        var run = Assert.Single(store.Runs);
+        Assert.Equal((AnalysisRunOutcome.Bypassed, VoteDraftErrorCodes.CodeWritten, 0L), (run.Run.Outcome, run.Reason, run.Run.ChargedTokens));
+    }
+
+    [Fact]
+    public async Task ABillWithCandidateIssuesMakesOneIssueOnlyCallWhoseSchemaAndPromptHoldNoHeadlineOrSummary()
+    {
+        var (store, model) = await RunAsync(Create(), new FakeHeadlineSummaryModel().Draft(Drafted));
 
         var request = Assert.Single(model.Requests);
-        Assert.DoesNotContain("issueIds", request.SchemaJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("issueIds", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("issueIds", request.SchemaJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("headline", request.SchemaJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("summary", request.SchemaJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("headline", request.SystemPrompt, StringComparison.OrdinalIgnoreCase);
+        var revision = Assert.Single(store.Revisions);
+        Assert.Equal(("civic-lens:code", ReviewTextOrigin.Code), (revision.AuthorSubject, revision.TextOrigin));
+        Assert.Equal(["rent"], revision.TrackedIssueIds.ToArray());
+        Assert.Equal(AnalysisRunOutcome.Drafted, Assert.Single(store.Runs).Run.Outcome);
     }
 
     [Fact]

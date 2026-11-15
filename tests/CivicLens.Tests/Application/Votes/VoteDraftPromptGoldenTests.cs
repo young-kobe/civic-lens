@@ -1,34 +1,19 @@
 using System.Security.Cryptography;
 using System.Text;
-using CivicLens.Application.Analysis;
 using CivicLens.Application.Issues;
 using CivicLens.Application.Votes;
-using CivicLens.Tests.Application.Analysis;
 using CivicLens.Tests.Fixtures;
 
 namespace CivicLens.Tests.Application.Votes;
 
 public sealed class VoteDraftPromptGoldenTests
 {
-    private const string SystemSha256 = "68e39f5ff75809480e6de75e2522c3f2bf27c21b982355d920b359fe94062974";
-    private const string SenateSystemSha256 = "7fa054545418aa57c76a03711fedca1826fdd40a5951a654b1957916cfa0a686";
-    private const string SchemaSha256 = "6d6adb018d7ee24f5df2e21a1f678cc87ed0fb7c144cf0a5c99cd84153a3acf0";
-    private const string InputHash = "a985b981acd3a0723fd5632d64d176ad2a68d214a0ae5c284a9b6928c1c84d59";
+    private const string SystemSha256 = "58a0aa231547de0a324a7a9c8ba17d6910087dcbe2ab19ec4459462f07b4044a";
+    private const string SchemaSha256 = "924ddf09fe3d1e1bc40739a6bbe685736955129192b0372e33a985c82a73855f";
+    private const string InputHash = "3f62b6abae8f03c0240535e723c55d916b2b2670ce9ec3b986e93a4cb9c2be98";
 
     [Fact]
-    public async Task TheHouseAndSenatePromptsHoldTheSharedAiTextSentencesAndStateTheCodeGradeLimit()
-    {
-        var house = VoteWorld.Create();
-        var senate = VoteviewVoteWorld.Create();
-        var houseSnapshot = (await house.Reader().ReadAsync(house.Evidence(), default)).Snapshot!;
-        var senateSnapshot = (await senate.Reader().ReadAsync(senate.Evidence(), default)).Snapshot!;
-
-        AiTextPromptRules.AssertHoldsSharedSentences(VoteDraftPrompt.Build(houseSnapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes)!.SystemPrompt, codeApproves: true);
-        AiTextPromptRules.AssertHoldsSharedSentences(VoteDraftPrompt.Build(senateSnapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes)!.SystemPrompt, codeApproves: true);
-    }
-
-    [Fact]
-    public async Task ThePromptAndSchemaMatchTheirPinnedVersions()
+    public async Task TheIssueOnlyPromptAndSchemaMatchTheirPinnedVersions()
     {
         var world = VoteWorld.Create();
         var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
@@ -37,41 +22,32 @@ public sealed class VoteDraftPromptGoldenTests
 
         var bump = $"The prompt or schema changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}) or " +
             $"{nameof(VoteDraftTask.SchemaVersion)} ({VoteDraftTask.SchemaVersion}), and then update the pinned hashes in this test.";
-        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v7", "vote-draft-schema-v2", "claude-haiku-5-5"),
+        Assert.Equal(("vote-draft", "vote-draft-v1", "vote-draft-prompt-v8", "vote-draft-schema-v3", "claude-haiku-5-5"),
             (VoteDraftTask.Task, VoteDraftTask.TaskVersion, VoteDraftTask.PromptVersion, VoteDraftTask.SchemaVersion, VoteDraftTask.Model));
         Assert.True(Sha256(request.SystemPrompt) == SystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
         Assert.True(Sha256(request.SchemaJson) == SchemaSha256, $"{bump} Schema: {Sha256(request.SchemaJson)}");
         Assert.True(request.InputHash == InputHash, $"{bump} Input hash: {request.InputHash}");
+        Assert.True(request.CacheSystemPrompt);
     }
 
     [Fact]
-    public async Task TheSenatePromptNamesTheSenateAndItsSourcesWhileTheHouseGoldenAbovePinsTheHouseBytes()
+    public async Task TheSenateGetsTheSameIssueOnlySystemPromptBecauseCodeNowWritesEveryWord()
     {
         var world = VoteviewVoteWorld.Create();
         var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
 
         var request = VoteDraftPrompt.Build(snapshot, BillGateFixtures.HousingChoice(), VoteDraftTask.MaximumPromptBytes)!;
 
-        var bump = $"The Senate prompt changed. Bump {nameof(VoteDraftTask.PromptVersion)} ({VoteDraftTask.PromptVersion}), and then update the pinned hash in this test.";
-        Assert.True(Sha256(request.SystemPrompt) == SenateSystemSha256, $"{bump} System prompt: {Sha256(request.SystemPrompt)}");
-        Assert.DoesNotContain("House", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.Contains("roll-call vote of the United States Senate", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.Contains("checked against the Senate roll call data and Congress.gov data", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.Contains("states what the Senate voted on", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Equal(SystemSha256, Sha256(request.SystemPrompt));
     }
 
     [Fact]
-    public async Task TheSystemPromptBansInternalWordsAndIsCached()
+    public async Task AVoteWithNoCandidateIssueHasNoRequestBecauseTheStepNeverCallsTheModelForIt()
     {
         var world = VoteWorld.Create();
         var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
 
-        var request = VoteDraftPrompt.Build(snapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes)!;
-
-        Assert.True(request.CacheSystemPrompt);
-        Assert.Contains("Never use the words tracked, entry, or candidate", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.Contains("Never describe how Civic Lens works", request.SystemPrompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("tracked member", request.SystemPrompt, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => VoteDraftPrompt.Build(snapshot, NoChoice(), VoteDraftTask.MaximumPromptBytes));
     }
 
     [Fact]
@@ -80,27 +56,11 @@ public sealed class VoteDraftPromptGoldenTests
         var world = VoteWorld.Create();
         var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
 
-        var first = VoteDraftPrompt.Build(snapshot, NoChoice(), 100_000)!;
-        var retry = VoteDraftPrompt.Build(snapshot, NoChoice(), 100_000, ["headline is required."])!;
+        var first = VoteDraftPrompt.Build(snapshot, BillGateFixtures.HousingChoice(), 100_000)!;
+        var retry = VoteDraftPrompt.Build(snapshot, BillGateFixtures.HousingChoice(), 100_000, ["confidence is required."])!;
 
-        Assert.Contains("- headline is required.", retry.UserPrompt, StringComparison.Ordinal);
+        Assert.Contains("- confidence is required.", retry.UserPrompt, StringComparison.Ordinal);
         Assert.StartsWith(first.UserPrompt, retry.UserPrompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AnAskedIssueChoiceListsEachCandidateAndAPolicyAreaWithNoIssueAsksForNone()
-    {
-        var world = VoteWorld.Create();
-        var snapshot = (await world.Reader().ReadAsync(world.Evidence(), default)).Snapshot!;
-
-        var asked = VoteDraftPrompt.Build(snapshot, BillGateFixtures.HousingChoice(), 100_000)!;
-        var none = VoteDraftPrompt.Build(snapshot, NoChoice(), 100_000)!;
-
-        Assert.Contains("\"issueIds\"", asked.SchemaJson, StringComparison.Ordinal);
-        Assert.Contains("\"definition\": \"Rent costs.\"", asked.UserPrompt, StringComparison.Ordinal);
-        Assert.Contains("choose an issue only when the title of the measure is about it", asked.SystemPrompt, StringComparison.Ordinal);
-        Assert.Equal(AnalysisSchema.HeadlineAndSummary(), none.SchemaJson);
-        Assert.DoesNotContain("issueIds", none.SystemPrompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -125,9 +85,8 @@ public sealed class VoteDraftPromptGoldenTests
         var plainRequest = VoteDraftPrompt.Build(plainSnapshot, BillGateFixtures.HousingChoice(), VoteDraftTask.MaximumPromptBytes)!;
 
         Assert.Contains("\"Rent and rental housing\"", asked.UserPrompt, StringComparison.Ordinal);
-        Assert.Contains("A subject does not make an issue fit.", asked.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("\"definition\": \"Rent costs.\"", asked.UserPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("subjects", plainRequest.UserPrompt, StringComparison.Ordinal);
-        Assert.Equal(SystemSha256, Sha256(plainRequest.SystemPrompt));
     }
 
     private static BillIssueChoice NoChoice() =>

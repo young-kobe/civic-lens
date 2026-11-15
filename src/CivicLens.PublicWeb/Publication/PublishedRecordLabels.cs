@@ -98,13 +98,6 @@ public static class PublishedRecordLabels
     /// <summary>The name of the fact row that holds the AI label of a record.</summary>
     public const string WordingFact = "Wording";
 
-    public static IEnumerable<Fact> Wording(PublishedTextOrigin origin, string modelWording = AiLabelWords.ModelWording) => origin switch
-    {
-        PublishedTextOrigin.Model => [new(WordingFact, modelWording)],
-        PublishedTextOrigin.Code => [new(WordingFact, AiLabelWords.CodeWording)],
-        _ => []
-    };
-
     public static IEnumerable<Fact> StatementWording(PublishedStatement statement) => statement.TextOrigin switch
     {
         PublishedTextOrigin.Model => [new(WordingFact, StatementModelLabel(statement.ApprovedBy))],

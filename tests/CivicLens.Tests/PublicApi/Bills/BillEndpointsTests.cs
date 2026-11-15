@@ -252,6 +252,19 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredBillLineThatEndsWithTheCutMarkShowsNoLineInTheListOrTheDetail()
+    {
+        var cut = A with { BillLine = PublishedSamples.CutBillLine };
+        await using var host = await StartWithBillsAsync(cut, B);
+
+        using var page = await GetAsync(host, "/v1/bills");
+        using var detail = await GetAsync(host, $"/v1/bills/{cut.RecordId}");
+
+        Assert.All(page.RootElement.GetProperty("bills").EnumerateArray(), bill => Assert.Equal(JsonValueKind.Null, bill.GetProperty("billLine").ValueKind));
+        Assert.Equal(JsonValueKind.Null, detail.RootElement.GetProperty("bill").GetProperty("billLine").ValueKind);
+    }
+
+    [Fact]
     public async Task CrsSummaryUsesThePublishedRevisionAndExposesOnlyItsBodyAndSummaryVersion()
     {
         await using var host = await StartWithBillsAsync(A with { Issues = ["health"] }, B);

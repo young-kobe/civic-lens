@@ -239,6 +239,21 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredBillLineThatEndsWithTheCutMarkShowsNoLineOnTheVotePage()
+    {
+        await using var host = await StartAsync();
+        await BillsSeed.AddBillsAsync(host.OperationalDatabase,
+            new SeededBill('b', "2026-03-02") { BillLine = PublishedSamples.CutBillLine, Sponsorships = [new("p0", "Sponsor", "2026-01-10")] });
+        await ViewsSeed.LinkVoteBillsAsync(host.OperationalDatabase, 1, ('a', 'b'));
+
+        var page = await GetPageAsync(host, Path);
+
+        Assert.Null(page.QuerySelector(".vote-about"));
+        Assert.DoesNotContain("report on sanctions", page.Body!.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(page.QuerySelector(".vote-bill"));
+    }
+
+    [Fact]
     public async Task ABlankNameQueryIsNoFilterSoTheFoldStaysClosedAndAllRowsShow()
     {
         await using var host = await StartAsync();

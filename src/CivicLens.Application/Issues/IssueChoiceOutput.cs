@@ -1,7 +1,7 @@
 using System.Text.Json;
 using CivicLens.Application.Analysis;
 
-namespace CivicLens.Application.Actions;
+namespace CivicLens.Application.Issues;
 
 internal sealed record IssueChoiceOutput(double Confidence, string[]? IssueIds = null)
 {

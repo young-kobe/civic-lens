@@ -28,6 +28,12 @@ internal sealed class FakeVoteDraftStore : FakeAnalysisQueue<VoteDraftRun>, IVot
 
     public Task<int> CountWaitingForBillAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
+    public Task<IReadOnlyList<VoteCodeTextTarget>> ListPublishedModelTextAsync(int limit, string? afterRecordId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<string?> AppendCodeTextAsync(VoteDraftRevision revision, VoteDraftRun run, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     public Task<IReadOnlyList<VoteDraftListItem>> ListAsync(VoteDraftView? view, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<VoteDraftListItem>>([]);
 

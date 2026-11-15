@@ -597,6 +597,24 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task AStoredBillLineThatEndsWithTheCutMarkGivesNoLineAndNoSourceNoteOnTheFeaturedVoteAndTheVotes()
+    {
+        var votes = new[] { House('1', "2026-05-01", 1), House('2', "2026-05-02", 2) };
+        var bills = new[] { new SeededBill('0', "2026-03-01") { BillNumber = 1, BillLine = PublishedSamples.CutBillLine } };
+        await using var host = await StartAsync(votes, bills);
+
+        var answer = await GetAsync(host);
+
+        var shown = answer.GetProperty("votes").EnumerateArray().Append(answer.GetProperty("featuredVote")).ToArray();
+        Assert.Equal(2, shown.Length);
+        Assert.All(shown, vote =>
+        {
+            Assert.Equal(JsonValueKind.Null, vote.GetProperty("billLine").ValueKind);
+            Assert.Equal(JsonValueKind.Null, vote.GetProperty("billLineSource").ValueKind);
+        });
+    }
+
+    [Fact]
     public async Task VotesOfOneDayComeLaterRollCallFirstAndTheCardStopsAtTwoForEachChamber()
     {
         var votes = new[] { House('1', "2026-05-01", 1), House('2', "2026-05-01", 2), House('3', "2026-05-01", 3), Senate('4', "2026-05-01", 4) };

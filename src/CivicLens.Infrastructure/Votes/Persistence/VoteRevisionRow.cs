@@ -12,6 +12,7 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public string AuthorSubject { get; set; } = string.Empty;
     public ReviewAuthorKind AuthorKind { get; set; }
     public string? RunId { get; set; }
+    public string? CodeVersion { get; set; }
     public long CreatedAtUtcTicks { get; set; }
     public string? Headline { get; set; }
     public string? Summary { get; set; }

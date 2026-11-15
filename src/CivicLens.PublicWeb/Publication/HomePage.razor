@@ -14,8 +14,7 @@
             </div>
             @if (Data.FeaturedVote is { } featured)
             {
-                var summaryLabel = featured.Label ?? (featured.TextOrigin is PublishedTextOrigin.Model or PublishedTextOrigin.Code
-                    ? PublishedRecordLabels.Wording(featured.TextOrigin).First().Value : null);
+                var summaryLabel = featured.Label;
                 <section class="panel panel-padded home-featured" aria-labelledby="home-featured-title">
                     <p class="home-featured-label">Featured vote</p>
                     <h2 id="home-featured-title" aria-describedby="@(summaryLabel is null ? null : "home-featured-origin")"><a href="@(RootPath + PublicationProtocol.RecordPagePath(featured.RecordId))">@featured.Headline</a></h2>
@@ -48,7 +47,10 @@
                     {
                         <div class="home-featured-summary">
                             <AiLabel Text="@summaryLabel" Origin="featured.TextOrigin" Id="home-featured-origin" />
-                            <p>@featured.Summary</p>
+                            @if (featured.TextOrigin != PublishedTextOrigin.Code)
+                            {
+                                <p>@featured.Summary</p>
+                            }
                         </div>
                     }
                     @if (featured.BillLine is not null)

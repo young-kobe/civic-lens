@@ -1,3 +1,4 @@
+using CivicLens.Application;
 using CivicLens.Application.Analysis;
 using CivicLens.Application.Votes;
 using CivicLens.Core.Analysis;
@@ -9,7 +10,7 @@ using CivicLens.Infrastructure.Votes.Persistence;
 
 namespace CivicLens.Infrastructure.Votes;
 
-internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision)
+internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, string, int, CancellationToken, Task> afterDecision, CodeVersion codeVersion)
     : IAnalysisQueueMapping<VoteAnalysisRow, VoteDraftRun>
 {
     public string Table => PostgresVoteDraftStore.Table;
@@ -61,7 +62,7 @@ internal sealed class VoteDraftQueueMapping(Func<CollectionAttemptDbContext, str
         }
         if (run.Run.Outcome is not (AnalysisRunOutcome.Drafted or AnalysisRunOutcome.Bypassed))
             throw new ArgumentException("A revision needs its drafted or bypassed run.", nameof(settlement));
-        var refusal = await VoteDraftRows.AppendAnalysisRevisionAsync(db, revision, run.Run.RunId, cancellationToken);
+        var refusal = await VoteDraftRows.AppendWorkerRevisionAsync(db, revision, run.Run.RunId, codeVersion, cancellationToken);
         if (refusal is null) return settlement;
         var discarded = run.Run.Outcome == AnalysisRunOutcome.Drafted
             ? run with { Run = run.Run with { Outcome = AnalysisRunOutcome.DraftDiscarded } } : run;
