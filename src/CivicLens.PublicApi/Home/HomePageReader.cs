@@ -1,4 +1,3 @@
-using CivicLens.PublicApi.ActiveRelease;
 using CivicLens.PublicApi.Boards;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Components.Ui;
@@ -9,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace CivicLens.PublicApi.Home;
 
 /// <summary>
-/// Maps the current public home answer to the public presentation contract, with the freshness of the same answer, without rereading its release.
+/// Maps the current public home answer to the public presentation contract. The shell reads its freshness line as every server page does.
 /// The featured vote page and the party boards come from their own readers.
 /// Each one joins the page only when it read the same release as the home answer, so the page never mixes two releases.
 /// </summary>
@@ -17,7 +16,7 @@ public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsP
 {
     public string? BrowserApiRoot => browserApiUrl?.Join(string.Empty).TrimEnd('/');
 
-    public async Task<HomePageRead?> ReadAsync(CancellationToken cancellationToken)
+    public async Task<HomePageData?> ReadAsync(CancellationToken cancellationToken)
     {
         if (await home.ReadAsync(cancellationToken) is not { } answer) return null;
         var featured = answer.FeaturedVote is { } vote
@@ -32,12 +31,11 @@ public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsP
             group.Kind, group.Count, group.NewestRecordId, group.NewestTitle, group.NewestSignedOn, group.OldestSignedOn)).ToArray();
         var issues = answer.Issues.Select(issue => new IssuesIndexItemData(
             issue.IssueId, issue.Name, issue.Congress, issue.SubstantiveVotes, issue.Bills)).ToArray();
-        var data = new HomePageData(answer.Release, featured, votes, brief)
+        return new HomePageData(answer.Release, featured, votes, brief)
         {
             ExecutiveActions = executiveActions,
             Issues = issues
         };
-        return new(data, new(answer.Release, answer.NewestHouseRollCall, answer.NewestSenateRollCall));
     }
 
     /// <summary>The chamber bar of a recent vote, as the bill page draws it: no half line, and no bar without all four counts.</summary>

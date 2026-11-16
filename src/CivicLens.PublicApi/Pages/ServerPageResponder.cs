@@ -9,7 +9,7 @@ namespace CivicLens.PublicApi.Pages;
 /// <summary>The pipeline of every server page: find the active release, answer 304 for a matching successful page, or render before setting cache headers.
 /// A successful page gets the shared validator and freshness. Any other page, such as the not found page, gets no validator and no-store.
 /// One read gives the release number and the freshness line that the shell of every page shows. A 304 skips the render, and a caller that already holds
-/// its release number skips that read until it renders. A caller that already holds the freshness, such as Home, skips that read. One private method holds the 304 rule.</summary>
+/// its release number skips that read until it renders. One private method holds the 304 rule.</summary>
 public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache cache, PageRenderer renderer)
 {
     public Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, IReadOnlyDictionary<string, object?> parameters,
@@ -28,10 +28,10 @@ public sealed class ServerPageResponder(ActiveReleaseReader releases, PageCache 
         IReadOnlyDictionary<string, object?> parameters, CancellationToken cancellationToken) where TComponent : IComponent =>
         RespondAsync<TComponent>(context, statusCode, releaseNumber, () => Task.FromResult(parameters), null, cancellationToken);
 
-    /// <summary>For a page that already holds its freshness and whose costly reads belong after the 304 check. The parameters are read only when the page renders.</summary>
-    public Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, ReleaseFreshness freshness,
+    /// <summary>For a page that already holds its release number and whose costly reads belong after the 304 check, such as Home. The parameters are read only when the page renders.</summary>
+    public Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
         Func<Task<IReadOnlyDictionary<string, object?>>> parameters, CancellationToken cancellationToken) where TComponent : IComponent =>
-        RespondAsync<TComponent>(context, statusCode, freshness.ReleaseNumber, parameters, freshness, cancellationToken);
+        RespondAsync<TComponent>(context, statusCode, releaseNumber, parameters, null, cancellationToken);
 
     private async Task<IResult> RespondAsync<TComponent>(HttpContext context, int statusCode, int releaseNumber,
         Func<Task<IReadOnlyDictionary<string, object?>>> parameters, ReleaseFreshness? read, CancellationToken cancellationToken) where TComponent : IComponent

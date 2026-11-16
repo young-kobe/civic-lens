@@ -268,7 +268,7 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     [InlineData("no-such-page")]
     public async Task EveryServerPageShowsTheNewestRollCallOfEachChamberFromOneOwner(string path)
     {
-        await using var host = await StartAsync(new SeededVote('a', "2026-03-03"), new SeededVote('b', "2026-03-09") { RollCall = 2 },
+        await using var host = await StartAsync(new SeededVote('a', "2026-03-03"), new SeededVote('b', "2026-03-09") { RollCall = 2, Kind = "Rule" },
             new SeededVote('c', "2026-02-10") { Chamber = "Senate" });
 
         var (_, page) = await GetAsync(host, path);

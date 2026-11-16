@@ -29,7 +29,7 @@
 	}
 }
 
-http://civic-lens.info, http://127.0.0.1 {
+http://civic-lens.info {
 	import security_headers
 
 	# The publisher still writes the member photos into the release. Each name holds the hash of its bytes, so a photo never changes.

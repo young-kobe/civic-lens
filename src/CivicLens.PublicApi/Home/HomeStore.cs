@@ -20,13 +20,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
                s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
-               freshness.house, freshness.senate, s.present, s.not_voting, s.oldest_signed_on
+               s.present, s.not_voting, s.oldest_signed_on
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
-          CROSS JOIN LATERAL (
-               SELECT max(v.voted_on) FILTER (WHERE v.chamber = 'House') AS house,
-                      max(v.voted_on) FILTER (WHERE v.chamber = 'Senate') AS senate
-                 FROM public_api.votes v
-          ) freshness
           LEFT JOIN LATERAL (
                SELECT v.record_id FROM public_api.votes v
                 WHERE v.kind = 'Passage' AND v.bill_type IS NOT NULL AND v.bill_number IS NOT NULL
@@ -101,21 +96,17 @@ public sealed class HomeStore(NpgsqlDataSource views)
         HomeFeaturedVote? featured = null;
         HomeBrief? brief = null;
         var executiveActions = new List<HomeExecutiveGroup>();
-        DateOnly? newestHouseRollCall = null;
-        DateOnly? newestSenateRollCall = null;
         int? release = null;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                newestHouseRollCall ??= reader.IsDBNull(28) ? null : reader.GetFieldValue<DateOnly>(28);
-                newestSenateRollCall ??= reader.IsDBNull(29) ? null : reader.GetFieldValue<DateOnly>(29);
                 brief ??= reader.IsDBNull(1) ? null : new(reader.GetString(1), reader.GetFieldValue<DateOnly>(2), reader.GetString(3), ViewColumns.Text(reader, 4));
                 if (!reader.IsDBNull(23))
                 {
                     executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 23), reader.GetInt32(24), reader.GetString(25), reader.GetString(26), reader.GetFieldValue<DateOnly>(27),
-                        reader.GetFieldValue<DateOnly>(32)));
+                        reader.GetFieldValue<DateOnly>(30)));
                     continue;
                 }
                 if (reader.IsDBNull(5)) continue;
@@ -128,9 +119,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
         return new(active, featured, [.. votes], brief)
         {
             ExecutiveActions = [.. executiveActions],
-            Issues = issues,
-            NewestHouseRollCall = newestHouseRollCall,
-            NewestSenateRollCall = newestSenateRollCall
+            Issues = issues
         };
     }
 
@@ -168,8 +157,8 @@ public sealed class HomeStore(NpgsqlDataSource views)
             billLine is null ? null : PublishedWording.BillLineSource)
         {
             Alignment = reader.IsDBNull(22) ? null : ViewColumns.Enum<PublishedVoteAlignment>(reader, 22),
-            Present = ViewColumns.Number(reader, 30),
-            NotVoting = ViewColumns.Number(reader, 31)
+            Present = ViewColumns.Number(reader, 28),
+            NotVoting = ViewColumns.Number(reader, 29)
         };
     }
 }

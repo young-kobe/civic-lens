@@ -68,8 +68,6 @@ Complete these gates before closing R-68.
   - P2: Application. Delete the leftovers of the page writers in `ReleaseDataFiles`, the file writer part of `ReleaseBillStatuses`, and the renderer fixtures and page assertions in the `Publish*Tests` classes.
   - P3: PublicWeb. Delete the members of `PublishedRecordLabels` and the views that only the deleted pages called. Delete the static branches and the "static page" comments. Delete the `PublishedAboutPage` and `PublishedMethodPage` copies if any remain.
   - P4: Delete the static only parts of `public.js` and the `public.css` rules that no server component renders.
-  - P5: Delete `ReleaseFeed`, `FeedReleaseSource`, `PublicApiOptions.ReleaseBaseUrl`, and `CIVIC_LENS_RELEASE_BASE_URL`. Delete the Caddy site name that lets the search service read the release.
-  - P6: Remove the `/v1/home` freshness fields and their SQL in `HomeStore`. No page reads them. Make `ReleaseIssuePartyCounts` read `PublicApiStatementSpeakerTerms.TermPartyOn`, before the squash. Fix the stale limits in `search.md`.
 - [ ] Remove public `release.json` at the retirement gate. Search ingestion reads typed published data, but the readers of the publisher still read the file. Keep private snapshots while verification or recovery use them, and remove code after its last caller leaves. Future public MCP uses the public API in a separate deployment.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
 
