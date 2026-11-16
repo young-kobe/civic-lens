@@ -13,7 +13,7 @@ namespace CivicLens.Application.Publication;
 /// line hold none, and two folders that hold different lines fail the check. A row that holds a line is never changed.
 /// It also fills the approval time of rows that hold none, from the record file of the oldest kept folder. A row that holds a time is never changed.
 /// The time fill runs last. The bill line and approver fills send the entry without its time, so their compare skips the stored time, which is still null.
-/// It also pins the bill statuses of each kept release that lacks them, from the status file of its folder. A release from before the file pins none.
+/// It also pins the bill statuses of each kept release that lacks them, from the status file of its folder. A folder with no status file pins none.
 /// A row that exists is never changed.
 /// The release list is read before the candidates, so a commit between the two reads leaves a range that no listed folder covers.
 /// Each kept manifest is read once, from the oldest folder to the newest. Rows go in only through the store insert.
@@ -131,10 +131,29 @@ public sealed class BackfillPublishedEntries(IPublicationStore publications, IRe
         var pinned = 0;
         foreach (var release in keptReleases)
         {
-            var statuses = await PreviousRelease.ReadBillStatusesAsync(releases, release.DirectoryName, cancellationToken);
-            pinned += await publications.AddBillStatusesAsync(release.ReleaseNumber, [.. statuses.Values], cancellationToken);
+            var statuses = await ReadBillStatusesAsync(release.DirectoryName, cancellationToken);
+            pinned += await publications.AddBillStatusesAsync(release.ReleaseNumber, statuses, cancellationToken);
         }
         return pinned;
+    }
+
+    // Only an older kept folder holds a status file. A folder with no status file pins no row.
+    private async Task<IReadOnlyCollection<PublishedBillStatus>> ReadBillStatusesAsync(string directoryName, CancellationToken cancellationToken)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = await releases.ReadFileAsync(directoryName, PublicationProtocol.BillStatusPath, PublishedBillStatuses.MaximumBytes,
+                cancellationToken);
+        }
+        catch (FileNotFoundException)
+        {
+            return [];
+        }
+        var statuses = JsonSerializer.Deserialize<PublishedBillStatuses>(bytes, PublicationProtocol.JsonOptions)
+            ?? throw new InvalidDataException("Release bill status file is empty.");
+        statuses.Validate();
+        return statuses.Records;
     }
 
     private async Task<(int Added, int RacedIn)> WriteRowsAsync(List<PendingPublishedEntry> pending, int limit, CancellationToken cancellationToken)

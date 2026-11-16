@@ -66,24 +66,6 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     private static string[] Ids(JsonDocument page) =>
         [.. page.RootElement.GetProperty("officials").EnumerateArray().Select(row => row.GetProperty("officialId").GetString()!)];
 
-    private static PublishedOfficialVote PartyVote(char id, PublishedChamber chamber, int congress, string votedOn, string cast, string party, string partyMajority) => new()
-    {
-        RecordId = new(id, 64),
-        Chamber = chamber,
-        Congress = congress,
-        Session = 1,
-        RollCallNumber = id,
-        VotedOn = DateOnly.Parse(votedOn),
-        Cast = cast,
-        Party = party,
-        PartyMajority = partyMajority,
-        Result = "Passed",
-        SplitVote = true,
-        Headline = "Vote",
-        Kind = PublishedVoteKind.Passage,
-        IssueIds = []
-    };
-
     [Fact]
     public async Task OfficialsComeInNameOrderWithTheLatestTermTheRecordCountAndTheScopeOfTheCount()
     {
@@ -416,16 +398,9 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         Assert.Contains("Congress 119", partyLines[0].GetProperty("scope").GetString(), StringComparison.Ordinal);
         using var switched = await GetAsync(host, "/v1/officials/p2");
         var switchedLines = switched.RootElement.GetProperty("partyLines").EnumerateArray().ToArray();
-        PublishedOfficialVote[] expectedVotes =
-        [
-            PartyVote('a', PublishedChamber.House, 119, "2026-02-01", "Nay", "Republican", "Nay"),
-            PartyVote('c', PublishedChamber.Senate, 119, "2026-02-05", "Yea", "Republican", "Nay"),
-            PartyVote('d', PublishedChamber.House, 118, "2024-05-01", "Yea", "Republican", "Nay"),
-            PartyVote('e', PublishedChamber.House, 119, "2026-02-07", "Yea", "Democrat", "Yea"),
-            PartyVote('f', PublishedChamber.House, 119, "2026-02-08", "No", "Democrat", "Yea")
-        ];
-        var expectedPartyLines = VotesWithParty.Of(expectedVotes.Where(vote => vote.Congress == 119));
-        Assert.Equal(expectedPartyLines.Select(row => $"{row.Chamber.ToString().ToLowerInvariant()} {row.Party} {row.Matched} {row.Breaks.Length} {row.Cast}"), switchedLines.Select(row =>
+        // In Congress 119, p2 votes as a Democrat on e and f and as a Republican on a and c. Each vote is split.
+        // House Democrat: Yea on e with the Yea majority, No on f against it. House Republican: Nay on a with the Nay majority. Senate Republican: Yea on c against the Nay majority.
+        Assert.Equal(["house Democrat 1 1 2", "house Republican 1 0 1", "senate Republican 0 1 1"], switchedLines.Select(row =>
             $"{row.GetProperty("chamber").GetString()} {row.GetProperty("party").GetString()} {row.GetProperty("withParty").GetInt32()} {row.GetProperty("againstParty").GetInt32()} {row.GetProperty("cast").GetInt32()}"));
         Assert.Equal(["2026-02-07", "2026-02-01", "2026-02-05"], switchedLines.Select(row => row.GetProperty("firstVotedOn").GetString()));
         Assert.Equal(["2026-02-08", "2026-02-01", "2026-02-05"], switchedLines.Select(row => row.GetProperty("lastVotedOn").GetString()));

@@ -4,7 +4,7 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>The one owner of the fixed words of an executive action page. The static page and the server page both call it.</summary>
+/// <summary>The one owner of the fixed words of an executive action page.</summary>
 public static class ExecutiveActionWords
 {
     public const string Caveat =

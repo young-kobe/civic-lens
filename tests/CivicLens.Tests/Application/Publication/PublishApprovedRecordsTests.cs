@@ -179,8 +179,7 @@ public sealed class PublishApprovedRecordsTests
         Assert.Equal(0, await Publisher(scenario).ExecuteAsync(default));
 
         Assert.Equal(2, scenario.Publications.Committed.Count);
-        var row = JsonSerializer.Deserialize<PublishedBillStatuses>(
-            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.BillStatusPath], PublicationProtocol.JsonOptions)!.Records.Single();
+        var row = scenario.Publications.PinnedBillStatuses[scenario.Publications.Committed[^1].ReleaseNumber].Values.Single();
         Assert.Equal("Became Public Law No: 119-1.", row.Text);
     }
 
@@ -319,7 +318,7 @@ public sealed class PublishApprovedRecordsTests
     {
         var request = new PublishReleaseRequest([new(PublishedRecordKind.Action, new string('a', 64))], "k");
 
-        var earlier = JsonSerializer.Serialize(new { request.Records, request.IdempotencyKey, request.Withdrawals, request.RewriteOfficials, request.RewriteEntries });
+        var earlier = JsonSerializer.Serialize(new { request.Records, request.IdempotencyKey, request.Withdrawals, request.RewriteEntries });
         Assert.Equal(earlier, JsonSerializer.Serialize(request));
         Assert.NotEqual(earlier, JsonSerializer.Serialize(request with { StatusOnly = true }));
     }

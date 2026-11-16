@@ -698,17 +698,19 @@ internal sealed class FakePublicationStore : IPublicationStore
     public int VerificationPageReads { get; private set; }
     public Action? BeforePreparingHistories { get; set; }
     private readonly Dictionary<int, BillHistoryBinding[]> historyBindings = [];
+    public Dictionary<int, Dictionary<string, PublishedBillStatus>> PinnedBillStatuses { get; } = [];
 
     public Task<IReadOnlyList<BillPublicationInput>> ReadBillInputsAsync(int? previousReleaseNumber, ImmutableArray<string> recordIds,
         CancellationToken cancellationToken)
     {
         var prior = (historyBindings.GetValueOrDefault(previousReleaseNumber ?? 0) ?? [])
             .ToDictionary(binding => binding.RecordId, StringComparer.Ordinal);
+        var shown = PinnedBillStatuses.GetValueOrDefault(previousReleaseNumber ?? 0) ?? [];
         return Task.FromResult<IReadOnlyList<BillPublicationInput>>([.. recordIds.Select(id =>
         {
             var published = prior.GetValueOrDefault(id);
             return new BillPublicationInput(id, BillStatuses.TryGetValue(id, out var status) ? new(status, "hr") : null,
-                BillHistories.GetValueOrDefault(id), published?.DetailJobId, published?.ProjectionVersion);
+                BillHistories.GetValueOrDefault(id), published?.DetailJobId, published?.ProjectionVersion, shown.GetValueOrDefault(id));
         })]);
     }
 
@@ -927,6 +929,7 @@ internal sealed class FakePublicationStore : IPublicationStore
         if (ConcurrentWinner is not null) return Task.FromResult(ConcurrentWinner);
         LastCommit = commit;
         historyBindings[commit.ReleaseNumber] = [.. commit.BillHistories];
+        PinnedBillStatuses[commit.ReleaseNumber] = commit.BillStatuses.ToDictionary(row => row.Status.RecordId, row => row.Status, StringComparer.Ordinal);
         CorrectionHistories[commit.ReleaseNumber] = commit.CorrectionHistories.ToDictionary(
             binding => new PublishedRecordReference(binding.Record.Kind, binding.Record.RecordId),
             binding => new StoredCorrectionHistory(binding,

@@ -5,7 +5,7 @@ namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>
 /// The one owner of the tenure rule of an office holder: unbroken stretches of terms and the sentence "In the House since January 2019."
-/// The static official page and the server official page both call it. Only a House or Senate term has a chamber, so any other office has no tenure sentence.
+/// Only a House or Senate term has a chamber, so any other office has no tenure sentence.
 /// </summary>
 public static class OfficeTenure
 {

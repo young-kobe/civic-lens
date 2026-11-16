@@ -10,12 +10,12 @@ namespace CivicLens.PublicApi.Pages;
 
 public static class SharedAssetEndpoints
 {
-    /// <summary>The cache value of the static release for every file. No shared file has a hashed or versioned name yet, so none can be cached for longer.</summary>
+    /// <summary>The cache value of every shared file. No shared file has a hashed or versioned name yet, so none can be cached for longer.</summary>
     public const string CacheControl = "public, max-age=60";
 
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
 
-    /// <summary>Serves the shared files of <see cref="PublicAssets.Paths"/> at the paths that the static release uses. A request with <c>If-None-Match</c> gets 304 when the file is the same.</summary>
+    /// <summary>Serves the shared files of <see cref="PublicAssets.Paths"/> at their public paths. A request with <c>If-None-Match</c> gets 304 when the file is the same.</summary>
     public static void MapSharedAssets(this IEndpointRouteBuilder routes)
     {
         foreach (var path in PublicAssets.Paths)

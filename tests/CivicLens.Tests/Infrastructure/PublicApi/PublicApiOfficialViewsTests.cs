@@ -10,8 +10,8 @@ using Npgsql;
 namespace CivicLens.Tests.Infrastructure.PublicApi;
 
 /// <summary>
-/// The officials views against the C# rules of the release, on the same rows. Each test seeds rows, reads the view as the public role,
-/// and compares the numbers with <see cref="MissedVotes"/> and <see cref="PublishedAction.ToEntry"/>.
+/// The officials views against the rules of the release, on the same rows. Each test seeds rows, reads the view as the public role,
+/// and compares the numbers with the counts that the test states from its seeded casts, or with <see cref="PublishedAction.ToEntry"/>.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
@@ -46,15 +46,27 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         await postgres.DropDatabaseAsync(database);
     }
 
+    // Held counts the roll calls of the chamber in the Congress, and missed counts the Not Voting casts. Present is a cast.
+    private static readonly string[][] Attendance =
+    [
+        ["House 119 2 0 2026-02-01 2026-02-03", "Senate 119 1 0 2026-02-05 2026-02-05"],
+        ["House 119 2 1 2026-02-01 2026-02-03", "Senate 119 1 0 2026-02-05 2026-02-05"],
+        ["House 119 2 1 2026-02-01 2026-02-03", "Senate 119 1 0 2026-02-05 2026-02-05"],
+        ["House 119 2 0 2026-02-01 2026-02-03", "Senate 119 1 1 2026-02-05 2026-02-05"],
+        ["House 119 2 0 2026-02-01 2026-02-03", "Senate 119 1 0 2026-02-05 2026-02-05"]
+    ];
+
+    // Only votes a and c count: vote b is a rule and vote d is of Congress 118. A Not Voting cast never counts, and Present does.
+    private static readonly string[][] VoteIssueCounts = [["health 1", "tax 1"], ["tax 1"], ["health 1", "tax 1"], ["health 1"], ["health 1", "tax 1"]];
+
     [Fact]
-    public async Task AttendanceEqualsMissedVotesForEachChamberAndCongressBecauseOneRuleMustGiveBothAnswers()
+    public async Task AttendanceCountsTheRollCallsHeldAndMissedForEachChamberAndCongress()
     {
         await ViewsSeed.AddVotesAsync(database, Votes);
         for (var index = 0; index < 5; index++)
         {
             var official = $"p{index}";
-            var expected = MissedVotes.Of(OfficialVotes(index).Where(vote => vote.Congress == 119))
-                .Select(row => $"{row.Chamber} 119 {row.Held} {row.Missed} {row.First:yyyy-MM-dd} {row.Last:yyyy-MM-dd}").ToArray();
+            var expected = Attendance[index];
             var actual = await QueryAsync($"""
                 SELECT chamber || ' ' || congress || ' ' || held || ' ' || missed || ' ' || to_char(first_voted_on, 'YYYY-MM-DD') || ' ' || to_char(last_voted_on, 'YYYY-MM-DD')
                   FROM public_api.official_attendance WHERE official_id = '{official}' AND congress = 119 ORDER BY chamber
@@ -70,9 +82,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         await ViewsSeed.AddVotesAsync(database, Votes);
         for (var index = 0; index < 5; index++)
         {
-            var expected = OfficialVotes(index).Where(vote => vote.Congress == 119 && vote.Kind.IsSubstantive() && vote.IsCast)
-                .SelectMany(vote => vote.IssueIds).GroupBy(issue => issue, StringComparer.Ordinal)
-                .Select(issue => $"{issue.Key} {issue.Count()}").Order(StringComparer.Ordinal).ToArray();
+            var expected = VoteIssueCounts[index];
             var actual = await QueryAsync($"""
                 SELECT issue_id || ' ' || sum(records) FROM public_api.official_issue_counts
                  WHERE official_id = 'p{index}' AND congress = 119 AND source = 'vote' AND vote_kind = ANY(ARRAY['{string.Join("','", Substantive)}'])
@@ -187,24 +197,6 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         }
         await AssertDeniedAsync(connection, "SELECT official_id FROM public.published_entry_officials", "42501");
     }
-
-    private static PublishedOfficialVote[] OfficialVotes(int index) =>
-    [.. Votes.Select(vote => new PublishedOfficialVote
-    {
-        RecordId = vote.RecordId,
-        VotedOn = DateOnly.ParseExact(vote.VotedOn, "yyyy-MM-dd", CultureInfo.InvariantCulture),
-        Chamber = Enum.Parse<PublishedChamber>(vote.Chamber),
-        Congress = vote.Congress,
-        Session = vote.Session,
-        RollCallNumber = vote.RollCall,
-        Cast = vote.Casts[index],
-        Result = vote.Result,
-        SplitVote = false,
-        Party = "Democrat",
-        Headline = "H",
-        Kind = Enum.Parse<PublishedVoteKind>(vote.Kind),
-        IssueIds = vote.Issues
-    })];
 
     private static PublishedAction ActionOf(SeededBill bill) => new()
     {

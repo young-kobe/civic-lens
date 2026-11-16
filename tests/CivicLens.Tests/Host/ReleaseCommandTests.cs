@@ -20,6 +20,7 @@ public sealed class ReleaseCommandTests
     [InlineData("releases", "publish", "key", "--withdraw", "statement:abc")]
     [InlineData("releases", "publish", "key", "--withdraw", "draft:abc", "text")]
     [InlineData("releases", "publish", "key", "--rewrite-pages")]
+    [InlineData("releases", "publish", "key", "--rewrite-officials")]
     [InlineData("releases", "blocked", "1")]
     [InlineData("releases", "list", "abc")]
     [InlineData("releases", "list", "0")]
@@ -582,30 +583,6 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task TheRewriteOfficialsOptionPublishesWithNoRecordAndComputesTheSummariesAgain()
-    {
-        var scenario = new PublicationScenario();
-        await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        var first = scenario.Publications.Committed[^1].DirectoryName;
-        var summaries = JsonSerializer.Deserialize<PublishedOfficialSummaries>(scenario.Releases.Directories[first][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
-        scenario.Releases.Directories[first][PublicationProtocol.OfficialSummariesPath] = JsonSerializer.SerializeToUtf8Bytes(new PublishedOfficialSummaries
-        {
-            Officials = [.. summaries.Officials.Select(row => row with { Attendance = [.. row.Attendance.Select(attendance => attendance with { Held = 99 })] })]
-        }, PublicationProtocol.JsonOptions);
-
-        var plain = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-        var rewritten = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k3", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
-
-        Assert.Equal((2, 0), (plain, rewritten));
-        var rewrittenRows = JsonSerializer.Deserialize<PublishedOfficialSummaries>(
-            scenario.Releases.Directories[scenario.Publications.Committed[^1].DirectoryName][PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
-        Assert.Equal(1, Assert.Single(rewrittenRows.Officials.Single(row => row.Id == "mayor").Attendance).Held);
-    }
-
-    [Fact]
     public async Task TheRewriteEntriesOptionPublishesWithNoRecordAndFillsTheVoteFactsOfACarriedVote()
     {
         var scenario = new PublicationScenario();
@@ -644,7 +621,7 @@ public sealed class ReleaseCommandTests
     }
 
     [Fact]
-    public async Task TheRewriteEntriesAndRewriteOfficialsOptionsRunTogetherAsInTheRunbookAndFillEntriesAndSummaries()
+    public async Task TheRewriteEntriesOptionAsInTheRunbookFillsTheVoteFactsAndTheCosponsorsOfTheCarriedEntries()
     {
         var scenario = new PublicationScenario();
         await ReleaseCommand.ExecuteAsync(["releases", "publish", "k1", $"vote:{scenario.AddVote('a')}", $"action:{scenario.AddAction('b', cosponsorWithdrawn: false)}",
@@ -657,7 +634,7 @@ public sealed class ReleaseCommandTests
             PublicationProtocol.JsonOptions);
         scenario.Releases.WriteOrder.Clear();
 
-        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries", "--rewrite-officials"], scenario.Publisher(), null!, null!, null!,
+        var exit = await ReleaseCommand.ExecuteAsync(["releases", "publish", "k2", "--rewrite-entries"], scenario.Publisher(), null!, null!, null!,
             null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, PublicationScenario.Owner, TextWriter.Null, TextWriter.Null, CancellationToken.None);
 
         Assert.Equal(0, exit);
@@ -665,8 +642,6 @@ public sealed class ReleaseCommandTests
         var rewritten = JsonSerializer.Deserialize<PublicationRelease>(directory[PublicationProtocol.ManifestPath], PublicationProtocol.JsonOptions)!;
         Assert.NotNull(rewritten.Records.Single(entry => entry.Kind == PublishedRecordKind.Vote).YeaCount);
         Assert.Equal(["chair"], rewritten.Records.Single(entry => entry.Kind == PublishedRecordKind.Action).CosponsorIds!);
-        var summaries = JsonSerializer.Deserialize<PublishedOfficialSummaries>(directory[PublicationProtocol.OfficialSummariesPath], PublicationProtocol.JsonOptions)!;
-        Assert.Equal(1, summaries.Officials.Single(row => row.Id == "chair").CosponsoredBills);
     }
 
     [Fact]

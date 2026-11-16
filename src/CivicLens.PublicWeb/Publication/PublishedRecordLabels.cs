@@ -44,9 +44,6 @@ public static class PublishedRecordLabels
         PublishedRecordKind.Brief, PublishedRecordKind.DocumentChange, PublishedRecordKind.Relationship
     ];
 
-    public static IReadOnlyDictionary<string, string> KindLabels { get; } =
-        Enum.GetValues<PublishedRecordKind>().ToDictionary(PublicationProtocol.KindText, Kind);
-
     public static string KindPlural(PublishedRecordKind kind) => kind switch
     {
         PublishedRecordKind.DocumentChange => "Document changes",
@@ -97,16 +94,6 @@ public static class PublishedRecordLabels
 
     /// <summary>The name of the fact row that holds the AI label of a record.</summary>
     public const string WordingFact = "Wording";
-
-    public static IEnumerable<Fact> StatementWording(PublishedStatement statement) => statement.TextOrigin switch
-    {
-        PublishedTextOrigin.Model => [new(WordingFact, StatementModelLabel(statement.ApprovedBy))],
-        PublishedTextOrigin.Code => [new(WordingFact, AiLabelWords.StatementSourceTextWording)],
-        _ => []
-    };
-
-    private static string StatementModelLabel(PublishedApprover approver) =>
-        approver == PublishedApprover.Code ? AiLabelWords.StatementModelWording : AiLabelWords.StatementCheckedByPersonWording;
 
     public const string LinkCheckedByCodeWording = "Code checked this link";
 

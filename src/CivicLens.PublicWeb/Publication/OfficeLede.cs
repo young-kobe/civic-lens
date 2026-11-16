@@ -4,7 +4,7 @@ namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>
 /// The one owner of the lede rules for an office holder: the party word, the place of a seat, the caucus phrase, and when a term has ended.
-/// The static official page and the server-rendered official page both call it, so a rule cannot differ between them.
+/// The official page lede and the seat words of rows and cards call it, so a rule cannot differ between them.
 /// </summary>
 public static class OfficeLede
 {

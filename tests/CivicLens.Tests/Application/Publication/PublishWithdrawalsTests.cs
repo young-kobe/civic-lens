@@ -373,22 +373,6 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task AReturnedVoteBringsBackTheVoteRowsOfItsMembers()
-    {
-        var scenario = new PublicationScenario();
-        var kept = scenario.AddVote('a');
-        var withdrawn = scenario.AddVote('b');
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Votes(kept, withdrawn)));
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Withdraw("k2", Reference(withdrawn, PublishedRecordKind.Vote), "Wrong."));
-        scenario.ReviseVote(withdrawn, 2);
-
-        var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([Reference(withdrawn, PublishedRecordKind.Vote)], "k3"));
-
-        var rows = VoteRows(scenario.Releases.Directories[returned.DirectoryName], PublicationProtocol.OfficialVotesPath("mayor", 119));
-        Assert.Equal([kept, withdrawn], rows.Select(row => row.RecordId).Order(StringComparer.Ordinal));
-    }
-
-    [Fact]
     public async Task AReturnedActionLinksTheCarriedVotesOfItsBillAgain()
     {
         var scenario = new PublicationScenario();
@@ -547,27 +531,6 @@ public sealed class PublishWithdrawalsTests
     }
 
     [Fact]
-    public async Task AWithdrawnVoteLeavesTheVoteFilesOfItsMembersAndACongressWithNoRowDisappears()
-    {
-        var scenario = new PublicationScenario();
-        var recent = scenario.AddVote('a');
-        var older = scenario.AddVote('b', congress: 118);
-        var sameCongress = scenario.AddVote('c');
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k1", Votes(recent, older, sameCongress)));
-
-        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            Withdraw("k2", Reference(older, PublishedRecordKind.Vote), "Wrong."));
-        var third = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner,
-            Withdraw("k3", Reference(recent, PublishedRecordKind.Vote), "Wrong."));
-
-        var afterOlder = scenario.Releases.Directories[second.DirectoryName];
-        Assert.DoesNotContain(PublicationProtocol.OfficialVotesPath("mayor", 118), afterOlder.Keys);
-        Assert.Equal(2, VoteRows(afterOlder, PublicationProtocol.OfficialVotesPath("mayor", 119)).Length);
-        var afterRecent = scenario.Releases.Directories[third.DirectoryName];
-        Assert.Equal([sameCongress], VoteRows(afterRecent, PublicationProtocol.OfficialVotesPath("mayor", 119)).Select(row => row.RecordId));
-    }
-
-    [Fact]
     public async Task AVoteThatLinkedTheWithdrawnActionOfItsBillLosesTheLinkAndTheOtherVotesAreCarried()
     {
         var scenario = new PublicationScenario();
@@ -635,8 +598,6 @@ public sealed class PublishWithdrawalsTests
     private static PublishedAction ReadAction(Dictionary<string, byte[]> files, string recordId) =>
         JsonSerializer.Deserialize<PublishedAction>(files[PublicationProtocol.RecordDataPath(recordId)], PublicationProtocol.JsonOptions)!;
 
-    private static PublishedOfficialVote[] VoteRows(Dictionary<string, byte[]> files, string path) =>
-        JsonSerializer.Deserialize<PublishedOfficialVotes>(files[path], PublicationProtocol.JsonOptions)!.Votes;
 
     private static void AssertCommitHoldsManifestWithdrawals(PublicationScenario scenario, PublicationReleaseSummary release)
     {

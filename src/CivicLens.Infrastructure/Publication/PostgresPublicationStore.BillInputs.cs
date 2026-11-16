@@ -24,7 +24,9 @@ public sealed partial class PostgresPublicationStore
                    history.observed_at_utc_ticks AS "HistoryObservedAtUtcTicks",
                    history.action_count AS "ActionCount",
                    prior.detail_job_id AS "PublishedHistoryDetailJobId",
-                   prior.projection_version AS "PublishedHistoryProjectionVersion"
+                   prior.projection_version AS "PublishedHistoryProjectionVersion",
+                   shown.latest_action_text AS "PublishedText", shown.latest_action_date AS "PublishedDate",
+                   shown.read_at_utc_ticks AS "PublishedReadAtUtcTicks"
               FROM action_drafts a
               LEFT JOIN LATERAL (
                    SELECT g.latest_action_text, g.latest_action_date, g.created_at_utc_ticks
@@ -44,6 +46,7 @@ public sealed partial class PostgresPublicationStore
                     ORDER BY g.update_date_utc_ticks DESC, g.detail_job_id DESC LIMIT 1
               ) history ON true
               LEFT JOIN release_bill_histories prior ON prior.release_number = {0} AND prior.record_id = a.record_id
+              LEFT JOIN release_bill_statuses shown ON shown.release_number = {0} AND shown.record_id = a.record_id
              WHERE a.record_id = ANY({1})
              ORDER BY a.record_id
             """, previousReleaseNumber ?? 0, recordIds.ToArray()).ToArrayAsync(cancellationToken);
@@ -92,9 +95,17 @@ public sealed partial class PostgresPublicationStore
         row.DetailJobId is null ? null : new BillHistoryCapture(row.DetailJobId, row.SourceId!, row.Congress!.Value,
             row.BillType, row.BillNumber!.Value, new DateTimeOffset(row.HistoryObservedAtUtcTicks!.Value, TimeSpan.Zero),
             row.ActionCount!.Value, BillHistoryCapture.CurrentProjectionVersion),
-        row.PublishedHistoryDetailJobId, row.PublishedHistoryProjectionVersion);
+        row.PublishedHistoryDetailJobId, row.PublishedHistoryProjectionVersion,
+        row.PublishedText is null ? null : new PublishedBillStatus
+        {
+            RecordId = row.RecordId,
+            Text = row.PublishedText,
+            Date = row.PublishedDate!.Value,
+            ObservedAtUtc = new DateTimeOffset(row.PublishedReadAtUtcTicks!.Value, TimeSpan.Zero)
+        });
 
     private sealed record BillInputRow(string RecordId, string BillType, string? Text, DateOnly? Date, long? StatusObservedAtUtcTicks,
         string? DetailJobId, string? SourceId, int? Congress, int? BillNumber, long? HistoryObservedAtUtcTicks,
-        int? ActionCount, string? PublishedHistoryDetailJobId, int? PublishedHistoryProjectionVersion);
+        int? ActionCount, string? PublishedHistoryDetailJobId, int? PublishedHistoryProjectionVersion,
+        string? PublishedText, DateOnly? PublishedDate, long? PublishedReadAtUtcTicks);
 }
