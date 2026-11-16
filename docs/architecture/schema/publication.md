@@ -275,6 +275,14 @@ END
 - check ck_release_official_bill_counts_sponsored: sponsored >= 0
 - index ix_release_official_bill_counts_release_official (release_number, official_id)
 
+## release_official_record_counts
+
+- pk (release_number, official_id)
+- fk (release_number, official_id) -> release_officials (release_number, official_id) on delete restrict
+- cols release_number integer, official_id varchar(256), records integer, votes integer, bills integer, statements integer, executive_actions integer
+- check ck_release_official_record_counts_counts: records >= 0 AND votes >= 0 AND bills >= 0 AND statements >= 0 AND executive_actions >= 0
+- check ck_release_official_record_counts_official_id: length(btrim(official_id)) > 0
+
 ## release_official_terms
 
 - pk (release_number, official_id, "position")

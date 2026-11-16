@@ -22,8 +22,9 @@ namespace CivicLens.Tests.PublicApi.Pages;
 /// <summary>
 /// The previous page read of every keyset list at the production size of release 1096, read as <c>civic_lens_public</c> (#580 item 7).
 /// Each list walks forward over its first pages and then reads the previous page of each one, which must give the page before it again.
-/// A previous page read stays under 0.5 s, or costs no more than a next page read of the same list: the officials list counts the records of every official,
-/// and the record page of <c>o1</c>, whom every copied bill and statement names, counts every tab. That work does not depend on the direction.
+/// A previous page read stays under 0.5 s, or costs no more than a next page read of the same list. The record page of <c>o1</c> names every copied bill and statement.
+/// The officials list and the record statements tab read the stored record counts of the release, so each of their reads stays under 250 ms in both directions.
+/// The bills tab sorts every sponsored bill of <c>o1</c> in its page query, which does not depend on the direction.
 /// The seed writes no member vote rows, so the votes tab of an official is not measured here.
 /// </summary>
 [Collection(PostgresCollection.Name)]
@@ -32,6 +33,8 @@ public sealed class ListPreviousPageScaleTests(PostgresCollection postgres, ITes
 {
     private const int Pages = 6;
     private static readonly TimeSpan Budget = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan StoredCountBudget = TimeSpan.FromMilliseconds(250);
+    private static readonly string[] StoredCountLists = ["officials", "o1 statements"];
     // The margin of timing noise between two reads of the same cost.
     private const double NextPageFactor = 1.25;
 
@@ -78,6 +81,9 @@ public sealed class ListPreviousPageScaleTests(PostgresCollection postgres, ITes
             output.WriteLine($"{list}: slowest next page {slowest.Next.TotalMilliseconds:F0} ms, slowest previous page {slowest.Previous.TotalMilliseconds:F0} ms.");
         Assert.All(measured, item => Assert.True(item.Slowest.Previous < Budget || item.Slowest.Previous <= item.Slowest.Next * NextPageFactor,
             $"A previous page read of {item.List} took {item.Slowest.Previous}, and a next page read took {item.Slowest.Next}."));
+        Assert.All(measured.Where(item => StoredCountLists.Contains(item.List)), item => Assert.True(
+            item.Slowest.Next < StoredCountBudget && item.Slowest.Previous < StoredCountBudget,
+            $"A read of {item.List} took {item.Slowest.Next} forward and {item.Slowest.Previous} backward."));
     }
 
     // Walks forward over the first pages, then times the previous page read of each later page and checks that it gives the page before it.

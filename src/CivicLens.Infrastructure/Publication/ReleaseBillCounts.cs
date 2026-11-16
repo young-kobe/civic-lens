@@ -8,16 +8,21 @@ using NpgsqlTypes;
 
 namespace CivicLens.Infrastructure.Publication;
 
-/// <summary>Owns the expected bill counts of one immutable release. The writer saves them from temporary tables, and the read-only verifier reads the same text as common table expressions.</summary>
+/// <summary>
+/// Owns the expected bill counts of one immutable release. The writer saves them from temporary tables, and the read-only verifier reads the same text as common table expressions.
+/// The same snapshot holds the official record counts of <see cref="ReleaseOfficialRecordCounts"/>, so one write and one verification serve both.
+/// </summary>
 internal static class ReleaseBillCounts
 {
-    private const string SelectedBody = """
+    /// <summary>The record states that the release selects. The CTE name is <c>selected</c>.</summary>
+    internal const string SelectedBody = """
         SELECT kind, record_id, revision_number
           FROM publication_record_states
          WHERE first_release <= {0} AND (last_release IS NULL OR last_release >= {0})
         """;
 
-    private const string EligibleBillsBody = """
+    /// <summary>The bills of the release that the public bill views show, read from <c>selected</c>. The one owner of that filter at the base tables.</summary>
+    internal const string EligibleBillsBody = """
         SELECT a.record_id, a.revision_number, a.congress
           FROM selected s
           JOIN action_revisions a ON a.record_id = s.record_id AND a.revision_number = s.revision_number
@@ -152,6 +157,7 @@ internal static class ReleaseBillCounts
           JOIN vote_revisions v ON v.record_id = requested.id AND v.revision_number = requested.number
         """;
 
+    /// <summary>Writes the bill counts and the official record counts of the release. It returns false when it wrote no row, because an exact snapshot exists.</summary>
     public static async Task<bool> FillAsync(CollectionAttemptDbContext db, int releaseNumber, int? releaseCongress,
         IReadOnlyCollection<PublishedRevisionBinding> bindings,
         CancellationToken cancellationToken)
@@ -164,6 +170,13 @@ internal static class ReleaseBillCounts
 
         await db.Database.ExecuteSqlRawAsync(ExpectedMembersSql, [releaseNumber], cancellationToken);
         await db.Database.ExecuteSqlRawAsync(ExpectedTotalsSql, [releaseNumber, CongressParameter(releaseCongress)], cancellationToken);
+        var billsAdded = await FillBillsAsync(db, releaseNumber, cancellationToken);
+        var recordsAdded = await ReleaseOfficialRecordCounts.FillAsync(db, releaseNumber, cancellationToken);
+        return billsAdded || recordsAdded;
+    }
+
+    private static async Task<bool> FillBillsAsync(CollectionAttemptDbContext db, int releaseNumber, CancellationToken cancellationToken)
+    {
         var existing = await db.Database.SqlQueryRaw<bool>(ExistingSql, releaseNumber).SingleAsync(cancellationToken);
         if (existing)
         {
@@ -180,14 +193,22 @@ internal static class ReleaseBillCounts
         return true;
     }
 
-    /// <summary>Compares the saved rows with the expected counts in both directions. It writes nothing, so it runs in a read-only transaction.</summary>
+    /// <summary>Compares the saved bill counts and official record counts with the expected counts in both directions. It writes nothing, so it runs in a read-only transaction.</summary>
     public static async Task<BillCountStatus> VerifyAsync(CollectionAttemptDbContext db, int releaseNumber, int? releaseCongress,
         CancellationToken cancellationToken)
     {
         var row = await db.Database.SqlQueryRaw<VerificationRow>(VerifyReadOnlySql, releaseNumber, CongressParameter(releaseCongress))
             .SingleAsync(cancellationToken);
-        if (!row.HasRows) return BillCountStatus.MissingRows;
-        return row.Matches ? BillCountStatus.Verified : BillCountStatus.DifferentRows;
+        var bills = !row.HasRows ? BillCountStatus.MissingRows : row.Matches ? BillCountStatus.Verified : BillCountStatus.DifferentRows;
+        var records = await ReleaseOfficialRecordCounts.VerifyAsync(db, releaseNumber, cancellationToken);
+        return Worse(bills, records);
+    }
+
+    // A changed row outranks a missing snapshot, which outranks a verified one.
+    private static BillCountStatus Worse(BillCountStatus first, BillCountStatus second)
+    {
+        if (first == BillCountStatus.DifferentRows || second == BillCountStatus.DifferentRows) return BillCountStatus.DifferentRows;
+        return first == BillCountStatus.MissingRows || second == BillCountStatus.MissingRows ? BillCountStatus.MissingRows : BillCountStatus.Verified;
     }
 
     private static async Task RequireStoredAsync(CollectionAttemptDbContext db, string sql, PublishedRevisionBinding[] bindings,

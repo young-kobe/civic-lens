@@ -8,7 +8,8 @@ using Npgsql;
 
 namespace CivicLens.Tests.Fixtures;
 
-/// <summary>Stores the bill count snapshot of a release through the production writer <c>ReleaseBillCounts.FillAsync</c>, as a publish commit does.</summary>
+/// <summary>Stores the bill count snapshot of a release through the production writer <c>ReleaseBillCounts.FillAsync</c>, as a publish commit does.
+/// The snapshot includes the official record counts of <c>ReleaseOfficialRecordCounts</c>.</summary>
 public static class StoredBillCounts
 {
     /// <param name="onlyStoredRevisions">Skips a record state that has no stored revision, such as the placeholder vote of the ZIP seed. The writer refuses such a state.</param>
@@ -18,6 +19,19 @@ public static class StoredBillCounts
         await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
         await using var transaction = await db.Database.BeginTransactionAsync();
         await FillInTransactionAsync(db, release, congress, bindings);
+        await transaction.CommitAsync();
+    }
+
+    /// <summary>Writes the official record counts of a release again through the production writer <c>ReleaseOfficialRecordCounts.FillAsync</c>.
+    /// A test that seeds rows after an earlier write calls it before a read, as a new publish would write the counts of the seeded rows.</summary>
+    public static async Task RefreshRecordCountsAsync(string database, int release)
+    {
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM release_official_record_counts WHERE release_number = {0}", release);
+        var type = typeof(PostgresPublicationStore).Assembly.GetType("CivicLens.Infrastructure.Publication.ReleaseOfficialRecordCounts", throwOnError: true)!;
+        var method = type.GetMethod("FillAsync", BindingFlags.Public | BindingFlags.Static)!;
+        await (Task)method.Invoke(null, [db, release, CancellationToken.None])!;
         await transaction.CommitAsync();
     }
 

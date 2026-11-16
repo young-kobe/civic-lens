@@ -305,7 +305,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     private static async Task StoreBillCountsAsync(ApiHost host)
     {
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "DELETE FROM release_official_bill_counts; DELETE FROM release_bill_counts;");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "DELETE FROM release_official_bill_counts; DELETE FROM release_bill_counts; DELETE FROM release_official_record_counts;");
         await StoredBillCounts.FillAsync(host.OperationalDatabase, 1, 119);
     }
 

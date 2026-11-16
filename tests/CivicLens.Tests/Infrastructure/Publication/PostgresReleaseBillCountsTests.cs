@@ -222,6 +222,9 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
     [InlineData("INSERT INTO release_officials (release_number, official_id, name) VALUES (1, 'p3', 'p3'); INSERT INTO release_official_bill_counts (release_number, congress, official_id, sponsored, cosponsored) VALUES (1, 119, 'p3', 1, 0)", BillCountStatus.DifferentRows)]
     [InlineData("INSERT INTO release_bill_counts (release_number, congress, bills, expected_member_row_count) VALUES (1, 118, 0, 0)", BillCountStatus.DifferentRows)]
     [InlineData("DELETE FROM release_official_bill_counts; DELETE FROM release_bill_counts", BillCountStatus.MissingRows)]
+    [InlineData("UPDATE release_official_record_counts SET bills = 2 WHERE official_id = 'p1'", BillCountStatus.DifferentRows)]
+    [InlineData("DELETE FROM release_official_record_counts WHERE official_id = 'p2'", BillCountStatus.DifferentRows)]
+    [InlineData("DELETE FROM release_official_record_counts", BillCountStatus.MissingRows)]
     public async Task VerifierFindsMissingExtraAndChangedRowsInBothDirectionsAndTreatsNoRowsAsAFailure(string mutation, BillCountStatus expected)
     {
         await SeedConvertibleReleaseAsync();
@@ -230,6 +233,24 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         await ExecuteAsync(mutation);
 
         Assert.Equal(expected, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
+    }
+
+    [Fact]
+    public async Task OwnerBackfillAddsTheOfficialRecordCountsToAReleaseThatHasOnlyBillCountsAndRefusesAChangedRecordCount()
+    {
+        await SeedConvertibleReleaseAsync();
+        var (release, members) = await ReleaseAndMembersAsync(1);
+        await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default);
+        await ExecuteAsync("DELETE FROM release_official_record_counts");
+
+        Assert.Equal(BillCountStatus.MissingRows, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
+        Assert.Equal(ReleaseSnapshotWrite.Added, await publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+        Assert.Equal(["p1|0|0|1|0|0", "p2|0|0|0|0|0"], await RecordCountsAsync(1));
+        Assert.Equal(BillCountStatus.Verified, await publications.VerifyBillCountsAsync(release, members, NoServedDirectory, default));
+
+        await ExecuteAsync("UPDATE release_official_record_counts SET votes = 3 WHERE official_id = 'p2'");
+        await Assert.ThrowsAsync<BillCountRefusedException>(() => publications.CommitBillCountsAsync(release, members, NoServedDirectory, default));
+        Assert.Equal(["p1|0|0|1|0|0", "p2|0|3|0|0|0"], await RecordCountsAsync(1));
     }
 
     [Fact]
@@ -435,6 +456,11 @@ public sealed class PostgresReleaseBillCountsTests(PostgresCollection postgres) 
         SELECT congress || '|' || official_id || '|' || sponsored || '|' || cosponsored
           FROM release_official_bill_counts WHERE release_number = {release}
          ORDER BY congress, official_id
+        """);
+
+    private Task<string[]> RecordCountsAsync(int release) => ReadAsync($"""
+        SELECT official_id || '|' || records || '|' || votes || '|' || bills || '|' || statements || '|' || executive_actions
+          FROM release_official_record_counts WHERE release_number = {release} ORDER BY official_id
         """);
 
     private async Task<string[]> ReadAsync(string sql)

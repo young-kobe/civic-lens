@@ -1,6 +1,7 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Officials;
@@ -128,6 +129,7 @@ public sealed class PublicApiOfficialViewsTests(PostgresCollection postgres) : I
         await OfficialsSeed.AddEntriesAsync(database, entries);
         PublishedRecordEntry[] manifest = [.. entries.Where(entry => entry is { FirstRelease: 1, LastRelease: null }).Select(ManifestEntry)];
         var expected = new[] { "p0", "p1", "p2" }.Select(id => $"{id} {manifest.Count(entry => entry.Officials.Any(official => official.Id == id))}").ToArray();
+        await StoredBillCounts.RefreshRecordCountsAsync(database, 1);
 
         Assert.Equal(expected, await QueryAsync("SELECT official_id || ' ' || record_count FROM public_api.officials ORDER BY official_id"));
         Assert.Equal(["p0 3", "p1 1", "p2 0"], expected);

@@ -7,7 +7,7 @@ using Npgsql;
 namespace CivicLens.PublicApi.Officials;
 
 /// <summary>
-/// The reads of the record page of one official, each inside the caller's snapshot: the count of each record kind and one page of a kind.
+/// The reads of the record page of one official, each inside the caller's snapshot: the stored count of each record kind and one page of a kind.
 /// Every kind sorts newest day first, then record ID, so a page ends at one <see cref="OfficialRecordCursor"/>. A page reads one row more than it shows, which tells whether another page follows.
 /// The vote kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>, as on the official page.
 /// </summary>
@@ -24,20 +24,13 @@ internal static class OfficialRecordQueries
     // An undated statement sorts last. The key is the second day of year 1, because Npgsql sends DateOnly.MinValue (the first day) as -infinity, which no row matches.
     private const string StatementDay = "COALESCE(s.statement_date, DATE '0001-01-02')";
 
-    // The bills tab count. The official page reads it alone for its "See all" link, so the link and the tab show one number.
-    // OFFSET 0 keeps the bill check correlated, as in SpokenBy.
-    private const string BillCountSql = """
-        SELECT count(*) FROM public_api.bill_sponsorships p
-         WHERE p.official_id = @id AND p.role = 'Sponsor'
-           AND EXISTS (SELECT 1 FROM public_api.bills b WHERE b.record_id = p.record_id AND b.revision_number = p.revision_number OFFSET 0)
+    // The publish stores the count of each tab for each official of the release, so a page reads one row instead of counting every record.
+    // The official page reads the bills count alone for its "See all" link, so the link and the tab show one number.
+    private const string CountsSql = """
+        SELECT votes, bills, statements, executive_actions FROM public_api.release_official_record_counts WHERE official_id = @id
         """;
 
-    private const string CountsSql = $"""
-        SELECT (SELECT count(*) FROM public_api.member_votes v WHERE v.official_id = @id AND v.kind = ANY(@kinds)),
-               ({BillCountSql}),
-               (SELECT count(*) FROM public_api.statements s WHERE {SpokenBy}),
-               (SELECT count(*) FROM public_api.executive_actions e WHERE e.official_id = @id)
-        """;
+    private const string BillCountSql = "SELECT bills FROM public_api.release_official_record_counts WHERE official_id = @id";
 
     private static string VotesSql(OfficialRecordRequest filter, bool backward) => $"""
         SELECT a.release_number, v.official_id, {MemberVoteStore.VoteColumns}
@@ -86,21 +79,20 @@ internal static class OfficialRecordQueries
         return backward ? KeysetPage.Window(after, recordId, "@after_id", backward) : $" AND (@after_day::date IS NULL OR {after})";
     }
 
-    /// <summary>Reads how many records the official has of each kind. A kind with no record counts zero.</summary>
+    /// <summary>Reads how many records the official has of each kind from the stored counts of the active release. A kind with no record counts zero.</summary>
     public static async Task<Dictionary<OfficialRecordKind, int>> ReadCountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(CountsSql, connection, transaction);
         command.Parameters.AddWithValue("id", officialId);
-        command.Parameters.AddWithValue("kinds", PublishedVoteKindExtensions.SubstantiveNames());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        await reader.ReadAsync(cancellationToken);
+        var found = await reader.ReadAsync(cancellationToken);
         return new()
         {
-            [OfficialRecordKind.Votes] = (int)reader.GetInt64(0),
-            [OfficialRecordKind.Bills] = (int)reader.GetInt64(1),
-            [OfficialRecordKind.Statements] = (int)reader.GetInt64(2),
-            [OfficialRecordKind.ExecutiveActions] = (int)reader.GetInt64(3)
+            [OfficialRecordKind.Votes] = found ? reader.GetInt32(0) : 0,
+            [OfficialRecordKind.Bills] = found ? reader.GetInt32(1) : 0,
+            [OfficialRecordKind.Statements] = found ? reader.GetInt32(2) : 0,
+            [OfficialRecordKind.ExecutiveActions] = found ? reader.GetInt32(3) : 0
         };
     }
 
@@ -109,7 +101,7 @@ internal static class OfficialRecordQueries
     {
         await using var command = new NpgsqlCommand(BillCountSql, connection, transaction);
         command.Parameters.AddWithValue("id", officialId);
-        return (int)(long)(await command.ExecuteScalarAsync(cancellationToken))!;
+        return await command.ExecuteScalarAsync(cancellationToken) as int? ?? 0;
     }
 
     /// <summary>Reads one page of the substantive votes of the official that pass the vote filters of the request.</summary>

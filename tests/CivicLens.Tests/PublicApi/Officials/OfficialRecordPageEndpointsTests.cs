@@ -51,6 +51,8 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
 
     private static async Task<IDocument> GetPageAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
     {
+        // The publish stores the record counts of each official. The tests seed rows after the release, so they write the counts again before each read.
+        await StoredBillCounts.RefreshRecordCountsAsync(host.OperationalDatabase, 1);
         using var response = await host.Client.GetAsync(path);
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == expected, $"{path} gave {(int)response.StatusCode}: {body}");
@@ -127,6 +129,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
             { Casts = [number % 2 == 0 ? "Yea" : "Nay"], PersonIds = ["p0"], RollCall = number + 1, RecordId = Id(number) })]);
         await StatementsSeed.AddAsync(host.OperationalDatabase, [.. Enumerable.Range(60, 27)
             .Select(number => new SeededStatement('0', number % 3 == 0 ? null : $"2026-02-0{1 + number % 2}", ["p0"], [], "Person", "Person") { RecordId = Id(number) })]);
+        await StoredBillCounts.RefreshRecordCountsAsync(host.OperationalDatabase, 1);
         await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
         var reader = new OfficialRecordPageReader(views);
 
@@ -326,6 +329,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     {
         await using var host = await StartAsync();
         await AddManyVotesAsync(host);
+        await StoredBillCounts.RefreshRecordCountsAsync(host.OperationalDatabase, 1);
         await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
         var reader = new OfficialRecordPageReader(views);
 
