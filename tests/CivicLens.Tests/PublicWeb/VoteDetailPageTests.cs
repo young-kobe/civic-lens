@@ -190,6 +190,22 @@ public sealed class VoteDetailPageTests
     }
 
     [Fact]
+    public async Task ABreakListOfMoreThanTwentyNamesStartsFoldedAndEachNameIsAListLink()
+    {
+        var vote = Vote();
+        var ada = vote.Members.Single(member => member.Name == "Ada Able");
+        var breakers = Enumerable.Range(0, 21).Select(index => ada with { OfficialId = $"b{index}", Name = $"Breaker {index}" });
+        var page = await RenderAsync(vote with { Members = [.. vote.Members.Where(member => member != ada), .. breakers] });
+
+        var democrats = page.QuerySelectorAll(".vote-breaker-group")[0];
+        var fold = democrats.QuerySelector("details.member-fold")!;
+        Assert.Null(fold.GetAttribute("open"));
+        Assert.Equal("Show all 21 members", fold.QuerySelector("summary")!.TextContent);
+        Assert.Equal(21, fold.QuerySelectorAll("ul.member-names > li > a").Length);
+        Assert.Null(page.QuerySelectorAll(".vote-breaker-group")[1].QuerySelector("details"));
+    }
+
+    [Fact]
     public async Task AGroupWithNoBreakerShowsOneLineWithItsBoardLinkAndNoHeading()
     {
         var vote = Vote();

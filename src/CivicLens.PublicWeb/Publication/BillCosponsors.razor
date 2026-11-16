@@ -13,18 +13,20 @@
     @if (Cosponsors.Total > 0)
     {
         <PartyBar Id="cosponsors" Data="Cosponsors.PartyBar()" />
-        <dl class="bill-kv">
-            @if (Cosponsors.Original.Length > 0)
-            {
-                <dt>@BillIntroducedWords.AddedOn(Introduced)</dt>
-                <dd>@Names(Cosponsors.Original, false)</dd>
-            }
-            @if (Cosponsors.Later.Length > 0)
-            {
-                <dt>Added later</dt>
-                <dd>@Names(Cosponsors.Later, true)</dd>
-            }
-        </dl>
+        <MemberListFold Count="Cosponsors.Total" Noun="cosponsors">
+            <dl class="bill-kv">
+                @if (Cosponsors.Original.Length > 0)
+                {
+                    <dt>@BillIntroducedWords.AddedOn(Introduced)</dt>
+                    <dd>@Names(Cosponsors.Original, false)</dd>
+                }
+                @if (Cosponsors.Later.Length > 0)
+                {
+                    <dt>Added later</dt>
+                    <dd>@Names(Cosponsors.Later, true)</dd>
+                }
+            </dl>
+        </MemberListFold>
     }
 </section>
 
@@ -35,13 +37,10 @@
     [Parameter, EditorRequired] public DateOnly? Introduced { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
 
-    private RenderFragment Names(BillSponsorData[] members, bool withDates) => @<text>
-        @for (var index = 0; index < members.Length; index++)
+    private RenderFragment Names(BillSponsorData[] members, bool withDates) => @<ul class="member-names" role="list">
+        @foreach (var member in members)
         {
-            var member = members[index];
-            if (index > 0) { <text>, </text> }
-            <a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a>
-            if (withDates) { <text> (@Moment.Day(member.SponsoredOn))</text> }
+            <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a>@if (withDates) {<text> (@Moment.Day(member.SponsoredOn))</text>}</li>
         }
-    </text>;
+    </ul>;
 }

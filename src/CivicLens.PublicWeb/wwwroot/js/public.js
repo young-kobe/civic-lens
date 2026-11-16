@@ -344,6 +344,7 @@
     const memberFailureWithRetry = (zip, status, officialsPage, retry) => {
         const again = document.createElement("button");
         again.type = "button";
+        again.className = "btn";
         again.textContent = "Try again";
         again.addEventListener("click", retry);
         return [memberFailure(zip, status, officialsPage), again];

@@ -1,0 +1,17 @@
+@using CivicLens.Publication.Contracts
+
+@* The result mark of a vote card. It reuses the vote squares of the official strip: a solid square for a vote that carried, stripes for one that did not,
+   and an open square for a result with no plain word. The result word on the card says the same in text, so the mark is hidden from screen readers. *@
+<span class="vote-result-mark" data-mark="@Mark" aria-hidden="true"></span>
+
+@code {
+    /// <summary>The source result or its plain word, such as "Passed".</summary>
+    [Parameter, EditorRequired] public string Result { get; set; } = default!;
+
+    private string Mark => PlainVoteWords.Carried(Result) switch
+    {
+        true => "yes",
+        false => "no",
+        null => "unknown"
+    };
+}

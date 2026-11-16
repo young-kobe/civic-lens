@@ -1,0 +1,26 @@
+@* The one owner of folding a long member list. A list of more than FoldAbove names starts folded under a summary that counts them, with native details and summary
+   as the other folds of the site. A shorter list shows open, with no fold. The vote break lists, the cosponsors of a bill, and the full board lists use it. *@
+@if (Count > FoldAbove)
+{
+    <details class="list-fold member-fold">
+        <summary>@Summary(Count, Noun)</summary>
+        <div class="in">@ChildContent</div>
+    </details>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    /// <summary>The longest list that shows open. The owner set about 20 names on 2026-11-14.</summary>
+    private const int FoldAbove = 20;
+
+    /// <summary>The number of names in the list.</summary>
+    [Parameter, EditorRequired] public int Count { get; set; }
+    /// <summary>The plural noun of the names, such as "members" or "cosponsors".</summary>
+    [Parameter, EditorRequired] public string Noun { get; set; } = default!;
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    private static string Summary(int count, string noun) => $"Show all {count:N0} {noun}";
+}
