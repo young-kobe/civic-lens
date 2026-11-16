@@ -621,6 +621,11 @@ catch (OperationCanceledException)
         : "Command cancelled or timed out.");
     return 1;
 }
+catch (UnknownMigrationHistoryException exception)
+{
+    Console.Error.WriteLine(exception.Message);
+    return 1;
+}
 catch (RetiredSourceException exception) when (!executing)
 {
     Console.Error.WriteLine(exception.Message);

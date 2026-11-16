@@ -1,6 +1,5 @@
 using CivicLens.Application.Publication;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Migrations;
 using Microsoft.EntityFrameworkCore;
 
 namespace CivicLens.Infrastructure.Publication;
@@ -22,7 +21,7 @@ internal static class ReleaseIssuePartyCounts
 
     /// <summary>The rule of the line-up, once. One row for each issue and party with the count of bills. A null party is the unknown count.
     /// It counts only issues that hold counts for the Congress, because every party row needs its header row. It reads the eligible bills by the name <see cref="ReleaseIssueCounts.EligibleBillsTable"/>, which is a temp table in the commit and a CTE in the verifier.
-    /// The term party of each sponsor comes from <see cref="PublicApiStatementSpeakerTerms.TermPartyOn"/>, the one owner of that rule.</summary>
+    /// The term party of each sponsor comes from <see cref="TermParties.PartyOn"/>, the one owner of that rule.</summary>
     private static readonly string ExpectedBillsSelect = $$"""
         WITH bill_parties AS (
             SELECT e.issue_id, bill.party
@@ -33,7 +32,7 @@ internal static class ReleaseIssuePartyCounts
                                   AND count(DISTINCT sponsor.party) = 1 THEN min(sponsor.party) END AS party
                   FROM (SELECT p.position, term.party
                           FROM action_revision_sponsorships p
-                        {{PublicApiStatementSpeakerTerms.TermPartyOn(ReleaseTerms, "p.person_id", "p.sponsored_on")}}
+                        {{TermParties.PartyOn(ReleaseTerms, "p.person_id", "p.sponsored_on")}}
                          WHERE p.record_id = e.record_id AND p.revision_number = e.revision_number AND p.role = 'Sponsor') sponsor) bill
         )
         SELECT issue_id, party, count(*)::integer AS bills FROM bill_parties GROUP BY issue_id, party

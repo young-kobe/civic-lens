@@ -14,6 +14,9 @@ using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
+using CivicLens.Tests.PublicApi.Officials;
+using CivicLens.Tests.PublicApi.Relationships;
+using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
 using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Publication;
@@ -1066,6 +1069,220 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
         Assert.Empty(await PublicAsync("SELECT official_id FROM public_api.release_official_bill_counts"));
         Assert.Empty(await PublicAsync("SELECT official_id FROM public_api.release_official_record_counts"));
         Assert.Empty(await PublicAsync("SELECT official_id FROM public_api.release_officials"));
+    }
+
+    [Fact]
+    public async Task ASenateVoteWithCodeTextReadsTheSenateLabelInEveryViewThatCarriesAVoteLabelAndAHouseVoteKeepsTheHouseLabel()
+    {
+        SeededVote[] votes =
+        [
+            new('a', "2025-03-01") { Casts = ["Yea"], PersonIds = ["house-code"], TextOrigin = "Code" },
+            new('b', "2025-03-02") { Casts = ["Yea"], PersonIds = ["senate-code"], TextOrigin = "Code", Chamber = "Senate" },
+            new('c', "2025-03-03") { Casts = ["Yea"], PersonIds = ["senate-model"], TextOrigin = "Model", Chamber = "Senate" }
+        ];
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, DateTimeOffset.UnixEpoch, recordCount: votes.Length);
+        await ViewsSeed.AddVotesAsync(connectionString, votes);
+
+        string[] expected = [$"Headline a|{AiLabelWords.CodeWording}", $"Headline b|{AiLabelWords.SenateCodeWording}", $"Headline c|{AiLabelWords.ModelWording}"];
+        foreach (var source in new[] { "votes", "member_votes", "record_headlines WHERE kind = 'vote'" })
+            Assert.Equal(expected, await PublicAsync($"SELECT headline || '|' || label FROM public_api.{source} ORDER BY 1"));
+        Assert.Equal([$"house-code|Code|{AiLabelWords.CodeWording}", $"senate-code|Code|{AiLabelWords.SenateCodeWording}", $"senate-model|Model|{AiLabelWords.ModelWording}"],
+            await PublicAsync("SELECT official_id || '|' || text_origin || '|' || label FROM public_api.member_votes ORDER BY official_id"));
+    }
+
+    // Each vote has one member. Only a Split vote with a Democrat or Republican who cast Yea or Nay and a party majority has a party line.
+    [Fact]
+    public async Task OneColumnNamesTheVotesThatBrokeFromThePartyAndThePartyLinesCountExactlyThoseVotes()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, DateTimeOffset.UnixEpoch, recordCount: 7);
+        await ViewsSeed.AddVotesAsync(connectionString,
+            new SeededVote('a', "2025-03-01") { Casts = ["Nay"], PersonIds = ["m-break"] },
+            new SeededVote('b', "2025-03-02") { Casts = ["Nay"], PersonIds = ["m-with"] },
+            new SeededVote('c', "2025-03-03") { Casts = ["Nay"], PersonIds = ["m-independent"] },
+            new SeededVote('d', "2025-03-04") { Casts = ["Nay"], PersonIds = ["m-tie"] },
+            new SeededVote('e', "2025-03-05") { Casts = ["Not Voting"], PersonIds = ["m-absent"] },
+            new SeededVote('f', "2025-03-06") { Casts = ["Nay"], PersonIds = ["m-agree"] },
+            new SeededVote('9', "2025-03-07") { Casts = ["Aye"], PersonIds = ["m-aye"] });
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions
+               SET columns_written = true, alignment = CASE WHEN left(record_id, 1) = 'f' THEN 'PartiesAgree' ELSE 'Split' END,
+                   democrat_majority = CASE WHEN left(record_id, 1) = 'd' THEN NULL ELSE 'Yea' END, republican_majority = 'Nay';
+            UPDATE vote_member_list_entries
+               SET party = CASE person_id WHEN 'm-with' THEN 'Republican' WHEN 'm-independent' THEN 'Independent' ELSE 'Democrat' END;
+            """);
+
+        Assert.Equal(["m-absent|none", "m-agree|none", "m-aye|false", "m-break|true", "m-independent|none", "m-tie|none", "m-with|false"],
+            await PublicAsync("SELECT official_id || '|' || coalesce(breaks_party::text, 'none') FROM public_api.member_votes ORDER BY official_id"));
+        Assert.Equal(["m-aye|1|0|1", "m-break|0|1|1", "m-with|1|0|1"], await PublicAsync(
+            "SELECT official_id || '|' || with_party || '|' || against_party || '|' || cast_count FROM public_api.official_party_lines ORDER BY official_id"));
+    }
+
+    [Fact]
+    public async Task AMemberVoteDistinguishesAKnownNullAlignmentFromAnUnwrittenOneByTheAlignmentKnownMarker()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, DateTimeOffset.UnixEpoch, recordCount: 3);
+        await ViewsSeed.AddVotesAsync(connectionString,
+            new SeededVote('a', "2025-03-01") { ActiveRevision = 2, Casts = ["Yea"], PersonIds = ["member-a"] },
+            new SeededVote('b', "2025-03-02") { Casts = ["Nay"], PersonIds = ["member-b"] },
+            new SeededVote('c', "2025-03-03") { Casts = ["Yea"], PersonIds = ["member-c"] });
+        await ExecuteAsync("""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions
+               SET columns_written = true,
+                   kind = CASE WHEN left(record_id, 1) = 'a' AND revision_number = 2 THEN 'Rule' ELSE 'Passage' END,
+                   alignment = CASE WHEN left(record_id, 1) = 'a' AND revision_number = 2 THEN NULL ELSE 'Split' END,
+                   democrat_majority = 'Yea', republican_majority = 'Nay'
+             WHERE left(record_id, 1) IN ('a', 'c');
+            UPDATE vote_member_list_entries SET party = 'Democrat' WHERE person_id IN ('member-a', 'member-c');
+            """);
+
+        Assert.Equal(["member-a|true||Democrat", "member-b|false||", "member-c|true|Split|Democrat"], await PublicAsync(
+            "SELECT official_id || '|' || alignment_known::text || '|' || coalesce(alignment, '') || '|' || coalesce(party, '') FROM public_api.member_votes ORDER BY official_id"));
+        Assert.Equal(["member-c|1"], await PublicAsync("SELECT official_id || '|' || cast_count FROM public_api.official_party_lines ORDER BY official_id"));
+    }
+
+    [Fact]
+    public async Task TheBillKeysHoldEveryBillOfTheBillsViewWithTheStageAndTheLatestActionDateOfTheActiveReleaseOnly()
+    {
+        var published = new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero);
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, published);
+        // Bill a has a stage and a newer action in an inactive release. Bill b has a row with no stage. Bill c has no row.
+        // Bill d has no sponsorship and bill e enters only in a later release, so bills hides both and so must the keys.
+        await BillsSeed.AddBillsAsync(connectionString,
+            new SeededBill('a', "2026-03-01") { BillNumber = 4 },
+            new SeededBill('b', "2025-03-02") { Congress = 118, BillType = "s", BillNumber = 5, PolicyAreaId = null },
+            new SeededBill('c', "2026-03-03") { BillNumber = 6, PolicyAreaId = "tax" },
+            new SeededBill('d', "2026-03-04") { BillNumber = 7, Sponsorships = [] },
+            new SeededBill('e', "2026-03-05") { BillNumber = 8, FirstRelease = 2 });
+        await ExecuteAsync("SET session_replication_role = replica;\n"
+            + PublicRecordPageRows.PinnedStatus(1, new string('a', 64), "Referred.", "2026-03-02", published.UtcTicks, "InCommittee") + "\n"
+            + PublicRecordPageRows.PinnedStatus(2, new string('a', 64), "Passed.", "2026-05-02", published.UtcTicks, "PassedHouse") + "\n"
+            + PublicRecordPageRows.PinnedStatus(1, new string('b', 64), "Introduced.", "2025-04-09", published.UtcTicks) + "\n"
+            + PublicRecordPageRows.PinnedStatus(1, new string('d', 64), "Referred.", "2026-03-04", published.UtcTicks, "InCommittee"));
+
+        string[] expected =
+        [
+            "a|1|119|hr|4|health|2026-03-01|InCommittee|2026-03-02",
+            "b|1|118|s|5|-|2025-03-02|-|2025-04-09",
+            "c|1|119|hr|6|tax|2026-03-03|-|-"
+        ];
+        Assert.Equal(expected, await PublicAsync("""
+            SELECT concat_ws('|', left(record_id, 1), revision_number, congress, bill_type, bill_number, coalesce(policy_area_id, '-'), event_date,
+                             coalesce(status, '-'), coalesce(latest_action_date::text, '-'))
+              FROM public_api.bill_keys ORDER BY record_id
+            """));
+        Assert.Equal(expected, await PublicAsync("""
+            SELECT concat_ws('|', left(b.record_id, 1), b.revision_number, b.congress, b.bill_type, b.bill_number, coalesce(b.policy_area_id, '-'), b.event_date,
+                             coalesce(t.status, '-'), coalesce(t.latest_action_date::text, '-'))
+              FROM public_api.bills b
+              LEFT JOIN public_api.bill_status t ON t.record_id = b.record_id AND t.revision_number = b.revision_number
+             ORDER BY b.record_id
+            """));
+    }
+
+    [Fact]
+    public async Task TheSponsorshipPartiesViewGivesThePartyOfTheSponsorAndABillWithNoCrsSummaryIsFlaggedFalse()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+        await BillsSeed.AddBillsAsync(connectionString, new SeededBill('a', "2026-03-02") { Sponsorships = [new("p1", "Sponsor", "2026-03-02")] });
+        await OfficialsSeed.AddOfficialsAsync(connectionString, new SeededOfficial("p1", "Pat One",
+            new SeededTerm("House", "Representative", "2020-01-01") { Party = "Democrat", State = "MA", District = 1 }));
+
+        Assert.Equal(["Democrat false"], await PublicAsync("""
+            SELECT p.party || ' ' || b.summary_from_crs
+              FROM public_api.bills b JOIN public_api.bill_sponsorship_parties p ON p.record_id = b.record_id AND p.revision_number = b.revision_number
+            """));
+    }
+
+    [Fact]
+    public async Task TheSpeakerTermViewGivesThePartyAndSeatOfTheSpeakerOnTheStatementDate()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+        await StatementsSeed.AddAsync(connectionString, new SeededStatement('b', "2026-03-02", ["p1"], [], "Analysis", "Code"));
+        await OfficialsSeed.AddOfficialsAsync(connectionString, new SeededOfficial("p1", "Pat One",
+            new SeededTerm("House", "Representative", "2020-01-01") { Party = "Democrat", State = "MA", District = 1, EndsOn = "2026-04-30" },
+            new SeededTerm("Senate", "Senator", "2026-05-01") { Party = "Independent", State = "MA" }));
+
+        Assert.Equal(["Democrat Representative House MA 1"], await PublicAsync(
+            "SELECT party || ' ' || kind || ' ' || office || ' ' || state || ' ' || district FROM public_api.statement_speaker_terms"));
+    }
+
+    [Fact]
+    public async Task TheVoteFirstPublicationsViewGivesTheReleaseOfTheActiveRevisionAndTheFirstReleaseOfTheRecord()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 2, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.AddVotesAsync(connectionString, new SeededVote('a', "2026-05-01") { FirstRelease = 2, ActiveRevision = 2 });
+        await ExecuteAsync($"""
+            SET session_replication_role = replica;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
+            VALUES ('vote', '{new string('a', 64)}', 1, 1, 1);
+            """);
+
+        Assert.Equal(["2 2 1"], await PublicAsync("SELECT revision_number || ' ' || release_number || ' ' || first_release FROM public_api.vote_first_publications"));
+    }
+
+    [Fact]
+    public async Task TheVotePartyTalliesViewShowsOnlyTheTalliesOfTheActiveRevisionOfAnActiveRecord()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, DateTimeOffset.UnixEpoch);
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 2, DateTimeOffset.UnixEpoch.AddDays(1));
+        var active = new SeededVote('a', "2026-01-01") { ActiveRevision = 2 };
+        var retired = new SeededVote('b', "2026-01-02") { LastRelease = 1 };
+        await ViewsSeed.AddVotesAsync(connectionString, active, retired);
+        await ExecuteAsync($"""
+            UPDATE vote_revisions SET party_tally_count = 1 WHERE record_id = '{active.RecordId}' AND revision_number = 1;
+            INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            VALUES ('{active.RecordId}', 1, 'Older', 1, 0, 0, 0, 0);
+            UPDATE vote_revisions SET party_tally_count = 0 WHERE record_id = '{active.RecordId}' AND revision_number = 2;
+            UPDATE vote_revisions SET party_tally_count = 1 WHERE record_id = '{retired.RecordId}' AND revision_number = 1;
+            INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+            VALUES ('{retired.RecordId}', 1, 'Retired', 1, 0, 0, 0, 0);
+            """);
+
+        Assert.Equal([$"{active.RecordId}|2|0|"], await PublicAsync(
+            "SELECT record_id || '|' || revision_number || '|' || party_tally_count || '|' || coalesce(party, '') FROM public_api.vote_party_tallies ORDER BY record_id, revision_number, party"));
+    }
+
+    [Fact]
+    public async Task TheLastColumnOfTheRelationshipViewNamesWhoWroteTheFactAndTheFactLabelFollowsIt()
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await RelationshipSeed.SeedAsync(connectionString);
+        await ExecuteAsync($"SET session_replication_role = replica; UPDATE action_revisions SET text_origin = 'Code' WHERE record_id = '{RelationshipSeed.ActionId}';");
+
+        Assert.Equal([$"{RelationshipSeed.BillLink}|{AiLabelWords.CodeWording}|Code", $"{RelationshipSeed.VoteLink}|-|-"], await PublicAsync(
+            "SELECT record_id || '|' || coalesce(fact_label, '-') || '|' || coalesce(fact_text_origin, '-') FROM public_api.relationships ORDER BY record_id"));
+        Assert.Equal("fact_text_origin", (await PublicAsync(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public_api' AND table_name = 'relationships' ORDER BY ordinal_position"))[^1]);
+    }
+
+    [Fact]
+    public async Task TheBillLookupIndexCoversTheBillIdentityOfTheBillsAndOnlyIndexesRowsThatTheBillsViewCanShow()
+    {
+        var definition = Assert.Single(await QueryAsync("SELECT pg_get_indexdef('public.ix_action_revisions_bill_identity'::regclass)", connectionString));
+
+        Assert.Contains("(congress, bill_number, bill_type, record_id, revision_number)", definition, StringComparison.Ordinal);
+        Assert.Contains("WHERE ((headline IS NOT NULL) AND (event_on IS NOT NULL))", definition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheVoteMemberListIndexCoversEveryEntryColumnThatTheMemberVotesAndOfficialIssueCountsViewsRead()
+    {
+        Assert.Equal(["CREATE INDEX ix_vote_member_list_entries_members ON public.vote_member_list_entries USING btree (list_id) INCLUDE (person_id, party, vote_cast)"],
+            await QueryAsync("SELECT pg_get_indexdef('public.ix_vote_member_list_entries_members'::regclass)", connectionString));
+        Assert.Empty(await QueryAsync("""
+            SELECT DISTINCT a.attname::text
+              FROM pg_depend d
+              JOIN pg_rewrite r ON r.oid = d.objid
+              JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
+             WHERE d.refobjid = 'public.vote_member_list_entries'::regclass
+               AND r.ev_class IN ('public_api.member_votes'::regclass, 'public_api.official_issue_counts'::regclass)
+               AND a.attnum <> ALL ((SELECT i.indkey::int2[] FROM pg_index i
+                                      WHERE i.indexrelid = 'public.ix_vote_member_list_entries_members'::regclass)::int2[])
+             ORDER BY 1
+            """, connectionString));
     }
 
     // The tab counts of the stored view and the record count that public_api.officials reads from the same row.

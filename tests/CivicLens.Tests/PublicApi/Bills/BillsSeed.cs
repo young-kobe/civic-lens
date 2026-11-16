@@ -43,14 +43,9 @@ internal sealed record SeededBill(char Id, string EventOn)
 
 internal static class BillsSeed
 {
-    public static Task AddBillsAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, false, bills);
-
-    /// <summary>Seeds bills at a schema before <c>action_revisions.introduced_on</c>, so the rows leave that column out.</summary>
-    public static Task AddBillsBeforeIntroducedOnAsync(string database, params SeededBill[] bills) => AddBillsAsync(database, true, bills);
-
-    private static async Task AddBillsAsync(string database, bool beforeIntroducedOn, SeededBill[] bills)
+    public static async Task AddBillsAsync(string database, params SeededBill[] bills)
     {
-        foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill, beforeIntroducedOn));
+        foreach (var bill in bills) await ViewsSeed.ExecuteAsync(database, Insert(bill));
     }
 
     private static string EntryRow(SeededBill bill) => bill.BillLine is null ? "" : $"""
@@ -79,7 +74,7 @@ internal static class BillsSeed
             """;
     }
 
-    private static string Insert(SeededBill bill, bool beforeIntroducedOn)
+    private static string Insert(SeededBill bill)
     {
         var last = bill.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
         var cosponsors = bill.Sponsorships.Count(item => item.Role == "Cosponsor");
@@ -88,7 +83,7 @@ internal static class BillsSeed
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
               VALUES ('{bill.RecordKind}', '{bill.RecordId}', {bill.FirstRelease}, 1, {last});
             {PublicActionRows.ActionRevision(bill.RecordId, 1, bill.TextOrigin, bill.EventOn, cosponsors, bill.Congress, bill.BillType, bill.BillNumber, bill.PolicyAreaId,
-                introducedOn: beforeIntroducedOn ? null : bill.IntroducedDate)}
+                introducedOn: bill.IntroducedDate)}
             {string.Join('\n', bill.Sponsorships.Select((item, position) => PublicActionRows.ActionSponsorship(
                 bill.RecordId, 1, position, item.Person, item.Role, item.IsOriginal, item.SponsoredOn, item.WithdrawnOn)))}
             {string.Join('\n', bill.Issues.Select((issue, position) => PublicActionRows.ActionIssue(bill.RecordId, 1, issue, position, true)))}

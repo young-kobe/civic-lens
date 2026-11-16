@@ -12,6 +12,7 @@ using CivicLens.Infrastructure.Collection;
 using CivicLens.Infrastructure.Votes;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Review;
 
@@ -73,6 +74,30 @@ public sealed class PostgresReviewListTests(PostgresCollection postgres) : IAsyn
         Assert.Equal(2, both.Total);
         Assert.Equal(1, withoutStuck.Total);
         Assert.Equal([other.RecordId], withoutStuck.Items.Select(item => item.RecordId));
+    }
+
+    [Fact]
+    public async Task EveryDraftTableHasAPartialNeedsActionIndexForTheReviewListAndTheFourCodeApprovedKindsHoldAReason()
+    {
+        string[] draftTables = ["action_drafts", "vote_drafts", "statement_drafts", "document_change_drafts", "executive_action_drafts", "brief_drafts", "relationship_drafts"];
+
+        Assert.Equal(draftTables.Select(table => $"ix_{table}_needs_action_revised").Order(),
+            await ReadAsync("SELECT indexname FROM pg_indexes WHERE indexname LIKE 'ix\\_%\\_needs\\_action\\_revised' ORDER BY 1"));
+        Assert.Equal(["action_drafts", "executive_action_drafts", "statement_drafts", "vote_drafts"],
+            await ReadAsync("SELECT table_name FROM information_schema.columns WHERE column_name = 'held_reason' ORDER BY 1"));
+        Assert.All(await ReadAsync("SELECT indexdef FROM pg_indexes WHERE indexname LIKE 'ix\\_%\\_needs\\_action\\_revised'"),
+            definition => Assert.Contains("review_status)::text <> 'Approved'", definition));
+    }
+
+    private async Task<string[]> ReadAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var rows = new List<string>();
+        while (await reader.ReadAsync()) rows.Add(reader.GetString(0));
+        return [.. rows];
     }
 
     private static string Id(char digit) => new(digit, 64);
