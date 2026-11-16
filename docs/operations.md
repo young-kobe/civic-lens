@@ -1362,7 +1362,7 @@ Test a report with `curl -d recordId=<64 hex characters> -d revision=1 -d catego
 
 The `/internal/*` route is not public. The [Caddyfile](#web-server) answers it with 404 on the API host.
 
-To use the search page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the search service. The server pages call this address from the browser. The service allows any origin. Without the variable, the search page says that search is not available.
+To use the ZIP forms and the report page, set `CIVIC_LENS_PUBLIC_API_URL=http://127.0.0.1:8100` in the environment of the search service. The server pages call this address from the browser. The service allows any origin. Without the variable, the report page says that reporting is not available.
 
 To give each page a canonical address and to serve the pages, set `CIVIC_LENS_PUBLIC_BASE_URL` in the environment of the search service, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. Without it, the server page routes do not exist. The service reads the variable once, so restart it after a change. The host publisher, the worker, and the review workspace do not read this variable.
 

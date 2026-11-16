@@ -362,7 +362,7 @@ The ZIP member route renders `ZipMemberCards` from one existing `ZipDistrictStor
 | `CIVIC_LENS_TURNSTILE_SECRET` | Optional. The Turnstile secret. Without it, the report route answers 503. |
 | `CIVIC_LENS_TURNSTILE_HOSTNAME` | Required when the secret is set. The hostname that siteverify must report. |
 | `CIVIC_LENS_REPORT_PULL_TOKEN` | Optional. The bearer token of the pull route, 32 characters or more. Without it, the route does not exist. |
-| `CIVIC_LENS_PUBLIC_API_URL` | Optional. The address that the search page, the report page, and the ZIP forms of the server pages call. |
+| `CIVIC_LENS_PUBLIC_API_URL` | Optional. The address that the report page and the ZIP forms of the server pages call. |
 | `CIVIC_LENS_TURNSTILE_SITE_KEY` | Optional. The public Turnstile site key of the report page. A blank value counts as unset. |
 
 The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are options of `PublicApiOptions`.
