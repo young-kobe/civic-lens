@@ -1203,6 +1203,12 @@ A complete ledger proves agreement for the selected membership. It does not repl
 
 Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261110190000` has no rows in `release_bill_counts` and `release_official_bill_counts`.
 
+The same commands write and verify `release_official_record_counts`. A release published before the migration `20261116171634` has no rows in that table. Until the backfill runs, the officials list shows zero records and the record page shows no tab. Deploy in this order, as for the bill counts:
+
+1. Apply the migration `20261116171634`.
+2. Run `releases counts backfill` until `nextCursor` is null. A release that already holds its bill counts reports `added` when the command writes its record counts.
+3. Run `releases counts verify` until `nextCursor` is null. Every selected release must verify under one fingerprint.
+
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts backfill <limit> [cursor]
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases counts verify <limit> [cursor]

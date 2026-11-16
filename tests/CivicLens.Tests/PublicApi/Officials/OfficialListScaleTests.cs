@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Officials;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 using Npgsql;
@@ -11,6 +12,7 @@ namespace CivicLens.Tests.PublicApi.Officials;
 /// <summary>
 /// The list statements of <see cref="OfficialStore"/> at the production size of 542 officials, read as <c>civic_lens_public</c>.
 /// Each official has two terms, and 2,000 statements name them. A walk of 50 rows a page visits every official once in sort order.
+/// The record count of each row comes from the counts that the publish stores for the release.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
@@ -27,11 +29,13 @@ public sealed class OfficialListScaleTests(PostgresCollection postgres, ITestOut
         try
         {
             await SeedAsync(database);
+            await StoredBillCounts.RefreshRecordCountsAsync(database, 1);
             await using var views = NpgsqlDataSource.Create(await ApiHost.LogInPublicRoleAsync(database));
             var store = new OfficialStore(views);
             var first = await store.ListAsync(new OfficialRequest(), default);
 
             var walk = new List<string>();
+            var records = 0;
             OfficialCursor? cursor = null;
             var slowest = TimeSpan.Zero;
             do
@@ -39,6 +43,7 @@ public sealed class OfficialListScaleTests(PostgresCollection postgres, ITestOut
                 var (page, elapsed) = await TimeAsync(store, new OfficialRequest { Cursor = cursor });
                 slowest = elapsed > slowest ? elapsed : slowest;
                 walk.AddRange(page.Officials.Select(official => official.OfficialId));
+                records += page.Officials.Sum(official => official.RecordCount);
                 cursor = OfficialCursor.Parse(page.NextCursor);
             }
             while (cursor is not null);
@@ -48,6 +53,7 @@ public sealed class OfficialListScaleTests(PostgresCollection postgres, ITestOut
             output.WriteLine($"Slowest walk page {slowest.TotalMilliseconds:F1} ms. Filtered {filtered.TotalMilliseconds:F1} ms. Exact name first {exact.TotalMilliseconds:F1} ms. Budget {Budget.TotalMilliseconds:F0} ms.");
             Assert.Equal(Officials, first!.OfficialsInRelease);
             Assert.Equal(await ExpectedOrderAsync(database), walk);
+            Assert.Equal(Statements, records);
             Assert.All(new[] { slowest, filtered, exact }, elapsed => Assert.True(elapsed < Budget, $"A list statement took {elapsed}."));
         }
         finally { await postgres.DropDatabaseAsync(database); }

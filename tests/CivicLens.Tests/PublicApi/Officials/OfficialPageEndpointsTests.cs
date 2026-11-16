@@ -76,6 +76,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
     private static async Task<IDocument> GetPageAsync(ApiHost host, string path, HttpStatusCode expected = HttpStatusCode.OK)
     {
+        // The publish stores the record counts of each official. The tests seed rows after the release, so they write the counts again before each read.
+        await StoredBillCounts.RefreshRecordCountsAsync(host.OperationalDatabase, 1);
         using var response = await host.Client.GetAsync(path);
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == expected, $"{path} gave {(int)response.StatusCode}: {body}");

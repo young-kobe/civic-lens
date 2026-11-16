@@ -28,8 +28,9 @@ public sealed class PublishedEntriesInsertOnlyTests
         Assert.Matches(@"ORDER BY e\.kind, e\.record_id, e\.revision_number\s+FOR UPDATE OF e", fill);
         Assert.Matches(@"WHERE e\.approved_by IS NULL\s+ORDER BY e\.kind, e\.record_id, e\.revision_number FOR UPDATE OF e\)\s+UPDATE published_entries e SET approved_by = locked\.approved_by\s+FROM locked", files[writer]);
         Assert.Matches(@"WHERE e\.approved_at_utc_ticks IS NULL\s+ORDER BY e\.kind, e\.record_id, e\.revision_number FOR UPDATE OF e\)\s+UPDATE published_entries e SET approved_at_utc_ticks = locked\.approved_at_utc_ticks\s+FROM locked", files[writer]);
-        // History binding reads exact entry keys. Only the entry writer updates their facts.
-        Assert.Equal(["CivicLens.Infrastructure/Publication/CorrectionHistoryCopies.cs", "CivicLens.Infrastructure/Publication/PublicApiGrants.cs", writer], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_entr(ies|y_\w+)\b")
+        // History binding reads exact entry keys, and the official record counts read the entries of a release. Only the entry writer updates their facts.
+        Assert.Equal(["CivicLens.Infrastructure/Publication/CorrectionHistoryCopies.cs", "CivicLens.Infrastructure/Publication/PublicApiGrants.cs", writer,
+            "CivicLens.Infrastructure/Publication/ReleaseOfficialRecordCounts.cs"], files.Where(file => Regex.IsMatch(file.Value, @"\bpublished_entr(ies|y_\w+)\b")
             && !file.Key.Contains("/Persistence/", StringComparison.Ordinal)).Select(file => file.Key).Order(StringComparer.Ordinal));
         Assert.Equal([writer], files.Where(file => Regex.IsMatch(file.Value, @"\bPublishedEntry\w*Row\b")
             && !file.Key.Contains("/Persistence/", StringComparison.Ordinal)).Select(file => file.Key));

@@ -6356,6 +6356,47 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         });
                 });
 
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRecordCountRow", b =>
+                {
+                    b.Property<int>("ReleaseNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("release_number");
+
+                    b.Property<string>("OfficialId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("official_id");
+
+                    b.Property<int>("Bills")
+                        .HasColumnType("integer")
+                        .HasColumnName("bills");
+
+                    b.Property<int>("ExecutiveActions")
+                        .HasColumnType("integer")
+                        .HasColumnName("executive_actions");
+
+                    b.Property<int>("Records")
+                        .HasColumnType("integer")
+                        .HasColumnName("records");
+
+                    b.Property<int>("Statements")
+                        .HasColumnType("integer")
+                        .HasColumnName("statements");
+
+                    b.Property<int>("Votes")
+                        .HasColumnType("integer")
+                        .HasColumnName("votes");
+
+                    b.HasKey("ReleaseNumber", "OfficialId");
+
+                    b.ToTable("release_official_record_counts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_release_official_record_counts_counts", "records >= 0 AND votes >= 0 AND bills >= 0 AND statements >= 0 AND executive_actions >= 0");
+
+                            t.HasCheckConstraint("ck_release_official_record_counts_official_id", "length(btrim(official_id)) > 0");
+                        });
+                });
+
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRow", b =>
                 {
                     b.Property<int>("ReleaseNumber")
@@ -11160,6 +11201,16 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_release_official_bill_counts_official");
+                });
+
+            modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRecordCountRow", b =>
+                {
+                    b.HasOne("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReleaseNumber", "OfficialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_release_official_record_counts_official");
                 });
 
             modelBuilder.Entity("CivicLens.Infrastructure.Publication.Persistence.ReleaseOfficialRow", b =>
