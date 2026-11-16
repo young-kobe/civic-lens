@@ -13,6 +13,7 @@ using CivicLens.Tests.PublicApi.Home;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
 using Npgsql;
+using CivicLens.Tests.PublicWeb;
 
 namespace CivicLens.Tests.PublicApi.Officials;
 
@@ -90,7 +91,8 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         var labels = (await GetPageAsync(host, "/officials/p0/record.html")).QuerySelectorAll(".shared-vote-meta .ai-label");
 
         Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
-        Assert.Equal([AiLabelWords.ModelWording, AiLabelWords.CodeWording], labels.Select(label => label.TextContent.Trim()));
+        AiLabelAssert.IsChip(labels[0], AiLabelWords.ModelChip, AiLabelWords.ModelWording);
+        AiLabelAssert.IsChip(labels[1], AiLabelWords.CodeChip, AiLabelWords.CodeWording);
     }
 
     [Fact]
@@ -393,6 +395,22 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
             rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!).ToArray());
         Assert.Contains("Said on 10 Feb 2026", rows[0].TextContent);
         Assert.Contains("Date not stated", rows[1].TextContent);
+    }
+
+    [Fact]
+    public async Task TheStatementsTabShowsTheChipOfTheTextOriginOfTheViewSoTheSourceTextOfAShortReleaseReadsNoAi()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
+            new SeededStatement('8', null, ["p0"], [], "Analysis", "Code"));
+        // The seed writes model text. An undated revision with a run may hold code text, the saved text of a short release.
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE statement_revisions SET author_kind = 'Code' WHERE candidate_id = '{new string('8', 64)}'");
+
+        var labels = (await GetPageAsync(host, "/officials/p0/record.html?kind=statements")).QuerySelectorAll(".record-row .ai-label");
+
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
+        AiLabelAssert.IsChip(labels[0], AiLabelWords.ModelChip, AiLabelWords.StatementModelWording);
+        AiLabelAssert.IsChip(labels[1], AiLabelWords.CodeChip, AiLabelWords.StatementSourceTextWording);
     }
 
     [Fact]

@@ -29,10 +29,39 @@ public sealed class AiLabelTests
         Assert.Equal(AiLabelWords.ModelWording, label.TextContent);
     }
 
-    [Fact]
-    public async Task AMissingLabelDrawsNothingSoACallerNeedsNoCheckOfItsOwn()
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model, AiLabelWords.ModelChip, "model")]
+    [InlineData(PublishedTextOrigin.Person, AiLabelWords.ModelChip, "person")]
+    [InlineData(PublishedTextOrigin.Code, AiLabelWords.CodeChip, "code")]
+    [InlineData(null, AiLabelWords.ModelChip, null)]
+    public async Task AChipShowsTheShortTextOfItsOriginAndKeepsTheFullLabelAsItsAccessibleTextAndFocusableDetail(PublishedTextOrigin? origin, string chipText,
+        string? dataOrigin)
     {
-        Assert.Empty((await RenderAsync(null, PublishedTextOrigin.Model, AiLabelLook.Tag, null)).Body!.Children);
+        var label = Assert.Single((await RenderAsync(AiLabelWords.ModelWording, origin, AiLabelLook.Chip, "summary-origin")).QuerySelectorAll("body > *"));
+
+        Assert.Equal(("SPAN", "ai-label ai-label-chip", dataOrigin, "summary-origin"), (label.TagName, label.ClassName, label.GetAttribute("data-origin"), label.Id));
+        AiLabelAssert.IsChip(label, chipText, AiLabelWords.ModelWording);
+    }
+
+    [Theory]
+    [InlineData(AiLabelLook.Tag)]
+    [InlineData(AiLabelLook.Line)]
+    [InlineData(AiLabelLook.Chip)]
+    public async Task AMissingLabelDrawsNothingSoACallerNeedsNoCheckOfItsOwn(AiLabelLook look)
+    {
+        Assert.Empty((await RenderAsync(null, PublishedTextOrigin.Model, look, null)).Body!.Children);
+    }
+
+    [Fact]
+    public void TheStylesheetDrawsTheChipAsAChipAndShowsItsFullLabelOnlyOnHoverOrFocus()
+    {
+        var css = WebStyleSheets.Read("public.css");
+
+        Assert.Contains(".ai-label-chip { position: relative; display: inline-flex;", css, StringComparison.Ordinal);
+        Assert.Contains("border: 1px solid var(--ai-line); border-radius: 999px; background: var(--ai-surface);", css[css.IndexOf(".ai-label-chip {", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        Assert.Contains(".ai-label-chip[data-origin=\"code\"] { border-color: var(--line-strong); background: var(--raised); color: var(--muted); }", css, StringComparison.Ordinal);
+        Assert.Contains(".ai-label-chip:not(:hover, :focus) .ai-label-detail { width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%);", css,
+            StringComparison.Ordinal);
     }
 
     [Fact]

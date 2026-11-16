@@ -1,19 +1,32 @@
 @using CivicLens.Publication.Contracts
-@if (Text is not null)
+@if (Text is not null && Look == AiLabelLook.Chip)
 {
-    <span id="@Id" class="ai-label ai-label-@Look.ToString().ToLowerInvariant()" data-origin="@Origin?.ToString().ToLowerInvariant()">@Text</span>
+    @* The short chip text is hidden from assistive technology, so the full label is the accessible text. The chip takes focus, so a keyboard or touch reader
+       sees the full label as a hover reader does. *@
+    <span id="@Id" class="ai-label ai-label-chip" data-origin="@OriginText" tabindex="0"><span class="ai-label-chip-text" aria-hidden="true">@ChipText</span><span class="ai-label-detail">@Text</span></span>
+}
+else if (Text is not null)
+{
+    <span id="@Id" class="ai-label ai-label-@Look.ToString().ToLowerInvariant()" data-origin="@OriginText">@Text</span>
 }
 
 @code {
     /// <summary>The label text, from the label column of the public view. Null draws nothing.</summary>
     [Parameter, EditorRequired] public string? Text { get; set; }
 
-    /// <summary>The origin of the labeled text. A code label, which says "with no AI", stays muted. Every other label shows in the AI ink. A caller whose
-    /// data names no origin passes none, so its label shows in the AI ink.</summary>
+    /// <summary>The origin of the labeled text. A code label, which says "with no AI", stays muted, and its chip reads <see cref="AiLabelWords.CodeChip"/>.
+    /// Every other label shows in the AI ink, and its chip reads <see cref="AiLabelWords.ModelChip"/>. A caller whose data names no origin passes none,
+    /// so its label shows in the AI ink.</summary>
     [Parameter] public PublishedTextOrigin? Origin { get; set; }
 
+    /// <summary>The look of the label. A record page passes <see cref="AiLabelLook.Tag"/> or <see cref="AiLabelLook.Line"/> and shows the full label.
+    /// A list row or a card passes <see cref="AiLabelLook.Chip"/>.</summary>
     [Parameter] public AiLabelLook Look { get; set; }
 
     /// <summary>The ID of the label, for a heading that names it with aria-describedby.</summary>
     [Parameter] public string? Id { get; set; }
+
+    private string? OriginText => Origin?.ToString().ToLowerInvariant();
+
+    private string ChipText => Origin == PublishedTextOrigin.Code ? AiLabelWords.CodeChip : AiLabelWords.ModelChip;
 }

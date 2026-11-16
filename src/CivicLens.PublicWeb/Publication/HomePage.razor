@@ -41,12 +41,12 @@
                     }
                     @if (featured.TextOrigin == PublishedTextOrigin.Model)
                     {
-                        <AiSummary TextOrigin="@featured.TextOrigin" Label="@summaryLabel" LabelId="home-featured-origin"><p>@featured.Summary</p></AiSummary>
+                        <AiSummary TextOrigin="@featured.TextOrigin" Label="@summaryLabel" LabelId="home-featured-origin" LabelLook="AiLabelLook.Chip"><p>@featured.Summary</p></AiSummary>
                     }
                     else
                     {
                         <div class="home-featured-summary">
-                            <AiLabel Text="@summaryLabel" Origin="featured.TextOrigin" Id="home-featured-origin" />
+                            <AiLabel Text="@summaryLabel" Origin="featured.TextOrigin" Id="home-featured-origin" Look="AiLabelLook.Chip" />
                             @if (featured.TextOrigin != PublishedTextOrigin.Code)
                             {
                                 <p>@featured.Summary</p>
@@ -83,7 +83,7 @@
                 <p class="home-brief-line">
                     <span>This week:</span>
                     <a href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))">@brief.Headline</a>
-                    <AiLabel Text="@brief.Label" />
+                    <AiLabel Text="@brief.Label" Look="AiLabelLook.Chip" />
                 </p>
             }
             @if (Data.Votes.Length > 0)
