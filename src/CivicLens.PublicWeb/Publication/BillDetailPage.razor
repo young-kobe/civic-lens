@@ -93,7 +93,7 @@
                         <p class="bill-lede">Votes on this site that name @Data.Number.</p>
                         @if (Data.Votes.Length > 0)
                         {
-                            <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" />
+                            <SharedVoteRows Data="voteRows" RootPath="@RootPath" SingleMember="true" LabelLook="AiLabelLook.Line" />
                         }
                         @if (Data.SenateVoteGap)
                         {

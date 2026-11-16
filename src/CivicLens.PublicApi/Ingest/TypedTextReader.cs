@@ -1,4 +1,5 @@
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicApi.Http;
 using Npgsql;
 
 namespace CivicLens.PublicApi.Ingest;
@@ -12,7 +13,7 @@ namespace CivicLens.PublicApi.Ingest;
 public sealed class TypedTextReader(NpgsqlTransaction snapshot)
 {
     private static readonly string StatementSummary = $"""
-        SELECT x.record_id, x.summary
+        SELECT x.record_id, x.summary, x.text_origin, x.label
           FROM unnest(@ids, @revisions) k(record_id, revision_number)
          CROSS JOIN LATERAL (SELECT * FROM public_api.statements x WHERE {RevisionKeys.Match} OFFSET 0) x
         """;
@@ -31,7 +32,7 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
         """;
 
     private static readonly string DocumentChangeSummary = $"""
-        SELECT x.record_id, x.summary
+        SELECT x.record_id, x.summary, x.text_origin, x.label
           FROM unnest(@ids, @revisions) k(record_id, revision_number)
          CROSS JOIN LATERAL (SELECT * FROM public_api.document_changes x WHERE {RevisionKeys.Match} OFFSET 0) x
         """;
@@ -45,7 +46,7 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
         """;
 
     private static readonly string ActionSummary = $"""
-        SELECT x.record_id, x.summary, x.bill_title
+        SELECT x.record_id, x.summary, x.text_origin, x.label, x.bill_title
           FROM unnest(@ids, @revisions) k(record_id, revision_number)
          CROSS JOIN LATERAL (SELECT * FROM public_api.bills x WHERE {RevisionKeys.Match} OFFSET 0) x
         """;
@@ -58,7 +59,7 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
         """;
 
     private static readonly string VoteSummary = $"""
-        SELECT x.record_id, x.summary
+        SELECT x.record_id, x.summary, x.text_origin, x.label
           FROM unnest(@ids, @revisions) k(record_id, revision_number)
          CROSS JOIN LATERAL (SELECT * FROM public_api.votes x WHERE {RevisionKeys.Match} OFFSET 0) x
         """;
@@ -82,6 +83,18 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
           FROM unnest(@ids, @revisions) k(record_id, revision_number)
          CROSS JOIN LATERAL (SELECT * FROM public_api.executive_action_summary_sentences x WHERE {RevisionKeys.Match} OFFSET 0) x
          ORDER BY x.record_id, x."position"
+        """;
+
+    private static readonly string ExecutiveActionSummaryLabel = $"""
+        SELECT x.record_id, x.text_origin, x.label
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.executive_action_summaries x WHERE {RevisionKeys.Match} OFFSET 0) x
+        """;
+
+    private static readonly string BriefLabel = $"""
+        SELECT x.record_id, x.text_origin, x.label
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+         CROSS JOIN LATERAL (SELECT * FROM public_api.briefs x WHERE {RevisionKeys.Match} OFFSET 0) x
         """;
 
     private static readonly string BriefParagraphs = $"""
@@ -124,7 +137,7 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
             if (!sources.TryGetValue(id, out var source)) continue;
             var summary = rows[0][0]!;
             var quotations = spans.GetValueOrDefault(id, []).Select(span => QuoteOf(Text(source[0]), span.Start, span.Length));
-            texts[id] = RecordTexts.Of(() => new([summary, .. quotations.ToArray()], [Text(source[0])], summary));
+            texts[id] = RecordTexts.Of(() => Labeled(new([summary, .. quotations.ToArray()], [Text(source[0])], summary), rows[0], 1));
         }
         return texts;
     }
@@ -133,41 +146,43 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
     {
         var summaries = await RowsAsync(keys, DocumentChangeSummary, cancellationToken);
         var sources = await RowsAsync(keys, DocumentChangeSources, cancellationToken);
-        return Combine(summaries, sources, (summary, parts) => new([summary[0]!], parts, summary[0]));
+        return Combine(summaries, sources, (summary, parts) => Labeled(new([summary[0]!], parts, summary[0]), summary, 1));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadActionsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var summaries = await RowsAsync(keys, ActionSummary, cancellationToken);
         var sources = await RowsAsync(keys, ActionSources, cancellationToken);
-        return Combine(summaries, sources, (summary, parts) => new([summary[0]!, summary[1]!], parts, summary[0]));
+        return Combine(summaries, sources, (summary, parts) => Labeled(new([summary[0]!, summary[3]!], parts, summary[0]), summary, 1));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadVotesAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var summaries = await RowsAsync(keys, VoteSummary, cancellationToken);
         var sources = await RowsAsync(keys, VoteSources, cancellationToken);
-        return Combine(summaries, sources, (summary, parts) => new([summary[0]!], parts, summary[0]));
+        return Combine(summaries, sources, (summary, parts) => Labeled(new([summary[0]!], parts, summary[0]), summary, 1));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadExecutiveActionsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var sources = await RowsAsync(keys, ExecutiveActionSources, cancellationToken);
         var sentences = await RowsAsync(keys, ExecutiveActionSummarySentences, cancellationToken);
+        var labels = await RowsAsync(keys, ExecutiveActionSummaryLabel, cancellationToken);
         return sources.ToDictionary(item => item.Key, item => RecordTexts.Of(() =>
         {
             string[] summary = [.. sentences.GetValueOrDefault(item.Key, []).Select(row => Text(row))];
-            return new(summary, [.. item.Value.Select(row => Text(row))], summary.Length == 0 ? null : string.Join(' ', summary));
+            return Labeled(new(summary, [.. item.Value.Select(row => Text(row))], summary.Length == 0 ? null : string.Join(' ', summary)), labels.GetValueOrDefault(item.Key)?[0], 0);
         }));
     }
 
     private async Task<Dictionary<string, RecordTexts>> ReadBriefsAsync(RevisionKeys keys, CancellationToken cancellationToken)
     {
         var paragraphs = await RowsAsync(keys, BriefParagraphs, cancellationToken);
+        var labels = await RowsAsync(keys, BriefLabel, cancellationToken);
         return paragraphs.ToDictionary(item => item.Key, item => RecordTexts.Of(() =>
         {
             string[] text = [.. item.Value.Select(row => Text(row))];
-            return new(text, [], string.Join('\n', text));
+            return Labeled(new(text, [], string.Join('\n', text)), labels.GetValueOrDefault(item.Key)?[0], 0);
         }));
     }
 
@@ -189,6 +204,13 @@ public sealed class TypedTextReader(NpgsqlTransaction snapshot)
     private static Dictionary<string, RecordTexts> Combine(Dictionary<string, List<string?[]>> summaries, Dictionary<string, List<string?[]>> sources,
         Func<string?[], string[], RecordTexts> create) =>
         summaries.ToDictionary(item => item.Key, item => RecordTexts.Of(() => create(item.Value[0], [.. sources.GetValueOrDefault(item.Key, []).Select(row => Text(row))])));
+
+    // The text origin and the label column of the view sit side by side in the row, at the given column. A record with no such row keeps no label.
+    private static RecordTexts Labeled(RecordTexts texts, string?[]? row, int column) => row is null ? texts : texts with
+    {
+        TextOrigin = row[column] is { } origin ? ViewColumns.Enum<PublishedTextOrigin>(origin) : null,
+        Label = row[column + 1]
+    };
 
     private static string Text(string?[] row) => row[0] ?? throw new InvalidDataException("A cited source has no stored text.");
 

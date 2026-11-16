@@ -357,7 +357,7 @@ public sealed class OfficialProfilePageTests
         });
 
         var labels = page.QuerySelectorAll("#statements .ai-label[data-origin=model]");
-        Assert.Equal([AiLabelWords.ModelWording], labels.Select(label => label.TextContent).ToArray());
+        Assert.Equal([AiLabelWords.ModelWording], labels.Select(AiLabelAssert.FullText).ToArray());
     }
 
     [Fact]
@@ -374,7 +374,7 @@ public sealed class OfficialProfilePageTests
         });
 
         Assert.Empty(page.QuerySelectorAll("#statements .ai-label[data-origin=model]"));
-        Assert.Equal(AiLabelWords.CodeWording, Assert.Single(page.QuerySelectorAll("#statements .ai-label")).TextContent);
+        AiLabelAssert.IsChip(Assert.Single(page.QuerySelectorAll("#statements .ai-label")), AiLabelWords.CodeChip, AiLabelWords.CodeWording);
     }
 
     [Fact]

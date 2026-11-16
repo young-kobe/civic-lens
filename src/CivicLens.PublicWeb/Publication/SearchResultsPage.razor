@@ -69,7 +69,7 @@
             @foreach (var hit in Data.Hits)
             {
                 <PublicRecordRow Icon="PublishedRecordLabels.Icon(hit.Kind)" IconClass="@IconClass(hit.Kind)" Href="@(RootPath + PublicationProtocol.RecordPagePath(hit.RecordId))"
-                                 Headline="@hit.Headline" Meta="@Meta(hit)" Snippet="@Snippet(hit)" />
+                                 Headline="@hit.Headline" Label="@hit.Label" LabelOrigin="hit.TextOrigin" Meta="@Meta(hit)" Snippet="@Snippet(hit)" />
             }
         </ul>
         @if (Data.Bill is { Others.Count: > 0 } numbered)

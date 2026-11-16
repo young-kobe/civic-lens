@@ -61,13 +61,16 @@ public sealed class HomePageTests
         Assert.Null(summary.QuerySelector("script"));
         // Code text repeats the headline, so the card shows only its label.
         Assert.Equal(origin == PublishedTextOrigin.Code ? null : text, summary.QuerySelector("p")?.TextContent);
-        Assert.Equal(wording, summary.QuerySelector("span")?.TextContent);
+        var label = summary.QuerySelector(".ai-label");
+        Assert.Equal(wording, label is null ? null : AiLabelAssert.FullText(label));
+        if (label is not null)
+            AiLabelAssert.IsChip(label, origin == PublishedTextOrigin.Code ? AiLabelWords.CodeChip : AiLabelWords.ModelChip, wording!);
         Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("ai-summary-ai"));
         var descriptionId = page.QuerySelector(".home-featured h2")!.GetAttribute("aria-describedby");
         if (wording is null)
             Assert.Null(descriptionId);
         else
-            Assert.Same(summary.QuerySelector("span"), Assert.Single(page.QuerySelectorAll("#" + descriptionId)));
+            Assert.Same(label, Assert.Single(page.QuerySelectorAll("#" + descriptionId)));
     }
 
     [Fact]
@@ -196,7 +199,8 @@ public sealed class HomePageTests
         var row = rows[0];
 
         Assert.Equal("Published vote", row.QuerySelector("a > span")!.TextContent);
-        Assert.Contains("AI label", row.QuerySelector("a")!.TextContent);
+        Assert.Null(row.QuerySelector("a .ai-label"));
+        AiLabelAssert.IsChip(row.QuerySelector(".ai-label")!, AiLabelWords.ModelChip, "AI label");
         Assert.Contains("House, 2 Mar 2026", row.QuerySelector("a")!.TextContent);
         Assert.Equal("Passed", row.QuerySelector(".record-counts")!.TextContent.Trim());
         Assert.Equal("House members", row.QuerySelector(".party-bar figcaption")!.TextContent);

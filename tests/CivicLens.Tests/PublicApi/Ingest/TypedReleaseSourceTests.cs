@@ -52,6 +52,25 @@ public sealed class TypedReleaseSourceTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task EachKindGivesTheTextOriginAndLabelColumnOfTheViewThatHoldsItsSummarySoASearchRowShowsTheLabelOfTheLists()
+    {
+        var typed = await ReadAsync(Records(Texts.Short));
+
+        (string, PublishedTextOrigin?, string?)[] expected =
+        [
+            ("action", PublishedTextOrigin.Model, AiLabelWords.ModelWording),
+            // The brief, the document change, and the statement of the fixture hold person text, and a person text has no label.
+            ("brief", PublishedTextOrigin.Person, null),
+            ("documentChange", PublishedTextOrigin.Person, null),
+            ("executiveAction", PublishedTextOrigin.Model, ExecutiveSummaryWords.Label),
+            ("relationship", null, null),
+            ("statement", PublishedTextOrigin.Person, null),
+            ("vote", PublishedTextOrigin.Model, AiLabelWords.ModelWording)
+        ];
+        Assert.Equal(expected, typed.Select(record => (Kind(record), record.TextOrigin, record.Label)));
+    }
+
+    [Fact]
     public async Task AStoredBillLineThatEndsWithTheCutMarkIsNeitherIndexedAsTheLineNorUsedAsTheSnippet()
     {
         var action = PublishedSamples.Action("Doe sponsors a bill", "Doe sponsored it.", "A housing bill", "Sponsor: D000001");

@@ -10,6 +10,7 @@ using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Home;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.Tests.PublicWeb;
 
 namespace CivicLens.Tests.PublicApi.Officials;
 
@@ -230,7 +231,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         Assert.Contains(AiLabelWords.StatementModelWording, statements.TextContent);
         Assert.Equal(2, statements.QuerySelectorAll(".ai-label[data-origin=model]").Length);
         Assert.Equal(4, page.QuerySelectorAll("#votes .ai-label").Length);
-        Assert.All(page.QuerySelectorAll("#votes .ai-label"), label => Assert.Equal(AiLabelWords.ModelWording, label.TextContent.Trim()));
+        Assert.All(page.QuerySelectorAll("#votes .ai-label"), label => AiLabelAssert.IsChip(label, AiLabelWords.ModelChip, AiLabelWords.ModelWording));
         Assert.DoesNotContain(page.QuerySelectorAll("#statements a"), link => link.GetAttribute("href")!.Contains(Unlinked));
     }
 
@@ -243,7 +244,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var labels = (await GetPageAsync(host, "/officials/p0.html")).QuerySelectorAll("#votes .shared-vote-meta .ai-label").ToArray();
 
-        Assert.Equal(AiLabelWords.CodeWording, labels[0].TextContent.Trim());
+        AiLabelAssert.IsChip(labels[0], AiLabelWords.CodeChip, AiLabelWords.CodeWording);
         Assert.Equal("code", labels[0].GetAttribute("data-origin"));
         Assert.NotEmpty(labels[1..]);
         Assert.All(labels[1..], label => Assert.Equal("model", label.GetAttribute("data-origin")));
@@ -406,8 +407,8 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
 
         var labels = page.QuerySelectorAll("#statements .ai-label[data-origin=model]");
         Assert.Equal(2, labels.Length);
-        Assert.Contains(labels, label => label.TextContent == AiLabelWords.StatementCheckedByPersonWording);
-        Assert.DoesNotContain(labels, label => label.TextContent == AiLabelWords.StatementModelWording);
+        Assert.Contains(labels, label => AiLabelAssert.FullText(label) == AiLabelWords.StatementCheckedByPersonWording);
+        Assert.DoesNotContain(labels, label => AiLabelAssert.FullText(label) == AiLabelWords.StatementModelWording);
     }
 
     [Fact]
@@ -420,8 +421,7 @@ public sealed class OfficialPageEndpointsTests(PostgresCollection postgres)
         var page = await GetPageAsync(host, "/officials/p0.html");
 
         Assert.Single(page.QuerySelectorAll("#statements .ai-label[data-origin=model]"));
-        Assert.Equal(AiLabelWords.CodeWording,
-            Assert.Single(page.QuerySelectorAll("#statements .ai-label[data-origin=code]")).TextContent);
+        AiLabelAssert.IsChip(Assert.Single(page.QuerySelectorAll("#statements .ai-label[data-origin=code]")), AiLabelWords.CodeChip, AiLabelWords.CodeWording);
     }
 
     [Fact]

@@ -110,6 +110,7 @@ public sealed class TypedReleaseRead : IAsyncDisposable
             throw new InvalidDataException("The record is not in the typed views.");
         if (found.Problem is not null) throw new InvalidDataException(found.Problem);
         entry.Validate();
-        return RecordReader.Finish(RecordReader.Create(entry, found.Summary, found.Source, found.Snippet), entry.BillLine);
+        var indexed = RecordReader.Create(entry, found.Summary, found.Source, found.Snippet) with { TextOrigin = found.TextOrigin, Label = found.Label };
+        return RecordReader.Finish(indexed, entry.BillLine);
     }
 }

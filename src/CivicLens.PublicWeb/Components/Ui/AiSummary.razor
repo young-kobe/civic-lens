@@ -1,5 +1,5 @@
 <div class="@(TextOrigin == PublishedTextOrigin.Model && Label is not null ? "ai-summary ai-summary-ai" : "ai-summary")">
-    <AiLabel Text="@Label" Origin="TextOrigin" Look="AiLabelLook.Tag" Id="@LabelId" />
+    <AiLabel Text="@Label" Origin="TextOrigin" Look="LabelLook" Id="@LabelId" />
     @ChildContent
     @if (Check is not null)
     {
@@ -12,6 +12,8 @@
 
     /// <summary>The public label of the text, as the public view sets it. Null shows plain text with no label.</summary>
     [Parameter] public string? Label { get; set; }
+    /// <summary>The look of the label. A record page keeps the full label as a tag. A card passes <see cref="AiLabelLook.Chip"/>.</summary>
+    [Parameter] public AiLabelLook LabelLook { get; set; } = AiLabelLook.Tag;
     /// <summary>The ID of the label, for a heading that names it with aria-describedby.</summary>
     [Parameter] public string? LabelId { get; set; }
     /// <summary>The text of the summary. A page with no summary shows only its check line.</summary>
