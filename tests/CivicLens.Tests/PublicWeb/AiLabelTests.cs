@@ -58,6 +58,8 @@ public sealed class AiLabelTests
         var css = WebStyleSheets.Read("public.css");
 
         Assert.Contains(".ai-label-chip { position: relative; display: inline-flex;", css, StringComparison.Ordinal);
+        // On a narrow screen the open chip grows in place, so the full label never runs past the screen edge.
+        Assert.Contains(".ai-label-chip:is(:hover, :focus) .ai-label-detail { position: static; width: 100%;", css, StringComparison.Ordinal);
         Assert.Contains("border: 1px solid var(--ai-line); border-radius: 999px; background: var(--ai-surface);", css[css.IndexOf(".ai-label-chip {", StringComparison.Ordinal)..], StringComparison.Ordinal);
         Assert.Contains(".ai-label-chip[data-origin=\"code\"] { border-color: var(--line-strong); background: var(--raised); color: var(--muted); }", css, StringComparison.Ordinal);
         Assert.Contains(".ai-label-chip:not(:hover, :focus) .ai-label-detail { width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%);", css,

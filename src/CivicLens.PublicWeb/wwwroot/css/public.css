@@ -154,6 +154,7 @@ table[data-paged]:focus { outline: none; }
 
 .home-brief-line { margin: var(--s6) 0 0; padding-top: var(--s4); border-top: 1px solid var(--line); }
 .home-brief-line > span:first-child { font-weight: 700; }
+.home-brief-line .ai-label-chip { margin-inline-start: var(--s2); vertical-align: middle; }
 
 .release-search { display: grid; gap: var(--s3); }
 .search-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s3); }
@@ -638,12 +639,16 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .ai-label-tag { display: inline-block; margin-bottom: var(--s2); padding: 5px 10px; border-radius: 999px; background: var(--ai-line); color: var(--ai-label-ink); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
 .ai-label-tag[data-origin="code"] { padding: 0; border-radius: 0; background: none; color: var(--muted); text-transform: none; }
 /* The chip of a list row or a card. It reads as a chip, not as link-colored text. The full label is visually hidden until hover or focus,
-   and it stays the accessible text of the chip. */
+   and it stays the accessible text of the chip. On a narrow screen the open chip grows in place, so the full label never runs past the screen edge. */
 .ai-label-chip { position: relative; display: inline-flex; align-items: center; justify-self: start; width: fit-content; min-height: 24px; padding: 1px 10px; border: 1px solid var(--ai-line); border-radius: 999px; background: var(--ai-surface); color: var(--ai-ink); font-size: var(--t-xs); font-weight: 650; line-height: 1.3; white-space: nowrap; cursor: help; }
 .ai-label-chip[data-origin="code"] { border-color: var(--line-strong); background: var(--raised); color: var(--muted); }
 .ai-label-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-.ai-label-detail { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 5; width: max-content; max-width: min(20rem, calc(100vw - 48px)); padding: var(--s2) var(--s3); border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 16px -6px rgba(22, 27, 34, .3); font-weight: 400; line-height: 1.4; white-space: normal; text-wrap: pretty; }
+.ai-label-detail { position: absolute; top: calc(100% + 6px); inset-inline-start: 0; z-index: 5; width: max-content; max-width: min(20rem, calc(100vw - 32px)); padding: var(--s2) var(--s3); border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 16px -6px rgba(22, 27, 34, .3); font-weight: 400; line-height: 1.4; white-space: normal; text-wrap: pretty; }
 .ai-label-chip:not(:hover, :focus) .ai-label-detail { width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 640px) {
+    .ai-label-chip:is(:hover, :focus) { flex-wrap: wrap; border-radius: 12px; white-space: normal; }
+    .ai-label-chip:is(:hover, :focus) .ai-label-detail { position: static; width: 100%; margin: 2px 0 4px; padding: 0; border: 0; background: none; box-shadow: none; color: inherit; }
+}
 .record-row .ai-label-chip { margin-top: var(--s1); }
 .shared-vote-meta .ai-label { display: inline-block; margin-inline-start: var(--s1); }
 .shared-vote-meta .ai-label-chip { display: inline-flex; vertical-align: middle; }
