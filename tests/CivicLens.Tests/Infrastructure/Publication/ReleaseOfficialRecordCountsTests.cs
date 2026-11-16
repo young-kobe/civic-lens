@@ -90,16 +90,22 @@ public sealed class ReleaseOfficialRecordCountsTests(PostgresCollection postgres
         await StatementsSeed.AddAsync(database,
             new SeededStatement('e', "2026-04-01", ["p1", "p3"], [], "Person", "Person"),
             new SeededStatement('f', "2026-04-02", ["p1"], [], "Person", "Person") { LastRelease = 1 },
-            new SeededStatement('g', "2026-04-03", ["p2"], [], "Person", "Person"));
+            new SeededStatement('7', "2026-04-03", ["p2"], [], "Person", "Person", HasMetadata: false));
         await HomeSeed.AddExecutiveActionsAsync(database,
             new SeededExecutiveAction('8', "ExecutiveOrder", "2026-05-20", "2026-05-21"),
             new SeededExecutiveAction('9', "Proclamation", "2026-05-22", "2026-05-23"));
-        await OfficialsSeed.AddEntriesAsync(database, new SeededEntry("statement", 'e', "p1", "p3"), new SeededEntry("statement", 'f', "p1") { LastRelease = 1 },
-            new SeededEntry("executiveAction", '8', "president") { DocumentType = "Executive Order" });
-        // A statement without a summary and an executive action without a title are not public, so no count includes them.
+        // The seeds above write the record states. The entry officials name who each record names, for the record count of the list.
         await ViewsSeed.ExecuteAsync(database, $"""
-            UPDATE statement_revisions SET summary = NULL WHERE candidate_id = '{new string('g', 64)}';
-            UPDATE executive_action_revisions SET title = NULL WHERE record_id = '{new string('9', 64)}';
+            SET session_replication_role = replica;
+            INSERT INTO published_entry_officials (kind, record_id, revision_number, "position", official_id) VALUES
+              ('statement', '{new string('e', 64)}', 1, 0, 'p1'), ('statement', '{new string('e', 64)}', 1, 1, 'p3'),
+              ('statement', '{new string('f', 64)}', 1, 0, 'p1'), ('executiveAction', '{new string('8', 64)}', 1, 0, 'president');
+            """);
+        // A statement without a headline and a summary, and an executive action whose columns are not written, are not public, so no count includes them.
+        await ViewsSeed.ExecuteAsync(database, $"""
+            UPDATE executive_action_revisions SET source_id = NULL, document_number = NULL, kind = NULL, title = NULL, signed_on = NULL, published_on = NULL,
+                   federal_register_citation = NULL, president_name = NULL, person_id = NULL, document_url = NULL
+             WHERE record_id = '{new string('9', 64)}';
             """);
     }
 
