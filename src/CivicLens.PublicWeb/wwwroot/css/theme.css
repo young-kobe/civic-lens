@@ -142,10 +142,10 @@ body.public {
     --content: 1440px;
     --gutter: 32px;
     --frame-pad: max(var(--gutter), calc((100% - var(--content)) / 2 + var(--gutter)));
-    --t-h1: clamp(2.5rem, 6vw, 4rem);
-    --t-h2: 1.5rem;
+    --t-base: 1rem;
+    --t-h1: clamp(2.125rem, 4.5vw, 3.5rem);
     --t-display: clamp(2.75rem, 7vw, 5.25rem);
-    --t-section: 2.25rem;
+    --t-section: clamp(1.5rem, 3vw, 2rem);
     --marigold: #f5b301;
     --vote-ink: #1f7074;
     --vote-surface: #def3f4;
@@ -232,7 +232,7 @@ body.public {
 }
 
 
-body.public :is(h1, h2, h3, h4) { font-family: var(--heading); }
+body.public :is(h1, h2, h3, h4) { font-family: var(--heading); line-height: 1.15; }
 body.public h1 { font-family: var(--display); font-weight: 900; font-stretch: 70%; letter-spacing: -.01em; }
 body.public .key-figure-value { font-family: var(--display); font-weight: 900; font-stretch: 62%; letter-spacing: -.01em; }
 body.public .btn-primary { background: var(--marigold); color: #14213d; box-shadow: var(--shadow-primary); }

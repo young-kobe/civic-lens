@@ -98,6 +98,24 @@ public sealed class PlainVoteWordsTests
         Assert.Equal(source, PlainVoteWords.ResultWithSource(source));
     }
 
+    [Theory]
+    [InlineData("Bill Passed", true)]
+    [InlineData("Passed", true)]
+    [InlineData("Agreed to", true)]
+    [InlineData("Nomination Confirmed", true)]
+    [InlineData("Confirmed", true)]
+    [InlineData("Failed", false)]
+    [InlineData("Amendment Rejected", false)]
+    [InlineData("Not Agreed to", false)]
+    [InlineData("Nomination Rejected", false)]
+    [InlineData("Not confirmed", false)]
+    [InlineData("Point of Order Sustained", null)]
+    public void AFailedResultNeverReadsAsCarriedInTheSourceWordsOrThePlainWord(string result, bool? carried)
+    {
+        Assert.Equal(carried, PlainVoteWords.Carried(result));
+        Assert.Equal(carried, PlainVoteWords.Carried(PlainVoteWords.Result(result)));
+    }
+
     [Fact]
     public void ResultsNeverUseTheWordApprovedBecauseThatWordIsForReviewStatus()
     {

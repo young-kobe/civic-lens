@@ -88,6 +88,54 @@ public sealed class PresentationArchitectureTests
     }
 
     [Fact]
+    public void EachTypeRoleHasOneSizeOnEveryPageAndPublicBodyTextIs16Pixels()
+    {
+        var css = WebStyleSheets.Read("public.css");
+        var theme = WebStyleSheets.Read("theme.css");
+
+        Assert.Matches(@"body\.public \{[^}]*--t-base: 1rem;[^}]*--t-h1: clamp\(2\.125rem, 4\.5vw, 3\.5rem\);[^}]*--t-section: clamp\(1\.5rem, 3vw, 2rem\);", theme);
+        foreach (var title in new[] { ".public .page-header h1", ".bill-head h1", ".detail-headline", ".official-head h1", ".vote-headline" })
+            Assert.Contains("font-size: var(--t-h1);", Declarations(css, title), StringComparison.Ordinal);
+        foreach (var heading in new[] { ".home-grid > section > h2", ".shared-vote-rows > h2", ".bill-section > h2", ".issue-section > h2", ".official-section > h2", ".vote-layout h2", ".public .panel-head h2" })
+            Assert.Contains("font-size: var(--t-section);", Declarations(css, heading), StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"font-size: \.75rem", css);
+        Assert.DoesNotContain(".content:has(> .search-box) > .page-header h1", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecordAndMemberTitlesShareOneLinkLookWithA44PixelTapHeight()
+    {
+        var css = WebStyleSheets.Read("public.css");
+        const string titles = ":is(.list-row-title, .shared-vote-title a, a.official-row-title)";
+
+        var look = Declarations(css, ":is(.list-row-title, .shared-vote-title a, a.official-row-title, .record-row a > span:first-child)");
+        Assert.Contains("color: var(--ink);", look, StringComparison.Ordinal);
+        Assert.Contains("text-decoration-color: var(--line-strong);", look, StringComparison.Ordinal);
+        Assert.Contains("padding-block: 12px; margin-block: -12px;", Declarations(css, titles), StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^(\.list-row-title|\.shared-vote-title a|a?\.official-row-title)(:hover)? \{", css);
+        Assert.Contains("min-height: 44px;", Declarations(css, ".member-names a, .vote-members td > a"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOpenMenuSheetDimsThePageBehindItWithTheScrimTokenExceptInForcedColors()
+    {
+        var css = WebStyleSheets.Read("public.css");
+
+        var scrim = Declarations(css, "body.public:has(.public-menu[open])::after");
+        Assert.Contains("position: fixed; inset: 0; z-index: 4; background: var(--scrim);", scrim, StringComparison.Ordinal);
+        Assert.Contains("z-index: 5;", Declarations(css, ".public-header:has(.public-menu[open])"), StringComparison.Ordinal);
+        Assert.Contains("@media (forced-colors: active) { body.public:has(.public-menu[open])::after { display: none; } }", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTryAgainButtonAfterAFailedLookupTakesTheNormalButtonStyle()
+    {
+        var script = File.ReadAllText(Path.Combine(PublicWebRoot, "wwwroot", "js", "public.js"));
+
+        Assert.Matches(@"again\.type = ""button"";\s+again\.className = ""btn"";\s+again\.textContent = ""Try again"";", script);
+    }
+
+    [Fact]
     public void TheFooterSitsOnTheSurfaceColorLikeTheApprovedDesign()
     {
         var footer = Declarations(WebStyleSheets.Read("public.css"), ".public-footer");

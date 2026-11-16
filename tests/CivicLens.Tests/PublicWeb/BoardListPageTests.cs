@@ -51,4 +51,20 @@ public sealed class BoardListPageTests
             tabs.Select(tab => tab.GetAttribute("href")));
         Assert.Equal([null, "true", null, null], tabs.Select(tab => tab.GetAttribute("aria-current")));
     }
+
+    [Theory]
+    [InlineData(20, false)]
+    [InlineData(21, true)]
+    public async Task ABoardOfMoreThanTwentyMembersStartsFoldedUnderASummaryThatCountsThem(int count, bool folded)
+    {
+        var rows = Enumerable.Range(0, count).Select(index => Row($"m{index}", $"Member {index}", 30, 25 - index)).ToArray();
+
+        var page = await RenderAsync(Data(PublishedChamber.House, "Democrat", rows));
+
+        var fold = page.QuerySelector(".board-panel details.member-fold");
+        Assert.Equal(folded, fold is not null);
+        Assert.Null(fold?.GetAttribute("open"));
+        if (folded) Assert.Equal($"Show all {count} members", fold!.QuerySelector("summary")!.TextContent);
+        Assert.Equal(count, page.QuerySelectorAll(".board-panel .list-row-title").Length);
+    }
 }

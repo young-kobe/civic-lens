@@ -93,6 +93,15 @@ public static class PlainVoteWords
     /// <summary>The one result word of every page and list, such as "Passed". The source result shows only when no plain word knows it, so the words never repeat.</summary>
     public static string Result(string result) => ResultWord(result) ?? result.Trim();
 
+    /// <summary>True when the result carried the question (Passed or Confirmed), false when it did not (Failed or Not confirmed), and null when no plain word knows it.
+    /// It reads source words and plain words alike, so a page that holds only the plain word can mark the result.</summary>
+    public static bool? Carried(string result) => ResultWord(result) switch
+    {
+        "Passed" or "Confirmed" => true,
+        "Failed" or "Not confirmed" => false,
+        _ => null
+    };
+
     /// <summary>The result fact of the source fold: plain words, then the source result in brackets, because that fact quotes the source. An unknown result shows alone.</summary>
     public static string ResultWithSource(string result) => PlainWithSource(ResultWord(result), result.Trim());
 

@@ -21,7 +21,7 @@
         {
             var vote = displayedVotes[index];
             <li class="shared-vote-row">
-                <span class="shared-vote-icon" aria-hidden="true"><Icon Name="IconName.Vote" /></span>
+                <span class="shared-vote-icon"><VoteResultMark Result="@vote.ResultWords" /></span>
                 <div class="shared-vote-content">
                     <div class="shared-vote-summary">
                         @RowHeading(vote)
