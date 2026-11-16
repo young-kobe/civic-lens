@@ -823,7 +823,7 @@ Order of use:
 2. Check `actions draft status`. Wait until no entry is pending, so few records skip with `draftPending`.
 3. Run `actions text backfill 500`. Pass the printed `nextCursor` to the next run. Stop when `nextCursor` is null.
 4. Run `actions text backfill 500` once more with no cursor. It must print `examined` 0, apart from records that skipped.
-5. Let the worker publish. Its next tick puts every moved record in one release, about 7,400 records.
+5. Let the worker publish. A release holds at most 64 records, and releases come at least 10 minutes apart, so the moved records publish over many releases. The first production run moved 19,524 records, which publish over about 50 hours. Other records keep publishing, because kinds share each release.
 
 Each moved record whose facts stayed the same gains a history entry that reads "Wording rewritten by code". A moved record can queue relationship pairs, as a worker revision does. The command is safe to repeat. A moved record holds current code text, so a second run finds nothing.
 
