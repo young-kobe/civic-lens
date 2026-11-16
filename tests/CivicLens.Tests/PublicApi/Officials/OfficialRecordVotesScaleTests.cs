@@ -3,6 +3,7 @@ using System.Globalization;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicWeb.Publication;
+using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 using Npgsql;
@@ -45,6 +46,7 @@ public sealed class OfficialRecordVotesScaleTests(PostgresCollection postgres, I
         try
         {
             await SeedAsync(database);
+            await StoredBillCounts.RefreshRecordCountsAsync(database, 1);
             await using var views = NpgsqlDataSource.Create(await ApiHost.LogInPublicRoleAsync(database));
             var reader = new OfficialRecordPageReader(views);
             // One untimed read opens the connection, as the first list read of OfficialListScaleTests does.
