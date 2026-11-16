@@ -1,3 +1,4 @@
+using AngleSharp.Html.Parser;
 using CivicLens.PublicWeb.Components.Ui;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -9,23 +10,15 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class FilterTabsTests
 {
     [Fact]
-    public async Task ATabListThatMixesLinksAndButtonsIsRefusedSoNoTabIsSilentlyTheWrongKind()
+    public async Task TabsRenderAsANavOfLinksThatMarksTheSelectedTabAndShowsItsCount()
     {
-        var tabs = new[] { FilterTab.Link("All", "?all", true), FilterTab.Button("Senators", "senator", false) };
+        var html = await RenderAsync([FilterTab.Link("All", "?all", true, 3), FilterTab.Link("Senators", "?senators", false)]);
+        var tabs = new HtmlParser().ParseDocument(html).QuerySelectorAll("nav.segmented > a.segmented-item");
 
-        await Assert.ThrowsAsync<ArgumentException>(() => RenderAsync(tabs));
-    }
-
-    [Fact]
-    public async Task LinkTabsRenderAsANavAndButtonTabsRenderAsAGroupOfButtons()
-    {
-        var links = await RenderAsync([FilterTab.Link("All", "?all", true, 3)]);
-        var buttons = await RenderAsync([FilterTab.Button("All", "", true)]);
-
-        Assert.Contains("<nav class=\"segmented\"", links, StringComparison.Ordinal);
-        Assert.Contains("href=\"?all\"", links, StringComparison.Ordinal);
-        Assert.Contains("<div class=\"segmented\" role=\"group\"", buttons, StringComparison.Ordinal);
-        Assert.Contains("aria-pressed=\"true\"", buttons, StringComparison.Ordinal);
+        Assert.Equal(["?all", "?senators"], tabs.Select(tab => tab.GetAttribute("href")));
+        Assert.Equal(["true", null], tabs.Select(tab => tab.GetAttribute("aria-current")));
+        Assert.Equal("3", tabs[0].QuerySelector(".segmented-count")!.TextContent);
+        Assert.Null(tabs[1].QuerySelector(".segmented-count"));
     }
 
     private static async Task<string> RenderAsync(IReadOnlyList<FilterTab> tabs)

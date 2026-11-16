@@ -33,10 +33,6 @@ public static class PublishedRecordLabels
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no icon.")
     };
 
-    public const string NewestFirst = "Newest first";
-
-    public const string DefaultOrder = "Default order";
-
     /// <summary>The record kinds in the order that a kind filter lists them, as the Mosaic v2 search mockup has them. The one owner of that order.</summary>
     public static IReadOnlyList<PublishedRecordKind> FilterOrder { get; } =
     [

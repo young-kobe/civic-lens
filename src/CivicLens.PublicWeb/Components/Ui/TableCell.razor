@@ -1,6 +1,6 @@
 @if (Header)
 {
-    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class" data-sort="@SortName">@ChildContent</th>
+    <th scope="col" role="@(Roles ? "columnheader" : null)" class="@Class">@ChildContent</th>
 }
 else
 {
@@ -16,8 +16,6 @@ else
     [Parameter] public bool Main { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public string? Label { get; set; }
-    [Parameter] public SortKind Sort { get; set; }
 
-    private string? SortName => Sort == SortKind.None ? null : Sort.ToString().ToLowerInvariant();
     private string? BodyClass => Main ? Class is null ? "cell-main" : $"cell-main {Class}" : Class;
 }

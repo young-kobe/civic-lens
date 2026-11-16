@@ -65,7 +65,6 @@ Complete these gates before closing R-68.
 - [ ] Deploy reviewed, green main builds with matching artifacts, a fresh backup, functional checks, worker health, and the final live check. Verify Cloudflare compression and caching with private fragments excluded from shared caches.
 - [x] Move every public route to server rendering. PublicApi serves each page at its public path, and Caddy sends the public host to it.
 - [ ] Prune the code that lost its last caller at retirement, one batch at a time. Each batch keeps the build green and shows that each deleted member has no production caller. Then squash the EF migrations into one baseline.
-  - P4: Delete the static only parts of `public.js` and the `public.css` rules that no server component renders.
 - [ ] Remove public `release.json` at the retirement gate. Search ingestion reads typed published data, but the readers of the publisher still read the file. Keep private snapshots while verification or recovery use them, and remove code after its last caller leaves. Future public MCP uses the public API in a separate deployment.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
 
