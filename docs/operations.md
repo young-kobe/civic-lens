@@ -806,7 +806,7 @@ Run order: `db migrate`, then `backfill`, then `verify`. Every action reader rea
 
 ### Action code text backfill
 
-Published bill records from before code text keep their retired text. They are the CRS rewrites, the title-only model drafts, and the code headlines that read "introduced by". The owner command moves them to code text with no model call. Do not run it in production yet; see the hold in [vote text backfill](#vote-text-backfill). The commands need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
+Published bill records from before code text keep their retired text. They are the CRS rewrites, the title-only model drafts, and the code headlines that read "introduced by". The owner command moves them to code text with no model call. Run it only after the deploy order in [vote text backfill](#vote-text-backfill). The commands need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- actions text backfill 500
@@ -825,7 +825,7 @@ Order of use:
 4. Run `actions text backfill 500` once more with no cursor. It must print `examined` 0, apart from records that skipped.
 5. Let the worker publish. Its next tick puts every moved record in one release, about 7,400 records.
 
-Each moved record gains a history entry that reads "Updated from the source". A moved record can queue relationship pairs, as a worker revision does. The command is safe to repeat. A moved record holds current code text, so a second run finds nothing.
+Each moved record whose facts stayed the same gains a history entry that reads "Wording rewritten by code". A moved record can queue relationship pairs, as a worker revision does. The command is safe to repeat. A moved record holds current code text, so a second run finds nothing.
 
 ### Executive action text backfill
 
