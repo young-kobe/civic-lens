@@ -84,8 +84,10 @@
                     break;
             }
             @* A filtered list counts no total, so its pager names none. *@
-            <Pager Label="@OfficialRecordText.PagerLabel" ForwardOnly="true" Summary="@(Filter.IsActive ? null : OfficialRecordText.PagerSummary(Shown, Data.SelectedCount))"
-                   OlderHref="@NextHref" OlderText="Next page" LastPage="@(!Filter.IsActive && Data.LaterPage && Data.NextCursor is null)" />
+            <Pager Label="@OfficialRecordText.PagerLabel" LinksOnly="true" Summary="@(Filter.IsActive ? null : OfficialRecordText.PagerSummary(Shown, Data.SelectedCount))"
+                   NewerText="@ListPageLink.PreviousText" OlderText="@ListPageLink.NextText"
+                   NewerHref="@(Data.PreviousCursor is { } previous ? Href(ListPageLink.Previous(previous)) : null)"
+                   OlderHref="@(Data.NextCursor is { } next ? Href(ListPageLink.Next(next)) : null)" />
         </section>
     }
     @if (Data.Offices.Length > 0)
@@ -120,5 +122,5 @@
 
     private bool IsFiltered => Filter.IsActive && Filter.Invalid is null;
 
-    private string? NextHref => Data.NextCursor is null ? null : OfficialRecordText.Path(RootPath, Data.OfficialId, Data.Selected, Data.NextCursor, Filter);
+    private string Href(ListPageLink page) => OfficialRecordText.Path(RootPath, Data.OfficialId, Data.Selected, page, Filter);
 }

@@ -153,8 +153,8 @@ public sealed class StatementStore(NpgsqlDataSource views)
           LEFT JOIN LATERAL (
                SELECT s.* FROM public_api.statements s
                 WHERE TRUE{Filters(request)}{Cursor(request)}
-                ORDER BY s.statement_date DESC NULLS LAST, s.record_id LIMIT @take) s ON TRUE
-         ORDER BY s.statement_date DESC NULLS LAST, s.record_id
+                ORDER BY {KeysetPage.Order(Order, request.Backward)} LIMIT @take) s ON TRUE
+         ORDER BY {KeysetPage.Order(Order, request.Backward)}
         """;
 
     private static async Task<(StatementPage Page, int? Total)?> ReadAsync(NpgsqlCommand command, StatementRequest request, bool withTotal, CancellationToken cancellationToken)
@@ -181,19 +181,19 @@ public sealed class StatementStore(NpgsqlDataSource views)
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? StatementCursor.Of(active, page[^1]).Encode() : null;
-        return (new(active, page, next), total);
+        var (page, next, previous) = KeysetPage.Cut(rows, request.Limit, request.Cursor?.Encode(), request.Backward, row => StatementCursor.Of(active, row).Encode());
+        return (new(active, page, next) { PreviousCursor = previous }, total);
     }
 
-    private const string AfterDated = " AND (s.statement_date < @cursor_date OR s.statement_date IS NULL OR (s.statement_date = @cursor_date AND s.record_id > @cursor_id))";
-    private const string AfterUndated = " AND s.statement_date IS NULL AND s.record_id > @cursor_id";
+    private const string Order = "s.statement_date DESC NULLS LAST, s.record_id";
+    private const string AfterDated = "s.statement_date < @cursor_date OR s.statement_date IS NULL OR (s.statement_date = @cursor_date AND s.record_id > @cursor_id)";
+    private const string AfterUndated = "s.statement_date IS NULL AND s.record_id > @cursor_id";
 
     private static string Cursor(StatementRequest request) => request.Cursor switch
     {
         null => "",
-        { StatementDate: null } => AfterUndated,
-        _ => AfterDated
+        { StatementDate: null } => KeysetPage.Window(AfterUndated, "s.record_id", "@cursor_id", request.Backward),
+        _ => KeysetPage.Window(AfterDated, "s.record_id", "@cursor_id", request.Backward)
     };
     // OFFSET 0 keeps the speaker lookup correlated through the security barrier view.
     private static string Filters(StatementRequest request) =>

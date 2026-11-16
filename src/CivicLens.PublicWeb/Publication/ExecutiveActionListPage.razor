@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.ExecutiveAction" RootPath="@RootPath" Total="Data.ActionsInRelease" RowCount="Data.Actions.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+<RecordListFrame Kind="PublishedRecordKind.ExecutiveAction" RootPath="@RootPath" Total="Data.ActionsInRelease" RowCount="Data.Actions.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor" PreviousCursor="@Data.PreviousCursor"
                  Lede="Documents that the President signed and the Federal Register printed, newest first. Civic Lens copies each title and date from the Federal Register."
                  FilterSummary="Filter by type of document or date" Singular="executive action" Plural="executive actions" EmptyTitle="No executive action matches these filters."
                  EmptyReleaseTitle="No executive actions are published yet.">

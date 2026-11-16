@@ -26,10 +26,9 @@
         else
         {
             <ul class="record-rows" role="list">@Rows</ul>
-            @if (NextCursor is { } cursor)
-            {
-                <Pager Label="@($"{List.Label} pages")" ForwardOnly="true" OlderHref="@Filter.Query(cursor)" OlderText="Next page" />
-            }
+            <Pager Label="@($"{List.Label} pages")" LinksOnly="true" NewerText="@ListPageLink.PreviousText" OlderText="@ListPageLink.NextText"
+                   NewerHref="@(PreviousCursor is { } previous ? Filter.Query(ListPageLink.Previous(previous)) : null)"
+                   OlderHref="@(NextCursor is { } next ? Filter.Query(ListPageLink.Next(next)) : null)" />
         }
     }
 </PublicPage>
@@ -49,6 +48,8 @@
     /// <summary>One short text for each active filter other than the dates, in form order. The frame adds the date chip.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<string?> Chips { get; set; } = default!;
     [Parameter] public string? NextCursor { get; set; }
+    /// <summary>The cursor of the previous page. It is null on the first page, which shows no Previous link.</summary>
+    [Parameter] public string? PreviousCursor { get; set; }
     /// <summary>The approved lede with links in its text, such as the page that the lede names. Its text must be <see cref="Lede"/>.</summary>
     [Parameter] public RenderFragment? LedeContent { get; set; }
     [Parameter, EditorRequired] public string EmptyTitle { get; set; } = default!;

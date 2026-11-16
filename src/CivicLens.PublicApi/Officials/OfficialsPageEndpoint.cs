@@ -12,7 +12,7 @@ public static class OfficialsPageEndpoint
     public static Task<IResult> RespondAsync(HttpContext context, OfficialsPageReader reader, ServerPageResponder responder,
         PublicBaseUrl baseUrl, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
     {
-        var request = OfficialRequest.Parse(context.Request.Query);
+        var request = OfficialsPageReader.Parse(context.Request.Query);
         if (await reader.ReadAsync(request, cancellationToken) is not { } data) return ApiResults.NoRelease();
         if (request.Cursor is { } cursor && cursor.Release != data.Release) return ServerPageEndpoints.FirstPage(baseUrl, PublicationProtocol.OfficialsPagePath, context.Request.Query);
         return await responder.RespondAsync<OfficialsPage>(context, StatusCodes.Status200OK, data.Release,

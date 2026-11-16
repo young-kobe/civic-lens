@@ -19,8 +19,18 @@ public sealed class VoteListReader(VoteStore votes, RecordSnapshot snapshot)
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static VoteRequest Parse(IQueryCollection query)
     {
+        var (cursor, backward) = KeysetPage.Cursor(query);
         var (billType, billNumber) = QueryValues.BillNumber(query, "bill");
-        return VoteRequest.Parse(query) with { Congress = null, Session = null, BillType = billType, BillNumber = billNumber, Limit = PageSize };
+        return VoteRequest.Parse(query) with
+        {
+            Congress = null,
+            Session = null,
+            BillType = billType,
+            BillNumber = billNumber,
+            Limit = PageSize,
+            Cursor = VoteCursor.Parse(cursor),
+            Backward = backward
+        };
     }
 
     public async Task<VoteListPageData?> ReadAsync(VoteRequest request, CancellationToken cancellationToken)
@@ -34,12 +44,12 @@ public sealed class VoteListReader(VoteStore votes, RecordSnapshot snapshot)
             vote.BillType is { } type && vote.BillNumber is { } number ? BillNumbers.Of(type, number) : null, vote.Result, vote.Alignment, vote.Yea, vote.Nay)).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("chamber", request.Chamber is { } chamber ? chamber.ToString().ToLowerInvariant() : null),
             ("kind", request.Kind is { } kind ? QueryValues.ChoiceText(kind) : null), ("issue", request.Issue), ("bill", QueryValues.BillNumberText(request.BillType, request.BillNumber)));
-        return new(page.Release, total, rows, filter, page.NextCursor, Kinds, choices);
+        return new(page.Release, total, rows, filter, page.NextCursor, Kinds, choices) { PreviousCursor = page.PreviousCursor };
     }
 
     /// <summary>The page of a refused request: the choices and the total of the first page, the typed text of each field, and no rows.</summary>
     public async Task<VoteListPageData?> ReadRefusedAsync(IQueryCollection query, string? invalid, CancellationToken cancellationToken) =>
         await ReadAsync(Parse(QueryCollection.Empty), cancellationToken) is { } data
-            ? data with { Votes = [], NextCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "chamber", "kind", "issue", "bill", "from", "to")) }
+            ? data with { Votes = [], NextCursor = null, PreviousCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "chamber", "kind", "issue", "bill", "from", "to")) }
             : null;
 }

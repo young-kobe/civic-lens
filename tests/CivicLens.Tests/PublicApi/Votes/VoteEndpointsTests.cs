@@ -2,6 +2,8 @@ using System.Net;
 using System.Text.Json;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
+using CivicLens.PublicApi.Votes;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Votes;
 
@@ -148,6 +150,27 @@ public sealed partial class VoteEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(ExpectedOrder, seen);
         Assert.Equal((8 + limit - 1) / limit, pages);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    [InlineData(8)]
+    public async Task EachPreviousPageGivesThePageBeforeItAgainAtAnyPageSizeEvenInsideATie(int limit)
+    {
+        await using var host = await StartWithVotesAsync(All);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var store = new VoteStore(views);
+
+        var seen = await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+        {
+            var page = (await store.ListAsync(new VoteRequest { Limit = limit, Cursor = VoteCursor.Parse(cursor), Backward = backward }, CancellationToken.None))!;
+            return new([.. page.Votes.Select(vote => vote.RecordId)], page.NextCursor, page.PreviousCursor);
+        });
+
+        Assert.Equal(ExpectedOrder, seen.Select(id => id[0]));
     }
 
     [Fact]

@@ -6,6 +6,8 @@ using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.PublicApi.Officials;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Officials;
 
@@ -208,7 +210,7 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task OfficialsSortByTheWholeRosterLastNameThenTheNameThenTheIdAndAWalkKeepsThatOrder()
+    public async Task OfficialsSortByTheWholeRosterLastNameThenTheNameThenTheIdAndAWalkKeepsThatOrderBothWays()
     {
         await using var host = await ApiHost.StartAsync(postgres);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
@@ -236,6 +238,15 @@ public sealed class OfficialEndpointsTests(PostgresCollection postgres)
         }
         while (cursor is not null);
         Assert.Equal(expected, seen);
+
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var store = new OfficialStore(views);
+        foreach (var limit in (int[])[1, 2, 3, 4])
+            Assert.Equal(expected, await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+            {
+                var page = (await store.ListAsync(new OfficialRequest { Limit = limit, Cursor = OfficialCursor.Parse(cursor), Backward = backward }, CancellationToken.None))!;
+                return new([.. page.Officials.Select(official => official.OfficialId)], page.NextCursor, page.PreviousCursor);
+            }));
     }
 
     [Fact]

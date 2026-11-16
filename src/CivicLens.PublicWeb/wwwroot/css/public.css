@@ -464,6 +464,8 @@ th[aria-sort="descending"] .sort-button::after { content: " \2193" / ""; }
 .public-main .segmented-item::after { display: none; }
 .public-main .segmented-count { color: inherit; }
 .pager .btn { min-width: 104px; min-height: 44px; }
+.pager > span:empty { display: none; }
+.pager > .pager-links { margin-inline-start: auto; }
 .pager p { margin: 0; font-size: var(--t-sm); }
 
 .theme-menu { position: relative; }

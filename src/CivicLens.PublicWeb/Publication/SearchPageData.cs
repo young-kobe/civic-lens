@@ -6,7 +6,11 @@ namespace CivicLens.PublicWeb.Publication;
 /// <see cref="FilterOfficialName"/> is the name of the official that the official filter names, taken from a result, or null.
 /// <see cref="MoreOfficials"/> says that more officials match the text than the page shows. <see cref="Total"/> counts every record of the release that the request matches.</summary>
 public sealed record SearchPageData(SearchQueryData Query, int Release, IReadOnlyList<SearchOfficialData> Officials, bool MoreOfficials,
-    SearchBillData? Bill, IReadOnlyList<SearchHitData> Hits, int Total, string? NextCursor, IReadOnlyList<SearchChoiceData> Issues, string? FilterOfficialName);
+    SearchBillData? Bill, IReadOnlyList<SearchHitData> Hits, int Total, string? NextCursor, IReadOnlyList<SearchChoiceData> Issues, string? FilterOfficialName)
+{
+    /// <summary>The cursor of the previous page, or null on the first page.</summary>
+    public string? PreviousCursor { get; init; }
+}
 
 /// <summary>The request as the reader typed it. <see cref="Official"/> is an official ID from an official card link.</summary>
 public sealed record SearchQueryData(string? Text, string? Kind, string? Official, string? Issue, string? From, string? To)

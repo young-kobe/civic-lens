@@ -20,12 +20,12 @@ public sealed class ExecutiveActionListReader(ExecutiveActionStore store)
         if (await store.ListAsync(request, cancellationToken) is not { } page) return null;
         var rows = page.Actions.Select(action => new ExecutiveActionListRowData(action.RecordId, action.Headline, action.Kind, action.SignedOn)).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("type", request.Kind is { } kind ? QueryValues.ChoiceText(kind) : null));
-        return new(page.Release, page.ActionsInRelease, rows, filter, request.Kind, page.NextCursor, Kinds);
+        return new(page.Release, page.ActionsInRelease, rows, filter, request.Kind, page.NextCursor, Kinds) { PreviousCursor = page.PreviousCursor };
     }
 
     /// <summary>The page of a refused request: the choices and the total of the first page, the typed text of each field, and no rows.</summary>
     public async Task<ExecutiveActionListPageData?> ReadRefusedAsync(IQueryCollection query, string? invalid, CancellationToken cancellationToken) =>
         await ReadAsync(Parse(QueryCollection.Empty), cancellationToken) is { } data
-            ? data with { Actions = [], NextCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "type", "from", "to")) }
+            ? data with { Actions = [], NextCursor = null, PreviousCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "type", "from", "to")) }
             : null;
 }

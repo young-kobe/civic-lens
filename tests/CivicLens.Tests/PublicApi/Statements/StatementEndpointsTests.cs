@@ -4,6 +4,8 @@ using System.Text.Json;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.PublicApi.Statements;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Statements;
 
@@ -45,6 +47,25 @@ public sealed class StatementEndpointsTests(PostgresCollection postgres)
 
         Assert.Equal(['a', 'b', 'c', 'd', 'e', 'f'], seen);
         Assert.Equal((6 + limit - 1) / limit, pages);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task EachPreviousPageGivesThePageBeforeItAgainAcrossDatedTiesAndUndatedRows(int limit)
+    {
+        await using var host = await StartAsync(DatedAndUndated);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var store = new StatementStore(views);
+
+        var seen = await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+        {
+            var page = (await store.ListAsync(new StatementRequest { Limit = limit, Cursor = StatementCursor.Parse(cursor), Backward = backward }, CancellationToken.None))!;
+            return new([.. page.Statements.Select(statement => statement.RecordId)], page.NextCursor, page.PreviousCursor);
+        });
+
+        Assert.Equal(['a', 'b', 'c', 'd', 'e', 'f'], seen.Select(id => id[0]));
     }
 
     [Fact]

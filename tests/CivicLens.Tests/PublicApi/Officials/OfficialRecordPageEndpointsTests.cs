@@ -108,9 +108,36 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Equal(2, second.QuerySelectorAll(".shared-vote-row").Length);
         Assert.Null(second.QuerySelector(".pager a[rel=next]"));
         Assert.Equal("2 on this page. 27 in all.", second.QuerySelector(".pager span")!.TextContent);
-        var seen = first.QuerySelectorAll(".shared-vote-row h2 a").Concat(second.QuerySelectorAll(".shared-vote-row h2 a")).Select(link => link.GetAttribute("href")!).ToArray();
+        var seen = VoteLinks(first).Concat(VoteLinks(second)).ToArray();
         Assert.Equal(27, seen.Distinct().Count());
         Assert.Equal(Enumerable.Range(0, 27).Select(number => BaseUrl.Join($"records/{Id(number)}.html")).ToArray(), seen);
+    }
+
+    private static string[] VoteLinks(AngleSharp.Dom.IDocument page) => [.. page.QuerySelectorAll(".shared-vote-row h2 a").Select(link => link.GetAttribute("href")!)];
+
+    // Sixty votes of p0 on three days make three pages, and the votes of each day tie on the day, so the record ID orders them.
+    // Twenty-seven statements, nine of them undated, make two pages of the statements tab.
+    [Fact]
+    public async Task EachPreviousPageOfATabGivesThePageBeforeItAgainAndTheFirstPageHasNoPreviousCursor()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. Enumerable.Range(0, 60).Select(number => new SeededVote('0', $"2026-01-0{1 + number % 3}")
+            { Casts = ["Yea"], PersonIds = ["p0"], RollCall = number + 1, RecordId = Id(number) })]);
+        await StatementsSeed.AddAsync(host.OperationalDatabase, [.. Enumerable.Range(60, 27)
+            .Select(number => new SeededStatement('0', number % 3 == 0 ? null : $"2026-02-0{1 + number % 2}", ["p0"], [], "Person", "Person") { RecordId = Id(number) })]);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var reader = new OfficialRecordPageReader(views);
+
+        foreach (var (kind, count) in new[] { (OfficialRecordKind.Votes, 60), (OfficialRecordKind.Statements, 27) })
+        {
+            var seen = await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+            {
+                var page = (await reader.ReadAsync("p0", new(kind, OfficialRecordCursor.Parse(cursor)) { Backward = backward }, CancellationToken.None))!;
+                string[] ids = kind == OfficialRecordKind.Votes ? [.. page.Votes.Select(vote => vote.RecordId)] : [.. page.Statements.Select(statement => statement.RecordId)];
+                return new(ids, page.NextCursor, page.PreviousCursor);
+            });
+            Assert.Equal(count, seen.Distinct().Count());
+        }
     }
 
     // Four votes of p0, a Democrat: a split vote against the party on a tagged bill, a split vote with the party, a No on another bill, and a Senate vote.
@@ -202,8 +229,15 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Contains("kind=votes&cast=yes&cursor=r.1.", next);
         Assert.Equal((25, 2), (first.QuerySelectorAll(".shared-vote-row").Length, second.QuerySelectorAll(".shared-vote-row").Length));
         Assert.Equal(["Voted Yes"], Chips(second));
-        Assert.Null(second.QuerySelector(".pager"));
+        Assert.Null(second.QuerySelector(".pager a[rel=next]"));
+        Assert.Null(first.QuerySelector(".pager a[rel=prev]"));
+        var previous = second.QuerySelector(".pager a[rel=prev]")!.GetAttribute("href")!;
+        Assert.Contains("kind=votes&cast=yes&before=r.1.", previous);
+        var back = await GetPageAsync(host, previous.Replace("https://civic-lens.test/", "/"));
+        Assert.Equal(VoteLinks(first), VoteLinks(back));
+        Assert.Null(back.QuerySelector(".pager a[rel=prev]"));
         Assert.DoesNotContain("in all", first.QuerySelector(".pager")!.TextContent);
+        Assert.DoesNotContain("in all", second.QuerySelector(".pager")!.TextContent);
     }
 
     // p0 has no votes and twenty-seven statements, so a vote filter falls back to the statements tab and that tab needs a second page.
@@ -294,7 +328,7 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         Assert.Empty(stale.Offices);
         Assert.NotEmpty(current!.Votes);
         Assert.NotEmpty(current.Offices);
-        Assert.True(current.LaterPage);
+        Assert.NotNull(current.PreviousCursor);
     }
 
     [Fact]

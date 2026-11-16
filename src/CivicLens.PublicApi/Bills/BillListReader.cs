@@ -22,6 +22,7 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static BillRequest Parse(IQueryCollection query)
     {
+        var (cursor, backward) = KeysetPage.Cursor(query);
         var (numberType, billNumber) = QueryValues.BillNumber(query, "bill");
         var chosenType = QueryValues.Filter(query, "type") is { } type
             ? BillNumbers.IsType(type) ? type : throw new ArgumentException("type must be a bill type, such as hr.", "type")
@@ -36,7 +37,9 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
             Status = QueryValues.Choice<BillStatusStage>(query, "status"),
             BillType = numberType ?? chosenType,
             BillNumber = billNumber,
-            Limit = PageSize
+            Limit = PageSize,
+            Cursor = BillCursor.Parse(cursor),
+            Backward = backward
         };
     }
 
@@ -58,7 +61,10 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
         }).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("type", request.BillType), ("status", request.Status is { } status ? QueryValues.ChoiceText(status) : null),
             ("issue", request.Issue), ("policyArea", request.PolicyArea), ("sponsor", request.SponsorName), ("bill", QueryValues.BillNumberText(request.BillType, request.BillNumber)));
-        return new(page.Release, list.Congress, list.BillsInCongress, rows, filter, page.NextCursor, Statuses, policyAreas, issueChoices);
+        return new(page.Release, list.Congress, list.BillsInCongress, rows, filter, page.NextCursor, Statuses, policyAreas, issueChoices)
+        {
+            PreviousCursor = page.PreviousCursor
+        };
     }
 
     /// <summary>The page of a refused request: the choices of the first page, the typed text of each field, and no rows.</summary>
@@ -68,6 +74,7 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
             {
                 Bills = [],
                 NextCursor = null,
+                PreviousCursor = null,
                 Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "type", "status", "issue", "policyArea", "sponsor", "bill", "from", "to"))
             }
             : null;

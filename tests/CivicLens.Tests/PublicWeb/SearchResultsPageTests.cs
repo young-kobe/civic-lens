@@ -233,7 +233,7 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
-    public async Task TheStatusLineNamesTheTotalOfTheReleaseAndHowManyThisPageShowsAndThePagerOffersNoWayBack()
+    public async Task TheStatusLineNamesTheTotalOfTheReleaseAndHowManyThisPageShowsAndTheFirstPageOffersNoWayBack()
     {
         var page = await RenderAsync(Data(hits: [Hit('a', "x"), Hit('b', "y")], next: "r.1.abc", total: 1_250));
         var filtered = await RenderAsync(Data(Query(null) with { Kind = "vote" }, hits: [Hit('a', "x")]));
@@ -241,6 +241,18 @@ public sealed class SearchResultsPageTests
         Assert.Equal("1,250 results for \"5334\". Showing 2 on this page.", page.QuerySelector(".list-status")!.TextContent);
         Assert.Equal("1 result.", filtered.QuerySelector(".list-status")!.TextContent);
         Assert.Single(page.QuerySelectorAll(".pager a, .pager button"));
+    }
+
+    [Fact]
+    public async Task ALaterPageLinksBackWithTheSameQueryAndTheLastPageHasOnlyThePreviousLink()
+    {
+        var query = new SearchQueryData("rent", "statement", null, null, null, null) { Sort = "date", Direction = "asc" };
+        var middle = await RenderAsync(Data(query, hits: [Hit('a', "x")], next: "s.1.abc") with { PreviousCursor = "s.1.aaa" });
+        var last = await RenderAsync(Data(query, hits: [Hit('a', "x")]) with { PreviousCursor = "s.1.aaa" });
+
+        Assert.Equal("?q=rent&kind=statement&sort=date&direction=asc&before=s.1.aaa", middle.QuerySelector(".pager a[rel=prev]")!.GetAttribute("href"));
+        Assert.Equal(["Previous page", "Show more results"], middle.QuerySelectorAll(".pager a").Select(link => link.TextContent.Trim()));
+        Assert.Equal(["Previous page"], last.QuerySelectorAll(".pager a, .pager button").Select(link => link.TextContent.Trim()));
     }
 
     [Fact]

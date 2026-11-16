@@ -59,8 +59,8 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        return new(active, total, page, rows.Count > request.Limit ? ExecutiveActionCursor.Of(active, page[^1]).Encode() : null);
+        var (page, next, previous) = KeysetPage.Cut(rows, request.Limit, request.Cursor?.Encode(), request.Backward, row => ExecutiveActionCursor.Of(active, row).Encode());
+        return new(active, total, page, next, previous);
     }
 
     private static string ListSql(ExecutiveActionListRequest request) => $"""
@@ -69,10 +69,13 @@ public sealed class ExecutiveActionStore(NpgsqlDataSource views)
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT e.* FROM public_api.executive_actions e
-                WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : " AND (e.signed_on < @cursor_date OR (e.signed_on = @cursor_date AND e.record_id > @cursor_id))")}
-                ORDER BY e.signed_on DESC, e.record_id LIMIT @take) e ON TRUE
-         ORDER BY e.signed_on DESC, e.record_id
+                WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : KeysetPage.Window(AfterCursor, "e.record_id", "@cursor_id", request.Backward))}
+                ORDER BY {KeysetPage.Order(Order, request.Backward)} LIMIT @take) e ON TRUE
+         ORDER BY {KeysetPage.Order(Order, request.Backward)}
         """;
+
+    private const string Order = "e.signed_on DESC, e.record_id";
+    private const string AfterCursor = "e.signed_on < @cursor_date OR (e.signed_on = @cursor_date AND e.record_id > @cursor_id)";
 
     private static string Filters(ExecutiveActionListRequest request) =>
         (request.Kind is null ? "" : " AND e.kind = @kind") +

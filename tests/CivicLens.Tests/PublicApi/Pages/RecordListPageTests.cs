@@ -4,6 +4,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using CivicLens.PublicApi;
 using CivicLens.PublicApi.Bills;
+using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
@@ -87,9 +88,30 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var stale = new VoteCursor(99, new DateOnly(2026, 3, 1), PublishedChamber.House, 1, 1, new string('a', 64)).Encode();
         using var noRedirect = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress };
         var response = await noRedirect.GetAsync($"/votes.html?chamber=house&cursor={stale}");
+        var before = await noRedirect.GetAsync($"/votes.html?chamber=house&before={stale}");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal(BaseUrl.Join("votes.html?chamber=house"), response.Headers.Location!.OriginalString);
+        // A previous page cursor of another release behaves as a next page cursor does.
+        Assert.Equal(HttpStatusCode.Redirect, before.StatusCode);
+        Assert.Equal(BaseUrl.Join("votes.html?chamber=house"), before.Headers.Location!.OriginalString);
+    }
+
+    // A malformed previous page cursor, or a request with both cursors, gives the refused page with no rows, as a malformed next page cursor does.
+    [Fact]
+    public async Task AMalformedPreviousPageCursorAnswersTheRefusedPageAsAMalformedNextPageCursorDoes()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Vote('a', "2026-03-02", 1));
+        var valid = new VoteCursor(1, new DateOnly(2026, 3, 1), PublishedChamber.House, 1, 1, new string('a', 64)).Encode();
+
+        foreach (var path in new[] { "/votes.html?cursor=v.1.x", "/votes.html?before=v.1.x", $"/votes.html?cursor={valid}&before={valid}",
+                     "/bills.html?before=bl.1", "/statements.html?before=t", "/executive-actions.html?before=x.1.2" })
+        {
+            var page = await GetPageAsync(host, path, HttpStatusCode.BadRequest);
+            Assert.Empty(Rows(page));
+            Assert.Null(page.QuerySelector(".pager"));
+        }
     }
 
     [Fact]
@@ -249,7 +271,15 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal(VoteListReader.PageSize, Rows(first).Length);
         Assert.StartsWith("?chamber=house&cursor=", next);
         Assert.Single(Rows(second));
-        Assert.Null(second.QuerySelector(".pager"));
+        // The last page has no next link, and its previous link gives the first page again (#580 item 7).
+        Assert.Equal(["Next page"], PagerLinks(first));
+        Assert.Equal(["Previous page"], PagerLinks(second));
+        var previous = second.QuerySelector(".pager a[rel=prev]")!.GetAttribute("href")!;
+        Assert.StartsWith("?chamber=house&before=", previous);
+        var back = await GetPageAsync(host, "/votes.html" + previous);
+        Assert.Equal(Titles(first), Titles(back));
+        Assert.Equal(["Next page"], PagerLinks(back));
+        Assert.Equal(next, back.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
         Assert.Empty(Titles(first).Intersect(Titles(second)));
         var empty = await GetPageAsync(host, "/votes.html?chamber=senate");
         Assert.Contains("No vote matches these filters.", empty.QuerySelector(".empty")!.TextContent);
@@ -257,6 +287,9 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal("Showing 0 votes on this page.", empty.QuerySelector(".list-status")!.TextContent);
         Assert.Equal(["Senate"], Chips(empty));
     }
+
+    // The words of every link and button of the pager, so a disabled button that promises no page also counts.
+    private static string[] PagerLinks(IDocument page) => [.. page.QuerySelectorAll(".pager a, .pager button").Select(link => link.TextContent.Trim())];
 
     // ---- bills ----
 
@@ -722,5 +755,26 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal(["Notice zero"], Titles(second));
         Assert.Contains("Memorandum", (await GetPageAsync(host, "/executive-actions.html")).QuerySelectorAll("select[name=type] option").Select(option => option.TextContent));
         Assert.Contains("No executive action matches these filters.", (await GetPageAsync(host, "/executive-actions.html?type=memorandum")).QuerySelector(".empty")!.TextContent);
+    }
+
+    // Seven actions, five of them signed on one day, so a page can end inside the tie and the record ID orders it.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task EachPreviousPageOfTheExecutiveActionListGivesThePageBeforeItAgain(int limit)
+    {
+        await using var host = await StartAsync();
+        await SeedExecutiveActionsAsync(host, [.. Enumerable.Range(1, 7).Select(index => (ExecutiveId(index), "ExecutiveOrder", $"Order {index}", $"2026-01-{Math.Min(index, 3):00}"))]);
+        await using var views = Npgsql.NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var store = new ExecutiveActionStore(views);
+
+        var seen = await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+        {
+            var page = (await store.ListAsync(new ExecutiveActionListRequest { Limit = limit, Cursor = ExecutiveActionCursor.Parse(cursor), Backward = backward }, CancellationToken.None))!;
+            return new([.. page.Actions.Select(action => action.RecordId)], page.NextCursor, page.PreviousCursor);
+        });
+
+        Assert.Equal([3, 4, 5, 6, 7, 2, 1], seen.Select(id => int.Parse(id[^8..], System.Globalization.CultureInfo.InvariantCulture)));
     }
 }

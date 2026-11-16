@@ -5,7 +5,11 @@ namespace CivicLens.PublicWeb.Publication;
 /// <summary>One page of the vote list. <see cref="VotesInRelease"/> counts every vote of the release, and a filter does not change it.
 /// <see cref="Kinds"/> and <see cref="Issues"/> fill the filter choices. <see cref="NextCursor"/> is null on the last page.</summary>
 public sealed record VoteListPageData(int Release, int VotesInRelease, IReadOnlyList<VoteListRowData> Votes, RecordListFilter Filter, string? NextCursor,
-    IReadOnlyList<SearchChoiceData> Kinds, IReadOnlyList<SearchChoiceData> Issues);
+    IReadOnlyList<SearchChoiceData> Kinds, IReadOnlyList<SearchChoiceData> Issues)
+{
+    /// <summary>The cursor of the previous page, or null on the first page.</summary>
+    public string? PreviousCursor { get; init; }
+}
 
 /// <summary><see cref="Label"/> is the label column of the view, or null. The counts are null when a cast is a candidate name.</summary>
 public sealed record VoteListRowData(string RecordId, string Headline, string? Label, PublishedTextOrigin TextOrigin, PublishedChamber Chamber, int RollCall, DateOnly VotedOn,

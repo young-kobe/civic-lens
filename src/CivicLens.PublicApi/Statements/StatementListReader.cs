@@ -16,8 +16,18 @@ public sealed class StatementListReader(StatementStore statements, RecordSnapsho
     public const int PageSize = 25;
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
-    public static StatementRequest Parse(IQueryCollection query) =>
-        StatementRequest.Parse(query) with { Official = null, SpeakerName = OfficialRequest.NameOf(query, "official"), Limit = PageSize };
+    public static StatementRequest Parse(IQueryCollection query)
+    {
+        var (cursor, backward) = KeysetPage.Cursor(query);
+        return StatementRequest.Parse(query) with
+        {
+            Official = null,
+            SpeakerName = OfficialRequest.NameOf(query, "official"),
+            Limit = PageSize,
+            Cursor = StatementCursor.Parse(cursor),
+            Backward = backward
+        };
+    }
 
     public async Task<StatementListPageData?> ReadAsync(StatementRequest request, CancellationToken cancellationToken)
     {
@@ -31,13 +41,13 @@ public sealed class StatementListReader(StatementStore statements, RecordSnapsho
         var issues = (await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken)).Select(issue => issue.ToChoice()).ToArray();
         var rows = page.Statements.Select(statement => Row(statement, names, facts[statement.RecordId])).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("official", request.SpeakerName), ("issue", request.Issue));
-        return new(page.Release, total, rows, filter, page.NextCursor, issues);
+        return new(page.Release, total, rows, filter, page.NextCursor, issues) { PreviousCursor = page.PreviousCursor };
     }
 
     /// <summary>The page of a refused request: the choices and the total of the first page, the typed text of each field, and no rows.</summary>
     public async Task<StatementListPageData?> ReadRefusedAsync(IQueryCollection query, string? invalid, CancellationToken cancellationToken) =>
         await ReadAsync(Parse(QueryCollection.Empty), cancellationToken) is { } data
-            ? data with { Statements = [], NextCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "official", "issue", "from", "to")) }
+            ? data with { Statements = [], NextCursor = null, PreviousCursor = null, Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "official", "issue", "from", "to")) }
             : null;
 
     // One snapshot read the page and its facts, so every statement of the page has facts and every speaker has a name.
