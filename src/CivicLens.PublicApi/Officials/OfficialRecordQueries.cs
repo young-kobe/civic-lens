@@ -63,7 +63,7 @@ internal static class OfficialRecordQueries
         """;
 
     private static readonly string StatementsSql = $"""
-        SELECT s.record_id, s.statement_date, s.headline, s.label, {StatementDay}
+        SELECT s.record_id, s.statement_date, s.headline, s.label, {StatementDay}, s.text_origin
           FROM public_api.statements s
          WHERE {SpokenBy}{After(StatementDay, "s.record_id")}
          ORDER BY {StatementDay} DESC, s.record_id LIMIT @take
@@ -132,7 +132,8 @@ internal static class OfficialRecordQueries
         OfficialRecordCursor? after, CancellationToken cancellationToken) =>
         ReadPageAsync(connection, transaction, StatementsSql, officialId, after, reader =>
         {
-            var statement = new OfficialRecordStatementData(reader.GetString(0), ViewColumns.Date(reader, 1), reader.GetString(2), ViewColumns.Text(reader, 3));
+            var statement = new OfficialRecordStatementData(reader.GetString(0), ViewColumns.Date(reader, 1), reader.GetString(2), ViewColumns.Text(reader, 3),
+                ViewColumns.NullableEnum<PublishedTextOrigin>(reader, 5));
             return (statement, reader.GetFieldValue<DateOnly>(4), statement.RecordId);
         }, cancellationToken);
 

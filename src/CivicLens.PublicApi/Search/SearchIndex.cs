@@ -21,7 +21,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         """;
     private const string Columns = """
         r.record_id, r.revision_number, r.kind, r.headline, r.first_published_at_utc, r.officials, r.issue_ids, r.policy_area_ids,
-        r.source_host, r.event_date, r.first_release, r.last_release, r.bill_line
+        r.source_host, r.event_date, r.first_release, r.last_release, r.bill_line, r.text_origin, r.label
         """;
 
     /// <summary>Finds the release with the given number, or the active one when the number is null. Null means that none is indexed.</summary>
@@ -55,7 +55,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         var rows = new List<(RecordHit Hit, float Rank)>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
-                rows.Add((ReadHit(reader), request.IsRanked ? reader.GetFloat(14) : 0));
+                rows.Add((ReadHit(reader), request.IsRanked ? reader.GetFloat(16) : 0));
         var hasMore = rows.Count > request.Limit;
         var page = rows.Take(request.Limit).ToArray();
         return new(release, [.. page.Select(row => row.Hit)], hasMore ? NextCursor(release, request, page[^1]).Encode() : null);
@@ -181,6 +181,8 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         FirstRelease = reader.GetInt32(10),
         LastRelease = reader.IsDBNull(11) ? null : reader.GetInt32(11),
         BillLine = reader.IsDBNull(12) ? null : reader.GetString(12),
-        Snippet = reader.IsDBNull(13) ? null : SearchSnippet.Cut(reader.GetString(13))
+        TextOrigin = ViewColumns.NullableEnum<PublishedTextOrigin>(reader, 13),
+        Label = reader.IsDBNull(14) ? null : reader.GetString(14),
+        Snippet = reader.IsDBNull(15) ? null : SearchSnippet.Cut(reader.GetString(15))
     };
 }

@@ -76,8 +76,9 @@ public sealed class IndexTransaction : IAsyncDisposable
         var entry = record.Entry;
         await using var command = Command("""
             INSERT INTO records (record_id, revision_number, kind, headline, first_published_at_utc, officials, official_ids,
-                issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, search, first_release)
+                issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, text_origin, label, search, first_release)
             VALUES (@id, @revision, @kind, @headline, @first, @officials, @official_ids, @issue_ids, @policy_area_ids, @host, @date, @bill_line, @snippet_text,
+                @text_origin, @label,
                 setweight(to_tsvector('english', @headline), 'A') ||
                 setweight(to_tsvector('english', @summary), 'B') ||
                 setweight(to_tsvector('english', @source), 'C'), @release)
@@ -95,6 +96,8 @@ public sealed class IndexTransaction : IAsyncDisposable
         command.Parameters.Add(new NpgsqlParameter("date", NpgsqlDbType.Date) { Value = (object?)entry.EventDate ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("bill_line", NpgsqlDbType.Text) { Value = (object?)entry.BillLine ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("snippet_text", NpgsqlDbType.Text) { Value = (object?)record.SnippetText ?? DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("text_origin", NpgsqlDbType.Text) { Value = (object?)record.TextOrigin?.ToString() ?? DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("label", NpgsqlDbType.Text) { Value = (object?)record.Label ?? DBNull.Value });
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -111,15 +114,15 @@ public sealed class IndexTransaction : IAsyncDisposable
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <summary>Opens a new range for each revision that a release holds again after a release dropped it. The new row copies the stored text.</summary>
+    /// <summary>Opens a new range for each revision that a release holds again after a release dropped it. The new row copies the stored text and label.</summary>
     public async Task ReturnAsync(IReadOnlyCollection<(string RecordId, int Revision)> revisions, int firstRelease, CancellationToken cancellationToken)
     {
         if (revisions.Count == 0) return;
         await using var command = Command("""
             INSERT INTO records (record_id, revision_number, kind, headline, first_published_at_utc, officials, official_ids,
-                issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, search, first_release)
+                issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, text_origin, label, search, first_release)
             SELECT DISTINCT ON (record_id, revision_number) record_id, revision_number, kind, headline, first_published_at_utc, officials,
-                official_ids, issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, search, @release
+                official_ids, issue_ids, policy_area_ids, source_host, event_date, bill_line, summary, text_origin, label, search, @release
             FROM records WHERE (record_id, revision_number) IN (SELECT * FROM unnest(@ids, @revisions))
             ORDER BY record_id, revision_number, first_release DESC
             """,

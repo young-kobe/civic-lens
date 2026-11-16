@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace CivicLens.Publication.Contracts;
 
-/// <summary>A null note means a code update. A note means a person correction. TextRewrite names who rewrote the headline or the summary of a vote in a code
-/// update that changed nothing else.</summary>
+/// <summary>A null note means a code update. A note means a person correction. TextRewrite names who rewrote the headline or the summary of a vote or a
+/// bill action in a code update that changed nothing else.</summary>
 public sealed record PublishedCorrection
 {
     public const int MaximumNoteLength = 500;
@@ -51,7 +51,8 @@ public sealed record PublishedCorrection
         return [entry, .. kept[..run].Where(item => item.IsTextRewrite != entry.IsTextRewrite), .. kept[run..]];
     }
 
-    /// <summary>Checks the correction list of a record of the given kind. Only a vote can name a text rewrite, because the page words name the vote facts.</summary>
+    /// <summary>Checks the correction list of a record of the given kind. A vote can name a text rewrite of either kind. A bill action can name only a code
+    /// rewrite, because only code text replaces the model text of a bill with the same facts.</summary>
     public static void ValidateAll(PublishedCorrection[]? corrections, int revisionNumber, PublishedRecordKind kind)
     {
         if (corrections is null || corrections.Any(item => item is null) || NotedCount(corrections) > MaximumNotedEntries)
@@ -68,14 +69,17 @@ public sealed record PublishedCorrection
                 throw new InvalidDataException("A correction names an unknown text rewrite.");
             if (correction.Note is not null && correction.IsTextRewrite)
                 throw new InvalidDataException("Only a code update can name a text rewrite.");
-            if (correction.IsTextRewrite && kind != PublishedRecordKind.Vote)
-                throw new InvalidDataException("Only a vote correction can name a text rewrite.");
+            if (correction.IsTextRewrite && !CanNameTextRewrite(kind, correction.TextRewrite))
+                throw new InvalidDataException("Only a vote correction can name a model rewrite, and only a vote or a bill action correction a code rewrite.");
             if (correction.Note is not null) kindsInRun.Clear();
             else if (!kindsInRun.Add(correction.IsTextRewrite))
                 throw new InvalidDataException("Between two person corrections the list holds at most one code update of each kind.");
             newerRevision = correction.ReplacedRevisionNumber;
         }
     }
+
+    private static bool CanNameTextRewrite(PublishedRecordKind kind, PublishedTextRewrite rewrite) =>
+        kind == PublishedRecordKind.Vote || kind == PublishedRecordKind.Action && rewrite == PublishedTextRewrite.Code;
 
     public static bool IsNote(string note) =>
         !string.IsNullOrWhiteSpace(note) && note.Length <= MaximumNoteLength && !note.Contains('\0');

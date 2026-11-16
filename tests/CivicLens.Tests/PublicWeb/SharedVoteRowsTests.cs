@@ -160,7 +160,7 @@ public sealed class SharedVoteRowsTests
     }
 
     [Fact]
-    public async Task OnlyAModelLabelTakesTheAiInkAndACodeLabelStaysMutedAsInAListRow()
+    public async Task OnlyAModelLabelTakesTheAiInkAndACodeLabelStaysMutedAsInAListRowAndEachRowShowsTheChipOfItsOrigin()
     {
         var model = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314, "House passes the bill", AiLabelWords.ModelWording,
             PublishedTextOrigin.Model, "Vote to pass", "Passed", []);
@@ -169,7 +169,8 @@ public sealed class SharedVoteRowsTests
         var labels = (await RenderAsync(new(PublishedChamber.House, [], [model, code]))).QuerySelectorAll(".shared-vote-meta .ai-label");
 
         Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
-        Assert.Equal([AiLabelWords.ModelWording, AiLabelWords.CodeWording], labels.Select(label => label.TextContent));
+        AiLabelAssert.IsChip(labels[0], AiLabelWords.ModelChip, AiLabelWords.ModelWording);
+        AiLabelAssert.IsChip(labels[1], AiLabelWords.CodeChip, AiLabelWords.CodeWording);
         Assert.DoesNotMatch(@"(?m)^\.shared-vote-[^{]*\{[^}]*color: var\(--ai-ink\)", WebStyleSheets.Read("public.css"));
     }
 

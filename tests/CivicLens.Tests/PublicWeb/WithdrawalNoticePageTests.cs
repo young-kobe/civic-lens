@@ -131,6 +131,22 @@ public sealed class WithdrawalNoticePageTests
         Assert.StartsWith("Updated from the source, 31 Oct 2026. Replaces revision 1.", entries[2]);
     }
 
+    [Theory]
+    [InlineData(PublishedRecordKind.Action, "Wording rewritten by code, 1 Nov 2026. Replaces revision 2.")]
+    [InlineData(PublishedRecordKind.Vote, "Wording rewritten by code, 1 Nov 2026. Replaces revision 2. The vote facts did not change.")]
+    public async Task ACodeRewriteInTheHistoryEndsWithTheVoteFactsSentenceOnlyOnAVote(PublishedRecordKind kind, string entry)
+    {
+        var rewritten = Notice with
+        {
+            Kind = kind,
+            Corrections = [Notice.Corrections[0], Notice.Corrections[1] with { TextRewrite = PublishedTextRewrite.Code }, Notice.Corrections[2]]
+        };
+
+        var page = await RenderAsync(rewritten);
+
+        Assert.Equal(entry, page.QuerySelectorAll(".corrections li")[1].TextContent.Trim());
+    }
+
     [Fact]
     public async Task ANoticeWithNoCorrectionsShowsNoCorrectionList()
     {

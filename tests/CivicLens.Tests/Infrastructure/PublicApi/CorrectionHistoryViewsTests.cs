@@ -47,7 +47,7 @@ public sealed class CorrectionHistoryViewsTests(PostgresCollection postgres) : I
         PublishedCorrection[] corrections =
         [
             Correction(3, CorrectionOneAt, "Corrected account"),
-            // Only a vote correction can name a text rewrite, and these records are an action and a document change.
+            // A document change names no text rewrite, and these entries also bind a document change.
             Correction(2, CorrectionTwoAt, null)
         ];
         var oldBinding = new PublishedRevisionBinding(PublishedRecordKind.Action, ActionA, 3);

@@ -1,7 +1,8 @@
 namespace CivicLens.Publication.Contracts;
 
 /// <summary>
-/// The one owner of the AI labels of a bill, a vote and a statement, and of the check line words that say a model wrote only the summary.
+/// The one owner of the AI labels of a bill, a vote and a statement, of the two short chip texts that stand for a label in a list, and of the check line
+/// words that say a model wrote only the summary.
 /// The Host and the public API read these words. A page never keeps its own copy. The migrations that make the <c>label</c> columns of the
 /// <c>public_api</c> views hold copies of the labels, because SQL cannot read this class. Tests compare them.
 /// </summary>
@@ -24,6 +25,12 @@ public static class AiLabelWords
 
     /// <summary>The label of a short press release that the page shows as its own saved text. Code copied it, and no model wrote it.</summary>
     public const string StatementSourceTextWording = "The source text of this press release, with no AI.";
+
+    /// <summary>The chip text of a list row or card whose label belongs to text that code wrote or copied. The full label stays the accessible text of the chip.</summary>
+    public const string CodeChip = "No AI";
+
+    /// <summary>The chip text of a list row or card whose label belongs to any other text. The full label stays the accessible text of the chip.</summary>
+    public const string ModelChip = "AI summary";
 
     /// <summary>The end of the check line under a model summary of a statement, a document change or an executive action.</summary>
     public const string ModelWroteOnlyThisSummary = "A model wrote only this summary.";

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace CivicLens.Publication.Contracts;
 
 public sealed record PublishedAction
@@ -45,6 +47,24 @@ public sealed record PublishedAction
         EventDate = Sponsorships.Max(item => item.LatestDate),
         CosponsorIds = CosponsorIdsOfEntry()
     };
+
+    /// <summary>True when only the headline or the summary differs from the earlier revision of the same record. The bill text sentences, the
+    /// citations, the sources, and the sponsorships count as action facts. The precedent is <see cref="PublishedVote.IsTextRewriteOf"/>.</summary>
+    public bool IsTextRewriteOf(PublishedAction earlier) =>
+        TrackedIssueIds.SequenceEqual(earlier.TrackedIssueIds) && (Headline != earlier.Headline || Summary != earlier.Summary) &&
+        FactsKey(this) == FactsKey(earlier);
+
+    private static string FactsKey(PublishedAction action) => JsonSerializer.Serialize(action with
+    {
+        RevisionNumber = 0,
+        Headline = "",
+        Summary = "",
+        TextOrigin = default,
+        TrackedIssueIds = [],
+        ApprovedAtUtc = default,
+        FirstPublishedAtUtc = default,
+        Corrections = []
+    }, PublicationProtocol.JsonOptions);
 
     private string[] CosponsorIdsOfEntry()
     {
