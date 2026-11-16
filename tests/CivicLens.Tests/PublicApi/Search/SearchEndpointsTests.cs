@@ -58,6 +58,29 @@ public sealed class SearchEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task EachHitCarriesTheTextOriginAndLabelThatTheIngestCopiedFromTheViewSoAModelSnippetKeepsItsAiLabel()
+    {
+        var action = PublishedSamples.Action("Doe sponsors a clinic bill", "Doe sponsored a clinic bill.", "A clinic bill", "Sponsor: D000001");
+        var codeAction = action with { Body = (PublishedAction)action.Body with { TextOrigin = PublishedTextOrigin.Code } };
+        await using var host = await ApiHost.StartAsync(postgres, publish: site => site.PublishAsync(1, codeAction,
+            PublishedSamples.Vote("Clinic vote", "The House passed the clinic bill.", "Xq roll call."), PublishedSamples.Statement('a', "Clinic debate", summary: "A clinic account.")));
+        await host.WaitForReleaseAsync();
+
+        using var json = JsonDocument.Parse(await host.Client.GetStringAsync("/v1/search?q=clinic"));
+        var record = await host.Client.GetFromJsonAsync<JsonElement>($"/v1/records/{new string('e', 64)}", PublicationProtocol.JsonOptions);
+
+        var hits = json.RootElement.GetProperty("hits").EnumerateArray().ToDictionary(hit => hit.GetProperty("kind").GetString()!);
+        Assert.Equal("The House passed the \uE000clinic\uE001 bill.", hits["vote"].GetProperty("snippet").GetString());
+        Assert.Equal(("model", AiLabelWords.ModelWording), OriginAndLabel(hits["vote"]));
+        Assert.Equal(("code", AiLabelWords.CodeWording), OriginAndLabel(hits["action"]));
+        // A person text has no label column, so its hit holds a null label.
+        Assert.Equal(("person", null), OriginAndLabel(hits["statement"]));
+        Assert.Equal(("model", AiLabelWords.ModelWording), OriginAndLabel(record));
+    }
+
+    private static (string?, string?) OriginAndLabel(JsonElement hit) => (hit.GetProperty("textOrigin").GetString(), hit.GetProperty("label").GetString());
+
+    [Fact]
     public async Task ASortedRequestAnswersWithHitsInTheOrderOfTheKeyAndACursorThatContinuesIt()
     {
         await using var host = await ApiHost.StartAsync(postgres, publish: site => site.PublishAsync(1, PublishedSamples.Statement('a', "Alpha"), PublishedSamples.Statement('b', "Beta")));

@@ -66,8 +66,9 @@ internal static class TypedSearchSeed
         var sponsoredOn = sponsor.SponsoredOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         return $"""
             {Extraction(extraction, record.Sources[0].Url, record.Sources[0].Text)}
-            {PublicActionRows.ActionRevision(record.RecordId, record.RevisionNumber, "Model", sponsoredOn, 0, record.Congress, record.BillType, record.BillNumber, policyAreaId: null, headline: "placeholder")}
-            UPDATE action_revisions SET headline = {Q(record.Headline)}, summary = {Q(record.Summary)}, bill_title = {Q(record.BillTitle)}
+            {PublicActionRows.ActionRevision(record.RecordId, record.RevisionNumber, record.TextOrigin.ToString(), sponsoredOn, 0, record.Congress, record.BillType, record.BillNumber, policyAreaId: null, headline: "placeholder")}
+            UPDATE action_revisions SET headline = {Q(record.Headline)}, summary = {Q(record.Summary)}, bill_title = {Q(record.BillTitle)},
+                   bill_citation_extraction_id = CASE WHEN bill_citation_extraction_id IS NULL THEN NULL ELSE '{extraction}' END
              WHERE record_id = '{record.RecordId}' AND revision_number = {record.RevisionNumber};
             {PublicActionRows.ActionSponsorship(record.RecordId, record.RevisionNumber, 0, sponsor.Official.Id, "Sponsor", true, sponsoredOn)}
             INSERT INTO action_revision_sponsorship_citations (record_id, revision_number, sponsorship_position, position, citation_extraction_id, citation_start, citation_length)
