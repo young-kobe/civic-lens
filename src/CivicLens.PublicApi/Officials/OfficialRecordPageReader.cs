@@ -31,12 +31,12 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
         if (selected == OfficialRecordKind.Votes) page = page with { VoteFilter = request.Filter };
         if (request.Cursor is { } stale && stale.Release != release) return page;
         page = page with { Offices = await ReadOfficesAsync(connection, transaction, officialId, cancellationToken) };
-        var after = request.Kind == selected ? request.Cursor : null;
+        var start = new OfficialRecordQueries.PageStart(release, request.Kind == selected ? request.Cursor : null, request.Kind == selected && request.Backward);
         if (tabs.Length == 0) return page;
         // Only the votes tab shows the issue choices of its filter form.
         if (selected == OfficialRecordKind.Votes)
             page = page with { Issues = [.. (await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken)).Select(issue => issue.ToChoice())] };
-        return await ReadPageAsync(connection, transaction, page with { LaterPage = after is not null }, request, after, cancellationToken);
+        return await ReadPageAsync(connection, transaction, page, request, start, cancellationToken);
     }
 
     private static async Task<OfficialOfficeData[]> ReadOfficesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, CancellationToken cancellationToken)
@@ -47,26 +47,26 @@ public sealed class OfficialRecordPageReader(NpgsqlDataSource views)
     }
 
     private static async Task<OfficialRecordPageData> ReadPageAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, OfficialRecordPageData page,
-        OfficialRecordRequest request, OfficialRecordCursor? after, CancellationToken cancellationToken)
+        OfficialRecordRequest request, OfficialRecordQueries.PageStart start, CancellationToken cancellationToken)
     {
         var id = page.OfficialId;
         switch (page.Selected)
         {
             case OfficialRecordKind.Votes:
-                var votes = await OfficialRecordQueries.ReadVotesAsync(connection, transaction, id, request, after, cancellationToken);
-                return Continue(page with { Votes = votes.Rows }, votes.Next);
+                var votes = await OfficialRecordQueries.ReadVotesAsync(connection, transaction, id, request, start, cancellationToken);
+                return Continue(page with { Votes = votes.Rows }, votes);
             case OfficialRecordKind.Bills:
-                var bills = await OfficialRecordQueries.ReadBillsAsync(connection, transaction, id, after, cancellationToken);
-                return Continue(page with { Bills = bills.Rows }, bills.Next);
+                var bills = await OfficialRecordQueries.ReadBillsAsync(connection, transaction, id, start, cancellationToken);
+                return Continue(page with { Bills = bills.Rows }, bills);
             case OfficialRecordKind.Statements:
-                var statements = await OfficialRecordQueries.ReadStatementsAsync(connection, transaction, id, after, cancellationToken);
-                return Continue(page with { Statements = statements.Rows }, statements.Next);
+                var statements = await OfficialRecordQueries.ReadStatementsAsync(connection, transaction, id, start, cancellationToken);
+                return Continue(page with { Statements = statements.Rows }, statements);
             default:
-                var actions = await OfficialRecordQueries.ReadExecutiveActionsAsync(connection, transaction, id, after, cancellationToken);
-                return Continue(page with { ExecutiveActions = actions.Rows }, actions.Next);
+                var actions = await OfficialRecordQueries.ReadExecutiveActionsAsync(connection, transaction, id, start, cancellationToken);
+                return Continue(page with { ExecutiveActions = actions.Rows }, actions);
         }
     }
 
-    private static OfficialRecordPageData Continue(OfficialRecordPageData page, (DateOnly Day, string RecordId)? next) =>
-        next is { } key ? page with { NextCursor = new OfficialRecordCursor(page.Release, key.Day, key.RecordId).Encode() } : page;
+    private static OfficialRecordPageData Continue<T>(OfficialRecordPageData page, OfficialRecordQueries.Page<T> read) =>
+        page with { NextCursor = read.Next, PreviousCursor = read.Previous };
 }

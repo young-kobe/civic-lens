@@ -67,9 +67,9 @@ public sealed class OfficialStore(NpgsqlDataSource views)
                 sortNames.Add(reader.GetString(SortNameColumn));
             }
         if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? OfficialCursor.Of(active, sortNames[page.Length - 1], page[^1]).Encode() : null;
-        return new(active, OfficialScopes.RecordCount, listed, OfficialScopes.OfficialsInRelease, page, next);
+        var (page, next, previous) = KeysetPage.Cut([.. rows.Zip(sortNames)], request.Limit, request.Cursor?.Encode(), request.Backward,
+            row => OfficialCursor.Of(active, row.Second, row.First).Encode());
+        return new(active, OfficialScopes.RecordCount, listed, OfficialScopes.OfficialsInRelease, [.. page.Select(row => row.First)], next) { PreviousCursor = previous };
     }
 
     /// <summary>Reads one official. Null means that no release is active or that the active release names no such official.
@@ -119,14 +119,14 @@ public sealed class OfficialStore(NpgsqlDataSource views)
     internal static string NameMatchSql(string alias) => $"strpos(' ' || lower({alias}.name), ' ' || lower(@name_prefix)) > 0";
 
     // An exact name match sorts first. The cursor does not carry that rule, so the request refuses the two together.
-    private static string OrderOf(OfficialRequest request) => request.ExactNameFirst ? $"(lower(o.name) = @name_prefix) DESC, {Order}" : Order;
+    private static string OrderOf(OfficialRequest request) => request.ExactNameFirst ? $"(lower(o.name) = @name_prefix) DESC, {Order}" : KeysetPage.Order(Order, request.Backward);
 
     private static string Filters(OfficialRequest request) =>
         (request.Kind is null ? "" : " AND o.kind = @kind") +
         (request.State is null ? "" : " AND o.state = @state") +
         (request.Party is null ? "" : " AND lower(o.party) = @party") +
         (request.NamePrefix is null ? "" : " AND " + NameMatchSql("o")) +
-        (request.Cursor is null ? "" : " AND (o.sort_name, o.name, o.official_id) > (@cursor_sort_name, @cursor_name, @cursor_id)");
+        (request.Cursor is null ? "" : KeysetPage.Window("(o.sort_name, o.name, o.official_id) > (@cursor_sort_name, @cursor_name, @cursor_id)", "o.official_id", "@cursor_id", request.Backward));
 
     private static void AddParameters(NpgsqlCommand command, OfficialRequest request)
     {

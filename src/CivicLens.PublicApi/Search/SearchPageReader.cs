@@ -23,7 +23,7 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
 
     public async Task<SearchPageData?> ReadAsync(IQueryCollection query, CancellationToken cancellationToken)
     {
-        var request = SearchRequest.Parse(query);
+        var request = SearchRequest.ParsePage(query);
         if (await index.FindReleaseAsync(request.Release, cancellationToken) is not { } release) return null;
         var issues = (await issueStore.ListOptionsAsync(cancellationToken)).Select(issue => new SearchChoiceData(issue.IssueId, issue.Name)).ToArray();
         var typed = Typed(request);
@@ -32,11 +32,12 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         var page = await index.SearchAsync(release.ReleaseNumber, request, cancellationToken);
         var hits = page.Hits.Select(Hit).ToArray();
         var total = hits.Length == 0 ? 0 : await index.CountAsync(release.ReleaseNumber, request, cancellationToken);
-        var first = request.Cursor is null && request.Text is not null;
+        // A previous page that reaches the start of the list is the first page, with its officials and its bill.
+        var first = page.PreviousCursor is null && request.Text is not null;
         var (officials, moreOfficials) = first ? await FindOfficialsAsync(request.Text!, cancellationToken) : ([], false);
         var bill = first && !typed.HasFilter ? await FindBillAsync(request.Text!, hits, cancellationToken) : null;
         var filterName = page.Hits.SelectMany(hit => hit.Officials).FirstOrDefault(official => official.Id == request.Official)?.Name;
-        return new(typed, release.ReleaseNumber, officials, moreOfficials, bill, hits, total, page.NextCursor, issues, filterName);
+        return new(typed, release.ReleaseNumber, officials, moreOfficials, bill, hits, total, page.NextCursor, issues, filterName) { PreviousCursor = page.PreviousCursor };
     }
 
     private static SearchQueryData Typed(SearchRequest request) => new(request.Text,

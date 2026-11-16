@@ -260,7 +260,16 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
 
         Assert.Equal(7, all.Length);
         Assert.Equal(all, walked);
+        foreach (var limit in (int[])[1, 2, 3])
+            Assert.Equal(all, await BothWaysAsync(request => request with { Text = withText ? "rent" : null, Limit = limit }));
     }
+
+    // The walk of KeysetWalk over the index, with the cursor of the next or the previous page.
+    private Task<string[]> BothWaysAsync(Func<SearchRequest, SearchRequest> change) => KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+    {
+        var page = await world.SearchAsync(request => change(request) with { Cursor = SearchCursor.Parse(cursor), Backward = backward });
+        return new([.. page.Hits.Select(hit => hit.RecordId)], page.NextCursor, page.PreviousCursor);
+    });
 
     [Theory]
     [InlineData(SearchSortKey.Date, true)]
@@ -290,6 +299,11 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
         } while (cursor is not null);
 
         Assert.Equal(expected, walked);
+        Assert.Equal(expected, await BothWaysAsync(request => request with { Sort = sort, Descending = descending, Limit = 2 }));
+        // A sorted text search reads the text query CTE of TextQuery. Only the statement summaries hold the word.
+        var statements = records.Where(record => record.Entry.Kind == PublishedRecordKind.Statement).ToArray();
+        Assert.Equal(ExpectedOrder(statements, sort, descending),
+            await BothWaysAsync(request => request with { Text = "account", Sort = sort, Descending = descending, Limit = 2 }));
     }
 
     [Fact]

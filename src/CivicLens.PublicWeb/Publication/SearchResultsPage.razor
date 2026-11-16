@@ -82,10 +82,9 @@
                 A number match can find another bill with the same number.
             </p>
         }
-        @if (Data.NextCursor is { } cursor)
-        {
-            <Pager Label="Search pages" ForwardOnly="true" OlderHref="@NextHref(cursor)" OlderText="Show more results" />
-        }
+        <Pager Label="Search pages" LinksOnly="true" NewerText="@ListPageLink.PreviousText" OlderText="Show more results"
+               NewerHref="@(Data.PreviousCursor is { } previous ? Href(ListPageLink.Previous(previous)) : null)"
+               OlderHref="@(Data.NextCursor is { } next ? Href(ListPageLink.Next(next)) : null)" />
     }
     <details class="list-fold" open="@(!Data.Query.IsEmpty && Data.Query.Text is null)">
             <summary>Filter by kind, issue or date</summary>
@@ -181,10 +180,10 @@
 
     private static string RecordsOfHref(SearchOfficialData official) => "?" + Query(("official", official.OfficialId));
 
-    private string NextHref(string cursor) => "?" + Query(("q", Data.Query.Text), ("kind", Data.Query.Kind), ("official", Data.Query.Official),
+    private string Href(ListPageLink page) => "?" + Query(("q", Data.Query.Text), ("kind", Data.Query.Kind), ("official", Data.Query.Official),
         ("issue", Data.Query.Issue), ("policyArea", Data.Query.PolicyArea), ("source", Data.Query.Source),
         ("from", Data.Query.From), ("to", Data.Query.To), ("sort", Data.Query.Sort), ("direction", Data.Query.Direction),
-        ("limit", Data.Query.Limit?.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("cursor", cursor));
+        ("limit", Data.Query.Limit?.ToString(System.Globalization.CultureInfo.InvariantCulture)), (page.Name, page.Cursor));
 
     private static string Query(params (string Name, string? Value)[] pairs) =>
         string.Join('&', pairs.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}"));

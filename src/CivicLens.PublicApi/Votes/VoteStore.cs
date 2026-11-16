@@ -17,12 +17,12 @@ public sealed class VoteStore(NpgsqlDataSource views)
     internal const string Order = "v.voted_on DESC, v.chamber, v.session_number DESC, v.roll_call_number DESC, v.record_id";
     // The tuple comparison cannot mix directions, so the chain follows the ORDER BY key by key.
     private const string AfterCursor = """
-         AND (v.voted_on < @cursor_date
+        v.voted_on < @cursor_date
             OR (v.voted_on = @cursor_date AND v.chamber > @cursor_chamber)
             OR (v.voted_on = @cursor_date AND v.chamber = @cursor_chamber AND v.session_number < @cursor_session)
             OR (v.voted_on = @cursor_date AND v.chamber = @cursor_chamber AND v.session_number = @cursor_session AND v.roll_call_number < @cursor_roll_call)
             OR (v.voted_on = @cursor_date AND v.chamber = @cursor_chamber AND v.session_number = @cursor_session AND v.roll_call_number = @cursor_roll_call
-                AND v.record_id > @cursor_id))
+                AND v.record_id > @cursor_id)
         """;
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
@@ -50,9 +50,8 @@ public sealed class VoteStore(NpgsqlDataSource views)
                 if (!reader.IsDBNull(1)) rows.Add(ReadRow(reader));
             }
         if (release is not { } active) return null;
-        var page = rows.Take(request.Limit).ToArray();
-        var next = rows.Count > request.Limit ? VoteCursor.Of(active, page[^1]).Encode() : null;
-        return (new(active, page, next), total);
+        var (page, next, previous) = KeysetPage.Cut(rows, request.Limit, request.Cursor?.Encode(), request.Backward, row => VoteCursor.Of(active, row).Encode());
+        return (new(active, page, next) { PreviousCursor = previous }, total);
     }
 
     private const string BillChambersSql = """
@@ -368,10 +367,10 @@ public sealed class VoteStore(NpgsqlDataSource views)
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.* FROM public_api.votes v
-                WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : AfterCursor)}
-                ORDER BY {Order} LIMIT @take) v
+                WHERE TRUE{Filters(request)}{(request.Cursor is null ? "" : KeysetPage.Window(AfterCursor, "v.record_id", "@cursor_id", request.Backward))}
+                ORDER BY {KeysetPage.Order(Order, request.Backward)} LIMIT @take) v
             ON TRUE
-         ORDER BY {Order}
+         ORDER BY {KeysetPage.Order(Order, request.Backward)}
         """;
 
     private static string Filters(VoteRequest request) =>

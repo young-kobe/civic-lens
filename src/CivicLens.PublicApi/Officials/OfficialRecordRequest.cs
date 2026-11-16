@@ -8,6 +8,9 @@ namespace CivicLens.PublicApi.Officials;
 /// A missing kind selects the first kind that has rows. A vote filter selects the votes tab, and no other tab takes one.</summary>
 public sealed record OfficialRecordRequest(OfficialRecordKind? Kind, OfficialRecordCursor? Cursor)
 {
+    /// <summary>True when <see cref="Cursor"/> starts the previous page: the page reads the rows before the cursor row.</summary>
+    public bool Backward { get; init; }
+
     /// <summary>The query names of the vote filters, in form order. The values of <see cref="Filter"/> carry them to the next page link.</summary>
     public static readonly string[] FilterNames = ["issue", "bill", "party", "cast"];
 
@@ -31,9 +34,11 @@ public sealed record OfficialRecordRequest(OfficialRecordKind? Kind, OfficialRec
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
     public static OfficialRecordRequest Parse(IQueryCollection query)
     {
+        var (cursor, backward) = KeysetPage.Cursor(query);
         var (billType, billNumber) = QueryValues.BillNumber(query, "bill");
-        var request = new OfficialRecordRequest(KindOf(QueryValues.Value(query, "kind")), OfficialRecordCursor.Parse(QueryValues.Value(query, "cursor")))
+        var request = new OfficialRecordRequest(KindOf(QueryValues.Value(query, "kind")), OfficialRecordCursor.Parse(cursor))
         {
+            Backward = backward,
             Issue = QueryValues.Filter(query, "issue"),
             BillType = billType,
             BillNumber = billNumber,

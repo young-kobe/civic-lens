@@ -171,7 +171,7 @@ public static class ServerPageEndpoints
     /// <summary>The first page of the same filters at the public address of a paged page, for a cursor of a release that is no longer active.
     /// It names the public path, not the request path, so a proxy that rewrites the path cannot send the reader to an address the site does not serve.</summary>
     internal static IResult FirstPage(PublicBaseUrl baseUrl, string publicPath, IQueryCollection query) =>
-        Results.Redirect(baseUrl.Join(publicPath) + QueryString.Create(query.Where(pair => pair.Key != "cursor")).ToUriComponent());
+        Results.Redirect(baseUrl.Join(publicPath) + QueryString.Create(query.Where(pair => pair.Key is not (ListPageLink.NextName or ListPageLink.PreviousName))).ToUriComponent());
 
     private static Task<IResult> NotFoundAsync(HttpContext context, ServerPageResponder responder, PublicBaseUrl baseUrl, CancellationToken cancellationToken) =>
         NotFoundAsync(context, responder, baseUrl.Join(string.Empty), cancellationToken);

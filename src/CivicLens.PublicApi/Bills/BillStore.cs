@@ -81,8 +81,8 @@ public sealed class BillStore(NpgsqlDataSource views)
         """;
 
     // The cursor tests follow the order: a bill with no stored status comes after every dated bill. StatementStore pages its undated statements the same way.
-    private const string AfterDated = " AND (b.latest_action_date < @cursor_date OR b.latest_action_date IS NULL OR (b.latest_action_date = @cursor_date AND b.record_id > @cursor_id))";
-    private const string AfterNoAction = " AND b.latest_action_date IS NULL AND b.record_id > @cursor_id";
+    private const string AfterDated = "b.latest_action_date < @cursor_date OR b.latest_action_date IS NULL OR (b.latest_action_date = @cursor_date AND b.record_id > @cursor_id)";
+    private const string AfterNoAction = "b.latest_action_date IS NULL AND b.record_id > @cursor_id";
 
     /// <summary>Reads one page. Null means that no release is active. The caller compares the release of the page with the release of the cursor.</summary>
     public async Task<BillPage?> ListAsync(BillRequest request, CancellationToken cancellationToken)
@@ -97,7 +97,7 @@ public sealed class BillStore(NpgsqlDataSource views)
                 release = reader.GetInt32(0);
                 if (!reader.IsDBNull(1)) rows.Add(ReadListed(reader));
             }
-        return release is { } active ? PageOf(active, rows, request.Limit) : null;
+        return release is { } active ? PageOf(active, rows, request) : null;
     }
 
     /// <summary>Reads one page of the bills of the newest Congress that the active release holds and that Congress, in one query, inside the transaction of the caller.
@@ -119,7 +119,7 @@ public sealed class BillStore(NpgsqlDataSource views)
                 total = ViewColumns.Total(reader);
                 if (!reader.IsDBNull(1)) rows.Add(ReadListed(reader));
             }
-        return release is { } active ? new(PageOf(active, rows, request.Limit), congress, total) : null;
+        return release is { } active ? new(PageOf(active, rows, request), congress, total) : null;
     }
 
     public async Task<BillDetail?> FindAsync(string recordId, CancellationToken cancellationToken)
@@ -328,10 +328,10 @@ public sealed class BillStore(NpgsqlDataSource views)
                SELECT b.*, k.latest_action_date FROM (
                     SELECT b.record_id, b.revision_number, b.latest_action_date {KeysOf(request)}
                      WHERE TRUE{Filters(request)}{AfterCursor(request)}
-                     ORDER BY {Order} LIMIT @take) k
+                     ORDER BY {KeysetPage.Order(Order, request.Backward)} LIMIT @take) k
                {BillsOfKeysSql}) b
             ON TRUE
-         ORDER BY {Order}
+         ORDER BY {KeysetPage.Order(Order, request.Backward)}
         """;
 
     private static string NewestCongressSql(BillRequest request) => $"""
@@ -344,10 +344,10 @@ public sealed class BillStore(NpgsqlDataSource views)
                SELECT b.*, k.latest_action_date FROM (
                     SELECT b.record_id, b.revision_number, b.latest_action_date {KeysOf(request)}
                      WHERE b.congress = n.congress{Filters(request)}{AfterCursor(request)}
-                     ORDER BY {Order} LIMIT @take) k
+                     ORDER BY {KeysetPage.Order(Order, request.Backward)} LIMIT @take) k
                {BillsOfKeysSql}) b
             ON TRUE
-         ORDER BY {Order}
+         ORDER BY {KeysetPage.Order(Order, request.Backward)}
         """;
 
     /// <summary>The FROM clause of the keys <c>b</c> that a list reads. The issue or the sponsor drives the read when the request names one, because those rows are few.
@@ -390,8 +390,8 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static string AfterCursor(BillRequest request) => request.Cursor switch
     {
         null => "",
-        { LatestActionDate: null } => AfterNoAction,
-        _ => AfterDated
+        { LatestActionDate: null } => KeysetPage.Window(AfterNoAction, "b.record_id", "@cursor_id", request.Backward),
+        _ => KeysetPage.Window(AfterDated, "b.record_id", "@cursor_id", request.Backward)
     };
 
     private static void AddParameters(NpgsqlCommand command, BillRequest request)
@@ -428,11 +428,11 @@ public sealed class BillStore(NpgsqlDataSource views)
     private static ListedBill ReadListed(DbDataReader reader) => new(ReadRow(reader), ViewColumns.Date(reader, LatestActionColumn));
 
     /// <summary>Takes one page of the rows that a list read, one more than the limit when a next page exists. The cursor holds the sort key of the last row of the page.</summary>
-    private static BillPage PageOf(int release, List<ListedBill> rows, int limit)
+    private static BillPage PageOf(int release, List<ListedBill> rows, BillRequest request)
     {
-        var page = rows.Take(limit).ToArray();
-        var next = rows.Count > limit ? new BillCursor(release, page[^1].LatestActionDate, page[^1].Bill.RecordId).Encode() : null;
-        return new(release, [.. page.Select(row => row.Bill)], next);
+        var (page, next, previous) = KeysetPage.Cut(rows, request.Limit, request.Cursor?.Encode(), request.Backward,
+            row => new BillCursor(release, row.LatestActionDate, row.Bill.RecordId).Encode());
+        return new(release, [.. page.Select(row => row.Bill)], next) { PreviousCursor = previous };
     }
 
     // Column 0 holds the release. The row starts at column 1.

@@ -66,9 +66,9 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
         _ => null
     };
 
-    /// <summary>The query string of the same filters, with the cursor of the next page when one is given. It starts with a question mark.</summary>
-    public string Query(string? cursor = null) => "?" + string.Join('&', Values.Select(pair => $"{pair.Key}={Uri.EscapeDataString(pair.Value)}")
-        .Concat(cursor is null ? [] : [$"cursor={Uri.EscapeDataString(cursor)}"]));
+    /// <summary>The query string of the same filters, with the cursor of the next or the previous page when one is given. It starts with a question mark.</summary>
+    public string Query(ListPageLink? page = null) => "?" + string.Join('&', Values.Select(pair => $"{pair.Key}={Uri.EscapeDataString(pair.Value)}")
+        .Concat(page is null ? [] : [page.QueryPair]));
 
     private static string? DateText(DateOnly? date) => date?.ToString(DateFormat, CultureInfo.InvariantCulture);
 

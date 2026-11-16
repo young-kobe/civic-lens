@@ -6,7 +6,11 @@ namespace CivicLens.PublicWeb.Publication;
 /// <see cref="Total"/> counts the bills of that Congress in the release, and no filter changes it.
 /// <see cref="Statuses"/>, <see cref="PolicyAreas"/> and <see cref="Issues"/> fill the filter choices. <see cref="NextCursor"/> is null on the last page.</summary>
 public sealed record BillListPageData(int Release, int? Congress, int Total, IReadOnlyList<BillListRowData> Bills, RecordListFilter Filter, string? NextCursor,
-    IReadOnlyList<SearchChoiceData> Statuses, IReadOnlyList<SearchChoiceData> PolicyAreas, IReadOnlyList<SearchChoiceData> Issues);
+    IReadOnlyList<SearchChoiceData> Statuses, IReadOnlyList<SearchChoiceData> PolicyAreas, IReadOnlyList<SearchChoiceData> Issues)
+{
+    /// <summary>The cursor of the previous page, or null on the first page.</summary>
+    public string? PreviousCursor { get; init; }
+}
 
 /// <summary><see cref="Label"/> is the label column of the view, or null. <see cref="Sponsor"/> is the first sponsor, or null when the release names none.
 /// The latest action is the text and day that Congress.gov last listed, or null when Civic Lens has not read them.

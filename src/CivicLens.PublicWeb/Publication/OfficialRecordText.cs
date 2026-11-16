@@ -52,13 +52,13 @@ public static class OfficialRecordText
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Record kind has no tab label.")
     };
 
-    /// <summary>The path of the record page of an official. A kind selects a tab, the filters narrow it, and a cursor selects a later page of it.</summary>
-    public static string Path(string rootPath, string officialId, OfficialRecordKind? kind = null, string? cursor = null, RecordListFilter? filter = null)
+    /// <summary>The path of the record page of an official. A kind selects a tab, the filters narrow it, and a page link selects the next or the previous page of it.</summary>
+    public static string Path(string rootPath, string officialId, OfficialRecordKind? kind = null, ListPageLink? page = null, RecordListFilter? filter = null)
     {
         var query = new List<string>();
         if (kind is { } selected) query.Add("kind=" + Query(selected));
         if (filter is not null) query.AddRange(filter.Values.Select(pair => $"{pair.Key}={Uri.EscapeDataString(pair.Value)}"));
-        if (cursor is not null) query.Add("cursor=" + Uri.EscapeDataString(cursor));
+        if (page is not null) query.Add(page.QueryPair);
         return rootPath + PublicationProtocol.OfficialRecordPagePath(officialId) + (query.Count == 0 ? "" : "?" + string.Join('&', query));
     }
 

@@ -48,7 +48,13 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Equal(OfficialsPageReader.PageSize, firstPage.QuerySelectorAll(".list-row").Length);
         Assert.StartsWith("?chamber=senate&cursor=", next);
         Assert.Equal(5, second.QuerySelectorAll(".list-row").Length);
-        Assert.Null(second.QuerySelector(".pager"));
+        Assert.Null(second.QuerySelector(".pager a[rel=next]"));
+        Assert.Null(firstPage.QuerySelector(".pager a[rel=prev]"));
+        var previous = second.QuerySelector(".pager a[rel=prev]")!.GetAttribute("href")!;
+        Assert.StartsWith("?chamber=senate&before=", previous);
+        var back = await ParseAsync(await host.Client.GetAsync("/officials.html" + previous));
+        Assert.Equal(firstPage.QuerySelectorAll(".list-row").Select(row => row.TextContent), back.QuerySelectorAll(".list-row").Select(row => row.TextContent));
+        Assert.Null(back.QuerySelector(".pager a[rel=prev]"));
         Assert.DoesNotContain("Rep One", firstPage.Body!.TextContent + second.Body!.TextContent);
         Assert.Contains("Term ends 3 Jan 2027", firstPage.QuerySelector(".list-row")!.TextContent);
         Assert.StartsWith("31 officials have a page.", firstPage.QuerySelector(".page-header-lede")!.TextContent);
@@ -124,6 +130,30 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Null(name.QuerySelector(".search-pin"));
         Assert.Null((await ParseAsync(await host.Client.GetAsync("/search.html?q=Pr"))).QuerySelector(".search-official"));
         Assert.Equal("Ayanna Pressley", (await ParseAsync(await host.Client.GetAsync("/search.html?q=ayanna%20pre"))).QuerySelector(".search-official h2")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ThePreviousLinkOfTheSecondSearchPageGivesTheFirstPageAgainWithItsOfficialAndNoPreviousLink()
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1,
+            PublishedSamples.Statement('a', "Pressley on rent", official: "p1"), PublishedSamples.Statement('b', "Pressley on wages", official: "p1")));
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("p1", "Ayanna Pressley", new SeededTerm("House", "Representative", "2021-01-03") { State = "MA", District = 7, Party = "Democrat" }));
+
+        var first = await ParseAsync(await host.Client.GetAsync("/search.html?q=Pressley&limit=1"));
+        var second = await ParseAsync(await host.Client.GetAsync("/search.html" + first.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")));
+        var previous = second.QuerySelector(".pager a[rel=prev]")!.GetAttribute("href")!;
+        var back = await ParseAsync(await host.Client.GetAsync("/search.html" + previous));
+
+        Assert.Null(first.QuerySelector(".pager a[rel=prev]"));
+        Assert.Null(second.QuerySelector(".search-official"));
+        Assert.Null(second.QuerySelector(".pager a[rel=next]"));
+        Assert.StartsWith("?q=Pressley&limit=1&before=", previous);
+        Assert.Equal(first.QuerySelector(".record-rows")!.TextContent, back.QuerySelector(".record-rows")!.TextContent);
+        Assert.Equal("Ayanna Pressley", back.QuerySelector(".search-official h2")!.TextContent);
+        Assert.Null(back.QuerySelector(".pager a[rel=prev]"));
     }
 
     [Fact]

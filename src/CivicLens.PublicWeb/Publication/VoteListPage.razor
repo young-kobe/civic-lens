@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Total="Data.VotesInRelease" RowCount="Data.Votes.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+<RecordListFrame Kind="PublishedRecordKind.Vote" RootPath="@RootPath" Total="Data.VotesInRelease" RowCount="Data.Votes.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor" PreviousCursor="@Data.PreviousCursor"
                  Lede="@Lede"
                  FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters."
                  EmptyReleaseTitle="No votes are published yet." Heading="@Heading">

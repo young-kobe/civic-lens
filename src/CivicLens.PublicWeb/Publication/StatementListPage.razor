@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.Statement" RootPath="@RootPath" Total="Data.StatementsInRelease" RowCount="Data.Statements.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+<RecordListFrame Kind="PublishedRecordKind.Statement" RootPath="@RootPath" Total="Data.StatementsInRelease" RowCount="Data.Statements.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor" PreviousCursor="@Data.PreviousCursor"
                  Lede="What members of Congress and the President said in their own press releases, newest first. Each statement links to its source."
                  FilterSummary="Filter by official, issue or date" Singular="statement" Plural="statements" EmptyTitle="No statement matches these filters."
                  EmptyReleaseTitle="No statements are published yet.">

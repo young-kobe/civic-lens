@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" Total="Data.Total" TotalScope="@TotalScope" RowCount="Data.Bills.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor"
+<RecordListFrame Kind="PublishedRecordKind.Action" RootPath="@RootPath" Total="Data.Total" TotalScope="@TotalScope" RowCount="Data.Bills.Count" Filter="Data.Filter" Chips="Chips" NextCursor="@Data.NextCursor" PreviousCursor="@Data.PreviousCursor"
                  Lede="@Lede" FilterSummary="Filter by status, sponsor or date" Singular="bill or resolution" Plural="bills and resolutions" EmptyTitle="No bill matches these filters."
                  EmptyReleaseTitle="No bills or resolutions are published yet." Heading="@Heading">
     <Fields>

@@ -22,15 +22,26 @@ public sealed record SearchRequest
     public SearchSortKey? Sort { get; init; }
     public bool Descending { get; init; }
     public SearchCursor? Cursor { get; init; }
+    /// <summary>True when <see cref="Cursor"/> starts the previous page: the page reads the rows before the cursor row. Only the search page sets it; the JSON query string never does.</summary>
+    public bool Backward { get; init; }
     public int Limit { get; init; } = DefaultLimit;
 
     /// <summary>Text ranks the results unless the request names a sort.</summary>
     public bool IsRanked => Text is not null && Sort is null;
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>
-    public static SearchRequest Parse(IQueryCollection query)
+    public static SearchRequest Parse(IQueryCollection query) => Parse(query, QueryValues.Value(query, "cursor"), backward: false);
+
+    /// <summary>Reads the query string of the search page, which also takes the cursor of the previous page.</summary>
+    public static SearchRequest ParsePage(IQueryCollection query)
     {
-        var cursor = SearchCursor.Parse(QueryValues.Value(query, "cursor"));
+        var (cursor, backward) = KeysetPage.Cursor(query);
+        return Parse(query, cursor, backward);
+    }
+
+    private static SearchRequest Parse(IQueryCollection query, string? cursorText, bool backward)
+    {
+        var cursor = SearchCursor.Parse(cursorText);
         var release = ReleaseNumber(query);
         if (cursor is not null && release is not null && release != cursor.Release)
             throw new ArgumentException("The cursor belongs to another release.", "cursor");
@@ -49,6 +60,7 @@ public sealed record SearchRequest
             Sort = sort,
             Descending = descending,
             Cursor = cursor,
+            Backward = backward,
             Limit = QueryValues.PageLimit(query)
         };
         if (cursor is not null && !request.Accepts(cursor))

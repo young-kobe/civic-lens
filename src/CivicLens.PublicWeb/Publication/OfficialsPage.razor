@@ -71,7 +71,9 @@
                 </li>
             }
         </ul>
-        <Pager Label="Officials pages" ForwardOnly="true" OlderHref="@NextHref" OlderText="Next page" />
+        <Pager Label="Officials pages" LinksOnly="true" NewerText="@ListPageLink.PreviousText" OlderText="@ListPageLink.NextText"
+               NewerHref="@(Data.PreviousCursor is { } previous ? Href(ListPageLink.Previous(previous)) : null)"
+               OlderHref="@(Data.NextCursor is { } next ? Href(ListPageLink.Next(next)) : null)" />
     }
 </PublicPage>
 
@@ -95,11 +97,10 @@
         Data.Filter.Name is { } name ? $"Name: {name}" : null
     }.OfType<string>()];
 
-    private string? NextHref => Data.NextCursor is null ? null : "?" + string.Join('&', new (string Name, string? Value)[]
+    private string Href(ListPageLink page) => "?" + string.Join('&', new (string Name, string? Value)[]
         {
-            ("chamber", Data.Filter.Chamber), ("state", Data.Filter.State), ("party", Data.Filter.Party),
-            ("name", Data.Filter.Name), ("cursor", Data.NextCursor)
-        }.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}"));
+            ("chamber", Data.Filter.Chamber), ("state", Data.Filter.State), ("party", Data.Filter.Party), ("name", Data.Filter.Name)
+        }.Where(pair => pair.Value is not null).Select(pair => $"{pair.Name}={Uri.EscapeDataString(pair.Value!)}").Append(page.QueryPair));
 
     private string Lede => $"{PublishedWording.Count(Data.OfficialsInRelease)} {(Data.OfficialsInRelease == 1 ? "official has" : "officials have")} a page. Each page lists the published records that name the official. A member of Congress also has their votes in the current Congress. Looking for the parties?";
 

@@ -20,6 +20,8 @@ public sealed record OfficialRequest
     /// <summary>True puts an official whose whole name equals <see cref="NamePrefix"/> before the rest. It needs a name and no cursor, because a cursor does not carry that order. The query string never sets it.</summary>
     public bool ExactNameFirst { get; init; }
     public OfficialCursor? Cursor { get; init; }
+    /// <summary>True when <see cref="Cursor"/> starts the previous page: the page reads the rows before the cursor row. Only the list page sets it; the JSON query string never does.</summary>
+    public bool Backward { get; init; }
     public int Limit { get; init; } = SearchRequest.DefaultLimit;
 
     /// <summary>Reads the query string. An invalid value throws <see cref="ArgumentException"/> that names the parameter.</summary>

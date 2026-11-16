@@ -14,10 +14,12 @@ public sealed class SearchIndex(NpgsqlDataSource database)
     private static readonly string SnippetOptions = $"StartSel={SearchResultsPage.MarkStart}, StopSel={SearchResultsPage.MarkEnd}, HighlightAll=true";
     private const string SortDate = "COALESCE(r.event_date, (r.first_published_at_utc AT TIME ZONE 'UTC')::date)";
     private const string InRelease = "r.first_release <= @release AND (r.last_release IS NULL OR r.last_release >= @release)";
-    private const string RankedAfterCursor = "WHERE r.rank < @cursor_rank OR (r.rank = @cursor_rank AND r.record_id > @cursor_id)";
+    private const string RankedOrder = "r.rank DESC, r.record_id";
+    private const string RankedAfterCursor = "r.rank < @cursor_rank OR (r.rank = @cursor_rank AND r.record_id > @cursor_id)";
+    private const string DatedOrder = $"{SortDate} DESC, r.first_published_at_utc DESC, r.record_id";
     private const string DatedAfterCursor = $"""
-         AND ({SortDate} < @cursor_date OR ({SortDate} = @cursor_date AND (r.first_published_at_utc < @cursor_published
-            OR (r.first_published_at_utc = @cursor_published AND r.record_id > @cursor_id))))
+        {SortDate} < @cursor_date OR ({SortDate} = @cursor_date AND (r.first_published_at_utc < @cursor_published
+            OR (r.first_published_at_utc = @cursor_published AND r.record_id > @cursor_id)))
         """;
     private const string Columns = """
         r.record_id, r.revision_number, r.kind, r.headline, r.first_published_at_utc, r.officials, r.issue_ids, r.policy_area_ids,
@@ -56,9 +58,8 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
             while (await reader.ReadAsync(cancellationToken))
                 rows.Add((ReadHit(reader), request.IsRanked ? reader.GetFloat(16) : 0));
-        var hasMore = rows.Count > request.Limit;
-        var page = rows.Take(request.Limit).ToArray();
-        return new(release, [.. page.Select(row => row.Hit)], hasMore ? NextCursor(release, request, page[^1]).Encode() : null);
+        var (page, next, previous) = KeysetPage.Cut(rows, request.Limit, request.Cursor?.Encode(), request.Backward, row => CursorOf(release, request, row).Encode());
+        return new(release, [.. page.Select(row => row.Hit)], next) { PreviousCursor = previous };
     }
 
     /// <summary>Counts every record of the release that the text and the filters match. The count ignores the cursor, so every page gives the same total.</summary>
@@ -77,34 +78,37 @@ public sealed class SearchIndex(NpgsqlDataSource database)
             WHERE {InRelease} AND r.search @@ q.query{FieldFilters(request)}
         ),
         page AS (
-            SELECT * FROM ranked r {(request.Cursor is null ? "" : RankedAfterCursor)}
-            ORDER BY r.rank DESC, r.record_id LIMIT @take
+            SELECT * FROM ranked r WHERE TRUE{Window(request, RankedAfterCursor)}
+            ORDER BY {KeysetPage.Order(RankedOrder, request.Backward)} LIMIT @take
         )
         SELECT {Columns},
             ts_headline('english', left(r.summary, {SearchSnippet.ScanCharacters}), q.query, '{SnippetOptions}'), r.rank
-        FROM page r CROSS JOIN q ORDER BY r.rank DESC, r.record_id
+        FROM page r CROSS JOIN q ORDER BY {KeysetPage.Order(RankedOrder, request.Backward)}
         """;
 
     private static string DatedSql(SearchRequest request) => $"""
         SELECT {Columns}, NULL::text FROM records r
-        WHERE {InRelease}{FieldFilters(request)}{(request.Cursor is null ? "" : DatedAfterCursor)}
-        ORDER BY {SortDate} DESC, r.first_published_at_utc DESC, r.record_id LIMIT @take
+        WHERE {InRelease}{FieldFilters(request)}{Window(request, DatedAfterCursor)}
+        ORDER BY {KeysetPage.Order(DatedOrder, request.Backward)} LIMIT @take
         """;
 
     private static string SortedSql(SearchRequest request, SearchSortKey sort)
     {
         var key = SortKeyExpression(sort);
         var direction = request.Descending ? "DESC" : "ASC";
-        var after = request.Cursor is null ? "" : $"""
-             AND ({key}, r.record_id) {(request.Descending ? "<" : ">")}
+        var after = $"""
+            ({key}, r.record_id) {(request.Descending ? "<" : ">")}
                 (SELECT {key}, r.record_id FROM records r WHERE r.record_id = @cursor_id AND {InRelease})
             """;
         return $"""
             {TextQuery(request)}SELECT {Columns}, NULL::text FROM records r{TextJoin(request)}
-            WHERE {InRelease}{FieldFilters(request)}{after}
-            ORDER BY {key} {direction}, r.record_id {direction} LIMIT @take
+            WHERE {InRelease}{FieldFilters(request)}{Window(request, after)}
+            ORDER BY {KeysetPage.Order($"{key} {direction}, r.record_id {direction}", request.Backward)} LIMIT @take
             """;
     }
+
+    private static string Window(SearchRequest request, string after) =>
+        request.Cursor is null ? "" : KeysetPage.Window(after, "r.record_id", "@cursor_id", request.Backward);
 
     private static string SortKeyExpression(SearchSortKey sort) => sort switch
     {
@@ -159,7 +163,7 @@ public sealed class SearchIndex(NpgsqlDataSource database)
         if (request.To is { } to) parameters.Add(new NpgsqlParameter("to", NpgsqlDbType.Date) { Value = to });
     }
 
-    private static SearchCursor NextCursor(int release, SearchRequest request, (RecordHit Hit, float Rank) last) => request switch
+    private static SearchCursor CursorOf(int release, SearchRequest request, (RecordHit Hit, float Rank) last) => request switch
     {
         { IsRanked: true } => SearchCursor.Ranked(release, last.Hit.RecordId, last.Rank),
         { Sort: not null } => SearchCursor.Sorted(release, last.Hit.RecordId),

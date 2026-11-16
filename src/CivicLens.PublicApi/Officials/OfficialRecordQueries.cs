@@ -39,12 +39,12 @@ internal static class OfficialRecordQueries
                (SELECT count(*) FROM public_api.executive_actions e WHERE e.official_id = @id)
         """;
 
-    private static string VotesSql(OfficialRecordRequest filter) => $"""
+    private static string VotesSql(OfficialRecordRequest filter, bool backward) => $"""
         SELECT a.release_number, v.official_id, {MemberVoteStore.VoteColumns}
           FROM public_api.member_votes v
          CROSS JOIN (SELECT release_number FROM public_api.active_release LIMIT 1) a
-         WHERE v.official_id = @id AND v.kind = ANY(@kinds){VoteFilters(filter)}{After("v.voted_on", "v.record_id")}
-         ORDER BY v.voted_on DESC, v.record_id LIMIT @take
+         WHERE v.official_id = @id AND v.kind = ANY(@kinds){VoteFilters(filter)}{Window("v.voted_on", "v.record_id", backward)}
+         ORDER BY {Order("v.voted_on", "v.record_id", backward)} LIMIT @take
         """;
 
     // The issue test reads the column issue_ids of the same view, as MemberVoteStore does. The party test reads breaks_party, the one owner of that rule,
@@ -56,27 +56,35 @@ internal static class OfficialRecordQueries
         (filter.AgainstPartyOnly ? " AND v.breaks_party" : "") +
         (filter.Cast is null ? "" : " AND v.side = @side");
 
-    private static readonly string BillsSql = $"""
+    private static string BillsSql(bool backward) => $"""
         SELECT {OfficialPageQueries.BillColumns}, {OfficialPageQueries.BillDay}
-        {OfficialPageQueries.SponsoredBillsSql}{After(OfficialPageQueries.BillDay, "b.record_id")}
-         ORDER BY {OfficialPageQueries.BillDay} DESC, b.record_id LIMIT @take
+        {OfficialPageQueries.SponsoredBillsSql}{Window(OfficialPageQueries.BillDay, "b.record_id", backward)}
+         ORDER BY {Order(OfficialPageQueries.BillDay, "b.record_id", backward)} LIMIT @take
         """;
 
-    private static readonly string StatementsSql = $"""
+    private static string StatementsSql(bool backward) => $"""
         SELECT s.record_id, s.statement_date, s.headline, s.label, {StatementDay}, s.text_origin
           FROM public_api.statements s
-         WHERE {SpokenBy}{After(StatementDay, "s.record_id")}
-         ORDER BY {StatementDay} DESC, s.record_id LIMIT @take
+         WHERE {SpokenBy}{Window(StatementDay, "s.record_id", backward)}
+         ORDER BY {Order(StatementDay, "s.record_id", backward)} LIMIT @take
         """;
 
-    private static readonly string ExecutiveSql = $"""
+    private static string ExecutiveSql(bool backward) => $"""
         SELECT e.record_id, e.headline, e.kind, e.signed_on
           FROM public_api.executive_actions e
-         WHERE e.official_id = @id{After("e.signed_on", "e.record_id")}
-         ORDER BY e.signed_on DESC, e.record_id LIMIT @take
+         WHERE e.official_id = @id{Window("e.signed_on", "e.record_id", backward)}
+         ORDER BY {Order("e.signed_on", "e.record_id", backward)} LIMIT @take
         """;
 
-    private static string After(string day, string recordId) => $" AND (@after_day::date IS NULL OR {day} < @after_day OR ({day} = @after_day AND {recordId} > @after_id))";
+    // Every kind sorts by its day, newest first, then by record ID.
+    private static string Order(string day, string recordId, bool backward) => KeysetPage.Order($"{day} DESC, {recordId}", backward);
+
+    // A first page sends a null day, which passes every row. A previous page always has a cursor.
+    private static string Window(string day, string recordId, bool backward)
+    {
+        var after = $"{day} < @after_day OR ({day} = @after_day AND {recordId} > @after_id)";
+        return backward ? KeysetPage.Window(after, recordId, "@after_id", backward) : $" AND (@after_day::date IS NULL OR {after})";
+    }
 
     /// <summary>Reads how many records the official has of each kind. A kind with no record counts zero.</summary>
     public static async Task<Dictionary<OfficialRecordKind, int>> ReadCountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,
@@ -106,8 +114,8 @@ internal static class OfficialRecordQueries
 
     /// <summary>Reads one page of the substantive votes of the official that pass the vote filters of the request.</summary>
     public static Task<Page<SharedVoteRowData>> ReadVotesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordRequest filter,
-        OfficialRecordCursor? after, CancellationToken cancellationToken) =>
-        ReadPageAsync(connection, transaction, VotesSql(filter), officialId, after, reader =>
+        PageStart start, CancellationToken cancellationToken) =>
+        ReadPageAsync(connection, transaction, VotesSql(filter, start.Backward), officialId, start, reader =>
         {
             var vote = MemberVoteStore.ReadVote(reader);
             return (OfficialPageReader.Vote(officialId, vote) with { Chamber = vote.Chamber }, vote.VotedOn, vote.RecordId);
@@ -120,17 +128,17 @@ internal static class OfficialRecordQueries
             if (filter.Cast is not null) parameters.AddWithValue("side", filter.Cast == OfficialRecordRequest.Yes ? "Yea" : "Nay");
         });
 
-    public static Task<Page<OfficialBillData>> ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, OfficialRecordCursor? after,
+    public static Task<Page<OfficialBillData>> ReadBillsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId, PageStart start,
         CancellationToken cancellationToken) =>
-        ReadPageAsync(connection, transaction, BillsSql, officialId, after, reader =>
+        ReadPageAsync(connection, transaction, BillsSql(start.Backward), officialId, start, reader =>
         {
             var bill = OfficialPageQueries.ReadBill(reader);
             return (bill, reader.GetFieldValue<DateOnly>(7), bill.RecordId);
         }, cancellationToken);
 
     public static Task<Page<OfficialRecordStatementData>> ReadStatementsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,
-        OfficialRecordCursor? after, CancellationToken cancellationToken) =>
-        ReadPageAsync(connection, transaction, StatementsSql, officialId, after, reader =>
+        PageStart start, CancellationToken cancellationToken) =>
+        ReadPageAsync(connection, transaction, StatementsSql(start.Backward), officialId, start, reader =>
         {
             var statement = new OfficialRecordStatementData(reader.GetString(0), ViewColumns.Date(reader, 1), reader.GetString(2), ViewColumns.Text(reader, 3),
                 ViewColumns.NullableEnum<PublishedTextOrigin>(reader, 5));
@@ -138,30 +146,34 @@ internal static class OfficialRecordQueries
         }, cancellationToken);
 
     public static Task<Page<OfficialRecordExecutiveData>> ReadExecutiveActionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string officialId,
-        OfficialRecordCursor? after, CancellationToken cancellationToken) =>
-        ReadPageAsync(connection, transaction, ExecutiveSql, officialId, after, reader =>
+        PageStart start, CancellationToken cancellationToken) =>
+        ReadPageAsync(connection, transaction, ExecutiveSql(start.Backward), officialId, start, reader =>
         {
             var action = new OfficialRecordExecutiveData(reader.GetString(0), reader.GetString(1), ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 2),
                 reader.GetFieldValue<DateOnly>(3));
             return (action, action.SignedOn, action.RecordId);
         }, cancellationToken);
 
-    private static async Task<Page<T>> ReadPageAsync<T>(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, string officialId, OfficialRecordCursor? after,
+    private static async Task<Page<T>> ReadPageAsync<T>(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql, string officialId, PageStart start,
         Func<NpgsqlDataReader, (T Row, DateOnly Day, string RecordId)> read, CancellationToken cancellationToken, Action<NpgsqlParameterCollection>? filters = null)
     {
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("id", officialId);
         command.Parameters.AddWithValue("take", PageSize + 1);
-        command.Parameters.AddWithValue("after_day", NpgsqlTypes.NpgsqlDbType.Date, after is null ? DBNull.Value : after.Day);
-        command.Parameters.AddWithValue("after_id", after?.RecordId ?? string.Empty);
+        command.Parameters.AddWithValue("after_day", NpgsqlTypes.NpgsqlDbType.Date, start.Cursor is { } cursor ? cursor.Day : DBNull.Value);
+        command.Parameters.AddWithValue("after_id", start.Cursor?.RecordId ?? string.Empty);
         filters?.Invoke(command.Parameters);
         var rows = new List<(T Row, DateOnly Day, string RecordId)>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken)) rows.Add(read(reader));
-        var shown = rows.Take(PageSize).ToArray();
-        return new([.. shown.Select(row => row.Row)], rows.Count > PageSize ? (shown[^1].Day, shown[^1].RecordId) : null);
+        var (shown, next, previous) = KeysetPage.Cut(rows, PageSize, start.Cursor?.Encode(), start.Backward,
+            row => new OfficialRecordCursor(start.Release, row.Day, row.RecordId).Encode());
+        return new([.. shown.Select(row => row.Row)], next, previous);
     }
 
-    /// <summary>One page of rows and the sort key of its last row when another page follows.</summary>
-    public sealed record Page<T>(T[] Rows, (DateOnly Day, string RecordId)? Next);
+    /// <summary>Where a page starts: the release of the page, the cursor of the tab or null on the first page, and whether the cursor starts the previous page.</summary>
+    public sealed record PageStart(int Release, OfficialRecordCursor? Cursor, bool Backward);
+
+    /// <summary>One page of rows and the cursors of the next and the previous page.</summary>
+    public sealed record Page<T>(T[] Rows, string? Next, string? Previous);
 }
