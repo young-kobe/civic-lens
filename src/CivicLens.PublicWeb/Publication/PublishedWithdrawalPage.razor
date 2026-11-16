@@ -37,8 +37,6 @@
 </PublicPage>
 
 @code {
-
     [Parameter, EditorRequired] public PublishedWithdrawal Withdrawal { get; set; } = default!;
-    /// <summary>The path to the site root. The static page sits one folder down, and a server page gets the configured root.</summary>
-    [Parameter] public string RootPath { get; set; } = "../";
+    [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
 }

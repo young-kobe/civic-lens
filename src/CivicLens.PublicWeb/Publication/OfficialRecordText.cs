@@ -4,8 +4,7 @@ using CivicLens.PublicWeb.Components.Ui;
 namespace CivicLens.PublicWeb.Publication;
 
 /// <summary>
-/// The one owner of the words and the paths of the record page of an official. The static page of the same name holds the approved title, description, back link,
-/// empty state, and "Rows are newest first." The official page and the record page both build their links here.
+/// The one owner of the words and the paths of the record page of an official. The official page and the record page both build their links here.
 /// </summary>
 public static class OfficialRecordText
 {
@@ -19,7 +18,7 @@ public static class OfficialRecordText
     public const string PartyLineLabel = "Party line";
     public const string CastLabel = "Vote";
 
-    /// <summary>The one choice of the party line filter. Its label is the approved name of the static record page filter.</summary>
+    /// <summary>The one choice of the party line filter, with its approved label.</summary>
     public static readonly SearchChoiceData[] PartyLineChoices = [new("against", "Against their party")];
 
     public static readonly SearchChoiceData[] CastChoices = [new("yes", "Yes"), new("no", "No")];

@@ -301,9 +301,13 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         _ => "none"
     };
 
-    // The C# rule for a statement is PublishedRecordLabels.StatementWording. It gives the code label when code approved a model statement, the person-checked label when a person did, the source text label for code text, and none for person text.
-    private static string LabelOfStatement(PublishedTextOrigin origin, PublishedApprover approver) =>
-        PublishedRecordLabels.StatementWording(PublishedStatementTests.Statement() with { TextOrigin = origin, ApprovedBy = approver }).SingleOrDefault()?.Value ?? "none";
+    // The label of a statement: the code label when code approved a model statement, the person-checked label when a person did, the source text label for code text, and none for person text.
+    private static string LabelOfStatement(PublishedTextOrigin origin, PublishedApprover approver) => origin switch
+    {
+        PublishedTextOrigin.Model => approver == PublishedApprover.Code ? AiLabelWords.StatementModelWording : AiLabelWords.StatementCheckedByPersonWording,
+        PublishedTextOrigin.Code => AiLabelWords.StatementSourceTextWording,
+        _ => "none"
+    };
 
     // PublishedRecordRules.ApproverOf reads the latest Approve decision of the revision.
     private static PublishedApprover StatementApprover(string[] approversInOrder)

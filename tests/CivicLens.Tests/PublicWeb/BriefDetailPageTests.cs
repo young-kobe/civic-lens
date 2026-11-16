@@ -122,7 +122,7 @@ public sealed class BriefDetailPageTests
     }
 
     [Fact]
-    public async Task EachCitedRecordKeepsItsIdHeadlineKindRevisionAndTheStaticRecordLink()
+    public async Task EachCitedRecordKeepsItsIdHeadlineKindRevisionAndItsRecordLinkFromTheRoot()
     {
         var page = await RenderAsync<BriefDetailPage, BriefPageData>(Brief());
 

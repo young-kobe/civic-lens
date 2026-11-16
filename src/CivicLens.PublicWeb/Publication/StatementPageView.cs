@@ -17,7 +17,7 @@ public static class StatementPageView
 
     public const string ModelCheckLine = CheckLine + " " + AiLabelWords.ModelWroteOnlyThisSummary;
 
-    /// <summary>The caveat of the static statement page. It sits in the check line, so no separate caveat shows.</summary>
+    /// <summary>The caveat of the statement page. It sits in the check line, so no separate caveat shows.</summary>
     public const string CaptureCaveat = "The observation time shows when the source was captured. It does not show when the statement was first made.";
 
     public const string QuotationsHeading = "What was said";
@@ -74,7 +74,7 @@ public static class StatementPageView
         ? $"See quote {count} in the source text above"
         : $"See quotes {ShownQuotations + 1} to {count} in the source text above";
 
-    /// <summary>The marks of the saved text: one per quote and one for the date evidence. The static page and the server page both call it.</summary>
+    /// <summary>The marks of the saved text: one per quote and one for the date evidence.</summary>
     public static IReadOnlyList<CitedRange> Ranges(PublishedQuotation[] quotations, PublishedCitation? dateEvidence)
     {
         var ranges = quotations.Select((quotation, index) => new CitedRange(CitedText.Anchor(index), quotation.Start, quotation.Length));
@@ -95,7 +95,7 @@ public static class StatementPageView
         return facts;
     }
 
-    /// <summary>The date rule has one owner: the label of the static page. It names an AI date only when code approved the statement and the date has evidence.</summary>
+    /// <summary>The date fact takes its label from <see cref="PublishedRecordLabels.StatementDate"/>. It names an AI date only when code approved the statement and the date has evidence.</summary>
     private static string DateFact(StatementPageData data) => data.StatementDate is { } date
         ? PublishedRecordLabels.StatementDate(data.ApprovedBy, data.DateEvidence is not null, Moment.Day(date))
         : "Not stated in the source";

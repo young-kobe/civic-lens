@@ -9,7 +9,7 @@ namespace CivicLens.PublicApi.Pages;
 
 /// <summary>The owner of shared freshness and the weak semantic validator of server pages. A page of one release, build, site origin, browser API origin, and Turnstile site key never changes.
 /// The edge keeps the page for 60 seconds, revalidates in the background for 10 minutes, and serves a kept copy for 24 hours when this service fails.
-/// A page with a status other than success, such as the not found page, gets no validator and no cache keeps it, as the static 404 page.
+/// A page with a status other than success, such as the not found page, gets no validator and no cache keeps it.
 /// Caddy owns transport encoding and no-transform at ingress. The rule holds no reader data: a page never varies by cookie or by query.</summary>
 public sealed class PageCache(string buildId, PublicBaseUrl baseUrl, PublicBaseUrl? browserApiUrl = null, string? turnstileSiteKey = null)
 {
