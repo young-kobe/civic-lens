@@ -124,11 +124,13 @@ public sealed class PostgresCollectionAttemptStore(IDbContextFactory<CollectionA
             PostgresCollectionJobStore.ToRequest(reserved), attempt.Request, attempt.Transfer);
     }
 
-    /// <summary>Applies checked-in migrations and the public API grants explicitly; imports never run schema changes.</summary>
+    /// <summary>Moves a pre-squash history to the baseline, then applies checked-in migrations and the public API grants explicitly;
+    /// imports never run schema changes.</summary>
     public async Task MigrateAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
         db.Database.SetCommandTimeout(MigrationCommandTimeout);
+        await MigrationHistorySquash.ApplyAsync(db, cancellationToken);
         await db.Database.MigrateAsync(cancellationToken);
         await PublicApiGrants.ApplyAsync(db, cancellationToken);
     }
