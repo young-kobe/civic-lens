@@ -362,12 +362,17 @@ internal sealed class PublicationScenario
         };
     }
 
-    public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null, string? correctionNote = PersonNote)
+    public void ReviseAction(string recordId, int revisionNumber, string? approverSubject = null, string? correctionNote = PersonNote,
+        Func<ActionDraftRevision, ActionDraftRevision>? change = null)
     {
         var publishable = Actions.Publishable[recordId];
         var review = publishable.Review;
         var approver = approverSubject ?? review.Decisions[^1].ActorSubject;
-        var revised = review.CurrentRevision with { RevisionNumber = revisionNumber, TrackedIssueIds = [$"issue-{revisionNumber}"], IssueCandidateIds = [$"issue-{revisionNumber}"] };
+        var revised = (change?.Invoke(review.CurrentRevision) ??
+            review.CurrentRevision with { TrackedIssueIds = [$"issue-{revisionNumber}"], IssueCandidateIds = [$"issue-{revisionNumber}"] }) with
+        {
+            RevisionNumber = revisionNumber
+        };
         Actions.Publishable[recordId] = publishable with
         {
             Review = review with

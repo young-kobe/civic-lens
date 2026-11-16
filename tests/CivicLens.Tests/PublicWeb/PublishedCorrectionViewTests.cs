@@ -30,8 +30,17 @@ public sealed class PublishedCorrectionViewTests
     [InlineData(PublishedTextRewrite.None, ", 2 Nov 2026. Replaces revision 2.")]
     [InlineData(PublishedTextRewrite.Model, ", 2 Nov 2026. Replaces revision 2. The vote facts did not change.")]
     [InlineData(PublishedTextRewrite.Code, ", 2 Nov 2026. Replaces revision 2. The vote facts did not change.")]
-    public void EveryTextRewriteSaysThatTheVoteFactsDidNotChange(PublishedTextRewrite rewrite, string afterTitle)
+    public void EveryTextRewriteOfAVoteSaysThatTheVoteFactsDidNotChange(PublishedTextRewrite rewrite, string afterTitle)
     {
-        Assert.Equal(afterTitle, PublishedCorrectionView.AfterTitle(SourceUpdate with { TextRewrite = rewrite }));
+        Assert.Equal(afterTitle, PublishedCorrectionView.AfterTitle(SourceUpdate with { TextRewrite = rewrite }, PublishedRecordKind.Vote));
+    }
+
+    [Fact]
+    public void ACodeRewriteOfABillActionShowsTheTitleWithNoVoteFactsTail()
+    {
+        var rewrite = SourceUpdate with { TextRewrite = PublishedTextRewrite.Code };
+
+        Assert.Equal("Wording rewritten by code", PublishedCorrectionView.Title(rewrite));
+        Assert.Equal(", 2 Nov 2026. Replaces revision 2.", PublishedCorrectionView.AfterTitle(rewrite, PublishedRecordKind.Action));
     }
 }

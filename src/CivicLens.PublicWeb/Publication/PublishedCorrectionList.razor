@@ -6,7 +6,7 @@
         @foreach (var correction in Corrections)
         {
             <li>
-                <strong>@if (correction.Note is not null) {<Term Key="correction">@PublishedCorrectionView.Title(correction)</Term>} else {<text>@PublishedCorrectionView.Title(correction)</text>}@PublishedCorrectionView.AfterTitle(correction)</strong>
+                <strong>@if (correction.Note is not null) {<Term Key="correction">@PublishedCorrectionView.Title(correction)</Term>} else {<text>@PublishedCorrectionView.Title(correction)</text>}@PublishedCorrectionView.AfterTitle(correction, Kind)</strong>
                 @if (correction.Note is not null)
                 {
                     <p>@correction.Note</p>
@@ -18,4 +18,7 @@
 
 @code {
     [Parameter, EditorRequired] public PublishedCorrection[] Corrections { get; set; } = [];
+
+    /// <summary>The kind of the record that the corrections belong to.</summary>
+    [Parameter, EditorRequired] public PublishedRecordKind Kind { get; set; }
 }

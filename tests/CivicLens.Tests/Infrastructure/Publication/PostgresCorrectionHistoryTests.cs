@@ -657,7 +657,7 @@ public sealed class PostgresCorrectionHistoryTests(PostgresCollection postgres) 
 
     private static PublishedRevisionBinding Binding(string recordId, int revision) => new(PublishedRecordKind.Action, recordId, revision);
 
-    // Only a vote correction can name a text rewrite, so a history that holds one binds a vote.
+    // A vote can name a text rewrite of either kind, so a history that holds one binds a vote.
     private static PublishedRevisionBinding VoteBinding(string recordId, int revision) => new(PublishedRecordKind.Vote, recordId, revision);
 
     private static PublishedCorrection[] OrderedCorrections() =>

@@ -28,7 +28,17 @@ internal sealed class ActionRecordLoader(IActionReviewStore actions)
     {
         var review = addition.Review;
         RequirePublishable(recordId, review.CurrentRevision.RevisionNumber, review.Decisions, review.UnresolvedConcerns, build);
-        var record = new PublishedActionBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId), build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions), build.Now);
+        var built = new PublishedActionBuilder(build.Rules).Build(addition, build.FirstPublishedAt(Kind, recordId), [], build.Now);
+        // Only code text names a rewrite of a bill action. PublishedCorrection.ValidateAll holds the rule.
+        var textRewrite = built.TextOrigin == PublishedTextOrigin.Code && build.Corrections.EarlierAction(recordId) is { } earlier &&
+            built.IsTextRewriteOf(earlier)
+            ? PublishedTextRewrite.Code
+            : PublishedTextRewrite.None;
+        var record = built with
+        {
+            Corrections = build.Corrections.For(Kind, recordId, review.CurrentRevision.RevisionNumber, review.Decisions, textRewrite)
+        };
+        PublishedCorrection.ValidateAll(record.Corrections, record.RevisionNumber, Kind);
         return PendingRecord.Create(BillLine.EntryOf(record), review.ReviewStateVersion, record, record.Corrections);
     }
 }
