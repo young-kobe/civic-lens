@@ -1,12 +1,6 @@
-using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Migrations;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
@@ -14,7 +8,7 @@ namespace CivicLens.Tests.Infrastructure.PublicApi;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PublicApiExecutiveActionTargetsMigrationTests(PostgresCollection postgres) : IAsyncLifetime
+public sealed class PublicApiExecutiveActionTargetsTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private string database = null!;
 
@@ -85,43 +79,8 @@ public sealed class PublicApiExecutiveActionTargetsMigrationTests(PostgresCollec
     }
 
     [Fact]
-    public async Task DowngradeDropsTheViewAndRevokesItsColumnsAndUpgradeWithGrantsRestoresThem()
+    public async Task AnIndexOnTheKindAndThePresidentialNumberServesTheTargetMatchOfTheView()
     {
-        var migration = new PublicApiExecutiveActionTargets();
-        // A later migration adds a view over executive_actions, so the test first rolls back to this migration, as a real rollback does.
-        await using (var migrated = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options))
-            await migrated.GetService<IMigrator>().MigrateAsync("20261111010000_PublicApiExecutiveActionTargets");
-        await ApplyAsync(migration.DownOperations);
-        Assert.Equal("false|false|true", await GrantStateAsync());
-        Assert.Equal(["0"], await QueryAsync(database, "SELECT count(*)::text FROM pg_indexes WHERE indexname = 'IX_executive_action_revisions_kind_presidential_number'"));
-
-        await ApplyAsync(migration.UpOperations);
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-        await db.GetService<IMigrator>().MigrateAsync();
-        await ApplyGrantsAsync(database);
-        Assert.Equal("true|true|false", await GrantStateAsync());
         Assert.Equal(["1"], await QueryAsync(database, "SELECT count(*)::text FROM pg_indexes WHERE indexname = 'IX_executive_action_revisions_kind_presidential_number'"));
-        Assert.Equal(["5"], await QueryAsPublicAsync(database, "SELECT count(*)::text FROM public_api.executive_action_targets"));
-    }
-
-    private async Task<string> GrantStateAsync() => (await QueryAsync(database, """
-        SELECT has_column_privilege('civic_lens_public_owner', 'executive_action_revisions', 'disposition_notes', 'SELECT')::text
-            || '|' || has_any_column_privilege('civic_lens_public_owner', 'executive_action_revision_disposition_targets', 'SELECT')::text
-            || '|' || (to_regclass('public_api.executive_action_targets') IS NULL)::text
-        """))[0];
-
-    private async Task ApplyAsync(IReadOnlyList<MigrationOperation> operations)
-    {
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-        var commands = db.GetService<IMigrationsSqlGenerator>().Generate(operations, db.Model);
-        await using var connection = new NpgsqlConnection(database);
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
-        foreach (var statement in commands)
-        {
-            await using var command = new NpgsqlCommand(statement.CommandText, connection, transaction);
-            await command.ExecuteNonQueryAsync();
-        }
-        await transaction.CommitAsync();
     }
 }

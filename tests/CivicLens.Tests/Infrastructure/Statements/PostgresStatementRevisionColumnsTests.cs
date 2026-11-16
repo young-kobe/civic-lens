@@ -315,6 +315,7 @@ public sealed class PostgresStatementRevisionColumnsTests(PostgresCollection pos
     [InlineData("UPDATE statement_revisions SET statement_date = NULL WHERE revision_number = 2", "ck_statement_revisions_date_evidence")]
     [InlineData("UPDATE statement_revisions SET statement_date_evidence_length = 4097 WHERE revision_number = 2", "ck_statement_revisions_date_evidence_length")]
     [InlineData("UPDATE statement_revisions SET statement_date_evidence_start = -1 WHERE revision_number = 2", "ck_statement_revisions_statement_date_evidence")]
+    [InlineData("UPDATE statement_revisions SET author_kind = 'Code' WHERE revision_number = 2", "ck_statement_revisions_code_date")]
     [InlineData("UPDATE statement_revision_speakers SET official_id = ' ' WHERE position = 0", "ck_statement_revision_speakers_official")]
     [InlineData("UPDATE statement_revision_speakers SET position = 64 WHERE position = 0", "ck_statement_revision_speakers_position")]
     [InlineData("UPDATE statement_revision_other_speakers SET speaker_name = ' Jo Rivera' WHERE position = 0", "ck_statement_revision_other_speakers_name")]

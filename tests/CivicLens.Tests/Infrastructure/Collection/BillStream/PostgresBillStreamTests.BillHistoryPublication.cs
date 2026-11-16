@@ -15,6 +15,51 @@ namespace CivicLens.Tests.Infrastructure.Collection.BillStream;
 public sealed partial class PostgresBillStreamTests
 {
     [Fact]
+    public async Task ProjectionVersionsAllowCoexistingCopiesAndTheReleaseBindingRefusesAVersionThatHasNoCopy()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        var detailJobId = (string)(await ScalarAsync("SELECT detail_job_id FROM bill_gates"))!;
+        await ExecuteAsync(connectionString, string.Join('\n', Enumerable.Range(1, 3).Select(number => $"""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES ({number}, '{number:D6}-{Guid.NewGuid():N}', 'history-test', 0, 1, {(number == 2 ? "true" : "false")});
+            """)));
+        await ExecuteAsync(connectionString, $"""
+            INSERT INTO published_bill_histories
+                (detail_job_id, projection_version, source_id, congress, bill_type, bill_number, observed_at_utc_ticks, action_count, public_law)
+            SELECT detail_job_id, versions.projection_version, source_id, congress, bill_type, bill_number, 638713728000000000, 1, '119-21'
+              FROM bill_gates CROSS JOIN (VALUES (0), (1)) AS versions(projection_version)
+             WHERE detail_job_id = '{detailJobId}';
+            INSERT INTO published_bill_history_actions
+                (detail_job_id, projection_version, position, action_date, action_time, text, type, action_code, source_system_code, source_system_name)
+            VALUES ('{detailJobId}', 0, 0, DATE '2025-03-02', TIME '13:45:10', 'Legacy action', 'Floor', 'H8D000', 2, 'House floor actions'),
+                   ('{detailJobId}', 1, 0, DATE '2025-03-02', TIME '13:45:10', 'Verified action', 'Floor', 'H8D000', 2, 'House floor actions');
+            INSERT INTO release_bill_histories (release_number, record_id, detail_job_id, projection_version)
+            VALUES (1, '{RecordId}', '{detailJobId}', 0), (2, '{RecordId}', '{detailJobId}', 1);
+            """);
+
+        var incorrectVersion = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(connectionString, $"""
+            INSERT INTO release_bill_histories (release_number, record_id, detail_job_id, projection_version) VALUES (3, '{RecordId}', '{detailJobId}', 2)
+            """));
+
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, incorrectVersion.SqlState);
+        Assert.Equal("1|Legacy action,2|Verified action", await ScalarAsync("""
+            SELECT string_agg(rh.release_number::text || '|' || a.text, ',' ORDER BY rh.release_number)
+              FROM release_bill_histories rh
+              JOIN published_bill_history_actions a ON a.detail_job_id = rh.detail_job_id AND a.projection_version = rh.projection_version
+            """));
+        Assert.Equal("0,1|0,1|0,1", await ScalarAsync("""
+            SELECT (SELECT string_agg(projection_version::text, ',' ORDER BY projection_version) FROM published_bill_histories)
+                 || '|' || (SELECT string_agg(projection_version::text, ',' ORDER BY projection_version) FROM published_bill_history_actions)
+                 || '|' || (SELECT string_agg(projection_version::text, ',' ORDER BY projection_version) FROM release_bill_histories)
+            """));
+        Assert.Equal("PRIMARY KEY (detail_job_id, projection_version)", await ScalarAsync(PrimaryKeyOf("published_bill_histories")));
+        Assert.Equal("PRIMARY KEY (detail_job_id, projection_version, \"position\")", await ScalarAsync(PrimaryKeyOf("published_bill_history_actions")));
+        Assert.Equal("PRIMARY KEY (release_number, record_id)", await ScalarAsync(PrimaryKeyOf("release_bill_histories")));
+    }
+
+    private static string PrimaryKeyOf(string table) => $"SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = '{table}'::regclass AND contype = 'p'";
+
+    [Fact]
     public async Task VerifiedCopiesAndReleaseBindingsDoNotOverwriteLegacyEmptyHistoryOfTheSameCapture()
     {
         await DraftForReviewAsync(UpdatedAt, DraftableOutput);

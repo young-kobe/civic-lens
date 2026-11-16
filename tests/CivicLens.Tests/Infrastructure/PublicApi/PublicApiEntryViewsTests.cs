@@ -1,14 +1,11 @@
 using System.Globalization;
 using CivicLens.Application.Publication;
-using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Migrations;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi;
+using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Votes;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
@@ -16,15 +13,16 @@ namespace CivicLens.Tests.Infrastructure.PublicApi;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection postgres)
+public sealed class PublicApiEntryViewsTests(PostgresCollection postgres)
 {
-    private const string Migration = "20261112050100_PublicApiSearchEntries";
     private static readonly string[] Views = ["record_entries", "record_first_publications", "record_issues", "record_officials", "record_policy_areas"];
     private static readonly DateTimeOffset FirstPublished = new(2026, 3, 2, 12, 0, 0, TimeSpan.Zero);
     private static readonly string ActionId = new('a', 64);
     private static readonly string RetiredId = new('b', 32);
 
-    private static readonly PublishedRecordEntry OldAction = PublishedEntryFixtures.Action(ActionId, FirstPublished) with { BillLine = "H.R. 1, introduced" };
+    private static readonly DateTimeOffset OldApproval = FirstPublished.AddHours(1);
+    private static readonly DateTimeOffset NewApproval = FirstPublished.AddDays(30).AddMinutes(7);
+    private static readonly PublishedRecordEntry OldAction = PublishedEntryFixtures.Action(ActionId, FirstPublished) with { BillLine = "H.R. 1, introduced", ApprovedAtUtc = OldApproval };
 
     private static readonly PublishedRecordEntry NewAction = PublishedEntryFixtures.Action(ActionId, FirstPublished, revision: 2) with
     {
@@ -34,11 +32,12 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
         PolicyAreaIds = ["housing", "economics"],
         SourceHost = "api.congress.gov",
         EventDate = new DateOnly(2026, 4, 1),
-        BillLine = "H.R. 1, passed House"
+        BillLine = "H.R. 1, passed House",
+        ApprovedAtUtc = NewApproval
     };
 
     private static readonly PublishedRecordEntry Retired =
-        PublishedEntryFixtures.DocumentChange(RetiredId, 1, "A page changed", FirstPublished.AddDays(-3));
+        PublishedEntryFixtures.DocumentChange(RetiredId, 1, "A page changed", FirstPublished.AddDays(-3)) with { ApprovedAtUtc = OldApproval.AddMinutes(1) };
 
     [Fact]
     public async Task EachEntryViewShowsTheStoredEntryOfTheActiveRevisionAndARollbackMovesItBecauseTheViewsJoinActiveRecords()
@@ -96,31 +95,41 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
     }
 
     [Fact]
-    public async Task DowngradeDropsTheEntryViewsAndRevokesOnlyTheGrantsThatNoOlderViewReads()
+    public async Task TheEntryViewShowsTheStoredApprovalTimeOfTheActiveReleaseOnlyAndThePublicRoleCannotReadItFromTheTable()
     {
+        const string readTimes = "SELECT revision_number || '|' || approved_at_utc_ticks FROM public_api.record_entries ORDER BY record_id, revision_number";
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
-            await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-            var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, Migration) < 0);
-            await db.GetService<IMigrator>().MigrateAsync(previous);
-
-            Assert.Equal(["0"], await QueryAsync(database, $"""
-                SELECT count(*)::text FROM pg_class WHERE relnamespace = 'public_api'::regnamespace AND relname IN ({string.Join(", ", Views.Select(view => $"'{view}'"))})
-                """));
-            Assert.Equal("0", await AddedGrantCountAsync(database));
-            Assert.Equal(["true|true|true|true"], await QueryAsync(database, """
-                SELECT has_column_privilege('civic_lens_public_owner', 'published_entries', 'event_date', 'SELECT')::text || '|'
-                    || has_column_privilege('civic_lens_public_owner', 'published_entries', 'bill_line', 'SELECT')::text || '|'
-                    || has_column_privilege('civic_lens_public_owner', 'published_entry_officials', 'official_id', 'SELECT')::text || '|'
-                    || has_column_privilege('civic_lens_public_owner', 'published_records', 'first_published_at_utc_ticks', 'SELECT')::text
-                """));
-
-            await db.GetService<IMigrator>().MigrateAsync();
-            await ApplyGrantsAsync(database);
-            Assert.Equal("15", await AddedGrantCountAsync(database));
             await SeedAsync(database);
-            Assert.Equal(Expected(NewAction), await EntryAsync(database));
+            Assert.Equal([$"2|{NewApproval.UtcTicks}"], await QueryAsPublicAsync(database, readTimes));
+            await ViewsSeed.ActivateReleaseAsync(database, 1, DateTimeOffset.UnixEpoch);
+            Assert.Equal([$"1|{OldApproval.UtcTicks}", $"1|{OldApproval.AddMinutes(1).UtcTicks}"], await QueryAsPublicAsync(database, readTimes));
+            await ExecuteAsync(database, "UPDATE publication_releases SET is_active = false");
+            Assert.Empty(await QueryAsPublicAsync(database, readTimes));
+            var denied = await Assert.ThrowsAsync<PostgresException>(() => QueryAsPublicAsync(database, "SELECT approved_at_utc_ticks FROM public.published_entries"));
+            Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
+        }
+        finally { await postgres.DropDatabaseAsync(database); }
+    }
+
+    [Fact]
+    public async Task TheBillAndEntryViewsShowNoLineThatEndsWithTheCutMarkAndKeepAWholeLineWhileTheStoredRowKeepsBoth()
+    {
+        const string wholeLine = "This bill funds rent aid.";
+        var database = await postgres.CreateMigratedDatabaseAsync();
+        try
+        {
+            await ViewsSeed.ActivateReleaseAsync(database, 1, DateTimeOffset.UnixEpoch);
+            await BillsSeed.AddBillsAsync(database,
+                new SeededBill('a', "2026-03-02") { BillLine = wholeLine },
+                new SeededBill('b', "2026-03-02") { BillLine = PublishedSamples.CutBillLine });
+
+            string[] expected = [$"a:{wholeLine}", "b:-"];
+            Assert.Equal(expected, await QueryAsPublicAsync(database, "SELECT right(record_id, 1) || ':' || coalesce(bill_line, '-') FROM public_api.bills ORDER BY record_id"));
+            Assert.Equal(expected, await QueryAsPublicAsync(database, "SELECT right(record_id, 1) || ':' || coalesce(bill_line, '-') FROM public_api.record_entries ORDER BY record_id"));
+            Assert.Equal([$"a:{wholeLine}", $"b:{PublishedSamples.CutBillLine}"], await QueryAsync(database,
+                "SELECT right(record_id, 1) || ':' || bill_line FROM published_entries ORDER BY record_id"));
         }
         finally { await postgres.DropDatabaseAsync(database); }
     }
@@ -159,17 +168,4 @@ public sealed class PublicApiSearchEntriesMigrationTests(PostgresCollection post
           JOIN public_api.record_first_publications f ON f.kind = e.kind AND f.record_id = e.record_id
          ORDER BY e.record_id
         """);
-
-    private static async Task<string> AddedGrantCountAsync(string database) => (await QueryAsync(database, """
-        SELECT count(*)::text FROM (VALUES
-            ('published_entries', 'headline'), ('published_entries', 'source_host'), ('published_entries', 'bill_title'),
-            ('published_entry_officials', 'position'), ('published_entry_officials', 'is_matched'),
-            ('published_entry_issues', 'kind'), ('published_entry_issues', 'record_id'), ('published_entry_issues', 'revision_number'),
-            ('published_entry_issues', 'position'), ('published_entry_issues', 'issue_id'),
-            ('published_entry_policy_areas', 'kind'), ('published_entry_policy_areas', 'record_id'), ('published_entry_policy_areas', 'revision_number'),
-            ('published_entry_policy_areas', 'position'), ('published_entry_policy_areas', 'policy_area_id')
-        ) added(table_name, column_name)
-        WHERE has_column_privilege('civic_lens_public_owner', added.table_name, added.column_name, 'SELECT')
-        """))[0];
-
 }

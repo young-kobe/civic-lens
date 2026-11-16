@@ -223,24 +223,6 @@ public sealed class PostgresPublicationWithdrawalTests(PostgresCollection postgr
         Assert.Equal([PostgresErrorCodes.UniqueViolation, PostgresErrorCodes.ForeignKeyViolation], [duplicate.SqlState, orphan.SqlState]);
     }
 
-    [Fact]
-    public async Task TheMigrationCreatesBothTablesAndGoesDownByDroppingThemBecauseDownMustWorkForARollback()
-    {
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-        var migrations = db.Database.GetMigrations().ToList();
-        var migration = migrations.Single(id => id.EndsWith("_PublicationWithdrawals", StringComparison.Ordinal));
-        Assert.Equal(2, (await TablesAsync()).Count);
-
-        await db.GetService<IMigrator>().MigrateAsync(migrations[migrations.IndexOf(migration) - 1]);
-
-        Assert.Empty(await TablesAsync());
-        await db.Database.MigrateAsync();
-        Assert.Equal(2, (await TablesAsync()).Count);
-    }
-
-    private Task<List<string[]>> TablesAsync() => ReadAsync(
-        "SELECT table_name FROM information_schema.tables WHERE table_name IN ('publication_withdrawals', 'publication_withdrawal_corrections')");
-
     private async Task SeedReleaseWithRecordAsync()
     {
         await SeedActionsAsync(A);

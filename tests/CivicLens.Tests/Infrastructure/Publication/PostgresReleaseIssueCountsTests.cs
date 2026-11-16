@@ -58,6 +58,21 @@ public sealed class PostgresReleaseIssueCountsTests(PostgresCollection postgres)
         Assert.Equal(0, await FillAsync(3, 119));
     }
 
+    [Theory]
+    [InlineData("119, NULL, 0")]
+    [InlineData("119, -1, 0")]
+    [InlineData("NULL, 1, 1")]
+    public async Task AReleaseIssueRefusesPartialOrNegativeHomeCountsBecauseTheThreeCountsAreStoredTogether(string counts)
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, Published);
+
+        var invalid = await Assert.ThrowsAsync<PostgresException>(() => ViewsSeed.ExecuteAsync(connectionString, $"""
+            INSERT INTO release_issues (release_number, issue_id, name, count_congress, substantive_votes, bills) VALUES (1, 'health', 'Health', {counts})
+            """));
+
+        Assert.Equal((PostgresErrorCodes.CheckViolation, "ck_release_issues_home_counts"), (invalid.SqlState, invalid.ConstraintName));
+    }
+
     private async Task InsertIssueNamesAsync() => await ViewsSeed.ExecuteAsync(connectionString, """
         INSERT INTO release_issues (release_number, issue_id, name, definition)
         VALUES (1, 'health', 'Health', 'Definition'), (1, 'climate', 'Climate', 'Definition'), (1, 'empty', 'Empty', 'Definition'),

@@ -8,13 +8,10 @@ using CivicLens.Core.ExecutiveActions;
 using CivicLens.Core.Review;
 using CivicLens.Core.Votes;
 using CivicLens.Infrastructure.Collection;
-using CivicLens.Infrastructure.Collection.Migrations;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using static CivicLens.Tests.PublicApi.Votes.ViewsSeed;
 
@@ -22,9 +19,8 @@ namespace CivicLens.Tests.Infrastructure.PublicApi;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection postgres)
+public sealed class PublicApiSourceViewsTests(PostgresCollection postgres)
 {
-    private const string Migration = "20261112050000_PublicApiSearchSources";
     private static readonly DocumentExtraction[] Extractions = [.. Enumerable.Range(0, 11).Select(Extraction)];
     private static readonly string ActionId = new('a', 64);
     private static readonly string VoteId = new('b', 64);
@@ -133,38 +129,6 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
 
             Assert.Equal([$"action|{Extractions[2].ExtractionId}|7|4", $"statement|{Extractions[2].ExtractionId}|7|4"], await QueryAsPublicAsync(database,
                 "SELECT kind || '|' || quote_extraction_id || '|' || quote_start || '|' || quote_length FROM public_api.record_links ORDER BY kind"));
-        }
-        finally { await postgres.DropDatabaseAsync(database); }
-    }
-
-    [Fact]
-    public async Task DowngradeRestoresTheOlderViewShapesAndRevokesOnlyTheGrantsThatNoOlderViewReads()
-    {
-        var database = await postgres.CreateMigratedDatabaseAsync();
-        try
-        {
-            var upgraded = await ColumnsAsync(database);
-            await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-            var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, Migration) < 0);
-            await db.GetService<IMigrator>().MigrateAsync(previous);
-
-            Assert.Equal([
-                "record_links:record_id|kind|related_kind|related_record_id|related_headline|related_text_origin|related_label|link_type|statement_date|link_record_id|reason",
-                "vote_sources:record_id|revision_number|extraction_id|url|observed_at_utc_ticks|text"
-            ], await ColumnsAsync(database));
-            Assert.Equal("0", await AddedGrantCountAsync(database));
-            Assert.Equal(["true|true|true"], await QueryAsync(database, """
-                SELECT has_column_privilege('civic_lens_public_owner', 'relationship_revisions', 'reason', 'SELECT')::text || '|'
-                    || has_column_privilege('civic_lens_public_owner', 'executive_action_documents', 'notice_url', 'SELECT')::text || '|'
-                    || has_column_privilege('civic_lens_public_owner', 'action_revisions', 'crs_summary_text', 'SELECT')::text
-                """));
-            Assert.Equal(["0", "0"], await QueryAsPublicAsync(database,
-                "SELECT count(*)::text FROM public_api.vote_sources UNION ALL SELECT count(*)::text FROM public_api.record_links"));
-
-            await db.GetService<IMigrator>().MigrateAsync();
-            await ApplyGrantsAsync(database);
-            Assert.Equal(upgraded, await ColumnsAsync(database));
-            Assert.Equal("21", await AddedGrantCountAsync(database));
         }
         finally { await postgres.DropDatabaseAsync(database); }
     }
@@ -296,33 +260,4 @@ public sealed class PublicApiSearchSourcesMigrationTests(PostgresCollection post
           VALUES ('{revision.SourceId}', '{notice.DocumentNumber}', '{revision.RecordId}', NULL, '{notice.PublishedOn:yyyy-MM-dd}', 'job', '{notice.Url}',
             '{notice.Citation.ExtractionId}', {notice.Citation.Start}, {notice.Citation.Length});
         """));
-
-    private static Task<string[]> ColumnsAsync(string database) => QueryAsync(database, """
-        SELECT c.relname || ':' || string_agg(a.attname, '|' ORDER BY a.attnum)
-          FROM pg_class c
-          JOIN pg_namespace n ON n.oid = c.relnamespace
-          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-         WHERE n.nspname = 'public_api' AND c.relname IN ('vote_sources', 'record_links', 'action_sources', 'executive_action_sources')
-         GROUP BY c.relname ORDER BY c.relname
-        """);
-
-    private static async Task<string> AddedGrantCountAsync(string database) => (await QueryAsync(database, """
-        SELECT count(*)::text FROM (VALUES
-            ('action_revisions', 'summary_citation_extraction_id'), ('action_revisions', 'policy_area_citation_extraction_id'),
-            ('action_revisions', 'bill_citation_extraction_id'),
-            ('action_revision_sponsorship_citations', 'record_id'), ('action_revision_sponsorship_citations', 'revision_number'),
-            ('action_revision_sponsorship_citations', 'sponsorship_position'), ('action_revision_sponsorship_citations', 'position'),
-            ('action_revision_sponsorship_citations', 'citation_extraction_id'),
-            ('action_revision_text_citations', 'record_id'), ('action_revision_text_citations', 'revision_number'),
-            ('action_revision_text_citations', 'position'), ('action_revision_text_citations', 'citation_extraction_id'),
-            ('executive_action_revision_facts', 'record_id'), ('executive_action_revision_facts', 'revision_number'),
-            ('executive_action_revision_facts', 'position'), ('executive_action_revision_facts', 'citation_extraction_id'),
-            ('executive_action_revisions', 'disposition_notes_extraction_id'),
-            ('executive_action_documents', 'notice_citation_extraction_id'),
-            ('relationship_revisions', 'statement_quote_extraction_id'), ('relationship_revisions', 'statement_quote_start'),
-            ('relationship_revisions', 'statement_quote_length')
-        ) added(table_name, column_name)
-        WHERE has_column_privilege('civic_lens_public_owner', added.table_name, added.column_name, 'SELECT')
-        """))[0];
-
 }

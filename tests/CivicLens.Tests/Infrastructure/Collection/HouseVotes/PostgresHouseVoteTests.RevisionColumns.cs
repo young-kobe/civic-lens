@@ -192,6 +192,7 @@ public sealed partial class PostgresHouseVoteTests
     [InlineData("vote_member_lists", "member_count = 601, yea_count = 601, nay_count = 0, present_count = 0, not_voting_count = 0, other_count = 0", "ck_vote_member_lists_count")]
     [InlineData("vote_member_lists", "other_count = -1", "ck_vote_member_lists_totals")]
     [InlineData("vote_member_lists", "other_count = other_count + 1", "ck_vote_member_lists_totals")]
+    [InlineData("vote_member_lists", "yea_count = 32767, nay_count = 32767, present_count = 32767, not_voting_count = 32767, other_count = 32767", "ck_vote_member_lists_totals")]
     [InlineData("vote_member_lists", "list_id = 'xyz'", "ck_vote_member_lists_id")]
     [InlineData("vote_member_lists", "created_at_utc_ticks = -1", "ck_vote_member_lists_created_at_utc_ticks")]
     [InlineData("vote_member_list_entries", "position = -1", "ck_vote_member_list_entries_position")]
