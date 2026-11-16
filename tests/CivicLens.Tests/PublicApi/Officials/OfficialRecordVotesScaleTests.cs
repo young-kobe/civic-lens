@@ -24,7 +24,7 @@ public sealed class OfficialRecordVotesScaleTests(PostgresCollection postgres, I
     private const int HouseMembers = 440;
     private const int SenateMembers = 100;
     private const string Official = "h0001";
-    private static readonly TimeSpan Budget = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan Budget = TimeSpan.FromMilliseconds(250);
 
     // The page size of the votes tab. OfficialRecordQueries is internal to PublicApi, so the test repeats the value.
     private const int PageSize = 25;
