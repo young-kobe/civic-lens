@@ -266,14 +266,6 @@ The first full run drafts every roll call that has a tracked senator. Code appro
 
 ## Postgres adapter and migrations
 
-`PublishedEntryApprovalTime` adds `published_entries.approved_at_utc_ticks`. Run `releases entries backfill` after this migration, and then `releases entries verify`. The backfill reads the kept record files. Until it runs, a publish of a revision that has an entry without a time stops with a conflict, and the correction commands report a stored time that differs. New manifests include `approvedAtUtc`; older images reject that field. Before rolling back an image, activate a kept release from before this field was written.
-
-`ActionRevisionIntroducedOn` adds `action_revisions.introduced_on` and the column `public_api.bills.introduced_on`. Run `actions revisions backfill` after this migration, and then `actions revisions verify`. The column is nullable, and no public bill view leaves out a revision without a date. Until the backfill fills a revision, its pages print no introduction date.
-
-`RelationshipApprover` lets relationship entries hold `approved_by` and adds `public_api.record_links.approver`. Run `releases entries backfill` again after this migration. Until then, no link shows who checked it.
-
-`PublishedStatementApprover` adds `published_entries.approved_by`. Run `releases entries backfill` before starting public serving after this migration. It reads the kept statement files and reports unresolved open classifiers. Statements with unknown classifiers stay hidden. New manifests include `approvedBy`; older images reject that field. Before rolling back an image, use the newer image to activate a kept release from before this field was written.
-
 Set `CIVIC_LENS_DATABASE` in your local environment to a Postgres connection string with Host and Database, and with authentication for your local server. Runtime commands need this variable and have no default database. Keep credentials out of committed files, command arguments, and captured output. The commands need a reachable Postgres server and enough database permissions. They do not install or start Postgres.
 
 After you set the variable, run:
@@ -282,11 +274,11 @@ After you set the variable, run:
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db migrate
 ```
 
-`db migrate` applies all pending checked-in EF migrations and can be repeated. Then it applies the grants of the public role again, also when no migration is pending. See [public role login](#public-role-login). An image from before the migration `DropPublicationRecordsJson` cannot run until you roll that migration back with an explicit EF rollback, because that image needs the dropped column `publication_releases.records_json`. The rollback rebuilds the column from `publication_record_states`. An image from before the migration `RejectDecision` runs on the new schema only until the first rejection. After a rejection, that image cannot parse the kind Reject or the status Rejected, and the `Down` of the migration fails with a check violation and rolls back, because it deletes no decision. Roll forward with a fixed image in that case. An image from before the migration `DropDecisionJson` needs the same explicit EF rollback, because that image needs the dropped column `decision_json` in the seven `<kind>_review_decisions` tables. The rollback rebuilds the column from the decision columns and the resolution rows. To roll back to such an image, do these steps in this order. Stop the worker and the review host. Have a developer with the EF tool roll the database back to the migration before `DropDecisionJson`. Then run `update.sh` with the old SHA. No production command rolls a migration back. Running `update.sh` alone is wrong, because the old image starts without the column and every decision write fails. Running the rollback while the new worker runs is also wrong, because the new writer fails on the rebuilt NOT NULL column. `db migrate` only moves forward. The migration `JobAttemptColumns` moves the request and resolution JSON of `collection_job_attempts` into typed columns and drops both JSON columns. It rewrites every attempt row and locks `collection_attempts` and `collection_job_attempts` against writes while it runs, so the worker must be stopped; `update.sh` stops it. The migration stops with an error and rolls back when a JSON value cannot be read or does not reach its column. Its `Down` rebuilds the JSON columns. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
+`db migrate` applies all pending checked-in EF migrations and can be repeated. First it runs the [migration history step](#migration-squash). Then it applies the grants of the public role again, also when no migration is pending. See [public role login](#public-role-login). `db migrate` only moves forward. No production command rolls a migration back. Each migration command fails after 10 minutes, for example when it waits on a lock. Imports never apply migrations. Capture files stay in the artifact directory. [Managed collection jobs](#managed-collection-jobs) collect and import evidence.
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
-The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. The first migration, `InitialSchema`, holds the generated tables. After them, it holds the hand SQL for the notify functions and triggers, the composite prior-capture foreign key, and the descending and partial indexes. Add later schema changes as new migrations.
+The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. The first migration, `InitialSchema`, holds the generated tables. Its partial file `InitialSchema.HandWritten.cs` holds the hand SQL in dependency order. That is the notify functions and triggers, the hand constraints and indexes, five stale column defaults, the `public_api` schema with its owner role, and every public view. Add later schema changes as new migrations.
 
 The EF tool version is pinned in `.config/dotnet-tools.json`. Restore it once, then add a migration for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`:
 
@@ -304,13 +296,41 @@ After a schema change, regenerate the schema reference in `docs/architecture/sch
 CIVIC_LENS_WRITE_SCHEMA_DOCS=1 dotnet test CivicLens.slnx --configuration Release --no-build --filter FullyQualifiedName~SchemaReferenceTests
 ```
 
+### Migration squash
+
+One baseline migration, `20261116204947_InitialSchema`, replaced the chain of 134 migrations that ended with `20261116171634_ReleaseOfficialRecordCounts`. The baseline builds the same schema as that chain. Only the column order of 36 tables differs. Production keeps all its tables and rows. Only the rows of `__EFMigrationsHistory` change.
+
+`db migrate` runs the history step before EF applies migrations. The step reads the history under a lock on the table:
+
+- The exact 134 pre-squash IDs: the step deletes them and inserts the baseline ID in one transaction. EF then finds nothing to apply.
+- No history table, or an empty one: the step does nothing, and EF runs the baseline.
+- A history that holds the baseline ID: the step does nothing. A second `db migrate` is therefore safe.
+- Any other history: the command prints the count and the newest ID, exits with code 1, and changes nothing.
+
+Deploy the squash in this order:
+
+1. Deploy the last pre-squash commit, `4969ed76`, and run `db migrate`. The history must end with `20261116171634_ReleaseOfficialRecordCounts`.
+2. Take a fresh backup. Follow [Backups](#backups), and check that the dump completed.
+3. Deploy the squash commit. `update.sh` stops the worker and the review host, then runs `db migrate`, which runs the history step.
+4. Check the history. It must hold one row, `20261116204947_InitialSchema`.
+
+An image from before the squash cannot run its migrations on the new history. To roll back past the squash, restore the backup from step 2, then deploy the old image. Do not merge a migration PR that branched before the squash. Its history would not match the step.
+
+A development database moves the same way. If it is older than the pre-squash commit, check out `4969ed76`, run `make migrate`, and then return to the branch. Otherwise follow [Dev database reset](#dev-database-reset).
+
+`tools/compare-squash-schema.py` builds database A from the chain at `4969ed76` and database B from the working tree, each in its own Postgres container. It compares the schema dump with sorted columns, the views, the relation options, the functions, the triggers, the indexes, the roles, and the grants. It needs Docker, git, and the .NET SDK, and it never reads production:
+
+```sh
+python3 tools/compare-squash-schema.py
+```
+
 ### Public role login
 
-The migration `PublicApiViews` creates the roles `civic_lens_public` and `civic_lens_public_owner`. Both have no login and no password. It also creates the schema `public_api` with its views. The migration creates only the owner role. The role `civic_lens_public` and every grant come from `db migrate` after the migrations, in one step that runs every time. The step holds no secret, because a secret in code lands in Git. `readonly-grants.sql` creates `civic_lens_readonly` with LOGIN and no password. The public role must log in over the network, so it needs a login and a password.
+The baseline migration creates the role `civic_lens_public_owner` with no login and no password. It also creates the schema `public_api` with its views. The migration creates only the owner role. The role `civic_lens_public` and every grant come from `db migrate` after the migrations, in one step that runs every time. The step holds no secret, because a secret in code lands in Git. `readonly-grants.sql` creates `civic_lens_readonly` with LOGIN and no password. The public role must log in over the network, so it needs a login and a password.
 
 The same step revokes `TEMPORARY` on the database and `EXECUTE` on the `pg_advisory_*` and `pg_try_advisory_*` functions from `PUBLIC`. So `db migrate` needs a superuser. It is the only place that revokes `TEMPORARY`, so `readonly-grants.sql` relies on it. The app role of the compose database is one. The role `civic_lens_public` then creates no temporary table and takes no advisory lock.
 
-Enable the login by hand, after the first `db migrate` that holds the migration. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where `PublicApi` reads its settings. The service reads the connection from `CIVIC_LENS_PUBLIC_VIEWS_DATABASE`, for example `Host=<host>;Database=<database>;Username=civic_lens_public;Password=<password>`. It sets `Maximum Pool Size=4` itself and no timeout, because the role sets the statement timeout. The service stops at startup when the variable is missing.
+Enable the login by hand, after the first `db migrate`. Open an interactive `psql` session on the database host as the database owner. Run `ALTER ROLE civic_lens_public LOGIN PASSWORD` with a long random password. Keep the password out of shell history, logs, and Git. Store it only where `PublicApi` reads its settings. The service reads the connection from `CIVIC_LENS_PUBLIC_VIEWS_DATABASE`, for example `Host=<host>;Database=<database>;Username=civic_lens_public;Password=<password>`. It sets `Maximum Pool Size=4` itself and no timeout, because the role sets the statement timeout. The service stops at startup when the variable is missing.
 
 The role reads only the views in `public_api`. It cannot write, a statement stops after 2 seconds, an idle session ends after 60 seconds, and it holds at most 5 connections. It runs with `jit` off. After a restore, run `db migrate`. It creates a missing role and sets the grants again, because `pg_restore --no-privileges` drops them. Roles belong to the cluster and a dump can leave them out, so the login of the role needs a new `ALTER ROLE` after a restore into a new cluster. Without the login the views stay closed, which is the safe state. `PublicApi` uses the role for `/v1/release` and the vote routes. Without the login those routes fail and the search routes keep working.
 
@@ -488,13 +508,13 @@ Only captured HTML and plain-text attempts are supported. For a linked 304, sele
 
 ### Backfill comparison details
 
-After applying the migration, run the owner-only backfill:
+Run the owner-only backfill for comparisons that have no stored offsets:
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- documents comparisons backfill 500
 ```
 
-The limit bounds rows examined. Each batch examines at most 25 rows in comparison ID order. The command rebuilds each comparison from its retained extractions and checks the saved JSON before it writes offsets. It reports at most 50 skipped comparison IDs and exits 1 if any row is skipped. Investigate skipped rows before continuing. The migration keeps the legacy JSON for current operational readers.
+The limit bounds rows examined. Each batch examines at most 25 rows in comparison ID order. The command rebuilds each comparison from its retained extractions and checks the saved JSON before it writes offsets. It reports at most 50 skipped comparison IDs and exits 1 if any row is skipped. Investigate skipped rows before continuing. The backfill keeps the legacy JSON for current operational readers.
 
 ### Configure versioned HTML content selection
 
@@ -624,7 +644,7 @@ The optional stage is `actions`, `votes`, `statements`, `document-changes`, or `
 
 A short press release shows its own text (owner decision, 2026-11-14). Its model summary from before that rule is stale. Use this order to move such records:
 
-1. Deploy, so the migration `ShortStatementSourceText` runs.
+1. Deploy the build that shows a short press release by its own text.
 2. Check `statements draft status` for the daily limit. Long releases on an older version can still spend tokens.
 3. Run `analyses redraft --stale statements` as the owner.
 4. Let the worker drain the stage. A short release gets a code revision with no model call.
@@ -765,7 +785,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- vo
 
 Published votes from before code text hold model text. `votes text backfill` moves them to code text. It makes no model call and spends no tokens. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, `CIVIC_LENS_ARTIFACT_DIRECTORY`, and `CIVIC_LENS_ISSUES_CONFIG`.
 
-Run `votes text backfill` or `actions text backfill` in production only after the correction text rewrite kind deploys, with the migration `CorrectionTextRewrite`. Before it, the history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. After it, the entry reads "Wording rewritten by code". Run `actions text backfill` only after the bill code rewrite change also deploys. Before it, a moved bill reads "Updated from the source".
+Run `votes text backfill` or `actions text backfill` in production only after the correction text rewrite kind deploys. Before it, the history entry of a moved vote reads "Summary rewritten by the AI model", and that is false. After it, the entry reads "Wording rewritten by code". Run `actions text backfill` only after the bill code rewrite change also deploys. Before it, a moved bill reads "Updated from the source".
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- votes text backfill 500
@@ -859,7 +879,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 ### Executive action revision backfill
 
-R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The migration `ExecutiveActionRevisionColumns` also moves each `notice_json` of a document into the notice columns, and drops `notice_json`. It sets the code author on each old revision. It fails and changes nothing when a notice differs from its row, when a revision names another author, or when a `notice_json` or `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 3 moves old executive action revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions revisions backfill 500
@@ -870,11 +890,11 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- ex
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the action `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
 
-Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made. A rollback past the migration rebuilds `notice_json` from the notice columns.
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every executive action read fails until it ends. For a manual run, start the new code only when `verify` exits 0. Every reader fails on a row with null columns. Production held 688 revisions when the survey was made.
 
 ### Executive action disposition target backfill
 
-The table `executive_action_revision_disposition_targets` holds the typed Amends and Revokes targets of each revision. Current code writes them with each new revision. Revisions from before the migration `ExecutiveActionDispositionTargets` that hold notes need a backfill. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+The table `executive_action_revision_disposition_targets` holds the typed Amends and Revokes targets of each revision. Current code writes them with each new revision. Revisions from before the target table existed that hold notes need a backfill. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- executive-actions targets backfill 500
@@ -889,7 +909,7 @@ Run order: `db migrate`, then `backfill`, then `verify`. The public pages and th
 
 ### Statement revision backfill
 
-R-63 step 3 moves old statement revisions into columns and child rows. A revision written by current code already has them. The migration `StatementRevisionColumns` adds the columns and tables. It does not read any JSON. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 3 moves old statement revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- statements revisions backfill 500
@@ -900,11 +920,11 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- st
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the action `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
 
-Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every statement read fails until it ends. That includes the review pages, the queue, the relationship and brief readers, and the bill mention priority. For a manual run, start the new code only when `verify` exits 0. A rollback past the migration keeps the JSON.
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every statement read fails until it ends. That includes the review pages, the queue, the relationship and brief readers, and the bill mention priority. For a manual run, start the new code only when `verify` exits 0.
 
 ### Brief revision backfill
 
-R-63 step 3 moves old brief revisions into columns and child rows. A revision written by current code already has them. The migration `BriefRevisionColumns` adds nullable columns and moves no data. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 3 moves old brief revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- brief revisions backfill 500
@@ -919,7 +939,7 @@ Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy`
 
 ### Document change revision backfill
 
-R-63 step 3 moves old document change revisions into columns and child rows. A revision written by current code already has them. The migration `DocumentChangeRevisionColumns` fills the author columns of each old revision from its JSON. It fails and changes nothing when a `revision_json` is not valid JSON, or when it has no author of 1 to 256 characters. The error names the draft and the revision number. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 3 moves old document change revisions into columns and child rows. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- document-changes revisions backfill 500
@@ -930,7 +950,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- do
 
 `verify` rebuilds every revision from its rows and compares it to its JSON as trees. It writes nothing and takes no lock. The output and the exit code are the same as for the action `verify`. A revision whose rows cannot be read shows the field name `columns`. No key is allowed to be absent.
 
-Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every document change read fails until it ends. That includes the review pages, the activity feed, the approved record search, and the weekly brief reader. For a manual run, start the new code only when `verify` exits 0. A rollback past the migration keeps the JSON, and the next run of the migration fills the author columns again.
+Run order: `db migrate`, then `backfill`, then `verify`. On production, `deploy` migrates and then restarts the worker and the review host. The new code runs from the deploy. Run `backfill` right after the deploy, because every document change read fails until it ends. That includes the review pages, the activity feed, the approved record search, and the weekly brief reader. For a manual run, start the new code only when `verify` exits 0.
 
 ## Relationship drafting
 
@@ -942,7 +962,7 @@ The `worker` command drafts one relationship for each pair of an approved statem
 | `CIVIC_LENS_RELATIONSHIP_DRAFTING_DAILY_TOKENS` | Daily token limit for relationship drafting calls, per UTC day. It is separate from the other limits. Start low. |
 | `CIVIC_LENS_ANALYSIS_CONCURRENCY` | Optional number of calls at the same time, shared with the other stages (default 2, 1 to 4) |
 
-Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once after the migration to queue the pairs of records that were approved earlier. The same stale check runs after each review decision (`AfterDecisionHooks`). Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
+Drafting uses Claude Haiku 5.5. The stage runs after vote drafting and before brief drafting. A review decision on a statement, an action, or a vote queues a Pending row for each new pair of that record. Run `relationships draft refresh` once to queue the pairs of records that were approved earlier. The same stale check runs after each review decision (`AfterDecisionHooks`). Then the worker can spend up to the daily limit. A pair with a new approved revision on either side returns to Pending unless a person approved its relationship. A pair with the same input as the last settled run makes no call. The [outcomes](architecture/statements.md#relationship-drafting) table lists every code.
 
 The commands below need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
@@ -957,7 +977,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 ### Relationship revision backfill
 
-R-63 step 3 moves old relationship revisions into columns. A revision written by current code already has them. The migration `RelationshipRevisionColumns` adds the columns and checks, and moves no data. It fails and changes nothing when a `revision_json` is not valid JSON. The error names the row. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
+R-63 step 3 moves old relationship revisions into columns. A revision written by current code already has them. The commands need `CIVIC_LENS_DATABASE` and `CIVIC_LENS_REVIEW_OWNER`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- relationships revisions backfill 500
@@ -1107,7 +1127,7 @@ Every publish now reads all release vote revisions. Before the deploy, run `vote
 
 ### First publication backfill
 
-The table `published_records` stores the first publication time of each record. A publish writes a row for each record that it adds. Run the backfill once after the migration `PublishedRecords`. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
+The table `published_records` stores the first publication time of each record. A publish writes a row for each record that it adds. Run the backfill once for the records that a release listed before the table existed. It needs `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases first-published backfill
@@ -1115,9 +1135,9 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 The command reads the manifest of the active release. It inserts a row for each record and each withdrawal, with the `firstPublishedAtUtc` of the entry. It never changes a row that exists, so a repeat is safe. It prints `examined`, `added`, and `alreadyPresent` as JSON. A record that no active entry or withdrawal names gets no row. Its row comes with the publish that adds it.
 
-Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works. A rollback keeps the rows.
+Until the backfill runs, a publish that adds a record of the active release stops with the message "Run releases first-published backfill". A guess could give one record two first times. The worker logs the error and tries again at its next wake. Run the backfill, and the next publish works.
 
-The withdrawal tables add a second need. Every publish whose release lists a withdrawal, carried or new, also stops with the same message until the backfill runs. The database refuses a withdrawal row for a record that `published_records` lacks. On a deploy that adds the migration `PublicationWithdrawals`, do these steps in order: stop the worker, migrate, run `releases first-published backfill`, then start the worker.
+The withdrawal tables add a second need. Every publish whose release lists a withdrawal, carried or new, also stops with the same message until the backfill runs. The database refuses a withdrawal row for a record that `published_records` lacks. On a deploy that adds the withdrawal tables, do these steps in order: stop the worker, migrate, run `releases first-published backfill`, then start the worker.
 
 ### Entries backfill
 
@@ -1193,11 +1213,11 @@ A complete ledger proves agreement for the selected membership. It does not repl
 
 ### Bill count backfill and verification
 
-Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261110190000` has no rows in `release_bill_counts` and `release_official_bill_counts`.
+Run these owner commands for the active and retained rollback releases before any public reader uses the bill count tables. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before these tables existed has no rows in `release_bill_counts` and `release_official_bill_counts`.
 
-The same commands write and verify `release_official_record_counts`. A release published before the migration `20261116171634` has no rows in that table. Until the backfill runs, the officials list shows zero records and the record page shows no tab. Deploy in this order, as for the bill counts:
+The same commands write and verify `release_official_record_counts`. A release published before the table `release_official_record_counts` existed has no rows in that table. Until the backfill runs, the officials list shows zero records and the record page shows no tab. Deploy in this order, as for the bill counts:
 
-1. Apply the migration `20261116171634`.
+1. Apply the migrations with `db migrate`.
 2. Run `releases counts backfill` until `nextCursor` is null. A release that already holds its bill counts reports `added` when the command writes its record counts.
 3. Run `releases counts verify` until `nextCursor` is null. Every selected release must verify under one fingerprint.
 
@@ -1214,7 +1234,7 @@ The verifier writes nothing. It repeats the file checks of the backfill. Then it
 
 ### Party line-up backfill and verification
 
-Run these owner commands for the active and retained rollback releases before the issue page reads the party line-up. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before the migration `20261111000000` has no rows in `release_issue_party_lineups` and `release_issue_party_counts`. The line-up counts the bills of the issues that hold counts in `release_issues`. The migration `ReleaseHomeIssueCounts` fills those counts. The line-up does not read the bill count tables, so the bill count commands are not a prerequisite.
+Run these owner commands for the active and retained rollback releases before the issue page reads the party line-up. They need `CIVIC_LENS_DATABASE`, `CIVIC_LENS_REVIEW_OWNER`, and `CIVIC_LENS_RELEASE_DIRECTORY`. A release published before these tables existed has no rows in `release_issue_party_lineups` and `release_issue_party_counts`. The line-up counts the bills of the issues that hold counts in `release_issues`. Publish fills those counts. The line-up does not read the bill count tables, so the bill count commands are not a prerequisite.
 
 ```sh
 dotnet run --no-build --configuration Release --project src/CivicLens.Host -- releases lineups backfill <limit> [cursor]
@@ -1237,7 +1257,7 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- re
 
 Run this command after `db migrate` and before the worker starts. The worker publishes by itself. A redraft that shares an old member list with no pinned parties would pin the parties of today's roster. `deploy/scripts/update.sh` runs the command for you, in this order: it stops the worker and the review host, runs `db migrate`, runs `releases columns backfill`, and then starts the services. If the command exits with 1, `update.sh` stops and the worker stays stopped. Two counts stop the deploy. `openVoteRevisionsWithoutKeptFile` counts the revisions that no kept folder holds. Restore their kept folders. `releasesWithUnreadableManifest` counts the kept releases whose manifest is invalid. Restore the folder of each such release from a backup, so that its manifest is whole. Then run `update.sh` again with the same SHA. To deploy by hand, follow the same order.
 
-The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. A release takes the bill links of its votes from its manifest: each vote links the first action record on its bill that the release holds, as `ReleaseVoteBills` gives it at publication. A bill status row with no stage takes the stage of `BillStatusMeaning.StageOf` from its latest action text and the bill type of its record. A release with no manifest folder is skipped. A release whose manifest cannot be read is skipped and counted in `releasesWithUnreadableManifest`. Until this command runs after the migration `ReleaseVoteBills`, the API shows a null bill link for the votes of the releases that the migration found. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
+The command reads the kept release folders. A vote revision takes its values from its own vote file, which the newest kept folder in its release range holds. The parties are the ones that the release gave on the vote day. A member list that holds no parties takes them from the published revision with the lowest revision number that has a kept file. A later revision of the list never changes them. An official takes the photo path of the officials file of its release. An entry takes the Congress of its event date, or of its first publication day when it has no event date. A release takes the bill links of its votes from its manifest: each vote links the first action record on its bill that the release holds, as `ReleaseVoteBills` gives it at publication. A bill status row with no stage takes the stage of `BillStatusMeaning.StageOf` from its latest action text and the bill type of its record. A release with no manifest folder is skipped. A release whose manifest cannot be read is skipped and counted in `releasesWithUnreadableManifest`. Until this command runs, the API shows a null bill link for the votes of releases published before the table `release_vote_bills` existed. The command writes in batches of 25 rows. It fills only what is not filled yet, so you can run it again at any time. A written vote revision has `columns_written` set.
 
 The command prints JSON with these keys:
 
@@ -1292,7 +1312,7 @@ The command reads each kept manifest once. It writes the file again with no chan
 The command prints JSON with these keys:
 
 - `passed`: the kept releases that the tables rebuild byte for byte.
-- `legacy`: the kept releases that pass but list withdrawals that no withdrawal row covers, and that are older than the first release with a withdrawal row. Withdrawals made before the migration `PublicationWithdrawals` have no rows. A newer release with such withdrawals fails. Legacy releases do not change the exit code.
+- `legacy`: the kept releases that pass but list withdrawals that no withdrawal row covers, and that are older than the first release with a withdrawal row. Withdrawals made before the withdrawal tables existed have no rows. A newer release with such withdrawals fails. Legacy releases do not change the exit code.
 - `failed`, `failedByReason`, and `failedReleases`: the failed releases, a count for each reason, and each release with its number, folder, reason, and first record. The reasons are `manifestInvalid`, `manifestNotReproducible`, `entryRowMissing`, `firstPublishedMissing`, `stateRowNotListed`, `entryOutsideRange`, and `bytesDiffer`.
 - `retired`: the release rows whose folder holds no manifest.
 
@@ -1486,11 +1506,9 @@ sudo deploy/scripts/compose.sh run --rm cli releases list
 
 `install.sh` creates the directories and copies each `deploy/env/*.env.example` file only when the target is absent. It never overwrites a file. Fill in the env files and the two config files, then run `update.sh`.
 
-`update.sh` stops when the checkout is not at the given SHA, when `deploy/` has uncommitted changes, or when the Caddy port in `compose.env` differs from the port in the tunnel config. It sets the image tag for the run and pulls the images. It stops the worker and the review host, so no old image runs on the new schema or commits a release during the migration. Then it applies the migrations with a one-off `cli` container. Then it runs `releases columns backfill` in a one-off `cli` container, before any worker starts (see [Stored columns backfill](#stored-columns-backfill)). The backfill runs on every deploy. After the first run it finds no gaps and ends at once. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy and cloudflared so that a changed Caddyfile or tunnel config takes effect. The worker stays stopped until the services start from the new tag. A search service of an older image fails the ingest of a release with a new published value, keeps its last index, and tries again at the next interval. It recovers by itself once the new image runs. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker and the review host stay stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker review` to start the old services. If the backfill exits with 1, the worker and the review host also stay stopped, and `compose.env` still holds the old tag. Do not start the old services, because the schema is already new. Fix the cause that the backfill names, then run `update.sh` again with the same SHA. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration, so a rollback past `DropDecisionJson` needs the steps in [Postgres adapter and migrations](#postgres-adapter-and-migrations) first. If the migration `DropPublicationRecordsJson` raises "Cannot drop records_json", run `db migrate` from the prior image, which still rebuilds the record state table, and then run `update.sh` again. If the migration `DropDecisionJson` raises "Cannot drop decision_json", the migration rolled back, the column is intact, and `compose.env` still holds the old tag. Run `sudo deploy/scripts/compose.sh up --detach worker review` to restore service, and give the named decision to the developer.
+`update.sh` stops when the checkout is not at the given SHA, when `deploy/` has uncommitted changes, or when the Caddy port in `compose.env` differs from the port in the tunnel config. It sets the image tag for the run and pulls the images. It stops the worker and the review host, so no old image runs on the new schema or commits a release during the migration. Then it applies the migrations with a one-off `cli` container. Then it runs `releases columns backfill` in a one-off `cli` container, before any worker starts (see [Stored columns backfill](#stored-columns-backfill)). The backfill runs on every deploy. After the first run it finds no gaps and ends at once. Then it writes the tag to `compose.env`, because the schema now belongs to that commit. Last, it recreates the services, and it always recreates Caddy and cloudflared so that a changed Caddyfile or tunnel config takes effect. The worker stays stopped until the services start from the new tag. A search service of an older image fails the ingest of a release with a new published value, keeps its last index, and tries again at the next interval. It recovers by itself once the new image runs. If a step after the migration fails, run `update.sh` again with the same SHA. If the migration fails, the worker and the review host stay stopped. Fix the cause and run `update.sh` again, or run `sudo deploy/scripts/compose.sh up --detach worker review` to start the old services. If the backfill exits with 1, the worker and the review host also stay stopped, and `compose.env` still holds the old tag. Do not start the old services, because the schema is already new. Fix the cause that the backfill names, then run `update.sh` again with the same SHA. Services never migrate at start. The tag must be a full commit SHA whose images exist. To roll back, run `update.sh` with an earlier SHA. A rollback does not undo a migration. A rollback past the migration squash needs a backup restore; see [Migration squash](#migration-squash).
 
 **Receipt spool check.** Do this before an `update.sh` that changes the receipt handoff version. Stop the worker with `sudo deploy/scripts/compose.sh stop worker`. Run `sudo ls -A /srv/civic-lens/captures/.pending`. An empty directory is the goal. Each file is a receipt that was saved but not yet imported. Let the old worker finish first, so that the spool empties. If a file remains, the new worker refuses it. It logs an error, removes the file, settles the attempt as interrupted with the code `HandoffRefused`, and fetches the job again. The saved capture file stays in the directory and is not used. `receipts replay` does not do this. It reports the file as invalid and keeps it.
-
-**Vote revision JSON drop.** The migration `DropVoteRevisionJson` stops with `Cannot drop revision_json` when a vote revision has a null column. The message names the revision. Nothing changes in that case. Run the vote revision backfill with the previous image. The current image has no `votes revisions` command. Then run `db migrate` again.
 
 `compose.sh` is `docker compose` with the compose file and `compose.env` set. The `cli` service starts the host image with no command. The `restic` service has the same `tools` profile. Add the host command after `cli`, for example `releases publish` or `db migrate`.
 
