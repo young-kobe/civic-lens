@@ -146,7 +146,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task AHeldFreshnessAnswers304WithoutReadingTheLazyParameters()
+    public async Task AHeldReleaseAnswers304WithoutReadingTheLazyParameters()
     {
         await using var views = NpgsqlDataSource.Create("Host=unused.invalid");
         await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
@@ -156,7 +156,7 @@ public sealed class ServerPageTests(PostgresCollection postgres)
         context.Request.Headers.IfNoneMatch = cache.ETag(9).ToString();
         var reads = 0;
 
-        var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, new ReleaseFreshness(9, null, null), () =>
+        var response = await responder.RespondAsync<BrokenPage>(context, StatusCodes.Status200OK, 9, () =>
         {
             reads++;
             return Task.FromResult<IReadOnlyDictionary<string, object?>>(new Dictionary<string, object?>());
