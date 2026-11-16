@@ -146,6 +146,24 @@ public sealed partial class PostgresBillStreamTests
         Assert.Empty(await ReadPublicationBillStatusesAsync([], default));
     }
 
+    [Fact]
+    public async Task TheBillInputOfAnActionCarriesTheStatusThatThePreviousReleasePinsAndNoStatusForAnyOtherRelease()
+    {
+        await DraftForReviewAsync(UpdatedAt, DraftableOutput);
+        await ExecuteAsync(connectionString, $"""
+            SET session_replication_role = replica;
+            INSERT INTO release_bill_statuses (release_number, record_id, latest_action_text, latest_action_date, read_at_utc_ticks)
+            VALUES (4, '{RecordId}', 'Passed House.', '2025-03-02', 638000000000000000);
+            """);
+        var store = PostgresPublicationStore.FromConnectionString(connectionString, TestCodeVersion.Current);
+
+        var shown = Assert.Single(await store.ReadBillInputsAsync(4, [RecordId], default)).PublishedStatus!;
+
+        Assert.Equal((RecordId, "Passed House.", new DateOnly(2025, 3, 2), 638000000000000000L), (shown.RecordId, shown.Text, shown.Date, shown.ObservedAtUtc.UtcTicks));
+        Assert.Null(Assert.Single(await store.ReadBillInputsAsync(5, [RecordId], default)).PublishedStatus);
+        Assert.Null(Assert.Single(await store.ReadBillInputsAsync(null, [RecordId], default)).PublishedStatus);
+    }
+
     // The saved Congress.gov pages pass the contract check, so a drafted citation never blocks a publish.
     [Fact]
     public async Task AnApprovedDraftedActionPublishesWithEveryCitationQuotingItsSavedApiPage()

@@ -263,13 +263,11 @@ public sealed class PublishVoteTests
             record.PartyMajorities.Select(party => (party.Party, party.YeaCount, party.NayCount, party.Majority)));
         Assert.Equal([("Democrat", 1, 0, 0, 0, 0), ("Republican", 2, 1, 1, 1, 0)],
             record.PartyTallies!.Select(party => (party.Party, party.Yea, party.Nay, party.Present, party.NotVoting, party.Other)));
-        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
-        Assert.Equal(("Passed", "Democrat", "Yea", 3), (row.Result, row.Party, row.PartyMajority, row.Totals!.Yea));
-        Assert.False(row.SplitVote);
+        Assert.False(record.IsSplit());
     }
 
     [Fact]
-    public async Task TheOfficialRowIsFlaggedSplitWhenMostDemocratsAndMostRepublicansVotedOnOppositeSides()
+    public async Task TheVoteIsSplitWhenMostDemocratsAndMostRepublicansVotedOnOppositeSides()
     {
         var scenario = new PublicationScenario();
         scenario.RosterMembers = [Member("M000001", Term("Democrat")), Member("R1", Term("Republican"))];
@@ -278,7 +276,7 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
-        Assert.True(Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes).SplitVote);
+        Assert.True(ReadVote(scenario, summary, vote).IsSplit());
     }
 
     [Fact]
@@ -296,7 +294,7 @@ public sealed class PublishVoteTests
     }
 
     [Fact]
-    public async Task ATiedPartyHasNoMajorityOnItsOfficialRow()
+    public async Task ATiedPartyHasNoMajority()
     {
         var scenario = new PublicationScenario();
         scenario.RosterMembers = [Member("M000001", Term("Democrat")), Member("D2", Term("Democrat"))];
@@ -304,14 +302,14 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
-        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
-        Assert.Equal((null, false), (row.PartyMajority, row.SplitVote));
+        var record = ReadVote(scenario, summary, vote);
+        Assert.Equal((null, false), (record.MajorityOf("Democrat"), record.IsSplit()));
     }
 
     [Theory]
     [InlineData("Independent")]
     [InlineData("Unknown")]
-    public async Task AMemberOfAGroupWithNoYeaOrNayVotesStillPublishesARowOnASplitVote(string party)
+    public async Task AGroupWithNoYeaOrNayVotesHasNoMajorityOnASplitVote(string party)
     {
         var scenario = new PublicationScenario();
         scenario.RosterMembers = [Member("M000001", Term(party)), Member("D1", Term("Democrat")), Member("R1", Term("Republican"))];
@@ -321,12 +319,12 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
-        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
-        Assert.Equal((party, null, true), (row.Party, row.PartyMajority, row.SplitVote));
+        var record = ReadVote(scenario, summary, vote);
+        Assert.Equal((party, null, true), (Assert.Single(record.Members, member => member.Official.Id == "mayor").Party, record.MajorityOf(party), record.IsSplit()));
     }
 
     [Fact]
-    public async Task ATiedIndependentGroupStillPublishesARowOnASplitVote()
+    public async Task ATiedIndependentGroupHasNoMajorityOnASplitVote()
     {
         var scenario = new PublicationScenario();
         scenario.RosterMembers = [Member("M000001", Term("Independent")), Member("I1", Term("Independent")), Member("D1", Term("Democrat")), Member("R1", Term("Republican"))];
@@ -336,8 +334,8 @@ public sealed class PublishVoteTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", vote));
 
-        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
-        Assert.Equal(("Independent", null, true), (row.Party, row.PartyMajority, row.SplitVote));
+        var record = ReadVote(scenario, summary, vote);
+        Assert.Equal(("Independent", null, true), (Assert.Single(record.Members, member => member.Official.Id == "mayor").Party, record.MajorityOf("Independent"), record.IsSplit()));
     }
 
     // The source gives a bare "I" for an Independent, but the member votes with a party caucus.
@@ -549,8 +547,7 @@ public sealed class PublishVoteTests
         Assert.Null(record.PartyTallies);
         var member = Assert.Single(record.Members);
         Assert.Equal(("Democrat", "Johnson (LA)"), (member.Party, member.Cast));
-        var row = Assert.Single(ReadOfficialVotes(scenario, summary, "mayor").Votes);
-        Assert.Equal(("Johnson (LA)", null, "Democrat", null, "Johnson (LA)", false), (row.Result, row.Totals, row.Party, row.PartyMajority, row.Cast, row.SplitVote));
+        Assert.False(record.IsSplit());
     }
 
     [Fact]
@@ -701,10 +698,6 @@ public sealed class PublishVoteTests
     private static PublishedVote ReadVote(PublicationScenario scenario, PublicationReleaseSummary summary, string recordId) =>
         JsonSerializer.Deserialize<PublishedVote>(scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.RecordDataPath(recordId)],
             PublicationProtocol.JsonOptions)!;
-
-    private static PublishedOfficialVotes ReadOfficialVotes(PublicationScenario scenario, PublicationReleaseSummary summary, string officialId) =>
-        JsonSerializer.Deserialize<PublishedOfficialVotes>(
-            scenario.Releases.Directories[summary.DirectoryName][PublicationProtocol.OfficialVotesPath(officialId, 119)], PublicationProtocol.JsonOptions)!;
 
     private static PublishReleaseRequest Request(string key, string voteId) =>
         PublicationScenario.Request(key, new PublishedRecordReference(PublishedRecordKind.Vote, voteId));

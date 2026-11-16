@@ -201,7 +201,6 @@ public sealed class BoardStore(NpgsqlDataSource views, PartyAgreementStore agree
         {
             Id = officialId,
             Congress = current,
-            CosponsoredBills = null,
             PartyVotes = [.. PartyRows(current)],
             Attendance = [.. AttendanceRows(current)],
             Previous = previous

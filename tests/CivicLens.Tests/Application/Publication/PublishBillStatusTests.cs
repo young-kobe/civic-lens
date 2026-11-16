@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CivicLens.Application.Publication;
 using CivicLens.Publication.Contracts;
 
@@ -9,7 +8,7 @@ public sealed class PublishBillStatusTests
     private static readonly DateTimeOffset Observed = new(2026, 1, 30, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task AnActionWithAStoredStatusPublishesItsRowButAnActionWithNoneGetsNoRowSoNoReaderSeesAFalseNoActionLine()
+    public async Task AnActionWithAStoredStatusPinsItsRowButAnActionWithNoneGetsNoRowSoNoReaderSeesAFalseNoActionLine()
     {
         var scenario = new PublicationScenario();
         var withStatus = scenario.AddAction('c');
@@ -18,29 +17,43 @@ public sealed class PublishBillStatusTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", withStatus, without));
 
-        var files = scenario.Releases.Directories[summary.DirectoryName];
-        var row = Assert.Single(ReadStatuses(files).Records);
+        var row = Assert.Single(Rows(scenario, summary));
         Assert.Equal(("Passed House.", new DateOnly(2026, 1, 28), Observed), (row.Text, row.Date, row.ObservedAtUtc));
         Assert.Equal(withStatus, row.RecordId);
     }
 
     [Fact]
-    public async Task TheCommitPinsExactlyTheRowsOfTheStatusFileSoTheTableAndTheFileNeverDisagree()
+    public async Task AReleaseHoldsNoStatusFileAndAPublishNeverReadsTheStatusFileOfAnOlderFolder()
     {
         var scenario = new PublicationScenario();
-        var withStatus = scenario.AddAction('c');
-        var without = scenario.AddAction('d');
-        scenario.Publications.BillStatuses[withStatus] = Status(withStatus, "Passed House.", new DateOnly(2026, 1, 28));
+        var action = scenario.AddAction('c');
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.BillStatusPath] = new byte[PublishedBillStatuses.MaximumBytes + 1];
+        scenario.Releases.ReadPaths.Clear();
 
-        var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", withStatus, without));
+        var second = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", scenario.AddAction('d')));
 
-        var fileRows = ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records;
-        Assert.Single(fileRows);
-        Assert.Equal(fileRows, scenario.Publications.LastCommit!.BillStatuses.Select(row => row.Status));
+        Assert.DoesNotContain(PublicationProtocol.BillStatusPath, scenario.Releases.Directories[second.DirectoryName].Keys);
+        Assert.DoesNotContain(PublicationProtocol.BillStatusPath, scenario.Releases.ReadPaths);
+        Assert.Equal(action, Assert.Single(Rows(scenario, second)).RecordId);
     }
 
     [Fact]
-    public async Task ACheckThatChangesNeitherTextNorDateKeepsTheObservationTimeInTheFileAndAMovedStatusReplacesIt()
+    public async Task AStoredStatusThatBreaksTheRowRulesFailsThePublishBeforeAnyStagingSoNoReleasePinsIt()
+    {
+        var scenario = new PublicationScenario();
+        var action = scenario.AddAction('c');
+        scenario.Publications.BillStatuses[action] = Status(action, "Passed\u0007 House.", new DateOnly(2026, 1, 28));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k", action)));
+
+        Assert.Equal(0, scenario.Releases.BeginCount);
+        Assert.Empty(scenario.Publications.Committed);
+    }
+
+    [Fact]
+    public async Task ACheckThatChangesNeitherTextNorDateKeepsThePinnedObservationTimeAndAMovedStatusReplacesIt()
     {
         var scenario = new PublicationScenario();
         var first = scenario.AddAction('c');
@@ -54,9 +67,9 @@ public sealed class PublishBillStatusTests
         scenario.Publications.BillStatuses[first] = Status(first, "Became Public Law No: 119-1.", new DateOnly(2026, 2, 1));
         var moved = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3"));
 
-        Assert.Equal(Observed, ReadStatuses(scenario.Releases.Directories[checkedOnly.DirectoryName]).Records.Single(row => row.RecordId == first).ObservedAtUtc);
+        Assert.Equal(Observed, Rows(scenario, checkedOnly).Single(row => row.RecordId == first).ObservedAtUtc);
         Assert.Equal(("Became Public Law No: 119-1.", new DateOnly(2026, 2, 1)),
-            ReadStatuses(scenario.Releases.Directories[moved.DirectoryName]).Records.Where(row => row.RecordId == first).Select(row => (row.Text, row.Date)).Single());
+            Rows(scenario, moved).Where(row => row.RecordId == first).Select(row => (row.Text, row.Date)).Single());
     }
 
     [Fact]
@@ -70,35 +83,22 @@ public sealed class PublishBillStatusTests
         scenario.Publications.BillStatuses[action] = Status(action, "Introduced in House", new DateOnly(2026, 1, 3));
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k3"));
 
-        Assert.Equal(action, Assert.Single(ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records).RecordId);
+        Assert.Equal(action, Assert.Single(Rows(scenario, summary)).RecordId);
     }
 
     [Fact]
-    public async Task AReleaseFromBeforeTheStatusFileReadsAsHavingNoStatusSoTheFirstPublishWritesEveryRowThatNowExists()
+    public async Task APreviousReleaseWithNoPinnedRowReadsAsHavingNoStatusSoTheNextPublishPinsEveryRowThatNowExists()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
-        var first = scenario.Publications.LastCommit!.DirectoryName;
-        scenario.Releases.Directories[first].Remove(PublicationProtocol.BillStatusPath);
         scenario.Publications.BillStatuses[action] = Status(action, "Passed House.", new DateOnly(2026, 1, 28));
+        var first = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
+        scenario.Publications.PinnedBillStatuses[first.ReleaseNumber].Clear();
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
 
-        var row = Assert.Single(ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records);
+        var row = Assert.Single(Rows(scenario, summary));
         Assert.Equal((action, "Passed House."), (row.RecordId, row.Text));
-    }
-
-    [Fact]
-    public async Task APreviousStatusFileOverTheByteCapIsRefusedOnReadSoNoPublishBuildsOnAnUnboundedFile()
-    {
-        var scenario = new PublicationScenario();
-        var action = scenario.AddAction('c');
-        await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k1", action));
-        var first = scenario.Publications.LastCommit!.DirectoryName;
-        scenario.Releases.Directories[first][PublicationProtocol.BillStatusPath] = new byte[PublishedBillStatuses.MaximumBytes + 1];
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", scenario.AddAction('d'))));
     }
 
     [Fact]
@@ -116,13 +116,13 @@ public sealed class PublishBillStatusTests
         scenario.ReviseAction(first, 2, correctionNote: "Back.");
         var returned = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k4", first));
 
-        Assert.Equal(new[] { second, kept }.Order(StringComparer.Ordinal), ReadStatuses(scenario.Releases.Directories[inThisPublish.DirectoryName]).Records.Select(row => row.RecordId));
-        Assert.Equal([kept], ReadStatuses(scenario.Releases.Directories[carried.DirectoryName]).Records.Select(row => row.RecordId));
-        Assert.Equal(new[] { first, kept }.Order(StringComparer.Ordinal), ReadStatuses(scenario.Releases.Directories[returned.DirectoryName]).Records.Select(row => row.RecordId));
+        Assert.Equal(new[] { second, kept }.Order(StringComparer.Ordinal), Rows(scenario, inThisPublish).Select(row => row.RecordId));
+        Assert.Equal([kept], Rows(scenario, carried).Select(row => row.RecordId));
+        Assert.Equal(new[] { first, kept }.Order(StringComparer.Ordinal), Rows(scenario, returned).Select(row => row.RecordId));
     }
 
     [Fact]
-    public async Task ARemovedStatusRowLeavesNoRowInTheFile()
+    public async Task ARemovedStatusLeavesNoPinnedRow()
     {
         var scenario = new PublicationScenario();
         var action = scenario.AddAction('c');
@@ -132,7 +132,7 @@ public sealed class PublishBillStatusTests
 
         var summary = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, new PublishReleaseRequest([], "k2"));
 
-        Assert.Empty(ReadStatuses(scenario.Releases.Directories[summary.DirectoryName]).Records);
+        Assert.Empty(Rows(scenario, summary));
     }
 
     private static PublishReleaseRequest Withdraw(string key, string actionId) =>
@@ -144,6 +144,6 @@ public sealed class PublishBillStatusTests
     private static PublishedBillStatus Status(string recordId, string text, DateOnly date, DateTimeOffset? observed = null) =>
         new() { RecordId = recordId, Text = text, Date = date, ObservedAtUtc = observed ?? Observed };
 
-    private static PublishedBillStatuses ReadStatuses(IReadOnlyDictionary<string, byte[]> files) =>
-        JsonSerializer.Deserialize<PublishedBillStatuses>(files[PublicationProtocol.BillStatusPath], PublicationProtocol.JsonOptions)!;
+    private static PublishedBillStatus[] Rows(PublicationScenario scenario, PublicationReleaseSummary release) =>
+        [.. scenario.Publications.PinnedBillStatuses[release.ReleaseNumber].Values.OrderBy(row => row.RecordId, StringComparer.Ordinal)];
 }
