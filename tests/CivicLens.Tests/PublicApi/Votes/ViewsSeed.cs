@@ -1,9 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Fixtures;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Votes;
@@ -57,19 +55,15 @@ internal static class ViewsSeed
         VALUES {string.Join(", ", links.Select(link => $"({release}, '{new string(link.Vote, 64)}', '{new string(link.Bill, 64)}')"))};
         """);
 
-    public static Task AddVotesAsync(string database, params SeededVote[] votes) => AddVotesAsync(database, false, votes);
-
-    public static Task AddVotesBeforeMemberTotalsAsync(string database, params SeededVote[] votes) => AddVotesAsync(database, true, votes);
-
-    private static async Task AddVotesAsync(string database, bool beforeMemberTotals, SeededVote[] votes)
+    public static async Task AddVotesAsync(string database, params SeededVote[] votes)
     {
-        foreach (var vote in votes) await ExecuteAsync(database, Insert(vote, beforeMemberTotals));
+        foreach (var vote in votes) await ExecuteAsync(database, Insert(vote));
     }
 
-    private static string Insert(SeededVote vote, bool beforeMemberTotals)
+    private static string Insert(SeededVote vote)
     {
-        var headerColumns = beforeMemberTotals ? "member_count" : VoteMemberListSeed.Columns;
-        var headerValues = beforeMemberTotals ? vote.Casts.Length.ToString(CultureInfo.InvariantCulture) : VoteMemberListSeed.Values(vote.Casts);
+        var headerColumns = VoteMemberListSeed.Columns;
+        var headerValues = VoteMemberListSeed.Values(vote.Casts);
         var source = vote.Chamber == "House" ? "CongressGov" : "Voteview";
         var bill = vote.BillType is null ? "NULL, NULL" : $"'{vote.BillType}', {vote.BillNumber}";
         var last = vote.LastRelease?.ToString(CultureInfo.InvariantCulture) ?? "NULL";
@@ -178,14 +172,6 @@ internal static class ViewsSeed
         await using var connection = new NpgsqlConnection(database);
         await connection.OpenAsync();
         return await ReadAsync(connection, sql);
-    }
-
-    /// <summary>Applies the public API grants after a test has rolled a migration forward again.</summary>
-    internal static async Task ApplyGrantsAsync(string database)
-    {
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-        var grants = typeof(CollectionAttemptDbContext).Assembly.GetType("CivicLens.Infrastructure.Publication.PublicApiGrants")!;
-        await (Task)grants.GetMethod("ApplyAsync")!.Invoke(null, [db, CancellationToken.None])!;
     }
 
     private static async Task<string[]> ReadAsync(NpgsqlConnection connection, string sql)

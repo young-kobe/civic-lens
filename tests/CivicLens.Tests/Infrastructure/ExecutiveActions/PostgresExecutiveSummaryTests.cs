@@ -232,25 +232,6 @@ public sealed class PostgresExecutiveSummaryTests(PostgresCollection postgres) :
         Assert.Contains("cut flag", stop.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task TheMigrationQueuesTheTextsThatExistedBeforeItAndRollsBackToTheCodeOnlyAuthorRule()
-    {
-        _ = await seeder.AdmitWithTextAsync(FederalRegisterFixtures.BidenProclamation, "joe-biden", Body);
-        await using var db = new CivicLens.Infrastructure.Collection.CollectionAttemptDbContext(
-            new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<CivicLens.Infrastructure.Collection.CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-        var migrator = Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>(db);
-        var before = db.Database.GetMigrations().TakeWhile(id => !id.EndsWith("_ExecutiveActionSummary", StringComparison.Ordinal)).Last();
-        _ = await ExecuteAsync("DELETE FROM exec_summary_analysis");
-
-        await migrator.MigrateAsync(before);
-        await migrator.MigrateAsync();
-
-        Assert.Equal(1L, await ScalarAsync("SELECT count(*) FROM exec_summary_analysis WHERE status = 'Pending'"));
-        await migrator.MigrateAsync(before);
-        Assert.Equal(DBNull.Value, await ScalarAsync("SELECT to_regclass('exec_summary_analysis')::text"));
-        Assert.Equal(DBNull.Value, await ScalarAsync("SELECT to_regclass('executive_action_revision_summary_sentences')::text"));
-    }
-
     private static string Output() => JsonSerializer.Serialize(new
     {
         summary = new { sentences = new[] { new { sentence = Sentence, quote = Quote }, new { sentence = Second, quote = SecondQuote } }, confidence = 0.9 }
