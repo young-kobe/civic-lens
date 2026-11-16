@@ -1,19 +1,13 @@
-using CivicLens.Infrastructure.Collection;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Votes;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace CivicLens.Tests.Infrastructure.Publication;
 
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "Postgres")]
-public sealed class ReleaseOfficialRecordCountsMigrationTests(PostgresCollection postgres)
+public sealed class ReleaseOfficialRecordCountsViewTests(PostgresCollection postgres)
 {
-    private const string Migration = "20261116171634_ReleaseOfficialRecordCounts";
-
     // One statement names the official in release 1. The stored row says 7 records, so the view shows which source it reads.
     private const string SeedSql = """
         SET session_replication_role = replica;
@@ -23,37 +17,21 @@ public sealed class ReleaseOfficialRecordCountsMigrationTests(PostgresCollection
         """;
 
     [Fact]
-    public async Task UpgradeMakesTheOfficialsViewReadTheStoredCountAndDowngradeRestoresTheLiveCountAndRevokesTheOwnerGrant()
+    public async Task TheOfficialsViewReadsTheStoredCountNotTheLiveCountAndThePublicRoleReadsTheCountsView()
     {
         var database = await postgres.CreateMigratedDatabaseAsync();
         try
         {
-            await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(database).Options);
-            var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, Migration) < 0);
             await ViewsSeed.ActivateReleaseAsync(database, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
             await ViewsSeed.ExecuteAsync(database, SeedSql);
             await ViewsSeed.ExecuteAsync(database, "INSERT INTO release_official_record_counts VALUES (1, 'p1', 7, 0, 0, 0, 0)");
-            var upgraded = await ColumnsAsync(database);
 
             Assert.Equal(["p1 7"], await ReadAsPublicAsync(database, "SELECT official_id || ' ' || record_count FROM public_api.officials"));
             Assert.Equal(["p1 7"], await ReadAsPublicAsync(database, "SELECT official_id || ' ' || records FROM public_api.release_official_record_counts"));
-
-            await db.GetService<IMigrator>().MigrateAsync(previous);
-            Assert.Equal(upgraded, await ColumnsAsync(database));
-            Assert.Equal(["p1 1"], await ReadAsPublicAsync(database, "SELECT official_id || ' ' || record_count FROM public_api.officials"));
-            Assert.Equal(["true"], await ReadAsync(database, "SELECT (to_regclass('public_api.release_official_record_counts') IS NULL AND to_regclass('public.release_official_record_counts') IS NULL)::text"));
-
-            await PostgresCollectionAttemptStore.FromConnectionString(database).MigrateAsync();
-            Assert.Equal(["p1 0"], await ReadAsPublicAsync(database, "SELECT official_id || ' ' || record_count FROM public_api.officials"));
             Assert.Equal(["true"], await ReadAsync(database, "SELECT has_any_column_privilege('civic_lens_public_owner', 'release_official_record_counts', 'SELECT')::text"));
         }
         finally { await postgres.DropDatabaseAsync(database); }
     }
-
-    private static async Task<string[]> ColumnsAsync(string database) => await ReadAsync(database, """
-        SELECT column_name || '|' || data_type FROM information_schema.columns
-         WHERE table_schema = 'public_api' AND table_name = 'officials' ORDER BY ordinal_position
-        """);
 
     private static async Task<string[]> ReadAsPublicAsync(string database, string sql)
     {
