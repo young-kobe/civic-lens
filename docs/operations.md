@@ -303,7 +303,7 @@ One baseline migration, `20261116204947_InitialSchema`, replaced the chain of 13
 `db migrate` runs the history step before EF applies migrations. The step reads the history under a lock on the table:
 
 - The exact 134 pre-squash IDs: the step deletes them and inserts the baseline ID in one transaction. EF then finds nothing to apply.
-- No history table, or an empty one: the step does nothing, and EF runs the baseline.
+- No database, no history table, or an empty one: the step does nothing. EF creates a missing database and runs the baseline.
 - A history that holds the baseline ID: the step does nothing. A second `db migrate` is therefore safe.
 - Any other history: the command prints the count and the newest ID, exits with code 1, and changes nothing.
 

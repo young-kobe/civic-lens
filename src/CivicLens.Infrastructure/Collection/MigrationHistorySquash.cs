@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CivicLens.Infrastructure.Collection;
 
 /// <summary>
 /// Moves a database from the pre-squash migration history to the one baseline migration, before EF applies migrations.
 /// The baseline holds the same schema as the old chain, so the step changes only the history rows and runs no schema change.
-/// A database with no history runs the baseline. A database that already holds the baseline is left as it is.
+/// A missing database or a database with no history runs the baseline. A database that already holds the baseline is left as it is.
 /// Any other history fails and changes nothing, because only the exact old chain is known to equal the baseline.
 /// </summary>
 public static class MigrationHistorySquash
@@ -160,6 +161,10 @@ public static class MigrationHistorySquash
 
     internal static async Task ApplyAsync(DbContext db, CancellationToken cancellationToken)
     {
+        // A database that does not exist yet has no history. EF creates it and runs the baseline.
+        if (!await db.GetService<IRelationalDatabaseCreator>().ExistsAsync(cancellationToken))
+            return;
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (!await db.Database.SqlQueryRaw<bool>(HistoryExistsSql).SingleAsync(cancellationToken))
             return;

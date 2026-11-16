@@ -61,6 +61,24 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
     }
 
     [Fact]
+    public async Task AMissingDatabaseIsCreatedAndRunsTheBaselineBecauseTheStepNeverOpensADatabaseThatDoesNotExist()
+    {
+        var empty = await postgres.CreateEmptyDatabaseAsync();
+        var missing = new NpgsqlConnectionStringBuilder(empty) { Database = "test_" + Guid.NewGuid().ToString("N") }.ConnectionString;
+        try
+        {
+            await PostgresCollectionAttemptStore.FromConnectionString(missing).MigrateAsync();
+
+            Assert.Equal([MigrationHistorySquash.BaselineId], await ReadHistoryAsync(missing));
+        }
+        finally
+        {
+            await postgres.DropDatabaseAsync(missing);
+            await postgres.DropDatabaseAsync(empty);
+        }
+    }
+
+    [Fact]
     public async Task AnEmptyHistoryTableRunsTheBaseline()
     {
         var empty = await postgres.CreateEmptyDatabaseAsync();
