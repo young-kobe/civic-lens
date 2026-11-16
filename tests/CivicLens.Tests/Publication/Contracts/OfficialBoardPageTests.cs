@@ -37,7 +37,7 @@ public sealed class OfficialBoardPageTests
             Row("current", 119, 30, 3),
             Row("earlier", 118, 30, 3),
             (Listing("none"), PublishedOfficialSummary.Empty("none")),
-            (Listing("no-party"), new PublishedOfficialSummary { Id = "no-party", Congress = 119, CosponsoredBills = null, PartyVotes = [], Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 10, Missed = 0, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }] }));
+            (Listing("no-party"), new PublishedOfficialSummary { Id = "no-party", Congress = 119, PartyVotes = [], Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 10, Missed = 0, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }] }));
 
         Assert.Equal(119, page.Congress);
         Assert.Equal(["current"], page.Members.Select(member => member.Official.Profile.Id));
@@ -120,7 +120,6 @@ public sealed class OfficialBoardPageTests
         {
             Id = "switcher",
             Congress = 119,
-            CosponsoredBills = null,
             PartyVotes =
             [
                 new PublishedPartyVoteSummary { Chamber = PublishedChamber.House, Party = PublishedPartyMajority.Democrat, SplitVotesCast = 20, Breaks = 1 },
@@ -144,7 +143,6 @@ public sealed class OfficialBoardPageTests
         {
             Id = "attendance",
             Congress = 120,
-            CosponsoredBills = null,
             PartyVotes = [],
             Attendance = [new PublishedAttendanceSummary { Chamber = PublishedChamber.House, Held = 10, Missed = 1, First = new DateOnly(2027, 1, 3), Last = new DateOnly(2027, 1, 20) }]
         };
@@ -243,7 +241,6 @@ public sealed class OfficialBoardPageTests
         {
             Id = id,
             Congress = congress,
-            CosponsoredBills = null,
             PartyVotes = [new PublishedPartyVoteSummary { Chamber = chamber, Party = party, SplitVotesCast = cast, Breaks = breaks }],
             Attendance = [new PublishedAttendanceSummary { Chamber = chamber, Held = held, Missed = missed, First = new DateOnly(2025, 1, 3), Last = new DateOnly(2026, 10, 27) }],
             Previous = previous

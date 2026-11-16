@@ -36,11 +36,11 @@ public static class ServerPageEndpoints
         var pages = routes.MapGroup(string.Empty);
         pages.AddEndpointFilter<ServerErrorPageFilter>();
         var homePage = (HttpContext context, HomePageReader home, ServerPageResponder responder, CancellationToken cancellationToken) =>
-            ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } read
-                ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, read.Freshness,
+            ApiResults.GuardAsync(async () => await home.ReadAsync(cancellationToken) is { } data
+                ? await responder.RespondAsync<CivicLens.PublicWeb.Publication.HomePage>(context, StatusCodes.Status200OK, data.Release,
                     async () => new Dictionary<string, object?>
                     {
-                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = await home.WithDetailAsync(read.Data, cancellationToken),
+                        [nameof(CivicLens.PublicWeb.Publication.HomePage.Data)] = await home.WithDetailAsync(data, cancellationToken),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.RootPath)] = baseUrl.Join(string.Empty),
                         [nameof(CivicLens.PublicWeb.Publication.HomePage.BrowserApiUrl)] = home.BrowserApiRoot
                     }, cancellationToken)

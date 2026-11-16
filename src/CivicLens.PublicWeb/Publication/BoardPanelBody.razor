@@ -1,6 +1,6 @@
 @using CivicLens.Publication.Contracts
 
-@* The ranked list of one board, with its empty states, kept Congress line, delegate list and fold. The boards page shows it in each panel, and the full board page shows it whole.
+@* The ranked list of one board, with its empty states, kept Congress line, delegate list and fold. The boards page shows it in each panel. The full board page shows it whole, folded when it is long.
    Delegates and the resident commissioner rank in their own list below the voting members, in every state of the main list. *@
 @if (Board.Congress is not { } congress)
 {
@@ -26,7 +26,14 @@ else
         <p class="small muted">@BoardWords.NewestRollCall(congress, shown)</p>
     }
     <p class="board-lede">The @Board.Rows.Count @(Board.Rows.Count == 1 ? "member" : "members") of the @PublishedPartyNames.PartyOf(Board.Chamber, Board.Party) with the highest share of split votes cast against most @PublishedPartyNames.Members(Board.Party). Count first, then the base it comes from.</p>
-    @Rows(Board.Rows)
+    @if (FullListHref is null)
+    {
+        <MemberListFold Count="Board.Rows.Count" Noun="members">@Rows(Board.Rows)</MemberListFold>
+    }
+    else
+    {
+        @Rows(Board.Rows)
+    }
     @Delegates
     @if (FullListHref is not null)
     {

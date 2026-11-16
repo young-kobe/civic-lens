@@ -1,7 +1,7 @@
 @using CivicLens.Publication.Contracts
 
 <li class="record-row">
-    <span class="record-row-icon @IconClass"><Icon Name="Icon" /></span>
+    <span class="record-row-icon @IconClass">@if (ResultWords is not null) {<VoteResultMark Result="@ResultWords" />} else {<Icon Name="Icon" />}</span>
     <div>
         <a href="@Href">
             <span>@Headline</span>
@@ -58,6 +58,7 @@
     [Parameter] public string[]? MetaParts { get; set; }
     [Parameter] public int? Yea { get; set; }
     [Parameter] public int? Nay { get; set; }
+    /// <summary>The result of a vote row. The icon square then shows the result mark in place of the icon, so a failed vote never reads as passed.</summary>
     [Parameter] public string? ResultWords { get; set; }
     [Parameter] public string? BillLine { get; set; }
     [Parameter] public RenderFragment? Snippet { get; set; }

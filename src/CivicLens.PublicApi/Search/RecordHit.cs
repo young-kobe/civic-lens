@@ -22,10 +22,8 @@ public sealed record RecordHit
     public required int FirstRelease { get; init; }
     public int? LastRelease { get; init; }
     public string? BillLine { get; init; }
-    /// <summary>The text origin and label column of the view that held the summary. The search page shows the label as a chip. The search API does not serve them.</summary>
-    [JsonIgnore]
+    /// <summary>The text origin and label column of the view that held the summary. The search API serves both, so a snippet of AI text carries its label. The search page shows the label as a chip.</summary>
     public PublishedTextOrigin? TextOrigin { get; init; }
-    [JsonIgnore]
     public string? Label { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Snippet { get; init; }

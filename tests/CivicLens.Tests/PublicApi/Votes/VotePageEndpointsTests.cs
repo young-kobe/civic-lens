@@ -118,17 +118,13 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
             UPDATE vote_revision_party_tallies SET yea = 3 WHERE record_id = '{House.RecordId}' AND party = 'Democrat';
             {SplitColumns(House.RecordId, "Yea", "Nay")}
             """);
-        var tallies = new[] { ("Democrat", 3, 1), ("Republican", 0, 2) };
-        var casts = new[] { ("Ann Able", "Democrat", "Yea"), ("Ben Baker", "Democrat", "Nay"), ("Cy Cole", "Republican", "Nay"), ("Di Dole", "Republican", "Not Voting") };
-        string[] before = [.. tallies.Select(tally => PublishedPartyMajority.Of(tally.Item1, tally.Item2, tally.Item3))
-            .SelectMany(majority => casts.Where(member => member.Item2 == majority.Party && majority.Majority is { } line
-                && PublishedPartyMajority.IsAgainstPartyMajority(majority.Party, member.Item3, line)).Select(member => member.Item1))];
+        // The Democrat tally of Yes 3, No 1 makes Yes the majority, so Ben Baker breaks with No. Cy Cole votes No with the Republican majority, and Not voting never breaks.
+        string[] before = ["Ben Baker"];
 
         var page = await GetPageAsync(host, Path);
 
         Assert.Equal(["House Democrats: Yes 3, No 1, Not voting 0", "House Republicans: Yes 0, No 2, Not voting 1"],
             page.QuerySelectorAll(".vote-parties svg.party-bar-chart").Select(bar => bar.GetAttribute("aria-label")));
-        Assert.Equal(["Ben Baker"], before);
         Assert.Equal(before, page.QuerySelectorAll(".vote-breakers li a").Select(link => link.TextContent));
     }
 

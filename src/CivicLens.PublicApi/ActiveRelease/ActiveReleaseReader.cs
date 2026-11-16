@@ -16,7 +16,7 @@ public sealed class ActiveReleaseReader(NpgsqlDataSource views)
             : null;
     }
 
-    /// <summary>Finds the active release with the newest roll call day of each chamber, in one statement. The days come from every published roll call, as the home answer reads them.</summary>
+    /// <summary>Finds the active release with the newest roll call day of each chamber, in one statement. The days come from every published roll call, procedural kinds included.</summary>
     public async Task<ReleaseFreshness?> FindFreshnessAsync(CancellationToken cancellationToken)
     {
         await using var command = views.CreateCommand("""

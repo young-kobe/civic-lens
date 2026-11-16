@@ -462,7 +462,6 @@ This is the only navigation index.
 | Search ingest of a release | [Search](architecture/search.md#ingest) | `src/CivicLens.PublicApi/Ingest/ReleaseIngest.cs` |
 | Search API routes and errors | [Search](architecture/search.md#api) | `src/CivicLens.PublicApi/Search/SearchEndpoints.cs` |
 | Officials file of a release | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/PublicationOfficials.cs` |
-| Vote files and summary rows of an official | [Publication](architecture/publication.md#release-content) | `src/CivicLens.Application/Publication/ReleaseOfficialFiles.cs` |
 | Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
 | Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Server sitemap and robots file from the views | [Public site](architecture/public-site.md#invariants) | `src/CivicLens.PublicApi/Sitemap/SitemapEndpoints.cs` |

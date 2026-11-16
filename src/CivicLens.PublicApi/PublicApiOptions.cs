@@ -26,7 +26,7 @@ public sealed record PublicApiOptions
     public required string Database { get; init; }
     /// <summary>The connection of the role <c>civic_lens_public</c> to the operational database. Only the views of <c>public_api</c> are readable through it.</summary>
     public required string PublicViewsDatabase { get; init; }
-    /// <summary>The public origin of the site. The server pages use it for their links, as the static release does. Null means that the server page routes do not exist.</summary>
+    /// <summary>The public origin of the site. The server pages use it for their links. Null means that the server page routes do not exist.</summary>
     public PublicBaseUrl? PublicBaseUrl { get; init; }
     /// <summary>The browser-facing API origin embedded in server-rendered pages. Null leaves ZIP lookup unavailable.</summary>
     public PublicBaseUrl? BrowserApiUrl { get; init; }

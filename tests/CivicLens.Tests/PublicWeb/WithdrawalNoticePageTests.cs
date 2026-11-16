@@ -29,12 +29,8 @@ public sealed class WithdrawalNoticePageTests
         ]
     };
 
-    private static Task<IDocument> RenderAsync(PublishedWithdrawal notice, string? root = Root)
-    {
-        var parameters = new Dictionary<string, object?> { ["Withdrawal"] = notice };
-        if (root is not null) parameters["RootPath"] = root;
-        return ListPageRender.RenderPageAsync<PublishedWithdrawalPage>(parameters);
-    }
+    private static Task<IDocument> RenderAsync(PublishedWithdrawal notice) =>
+        ListPageRender.RenderPageAsync<PublishedWithdrawalPage>(new Dictionary<string, object?> { ["Withdrawal"] = notice, ["RootPath"] = Root });
 
 
     [Fact]
@@ -177,13 +173,5 @@ public sealed class WithdrawalNoticePageTests
 
         Assert.StartsWith(Root, page.QuerySelector(".public-breadcrumbs a")!.GetAttribute("href"));
         Assert.Contains("noindex", page.QuerySelector("meta[name=robots]")!.GetAttribute("content"));
-    }
-
-    [Fact]
-    public async Task TheStaticPageKeepsItsRelativeRootWhenNoRootIsGiven()
-    {
-        var page = await RenderAsync(Notice, root: null);
-
-        Assert.StartsWith("../", page.QuerySelector(".public-breadcrumbs a")!.GetAttribute("href"));
     }
 }

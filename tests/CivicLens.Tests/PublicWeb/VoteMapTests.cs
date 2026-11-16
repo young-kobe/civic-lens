@@ -32,8 +32,17 @@ public sealed class VoteMapTests
         }
         var row = page.QuerySelectorAll(".vote-map tbody tr").Single(item => item.Children[0].TextContent == "Texas district 23");
         Assert.Equal(["No member in the record", "", ""], row.Children.Skip(1).Select(cell => cell.TextContent));
-        Assert.Equal(["1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend li").Select(item => item.TextContent));
+        Assert.Equal(["1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend-vote li").Select(item => item.TextContent));
         Assert.DoesNotContain("acant", page.QuerySelector(".vote-map")!.TextContent);
+    }
+
+    [Fact]
+    public async Task TheVotePageMapReusesTheMapPageColorChoiceSoItCanColorByParty()
+    {
+        var page = await RenderAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)));
+
+        Assert.Equal([VoteMapWords.ByVote, VoteMapWords.ByParty], page.QuerySelectorAll(".vote-map [data-vote-map-colors] button").Select(button => button.TextContent));
+        Assert.Equal(["Democrats: 1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend-party li").Select(item => item.TextContent));
     }
 
     [Fact]
@@ -83,15 +92,15 @@ public sealed class VoteMapTests
             Member("d1", "Dee Cee", "Present", "Democrat", "DC", 0)));
 
         var used = page.QuerySelectorAll(".vote-map-frame .vote-map-seat, .vote-map-delegates .vote-map-seat").Select(seat => seat.GetAttribute("data-mark")).Distinct().Order();
-        var legend = page.QuerySelectorAll(".vote-map-legend .vote-map-seat").Select(seat => seat.GetAttribute("data-mark")).ToArray();
+        var legend = page.QuerySelectorAll(".vote-map-legend-vote .vote-map-seat").Select(seat => seat.GetAttribute("data-mark")).ToArray();
         Assert.Equal(used, legend.Order());
         Assert.Equal(["1 Yes", "1 No", "1 Present", "1 Not voting", "1 Other", "431 No member in the record"],
-            page.QuerySelectorAll(".vote-map-legend li").Select(item => item.TextContent));
+            page.QuerySelectorAll(".vote-map-legend-vote li").Select(item => item.TextContent));
         var css = WebStyleSheets.Read("public.css");
         Assert.All(legend, mark => Assert.Matches($@"\.vote-map-seat\[data-mark=""{mark}""\] \{{ fill: [^;]+;", css));
         Assert.Equal("Each mark counts House seats and delegate circles on roll call 308 by how the member voted. The counts add up to 436.",
-            page.QuerySelector(".vote-map-legend")!.PreviousElementSibling!.TextContent);
-        Assert.True(Position(page, ".vote-map-legend") < Position(page, ".vote-map-frame"));
+            page.QuerySelector(".vote-map-legend-vote .vote-map-legend")!.PreviousElementSibling!.TextContent);
+        Assert.True(Position(page, ".vote-map-legend-vote") < Position(page, ".vote-map-frame"));
     }
 
     [Fact]
@@ -164,8 +173,8 @@ public sealed class VoteMapTests
 
         var map = page.QuerySelector(".vote-map")!;
         Assert.Contains("1 tracked member has no seat in the record, so the map leaves them out.", map.TextContent);
-        Assert.Equal(["1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend li").Select(item => item.TextContent));
-        Assert.EndsWith("The counts add up to 435.", page.QuerySelector(".vote-map-legend")!.PreviousElementSibling!.TextContent, StringComparison.Ordinal);
+        Assert.Equal(["1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend-vote li").Select(item => item.TextContent));
+        Assert.EndsWith("The counts add up to 435.", page.QuerySelector(".vote-map-legend-vote .vote-map-legend")!.PreviousElementSibling!.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain(page.QuerySelectorAll(".vote-map-frame title"), title => title.TextContent.Contains("Ben Baker"));
     }
 

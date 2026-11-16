@@ -210,7 +210,7 @@ public sealed class PublishRelationshipTests
 
         await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, PublicationScenario.Request("k3", draft));
 
-        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.BillStatusPath], scenario.Releases.ReadPaths);
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath], scenario.Releases.ReadPaths);
     }
 
     [Fact]

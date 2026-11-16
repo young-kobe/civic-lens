@@ -24,7 +24,6 @@ public static class PublicationProtocol
     public const string MethodPagePath = "method.html";
     public const string IssueTagsAnchor = "#issue-tags";
     public const string OfficialsPath = "officials.json";
-    public const string OfficialSummariesPath = "officials-summary.json";
     public const string BillStatusPath = "bill-status.json";
     public const string OfficialsPagePath = "officials.html";
     public const string AboutPagePath = "about.html";
@@ -35,7 +34,6 @@ public static class PublicationProtocol
     public const string BoardsPagePath = "boards.html";
     public const string SitemapPath = "sitemap.xml";
     public const string RobotsPath = "robots.txt";
-    public const int MaximumOfficialFiles = 512;
     private const string PhotoFolder = "photos/";
     private const string PhotoExtension = ".jpg";
 
@@ -63,13 +61,10 @@ public static class PublicationProtocol
     public static string OfficialPagePath(string officialId) => $"officials/{officialId}.html";
     public static string OfficialCongressPagePath(string officialId, int congress) => $"officials/{officialId}/{congress}.html";
     public static string OfficialRecordPagePath(string officialId) => $"officials/{officialId}/record.html";
-    public static string OfficialVotesPath(string officialId, int congress) => $"officials/{officialId}/votes-{congress}.json";
-    public static string OfficialFolder(string officialId) => $"officials/{officialId}";
     public static string PhotoPath(string captureSha256) => $"{PhotoFolder}{captureSha256}{PhotoExtension}";
     public static bool IsPhotoPath(string? path) =>
         path is not null && path.StartsWith(PhotoFolder, StringComparison.Ordinal) && path.EndsWith(PhotoExtension, StringComparison.Ordinal) &&
         IsSha256(path[PhotoFolder.Length..^PhotoExtension.Length]);
-    public static int? VotesCongressOf(string path) => CongressIn(path, "/votes-", ".json");
     public static string RecordDataPath(string recordId) => $"records/{recordId}.json";
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
     /// <summary>The full map page of one vote. It sits under the record folder of the vote, beside no other page of that record.</summary>
@@ -92,14 +87,6 @@ public static class PublicationProtocol
         if (text[limit - 1] != ' ' && space > 0) head = head[..space];
         else if (char.IsHighSurrogate(head[^1])) head = head[..^1];
         return head.TrimEnd() + "\u2026";
-    }
-
-    private static int? CongressIn(string path, string prefix, string suffix)
-    {
-        var name = path[path.LastIndexOf('/')..];
-        if (!name.StartsWith(prefix, StringComparison.Ordinal) || !name.EndsWith(suffix, StringComparison.Ordinal)) return null;
-        var digits = name[prefix.Length..^suffix.Length];
-        return digits.Length is > 0 and <= 4 && digits[0] != '0' && digits.All(char.IsAsciiDigit) ? int.Parse(digits) : null;
     }
 
     private static string FacetPagePath(string folder, string facetId, int page) =>

@@ -83,14 +83,12 @@ public sealed class PublishReleaseTests
 
         var order = scenario.Releases.WriteOrder;
         Assert.Equal(PublicationProtocol.ManifestPath, order[^1]);
-        Assert.Equal(PublicationProtocol.OfficialSummariesPath, order[^2]);
-        Assert.Equal(PublicationProtocol.OfficialsPath, order[^3]);
-        Assert.Equal(PublicationProtocol.BillStatusPath, order[^4]);
-        Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf(PublicationProtocol.BillStatusPath));
+        Assert.Equal(PublicationProtocol.OfficialsPath, order[^2]);
+        Assert.True(order.IndexOf(PublicationProtocol.RecordDataPath(draft)) < order.IndexOf(PublicationProtocol.OfficialsPath));
     }
 
     [Fact]
-    public async Task AReleaseHoldsDataFilesOnlyAndNoPageSiteFileOrAsset()
+    public async Task AReleaseHoldsDataFilesOnlyAndNoPageSiteFileAssetSummaryVoteFileOrStatusFile()
     {
         var scenario = new PublicationScenario();
         var vote = scenario.AddVote('a');
@@ -102,7 +100,7 @@ public sealed class PublishReleaseTests
         Assert.DoesNotContain(paths, path => path.StartsWith("assets/", StringComparison.Ordinal));
         Assert.DoesNotContain(paths, path => path is "catalog.json" or "sitemap.xml" or "robots.txt" or "404.html");
         Assert.Contains(PublicationProtocol.RecordDataPath(vote), paths);
-        Assert.Contains(PublicationProtocol.OfficialVotesPath("mayor", 119), paths);
+        Assert.DoesNotContain(paths, path => path is "officials-summary.json" or "bill-status.json" || path.StartsWith("officials/", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -454,7 +452,7 @@ public sealed class PublishReleaseTests
         Assert.Contains((one.DirectoryName, PublicationProtocol.RecordDataPath(first)), scenario.Releases.Links);
         Assert.DoesNotContain(PublicationProtocol.RecordDataPath(first), scenario.Releases.WriteOrder);
         Assert.Contains(PublicationProtocol.RecordDataPath(second), scenario.Releases.WriteOrder);
-        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath, PublicationProtocol.OfficialSummariesPath, PublicationProtocol.BillStatusPath], scenario.Releases.ReadPaths);
+        Assert.Equal([PublicationProtocol.ManifestPath, PublicationProtocol.OfficialsPath], scenario.Releases.ReadPaths);
         Assert.Equal(new ReviewStateExpectation(PublishedRecordKind.DocumentChange, second, 1, 1), Assert.Single(scenario.Publications.LastCommit!.AddedRecords));
         Assert.Equal(2, scenario.Publications.LastCommit.Records.Length);
     }

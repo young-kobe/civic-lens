@@ -14,6 +14,25 @@ public sealed class SharedVoteRowsTests
 {
     private const string Root = "https://civic-lens.test/";
 
+    [Theory]
+    [InlineData("Passed", "yes")]
+    [InlineData("Confirmed", "yes")]
+    [InlineData("Failed", "no")]
+    [InlineData("Not confirmed", "no")]
+    [InlineData("Point of Order Sustained", "unknown")]
+    public async Task EachRowMarksItsResultSoAFailedVoteNeverShowsThePassedMark(string result, string mark)
+    {
+        var row = new SharedVoteRowData(new string('a', 64), new(2026, 9, 16), 119, 2, 314,
+            "House votes on the bill", null, PublishedTextOrigin.Code, "Vote to pass or agree to", result, []);
+
+        var document = await RenderAsync(new SharedVoteRowsData(PublishedChamber.House, [], [row]));
+
+        var square = Assert.Single(document.QuerySelectorAll(".shared-vote-icon .vote-result-mark"));
+        Assert.Equal(mark, square.GetAttribute("data-mark"));
+        Assert.Equal("true", square.GetAttribute("aria-hidden"));
+        Assert.Null(document.QuerySelector(".shared-vote-icon svg"));
+    }
+
     [Fact]
     public async Task RowsLinkVotesAndShowOnlyRecordedCastsInRequestedMemberOrder()
     {

@@ -3,7 +3,7 @@ using CivicLens.PublicWeb.Components.Ui;
 
 namespace CivicLens.PublicWeb.Publication;
 
-/// <summary>The one owner of the time frame, agreement, caucus and delegate list words that the static board pages, the server boards page and the full board pages share.</summary>
+/// <summary>The one owner of the time frame, agreement, caucus and delegate list words that the boards page and the full board pages share.</summary>
 public static class BoardWords
 {
     public const string ListsEyebrow = "Four lists, one for each chamber and party";

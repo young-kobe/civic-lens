@@ -192,7 +192,7 @@ public sealed class BoardsPageTests
     [InlineData(1, 1000, "under 1% of split votes cast")]
     [InlineData(999, 1000, "over 99% of split votes cast")]
     [InlineData(1, 2, "50% of split votes cast")]
-    public async Task TheShareUsesTheRoundingWordsOfTheStaticBoardsAndNamesItsBase(int breaks, int cast, string share)
+    public async Task TheShareUsesTheRoundingWordsOfBoardWordsAndNamesItsBase(int breaks, int cast, string share)
     {
         var page = await RenderAsync(Data([Panel(PublishedChamber.House, "Democrat", 119, Row("a", "Ann", null, cast, breaks))]));
 
