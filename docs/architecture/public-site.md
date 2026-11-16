@@ -507,7 +507,7 @@ Limits:
 - The sitemap lists relationship records before the relationship page exists, because their URLs stay public.
 - The bill list shows the newest Congress of the release only. A bill of an older Congress is reached through search.
 - The list pages show no page number.
-- The bills tab of an official who sponsors every bill takes 0.55 to 0.65 s at the production size. Its page query sorts every sponsored bill. The counts do not cost that time.
+- The bills tab of an official who sponsors every bill takes 0.55 to 0.65 s at the production size. Its page query sorts every sponsored bill. The counts do not cost that time. The owner accepted this time for R-68 (2026-11-16). Planned after R-68: store a per-release sort key for sponsored bills, so the tab reads a keyset on an index.
 - The votes tab of an official is not measured at the production size. The shared release fixture writes no member vote rows.
 - The bills list still sorts by the latest sponsorship date. The latest official action order comes in a separate change.
 - The officials list sorts by the full display name. The release holds no last name. The last name order comes in a separate change.
