@@ -52,7 +52,8 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
     };
 
     private static SearchHitData Hit(RecordHit hit) => new(hit.Kind, hit.RecordId, hit.Headline, hit.EventDate, hit.BillLine, hit.Snippet,
-        [.. hit.Officials.Select(official => official.Name)]);
+        [.. hit.Officials.Select(official => official.Name)])
+    { Label = hit.Label, TextOrigin = hit.TextOrigin };
 
     /// <summary>Finds officials whose name, or any word of it, starts with the text. <see cref="OfficialStore"/> owns the name match and puts an exact name first.
     /// The store reads one row past the limit, so its next cursor says that more officials match.</summary>

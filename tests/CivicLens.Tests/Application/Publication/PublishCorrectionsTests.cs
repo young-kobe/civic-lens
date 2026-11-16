@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using CivicLens.Application.Publication;
 using CivicLens.Core.Review;
 using CivicLens.Publication.Contracts;
+using CivicLens.PublicWeb.Publication;
 
 namespace CivicLens.Tests.Application.Publication;
 
@@ -182,18 +183,32 @@ public sealed class PublishCorrectionsTests
     }
 
     [Fact]
-    public async Task AReplacementUsesTheBoundHistoryInsteadOfParsingAnObsoleteLegacyActionFile()
+    public async Task AReplacementUsesTheBoundHistoryInsteadOfParsingAnObsoleteLegacyStatementFile()
+    {
+        var scenario = new PublicationScenario();
+        var codeDecision = PublicationScenario.Decision(new string('c', 64), 1, ReviewDecisionKind.Approve) with { ActorSubject = ReviewAuthor.CodeSubject };
+        var statement = scenario.AddStatement('c', [codeDecision], author: ReviewAuthor.AnalysisSubject);
+        var reference = new PublishedRecordReference(PublishedRecordKind.Statement, statement);
+        var first = await scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k1", reference));
+        scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.RecordDataPath(statement)] = Encoding.UTF8.GetBytes("invalid old JSON");
+        scenario.ReviseStatementByCode(statement, 2);
+
+        var next = await scenario.Publisher().ExecuteAsync(Code, PublicationScenario.Request("k2", reference));
+
+        var correction = Assert.Single(JsonSerializer.Deserialize<PublishedStatement>(
+            scenario.Releases.Directories[next.DirectoryName][PublicationProtocol.RecordDataPath(statement)], PublicationProtocol.JsonOptions)!.Corrections);
+        Assert.Equal((1, null), (correction.ReplacedRevisionNumber, correction.Note));
+    }
+
+    [Fact]
+    public async Task ABillReplacementReadsTheExactEarlierActionFileForTheTextRewriteCheckAsAVoteReplacementDoes()
     {
         var (scenario, action) = await PublishedActionAsync();
         var first = scenario.Publications.Committed.Single();
         scenario.Releases.Directories[first.DirectoryName][PublicationProtocol.RecordDataPath(action)] = Encoding.UTF8.GetBytes("invalid old JSON");
         scenario.ReviseAction(action, 2, correctionNote: "Fixed the date.");
 
-        var next = await scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action));
-
-        var correction = Assert.Single(ReadAction(scenario, next.DirectoryName, action).Corrections);
-        Assert.Equal(1, correction.ReplacedRevisionNumber);
-        Assert.Equal("Fixed the date.", correction.Note);
+        await Assert.ThrowsAsync<InvalidDataException>(() => scenario.Publisher().ExecuteAsync(PublicationScenario.Owner, Request("k2", action)));
     }
 
     [Fact]
@@ -411,6 +426,45 @@ public sealed class PublishCorrectionsTests
 
         var entry = Assert.Single(ReadVote(scenario, third.DirectoryName, vote).Corrections);
         Assert.Equal((1, PublishedTextRewrite.Model), (entry.ReplacedRevisionNumber, entry.TextRewrite));
+    }
+
+    [Fact]
+    public async Task ABillMovedToCodeTextWithTheSameFactsShowsACodeRewriteWithNoVoteFactsTail()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        // The actions text backfill appends a code approved revision with the same facts and issues and only new code text.
+        scenario.ReviseAction(action, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Headline = "H.R. 7: A housing bill", Summary = "A housing bill.", TextOrigin = ReviewTextOrigin.Code });
+
+        var second = await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
+
+        var entry = Assert.Single(ReadAction(scenario, second.DirectoryName, action).Corrections);
+        Assert.Equal((1, null, PublishedTextRewrite.Code), (entry.ReplacedRevisionNumber, entry.Note, entry.TextRewrite));
+        Assert.Equal("Wording rewritten by code", PublishedCorrectionView.Title(entry));
+        Assert.EndsWith(". Replaces revision 1.", PublishedCorrectionView.AfterTitle(entry, PublishedRecordKind.Action), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACodeTextRevisionThatChangesABillFactStaysAnUpdateFromTheSource()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, approverSubject: ReviewAuthor.CodeSubject,
+            change: revision => revision with { Summary = "A housing bill.", TextOrigin = ReviewTextOrigin.Code, BillTitle = "A renamed housing bill" });
+
+        var second = await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
+
+        Assert.Equal(PublishedTextRewrite.None, Assert.Single(ReadAction(scenario, second.DirectoryName, action).Corrections).TextRewrite);
+    }
+
+    [Fact]
+    public async Task AModelTextRevisionOfABillWithTheSameFactsStaysAnUpdateFromTheSource()
+    {
+        var (scenario, action) = await PublishedActionAsync();
+        scenario.ReviseAction(action, 2, approverSubject: ReviewAuthor.CodeSubject, change: revision => revision with { Summary = "A new model summary." });
+
+        var second = await scenario.Publisher().ExecuteAsync(Code, Request("k2", action));
+
+        Assert.Equal(PublishedTextRewrite.None, Assert.Single(ReadAction(scenario, second.DirectoryName, action).Corrections).TextRewrite);
     }
 
     private static async Task<(PublicationScenario Scenario, string Vote)> PublishedVoteAsync()

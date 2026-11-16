@@ -15,6 +15,7 @@ using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Officials;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.Tests.PublicWeb;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
@@ -26,7 +27,6 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
     private static readonly DateTimeOffset PublishedAt = new(2026, 6, 9, 12, 0, 0, TimeSpan.Zero);
     private const string ModelLabel = "An AI summary of the official record";
-    private const string CodeLabel = "Written automatically from Congress.gov data, with no AI";
 
     private async Task<ApiHost> StartAsync()
     {
@@ -45,7 +45,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
     private static IElement[] Rows(IDocument page) => [.. page.QuerySelectorAll(".record-row")];
 
-    private static string? Label(IElement row) => row.QuerySelectorAll("a > span").Select(span => span.TextContent).SingleOrDefault(text => text is ModelLabel or CodeLabel);
+    private static string? Label(IElement row) => row.QuerySelector(".ai-label") is { } label ? AiLabelAssert.FullText(label) : null;
 
     private static string Text(IElement element) => element.TextContent;
 
@@ -218,7 +218,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var (person, model) = (Rows(page)[0], Rows(page)[1]);
         Assert.Null(Label(person));
         Assert.Equal(ModelLabel, Label(model));
-        Assert.Equal(["Headline a", ModelLabel], model.QuerySelectorAll("a > span").Take(2).Select(span => span.TextContent));
+        Assert.Equal("Headline a", model.QuerySelector("a > span")!.TextContent);
+        AiLabelAssert.IsChip(model.QuerySelector("a + .ai-label")!, AiLabelWords.ModelChip, ModelLabel);
         Assert.Contains("Voted on 2 Mar 2026, House roll call 1, Vote to pass or agree to, H.R. 1", Text(model));
         Assert.Contains("2 Yes", Text(model));
         Assert.Equal("Showing 2 votes on this page.", page.QuerySelector(".list-status")!.TextContent);
@@ -647,7 +648,8 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
 
         Assert.Equal(["Headline a", "Headline c", "Headline b"], Titles(page));
         var (model, earlier, person) = (Rows(page)[0], Rows(page)[1], Rows(page)[2]);
-        Assert.StartsWith("An AI summary", model.QuerySelector(".ai-label")!.TextContent);
+        Assert.StartsWith("An AI summary", AiLabelAssert.FullText(model.QuerySelector(".ai-label")!));
+        Assert.Equal(AiLabelWords.ModelChip, model.QuerySelector(".ai-label-chip-text")!.TextContent);
         Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
         Assert.Null(person.QuerySelector(".ai-label"));
         Assert.Contains("Zed Zane, Senator for AZ, Republican, Ann Able, Representative for MA, district 5, Democrat, Said on 2 Mar 2026, From site-a.senate.gov", Text(model));

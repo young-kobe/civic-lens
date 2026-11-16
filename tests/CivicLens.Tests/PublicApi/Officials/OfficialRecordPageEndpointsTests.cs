@@ -13,6 +13,7 @@ using CivicLens.Tests.PublicApi.Home;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
 using Npgsql;
+using CivicLens.Tests.PublicWeb;
 
 namespace CivicLens.Tests.PublicApi.Officials;
 
@@ -90,7 +91,8 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
         var labels = (await GetPageAsync(host, "/officials/p0/record.html")).QuerySelectorAll(".shared-vote-meta .ai-label");
 
         Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
-        Assert.Equal([AiLabelWords.ModelWording, AiLabelWords.CodeWording], labels.Select(label => label.TextContent.Trim()));
+        AiLabelAssert.IsChip(labels[0], AiLabelWords.ModelChip, AiLabelWords.ModelWording);
+        AiLabelAssert.IsChip(labels[1], AiLabelWords.CodeChip, AiLabelWords.CodeWording);
     }
 
     [Fact]
@@ -116,13 +118,13 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     private static string[] VoteLinks(AngleSharp.Dom.IDocument page) => [.. page.QuerySelectorAll(".shared-vote-row h2 a").Select(link => link.GetAttribute("href")!)];
 
     // Sixty votes of p0 on three days make three pages, and the votes of each day tie on the day, so the record ID orders them.
-    // Twenty-seven statements, nine of them undated, make two pages of the statements tab.
+    // Twenty-seven statements, nine of them undated, make two pages of the statements tab. The 30 Yes votes walk the cast filter of the votes tab.
     [Fact]
     public async Task EachPreviousPageOfATabGivesThePageBeforeItAgainAndTheFirstPageHasNoPreviousCursor()
     {
         await using var host = await StartAsync();
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. Enumerable.Range(0, 60).Select(number => new SeededVote('0', $"2026-01-0{1 + number % 3}")
-            { Casts = ["Yea"], PersonIds = ["p0"], RollCall = number + 1, RecordId = Id(number) })]);
+            { Casts = [number % 2 == 0 ? "Yea" : "Nay"], PersonIds = ["p0"], RollCall = number + 1, RecordId = Id(number) })]);
         await StatementsSeed.AddAsync(host.OperationalDatabase, [.. Enumerable.Range(60, 27)
             .Select(number => new SeededStatement('0', number % 3 == 0 ? null : $"2026-02-0{1 + number % 2}", ["p0"], [], "Person", "Person") { RecordId = Id(number) })]);
         await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
@@ -138,6 +140,13 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
             });
             Assert.Equal(count, seen.Distinct().Count());
         }
+        var yes = await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+        {
+            var request = new OfficialRecordRequest(OfficialRecordKind.Votes, OfficialRecordCursor.Parse(cursor)) { Backward = backward, Cast = OfficialRecordRequest.Yes };
+            var page = (await reader.ReadAsync("p0", request, CancellationToken.None))!;
+            return new([.. page.Votes.Select(vote => vote.RecordId)], page.NextCursor, page.PreviousCursor);
+        });
+        Assert.Equal(Enumerable.Range(0, 30).Select(number => Id(number * 2)).Order(StringComparer.Ordinal), yes.Order(StringComparer.Ordinal));
     }
 
     // Four votes of p0, a Democrat: a split vote against the party on a tagged bill, a split vote with the party, a No on another bill, and a Senate vote.
@@ -427,6 +436,22 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
             rows.Select(row => row.QuerySelector("a")!.GetAttribute("href")!).ToArray());
         Assert.Contains("Said on 10 Feb 2026", rows[0].TextContent);
         Assert.Contains("Date not stated", rows[1].TextContent);
+    }
+
+    [Fact]
+    public async Task TheStatementsTabShowsTheChipOfTheTextOriginOfTheViewSoTheSourceTextOfAShortReleaseReadsNoAi()
+    {
+        await using var host = await StartAsync();
+        await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
+            new SeededStatement('8', null, ["p0"], [], "Analysis", "Code"));
+        // The seed writes model text. An undated revision with a run may hold code text, the saved text of a short release.
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE statement_revisions SET author_kind = 'Code' WHERE candidate_id = '{new string('8', 64)}'");
+
+        var labels = (await GetPageAsync(host, "/officials/p0/record.html?kind=statements")).QuerySelectorAll(".record-row .ai-label");
+
+        Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
+        AiLabelAssert.IsChip(labels[0], AiLabelWords.ModelChip, AiLabelWords.StatementModelWording);
+        AiLabelAssert.IsChip(labels[1], AiLabelWords.CodeChip, AiLabelWords.StatementSourceTextWording);
     }
 
     [Fact]

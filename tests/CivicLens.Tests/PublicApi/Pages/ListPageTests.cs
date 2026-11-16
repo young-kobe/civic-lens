@@ -9,6 +9,7 @@ using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
 using CivicLens.Tests.PublicApi.Officials;
 using CivicLens.Tests.PublicApi.Votes;
+using CivicLens.Tests.PublicWeb;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
@@ -153,6 +154,24 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Equal(first.QuerySelector(".record-rows")!.TextContent, back.QuerySelector(".record-rows")!.TextContent);
         Assert.Equal("Ayanna Pressley", back.QuerySelector(".search-official h2")!.TextContent);
         Assert.Null(back.QuerySelector(".pager a[rel=prev]"));
+    }
+
+    [Fact]
+    public async Task ASearchRowShowsTheLabelThatTheIngestCopiedFromTheViewAsTheChipOfItsOrigin()
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Action("S. 5334 names a clinic", "A short account.", "Clinic act", "Xq the source text."),
+            PublishedSamples.Statement('a', "H.R. 5334 debate", official: "p1")));
+        await host.WaitForReleaseAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+
+        var page = await ParseAsync(await host.Client.GetAsync("/search.html?q=clinic%20OR%20debate"));
+        var model = Assert.Single(page.QuerySelectorAll(".record-row"), row => row.TextContent.Contains("names a clinic", StringComparison.Ordinal));
+        var person = Assert.Single(page.QuerySelectorAll(".record-row"), row => row.TextContent.Contains("debate", StringComparison.Ordinal));
+
+        Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
+        AiLabelAssert.IsChip(model.QuerySelector("a + .ai-label")!, AiLabelWords.ModelChip, AiLabelWords.ModelWording);
+        // A person text has no label column, so its row shows no chip.
+        Assert.Null(person.QuerySelector(".ai-label"));
     }
 
     [Fact]

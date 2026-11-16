@@ -128,6 +128,23 @@ public sealed class SearchResultsPageTests
     }
 
     [Fact]
+    public async Task EachHitShowsTheLabelOfTheIndexAsTheChipOfItsOriginAfterTheLinkAndAHitWithNoLabelShowsNone()
+    {
+        var page = await RenderAsync(Data(hits:
+        [
+            Hit('a', "One") with { Label = AiLabelWords.ModelWording, TextOrigin = PublishedTextOrigin.Model },
+            Hit('b', "Two") with { Label = AiLabelWords.CodeWording, TextOrigin = PublishedTextOrigin.Code },
+            Hit('c', "Three")
+        ]));
+
+        var rows = page.QuerySelectorAll(".record-row");
+        AiLabelAssert.IsChip(rows[0].QuerySelector("a + .ai-label")!, AiLabelWords.ModelChip, AiLabelWords.ModelWording);
+        AiLabelAssert.IsChip(rows[1].QuerySelector("a + .ai-label")!, AiLabelWords.CodeChip, AiLabelWords.CodeWording);
+        Assert.Equal("code", rows[1].QuerySelector(".ai-label")!.GetAttribute("data-origin"));
+        Assert.Null(rows[2].QuerySelector(".ai-label"));
+    }
+
+    [Fact]
     public async Task AHitWithoutASnippetShowsItsBillLineAndOneWithNeitherShowsNoSnippetParagraph()
     {
         var page = await RenderAsync(Data(Query(null) with { Kind = "action" },

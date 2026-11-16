@@ -139,12 +139,13 @@ public sealed class IssuePageTests
     }
 
     [Fact]
-    public async Task ABillKeepsItsPublicAiLabelAndTheSourceOfItsBillLine()
+    public async Task ABillKeepsItsPublicAiLabelAsAChipAfterTheLinkAndTheSourceOfItsBillLine()
     {
         var page = await RenderAsync(Data());
         var row = page.QuerySelector("#bills .record-row")!;
 
-        Assert.Contains(AiLabelWords.ModelWording, row.QuerySelector("a")!.TextContent);
+        Assert.Null(row.QuerySelector("a .ai-label"));
+        AiLabelAssert.IsChip(row.QuerySelector(".ai-label")!, AiLabelWords.ModelChip, AiLabelWords.ModelWording);
         Assert.Contains("Current bill line.", row.QuerySelector(".bill-line")!.TextContent);
         Assert.Contains(PublishedWording.BillLineSource, row.TextContent);
     }

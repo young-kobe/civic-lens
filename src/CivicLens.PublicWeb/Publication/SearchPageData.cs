@@ -43,7 +43,12 @@ public sealed record SearchBillVoteData(string RecordId, PublishedChamber Chambe
 /// <summary>Another bill with the number of the query. <see cref="Number"/> is the short bill number, such as S. 5334.</summary>
 public sealed record SearchOtherBillData(string RecordId, string Number, PublishedChamber Chamber, string? Sponsor);
 
+/// <summary>One search result. <see cref="Label"/> and <see cref="TextOrigin"/> are the label and text origin columns of the view that the index copied.</summary>
 public sealed record SearchHitData(PublishedRecordKind Kind, string RecordId, string Headline, DateOnly? Day, string? BillLine,
-    string? Snippet, IReadOnlyList<string> Officials);
+    string? Snippet, IReadOnlyList<string> Officials)
+{
+    public string? Label { get; init; }
+    public PublishedTextOrigin? TextOrigin { get; init; }
+}
 
 public sealed record SearchChoiceData(string Value, string Label);

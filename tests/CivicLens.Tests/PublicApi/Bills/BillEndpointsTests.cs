@@ -370,6 +370,32 @@ public sealed class BillEndpointsTests(PostgresCollection postgres)
         Assert.Equal(ExpectedOrder, seen.Select(id => id[0]));
     }
 
+    // The issue filter drives the read from the issue keys, as the issue page does. The date bounds test the latest action date that the list sorts by.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task EachPreviousPageOfAnIssueOrADateFilteredListGivesThePageBeforeItAgain(int limit)
+    {
+        await using var host = await StartWithBillsAsync(All);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsDatabase);
+        var store = new BillStore(views);
+
+        foreach (var (filter, expected) in new (BillRequest Filter, char[] Expected)[]
+                 {
+                     (new() { Issue = "health" }, ['a', 'e']),
+                     (new() { From = new DateOnly(2026, 3, 10) }, ['f', 'a', 'e']),
+                     (new() { To = new DateOnly(2026, 3, 10) }, ['a', 'e'])
+                 })
+        {
+            var seen = await KeysetWalk.BothWaysAsync(async (cursor, backward) =>
+            {
+                var page = (await store.ListAsync(filter with { Limit = limit, Cursor = BillCursor.Parse(cursor), Backward = backward }, CancellationToken.None))!;
+                return new([.. page.Bills.Select(bill => bill.RecordId)], page.NextCursor, page.PreviousCursor);
+            });
+            Assert.Equal(expected, seen.Select(id => id[0]));
+        }
+    }
+
     [Fact]
     public async Task TheDefaultPageHolds20BillsAndThePageSizeCapIs50()
     {

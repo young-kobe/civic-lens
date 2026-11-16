@@ -300,6 +300,10 @@ public sealed class SearchIndexTests(PostgresCollection postgres) : IAsyncLifeti
 
         Assert.Equal(expected, walked);
         Assert.Equal(expected, await BothWaysAsync(request => request with { Sort = sort, Descending = descending, Limit = 2 }));
+        // A sorted text search reads the text query CTE of TextQuery. Only the statement summaries hold the word.
+        var statements = records.Where(record => record.Entry.Kind == PublishedRecordKind.Statement).ToArray();
+        Assert.Equal(ExpectedOrder(statements, sort, descending),
+            await BothWaysAsync(request => request with { Text = "account", Sort = sort, Descending = descending, Limit = 2 }));
     }
 
     [Fact]
