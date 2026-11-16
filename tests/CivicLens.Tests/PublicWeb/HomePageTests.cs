@@ -113,11 +113,10 @@ public sealed class HomePageTests
         Assert.DoesNotContain("Congress", issueLink.TextContent);
         Assert.Equal("Each tile counts the substantive votes and the bills tagged with the issue in the 119th Congress.", page.QuerySelector(".home-issues .home-section-lede")!.TextContent);
 
-        var actionCard = Assert.Single(page.QuerySelectorAll(".home-executive-list li"));
-        Assert.Equal("Presidential notice", actionCard.QuerySelector("p")!.TextContent);
+        var actionCard = Assert.Single(page.QuerySelectorAll(".home-executive .record-row"));
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(actionId), actionCard.QuerySelector("a")!.GetAttribute("href"));
-        Assert.Contains("Newest notice title", actionCard.TextContent);
-        Assert.Equal(executiveCount, actionCard.QuerySelectorAll("p")[1].TextContent);
+        Assert.Equal("Newest notice title", actionCard.QuerySelector("a > span")!.TextContent);
+        Assert.Equal(["Presidential notice", executiveCount, "Signed 31 May 2026"], actionCard.QuerySelectorAll(".record-row-meta > span").Select(part => part.TextContent));
         Assert.DoesNotContain("in this release", actionCard.TextContent);
         Assert.Contains("Signed 31 May 2026", actionCard.TextContent);
     }
@@ -476,6 +475,18 @@ public sealed class HomePageTests
         Assert.Equal(["Henry Cuellar", "Lisa Murkowski"], page.QuerySelectorAll(".home-breaker-name").Select(name => name.TextContent));
         Assert.Null((await RenderAsync(new(7, null, [], null))).QuerySelector(".home-breakers"));
         Assert.Null((await RenderAsync(new(7, null, [], null) { Boards = [panels[1], panels[2]] })).QuerySelector(".home-breakers"));
+    }
+
+    [Fact]
+    public async Task EachRecentVoteRowShowsItsResultMarkInPlaceOfTheVoteIcon()
+    {
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        votes[1] = votes[1] with { ResultWords = "Failed" };
+
+        var page = await RenderAsync(new(7, null, votes, null));
+
+        Assert.Equal(["yes", "no", "yes", "yes"], page.QuerySelectorAll(".home-votes .record-row-icon").Select(square => square.QuerySelector(".vote-result-mark")?.GetAttribute("data-mark")));
+        Assert.Null(page.QuerySelector(".home-votes .record-row-icon svg"));
     }
 
     private static HomeVoteData[] RecentVotes(PublishedVoteAlignment alignment) =>

@@ -163,18 +163,11 @@
             {
                 <section class="home-executive" aria-labelledby="home-executive-title">
                     <h2 id="home-executive-title">Latest executive actions</h2>
-                    <ul class="home-executive-list" role="list">
+                    <ul class="record-rows" role="list">
                         @foreach (var action in Data.ExecutiveActions)
                         {
-                            <li>
-                                <div class="record-row-icon home-executive-icon"><Icon Name="IconName.ExecutiveAction" /></div>
-                                <div>
-                                    <p class="muted small">@PublishedRecordLabels.ExecutiveActionKind(action.Kind)</p>
-                                    <a href="@(RootPath + PublicationProtocol.RecordPagePath(action.NewestRecordId))">@action.NewestTitle</a>
-                                    <p class="muted small">@ExecutiveActionWords.HomeGroupCount(action)</p>
-                                    <p class="muted small">Signed @action.NewestSignedOn.ToString("d MMM yyyy")</p>
-                                </div>
-                            </li>
+                            <PublicRecordRow Icon="IconName.ExecutiveAction" IconClass="record-row-icon-exec" Href="@(RootPath + PublicationProtocol.RecordPagePath(action.NewestRecordId))" Headline="@action.NewestTitle"
+                                             MetaParts="@([PublishedRecordLabels.ExecutiveActionKind(action.Kind), ExecutiveActionWords.HomeGroupCount(action), $"Signed {action.NewestSignedOn:d MMM yyyy}"])" />
                         }
                     </ul>
                 </section>

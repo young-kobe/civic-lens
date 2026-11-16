@@ -214,6 +214,23 @@ public sealed class BillDetailPageTests
         Assert.Equal(["1 Republican"], section.QuerySelectorAll(".party-bar-legend li").Select(item => Regex.Replace(item.TextContent, @"\s+", " ").Trim()));
     }
 
+    [Theory]
+    [InlineData(20, false)]
+    [InlineData(21, true)]
+    public async Task CosponsorsAreAListOfNameLinksThatStartsFoldedAboveTwentyNames(int count, bool folded)
+    {
+        BillSponsorData Member(int index) => new($"c{index}", $"Member {index}", "Democrat", new DateOnly(2025, 10, 2));
+        var page = await RenderAsync(Bill with { Cosponsors = new(PublishedChamber.House, [Member(0)], [.. Enumerable.Range(1, count - 1).Select(Member)]) });
+        var section = page.QuerySelector("#bill-backers-title")!.ParentElement!;
+
+        var fold = section.QuerySelector("details.member-fold");
+        Assert.Equal(folded, fold is not null);
+        Assert.Null(fold?.GetAttribute("open"));
+        if (folded) Assert.Equal($"Show all {count} cosponsors", fold!.QuerySelector("summary")!.TextContent);
+        Assert.Equal(count, section.QuerySelectorAll(".bill-kv ul.member-names > li > a").Length);
+        Assert.Equal("Member 1 (2 Oct 2025)", section.QuerySelectorAll(".bill-kv ul.member-names")[1].QuerySelector("li")!.TextContent);
+    }
+
     [Fact]
     public async Task ABillWithNoTrackedCosponsorShowsNoPartyBar()
     {
@@ -303,7 +320,7 @@ public sealed class BillDetailPageTests
         var css = WebStyleSheets.Read("public.css");
 
         Assert.Matches(@"\.bill-card-raised \{ box-shadow: inset 0 0 0 2px var\(--marigold\); \}", css);
-        Assert.Matches(@"\.bill-card-heading \{[^}]*font-family: var\(--heading\);[^}]*font-size: 1\.25rem;", css);
+        Assert.Matches(@"\.bill-card-heading \{[^}]*font-family: var\(--heading\);[^}]*font-size: var\(--t-lg\);", css);
         Assert.Matches(@"\.bill-card-title \{[^}]*text-transform: uppercase;", css);
         Assert.Matches(@"\.bill-members \[data-bill-members-body\]:empty \{ display: none; \}", css);
     }

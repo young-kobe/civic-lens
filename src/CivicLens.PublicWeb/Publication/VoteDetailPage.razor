@@ -81,7 +81,7 @@
                 }
                 @if (map is not null)
                 {
-                    <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" />
+                    <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" ColorModes="true" />
                 }
                 @if (Data.Statements.Length > 0)
                 {
@@ -146,12 +146,14 @@
                                 else
                                 {
                                     <h3><a href="@board">@group.Name</a>: @VoteBreakers.Headline(group.Members.Length)</h3>
-                                    <ul class="vote-breaker-list">
-                                        @foreach (var member in group.Members)
-                                        {
-                                            <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a> <span class="small">voted <CastWord Cast="@member.Cast" /></span></li>
-                                        }
-                                    </ul>
+                                    <MemberListFold Count="group.Members.Length" Noun="members">
+                                        <ul class="member-names" role="list">
+                                            @foreach (var member in group.Members)
+                                            {
+                                                <li><a href="@(RootPath + PublicationProtocol.OfficialPagePath(member.OfficialId))">@member.Name</a> <span class="small">voted <CastWord Cast="@member.Cast" /></span></li>
+                                            }
+                                        </ul>
+                                    </MemberListFold>
                                 }
                             </div>
                         }
