@@ -30,6 +30,15 @@ public sealed class ListPageTests(PostgresCollection postgres)
     private static async Task<AngleSharp.Dom.IDocument> ParseAsync(HttpResponseMessage response) =>
         await new HtmlParser().ParseDocumentAsync(await response.Content.ReadAsStringAsync());
 
+    private static void AssertPrivateSearch(HttpResponseMessage response)
+    {
+        Assert.True(response.Headers.CacheControl?.Private);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        Assert.False(response.Headers.CacheControl?.Public);
+        Assert.Null(response.Headers.ETag);
+        Assert.False(response.Headers.Contains("Set-Cookie"));
+    }
+
     [Fact]
     public async Task TheOfficialsPagePagesByTwentyFiveKeepsItsFiltersAndUsesTheSharedPageCache()
     {
@@ -129,6 +138,161 @@ public sealed class ListPageTests(PostgresCollection postgres)
     {
         await using var host = await StartAsync();
         using var response = await host.Client.GetAsync("/officials.html?chamber=moon");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(PageCache.FailureCacheControl, response.Headers.CacheControl!.ToString());
+        Assert.Null(response.Headers.ETag);
+        Assert.Contains(PublishedServerErrorPage.Title, (await ParseAsync(response)).QuerySelector("main")!.TextContent);
+    }
+
+    [Theory]
+    [InlineData("q=rent&q=labor", "q", HttpStatusCode.BadRequest)]
+    [InlineData("q=rent&kind=unknown&kind=vote", "kind", HttpStatusCode.BadRequest)]
+    [InlineData("q=rent&from=2026-13-45", "from", HttpStatusCode.BadRequest)]
+    [InlineData("q=rent&to=not-a-date", "to", HttpStatusCode.BadRequest)]
+    [InlineData("q=rent&cursor=forged", null, HttpStatusCode.BadRequest)]
+    [InlineData("q=rent&before=forged", null, HttpStatusCode.OK)]
+    [InlineData("q=rent&cursor=forged&before=forged", null, HttpStatusCode.BadRequest)]
+    public async Task ARefusedSearchQueryKeepsTheRepairableFormAndPrivateCachePolicyInsteadOfResultsOrAProblemDocument(
+        string query, string? field, HttpStatusCode apiStatus)
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent policy")));
+        await host.WaitForReleaseAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/search.html?" + query);
+        request.Headers.TryAddWithoutValidation("If-None-Match", "*");
+
+        using var response = await host.Client.SendAsync(request);
+        var page = await ParseAsync(response);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType!.MediaType);
+        AssertPrivateSearch(response);
+        Assert.Equal("rent", page.QuerySelector(".search-box [name=q]")!.GetAttribute("value"));
+        Assert.True(page.QuerySelector("details.list-fold")!.HasAttribute("open"));
+        Assert.Null(page.QuerySelector(".search-official, .search-pin, .record-rows, .list-status, .empty"));
+        if (field is not null)
+            Assert.Equal("true", page.QuerySelector(field == "q" ? ".search-box [name=q]" : $"[name={field}]")!.GetAttribute("aria-invalid"));
+        if (field == "kind") Assert.Equal("unknown", page.QuerySelector("[name=kind] option[selected]")!.GetAttribute("value"));
+        if (field is "from" or "to")
+        {
+            var input = page.QuerySelector($"[name={field}]")!;
+            Assert.Equal("text", input.GetAttribute("type"));
+            Assert.Equal(field == "from" ? "2026-13-45" : "not-a-date", input.GetAttribute("value"));
+            Assert.Equal(RecordListFilter.DateError, page.GetElementById(input.GetAttribute("aria-describedby")!)!.TextContent);
+        }
+
+        using var api = await host.Client.GetAsync("/v1/search?" + query);
+        Assert.Equal(apiStatus, api.StatusCode);
+        Assert.Equal(apiStatus == HttpStatusCode.OK ? "application/json" : "application/problem+json", api.Content.Headers.ContentType!.MediaType);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheFilterFormKeepsAcceptedAdditionalParametersWhileAVisibleFieldIsRepaired(bool refused)
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent policy")));
+        await host.WaitForReleaseAsync();
+        var kind = refused ? "unknown" : "statement";
+        using var response = await host.Client.GetAsync($"/search.html?q=rent&kind={kind}&policyArea=Housing&source=office&sort=date&direction=desc&limit=10");
+        var page = await ParseAsync(response);
+        var form = page.QuerySelector(".list-fold form")!;
+        var parameters = new Dictionary<string, string>
+        {
+            ["policyArea"] = "Housing",
+            ["source"] = "office",
+            ["sort"] = "date",
+            ["direction"] = "desc",
+            ["limit"] = "10"
+        };
+
+        Assert.Equal(refused ? HttpStatusCode.BadRequest : HttpStatusCode.OK, response.StatusCode);
+        AssertPrivateSearch(response);
+        foreach (var (name, value) in parameters)
+            Assert.Equal(value, form.QuerySelector($"input[type=hidden][name={name}]")?.GetAttribute("value"));
+
+        parameters["q"] = "rent";
+        parameters["kind"] = "statement";
+        var repairedQuery = string.Join("&", parameters.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        using var repaired = await host.Client.GetAsync("/search.html?" + repairedQuery);
+        var repairedPage = await ParseAsync(repaired);
+        Assert.Equal(HttpStatusCode.OK, repaired.StatusCode);
+        Assert.Equal("Housing", repairedPage.QuerySelector(".list-fold input[name=policyArea]")?.GetAttribute("value"));
+    }
+
+    [Theory]
+    [InlineData("limit")]
+    [InlineData("sort")]
+    [InlineData("policyArea")]
+    public async Task ARepairDropsInvalidHiddenParametersInsteadOfResubmittingAnInvisibleError(string invalid)
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent policy")));
+        await host.WaitForReleaseAsync();
+        var bad = invalid switch
+        {
+            "limit" => "limit=0",
+            "sort" => "sort=unknown&direction=desc",
+            _ => "policyArea=" + new string('x', PublishedRecordEntry.MaximumFilterValueLength + 1)
+        };
+        using var response = await host.Client.GetAsync("/search.html?q=rent&kind=unknown&source=office&" + bad);
+        var page = await ParseAsync(response);
+        var form = page.QuerySelector(".list-fold form")!;
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(form.QuerySelector($"input[type=hidden][name={invalid}]"));
+        if (invalid == "sort") Assert.Null(form.QuerySelector("input[type=hidden][name=direction]"));
+        Assert.Equal("office", form.QuerySelector("input[type=hidden][name=source]")?.GetAttribute("value"));
+        var parameters = form.QuerySelectorAll("input[type=hidden]").ToDictionary(input => input.GetAttribute("name")!, input => input.GetAttribute("value") ?? "");
+        parameters["kind"] = "statement";
+        var repairedQuery = string.Join("&", parameters.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+        using var repaired = await host.Client.GetAsync("/search.html?" + repairedQuery);
+        Assert.Equal(HttpStatusCode.OK, repaired.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("from")]
+    [InlineData("to")]
+    public async Task ARepeatedBlankSearchDateKeepsItsOptionalDateControlWithoutAFalseFormatError(string field)
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent policy")));
+        await host.WaitForReleaseAsync();
+        using var response = await host.Client.GetAsync($"/search.html?q=rent&{field}=&{field}=2026-01-01");
+        var page = await ParseAsync(response);
+        var input = page.QuerySelector($"#search-{field}")!;
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        AssertPrivateSearch(response);
+        Assert.Equal("date", input.GetAttribute("type"));
+        Assert.Equal("true", input.GetAttribute("aria-invalid"));
+        Assert.True(string.IsNullOrEmpty(input.GetAttribute("value")));
+        Assert.Null(input.GetAttribute("aria-describedby"));
+        Assert.Null(page.QuerySelector(".field-error, .record-rows, .list-status, .empty"));
+    }
+
+    [Fact]
+    public async Task AnOverlengthSearchKeepsItsEncodedTextInThePrivateRefusedPage()
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent policy")));
+        await host.WaitForReleaseAsync();
+        var text = new string('x', SearchRequest.MaximumQueryLength + 1) + "<script>bad & text</script>";
+
+        using var response = await host.Client.GetAsync("/search.html?q=" + Uri.EscapeDataString(text));
+        var page = await ParseAsync(response);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        AssertPrivateSearch(response);
+        Assert.Equal(text, page.QuerySelector(".search-box [name=q]")!.GetAttribute("value"));
+        Assert.Equal("true", page.QuerySelector(".search-box [name=q]")!.GetAttribute("aria-invalid"));
+        Assert.DoesNotContain(page.QuerySelectorAll("script"), script => script.TextContent.Contains("bad & text", StringComparison.Ordinal));
+        Assert.Null(page.QuerySelector(".record-rows, .list-status, .empty"));
+    }
+
+    [Fact]
+    public async Task ARefusedSearchWithNoSearchableReleaseUsesTheSharedUnavailablePage()
+    {
+        await using var host = await StartAsync();
+        using var response = await host.Client.GetAsync("/search.html?kind=unknown");
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal("text/html", response.Content.Headers.ContentType!.MediaType);
@@ -325,6 +489,37 @@ public sealed class ListPageTests(PostgresCollection postgres)
         var page = await ParseAsync(await host.Client.GetAsync("/search.html?q=rent"));
 
         Assert.Equal(["air", "tax"], page.QuerySelectorAll("#search-issue option").Select(option => option.GetAttribute("value")).Where(value => !string.IsNullOrEmpty(value)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnAcceptedIssueOutsideTheCurrentOptionsStaysSelectedWhenTheReaderChangesAnotherFilter(bool hasChoices)
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
+        await host.WaitForReleaseAsync();
+        if (hasChoices)
+            await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
+                "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'd');");
+
+        using var response = await host.Client.GetAsync("/search.html?q=rent&issue=retired-housing&kind=statement");
+        var page = await ParseAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        AssertPrivateSearch(response);
+        var issue = page.QuerySelector("#search-issue");
+        Assert.NotNull(issue);
+        Assert.Equal("retired-housing", issue.QuerySelector("option[selected]")?.GetAttribute("value"));
+        Assert.Null(issue.GetAttribute("aria-invalid"));
+        Assert.Equal("statement", page.QuerySelector("#search-kind option[selected]")!.GetAttribute("value"));
+        Assert.NotNull(page.QuerySelector(".empty"));
+
+        using var listResponse = await host.Client.GetAsync("/statements.html?issue=retired-housing&from=2026-01-01");
+        var list = await ParseAsync(listResponse);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        Assert.Equal("retired-housing", list.QuerySelector("#statements-issue option[selected]")?.GetAttribute("value"));
+        Assert.Null(list.QuerySelector("#statements-issue")!.GetAttribute("aria-invalid"));
+        Assert.Equal("2026-01-01", list.QuerySelector("#statements-from")!.GetAttribute("value"));
     }
 
     [Fact]

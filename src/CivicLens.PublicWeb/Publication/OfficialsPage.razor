@@ -2,8 +2,8 @@
 @using CivicLens.PublicWeb.Components.Ui
 
 <PublicPage Section="PublicSection.Officials" CanonicalPath="@PublicationProtocol.OfficialsPagePath" Title="Officials" Description="Every official with a published record or vote. Each page lists the records and votes that name one official." RootPath="@RootPath">
-    <PageHeader Title="Officials" Lede="@Lede">
-        <Meta><a href="@(RootPath + PublicationProtocol.BoardsPagePath)">Compare the parties</a></Meta>
+    <PageHeader Title="Officials">
+        <LedeContent>@Lede <a href="@(RootPath + PublicationProtocol.BoardsPagePath)">Compare the parties</a>.</LedeContent>
     </PageHeader>
     @if (Data.Officials.Count == 0 && Data.Filter.Invalid is null)
     {
@@ -12,12 +12,14 @@
         </EmptyState>
     }
     <form class="lists-filter" method="get" aria-label="Filter officials">
-        <RecordListSelect Id="officials-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Filter="Data.Filter" AnyText="All" />
-        <RecordListSelect Id="officials-state" Name="state" Label="State or territory" Choices="States" Filter="Data.Filter" AnyText="All" />
-        <RecordListSelect Id="officials-party" Name="party" Label="Party" Choices="Parties" Filter="Data.Filter" AnyText="All" />
-        <Field Label="Name" For="officials-name">
-            <input id="officials-name" type="search" name="name" maxlength="@MaximumNameLength" value="@Data.Filter.Value(NameFilter)" placeholder="Type a name" autocomplete="off" @attributes="Data.Filter.InputAttributes(NameFilter, NameInputId)" />
-        </Field>
+        <div class="lists-filter-fields">
+            <RecordListSelect Id="officials-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Filter="Data.Filter" AnyText="All" />
+            <RecordListSelect Id="officials-state" Name="state" Label="State or territory" Choices="States" Filter="Data.Filter" AnyText="All" />
+            <RecordListSelect Id="officials-party" Name="party" Label="Party" Choices="Parties" Filter="Data.Filter" AnyText="All" />
+            <Field Label="Name" For="officials-name">
+                <input id="officials-name" type="search" name="name" maxlength="@MaximumNameLength" value="@Data.Filter.Value(NameFilter)" placeholder="Type a name" autocomplete="off" @attributes="Data.Filter.InputAttributes(NameFilter, NameInputId)" />
+            </Field>
+        </div>
         <div class="lists-filter-actions">
             <Button Type="submit" Variant="ButtonVariant.Primary">Apply filters</Button>
             @if (Data.Filter.IsActive)
