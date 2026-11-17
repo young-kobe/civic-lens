@@ -4,6 +4,7 @@ using Npgsql;
 namespace CivicLens.Tests.Infrastructure.Collection;
 
 [Collection(PostgresCollection.Name)]
+[Trait("Category", "Postgres")]
 public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string Newest = "20261116171634_ReleaseOfficialRecordCounts";
