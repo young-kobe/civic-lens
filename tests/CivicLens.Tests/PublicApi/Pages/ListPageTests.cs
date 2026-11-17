@@ -4,6 +4,7 @@ using CivicLens.PublicApi;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicApi.Search;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
@@ -87,6 +88,53 @@ public sealed class ListPageTests(PostgresCollection postgres)
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, none.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("chamber=moon", "chamber")]
+    [InlineData("chamber=moon&chamber=senate", "chamber")]
+    [InlineData("name=first&name=second", "name")]
+    [InlineData("cursor=forged", null)]
+    [InlineData("before=forged", null)]
+    [InlineData("cursor=forged&before=forged", null)]
+    public async Task ARefusedOfficialsQueryShowsTheFormWithoutRowsOrAMisleadingNoMatchClaimAndCannotBeCached(string query, string? field)
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, PublishedAt);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, Senator(1));
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/officials.html?" + query);
+        request.Headers.TryAddWithoutValidation("If-None-Match", "*");
+        using var response = await host.Client.SendAsync(request);
+        var page = await ParseAsync(response);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(PageCache.FailureCacheControl, response.Headers.CacheControl!.ToString());
+        Assert.Null(response.Headers.ETag);
+        Assert.NotNull(page.QuerySelector("form.lists-filter"));
+        Assert.Null(page.QuerySelector(".list-rows, .list-status, .pager, .empty"));
+        Assert.StartsWith("1 official has a page.", page.QuerySelector(".page-header-lede")!.TextContent);
+        if (field is not null) Assert.Equal("true", page.QuerySelector($"[name={field}]")!.GetAttribute("aria-invalid"));
+        if (field == "name") Assert.Equal("first", page.QuerySelector("[name=name]")!.GetAttribute("value"));
+        if (field == "chamber") Assert.Equal("moon", page.QuerySelector("[name=chamber] option[selected]")!.GetAttribute("value"));
+
+        using var api = await host.Client.GetAsync("/v1/officials?" + query.Replace("before", "cursor", StringComparison.Ordinal));
+        Assert.Equal(HttpStatusCode.BadRequest, api.StatusCode);
+        Assert.Equal("application/problem+json", api.Content.Headers.ContentType!.MediaType);
+    }
+
+    [Fact]
+    public async Task ARefusedOfficialsQueryWithoutAnActiveReleaseUsesTheSameUnavailablePageAsOtherLists()
+    {
+        await using var host = await StartAsync();
+        using var response = await host.Client.GetAsync("/officials.html?chamber=moon");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(PageCache.FailureCacheControl, response.Headers.CacheControl!.ToString());
+        Assert.Null(response.Headers.ETag);
+        Assert.Contains(PublishedServerErrorPage.Title, (await ParseAsync(response)).QuerySelector("main")!.TextContent);
     }
 
     [Fact]
