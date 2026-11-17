@@ -39,6 +39,26 @@ public sealed record SearchRequest
         return Parse(query, cursor, backward);
     }
 
+    /// <summary>Keeps independently valid settings that have no visible form control, so a refused page can offer a repair.</summary>
+    internal static SearchRequest ReadValidAdditionalParameters(IQueryCollection query)
+    {
+        var (sort, descending) = ReadValidOrDefault(() => SortOrder(query), (Sort: (SearchSortKey?)null, Descending: false));
+        return new SearchRequest
+        {
+            PolicyArea = ReadValidOrDefault(() => QueryValues.Filter(query, "policyArea"), (string?)null),
+            Source = ReadValidOrDefault(() => QueryValues.Filter(query, "source"), (string?)null),
+            Limit = ReadValidOrDefault(() => QueryValues.PageLimit(query), DefaultLimit),
+            Sort = sort,
+            Descending = descending
+        };
+    }
+
+    private static T ReadValidOrDefault<T>(Func<T> read, T fallback)
+    {
+        try { return read(); }
+        catch (ArgumentException) { return fallback; }
+    }
+
     private static SearchRequest Parse(IQueryCollection query, string? cursorText, bool backward)
     {
         var cursor = SearchCursor.Parse(cursorText);

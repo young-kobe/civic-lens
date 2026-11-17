@@ -36,12 +36,15 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
 
     public bool IsInvalid(string name) => Invalid == name;
 
+    /// <summary>An optional date is malformed only when a nonempty value cannot be parsed.</summary>
+    public bool HasMalformedDate(string name) => Value(name) is { Length: > 0 } value && ReadDate(value) is null;
+
     /// <summary>The error text of a refused field, or null. A date that is no date, a From date after the To date, a text that is no bill number,
     /// and a bill type that differs from the typed bill number have approved text. Any other refused field is marked invalid with no text.</summary>
     public string? ErrorOf(string name) => !IsInvalid(name) ? null : name switch
     {
-        "from" or "to" when !IsDate(Value(name)) => DateError,
-        "from" when IsDate(Value("to")) => DateOrderError,
+        "from" or "to" when HasMalformedDate(name) => DateError,
+        "from" when DatesAreReversed => DateOrderError,
         "bill" => BillNumberError,
         // A known bill type is refused only when it differs from the type of the typed bill number.
         "type" when Value("type") is { } type && BillNumbers.IsType(type) => BillTypeError,
@@ -72,5 +75,8 @@ public sealed record RecordListFilter(IReadOnlyDictionary<string, string> Values
 
     private static string? DateText(DateOnly? date) => date?.ToString(DateFormat, CultureInfo.InvariantCulture);
 
-    private static bool IsDate(string? text) => DateOnly.TryParseExact(text, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+    private bool DatesAreReversed => ReadDate(Value("from")) is { } from && ReadDate(Value("to")) is { } to && from > to;
+
+    private static DateOnly? ReadDate(string? text) =>
+        DateOnly.TryParseExact(text, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
 }
