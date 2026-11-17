@@ -29,7 +29,7 @@
                         <ChildContent>
                             @foreach (var sentence in summary.Sentences)
                             {
-                                <p>@sentence.Sentence</p>
+                                <p><AiText Text="@sentence.Sentence" Origin="@summary.TextOrigin" /></p>
                             }
                             @if (summary.Cut)
                             {

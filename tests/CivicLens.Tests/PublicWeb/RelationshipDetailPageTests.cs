@@ -6,6 +6,19 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class RelationshipDetailPageTests
 {
+    [Theory]
+    [InlineData(PublishedTextOrigin.Code)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task NonModelProseWithAGlossaryNameStaysPlain(PublishedTextOrigin origin)
+    {
+        var data = Relationship(origin) with { Reason = "Bill" };
+        var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(data);
+
+        Assert.Empty(page.QuerySelectorAll(".ai-summary button.term"));
+        Assert.Empty(page.QuerySelectorAll(".ai-summary [popover]"));
+        Assert.Contains("Bill", page.QuerySelector(".ai-summary")!.TextContent);
+    }
+
     [Fact]
     public async Task TheReasonTheQuoteAndTheFactShowTogetherInTheMainColumnWithTheirExactText()
     {
@@ -13,7 +26,7 @@ public sealed class RelationshipDetailPageTests
         var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(data);
 
         var main = page.QuerySelector(".detail-main")!;
-        Assert.Equal(data.Reason, main.QuerySelector(".ai-summary p")!.TextContent);
+        Assert.Equal(data.Reason, VisibleText(main.QuerySelector(".ai-summary p")!));
         Assert.Equal([RelationshipPageView.QuoteLabel, "Fact of the bill or resolution"], main.QuerySelectorAll(".detail-quotes .choice-label").Select(label => label.TextContent));
         Assert.Equal([data.Quote, data.Fact], main.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
         Assert.Null(main.QuerySelector(".ai-summary p b"));
@@ -53,6 +66,19 @@ public sealed class RelationshipDetailPageTests
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
         Assert.Null(page.QuerySelector(".ai-summary .ai-label"));
         Assert.Null(page.QuerySelector(".detail-quotes .row"));
+    }
+
+    [Fact]
+    public async Task ModelReasonExplainsItsGlossaryTermWhileTheCitedQuoteStaysPlain()
+    {
+        var data = Relationship() with { Reason = "The bill affects the committee.", Quote = "Cloture <img src=x onerror=alert(1)>" };
+        var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(data);
+
+        Assert.Equal(data.Reason, VisibleText(page.QuerySelector(".ai-summary p")!));
+        Assert.Equal("bill", page.QuerySelector(".ai-summary p button.term")!.TextContent);
+        Assert.Empty(page.QuerySelectorAll(".detail-quotes button.term"));
+        Assert.Equal(data.Quote, page.QuerySelector(".detail-quotes blockquote")!.TextContent);
+        Assert.Empty(page.QuerySelectorAll(".detail-quotes img"));
     }
 
     [Fact]
