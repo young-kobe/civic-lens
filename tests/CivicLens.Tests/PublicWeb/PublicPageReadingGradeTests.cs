@@ -39,7 +39,7 @@ public sealed class PublicPageReadingGradeTests
     {
         var officials = await RenderAsync<OfficialsPage>(new Dictionary<string, object?>
         {
-            [nameof(OfficialsPage.Data)] = new OfficialsPageData(7, 542, [], OfficialsFilterData.None, null),
+            [nameof(OfficialsPage.Data)] = new OfficialsPageData(7, 542, [], RecordListFilter.Of(null, null), null),
             [nameof(OfficialsPage.RootPath)] = Root
         });
         var boards = await RenderAsync<BoardsPage>(new Dictionary<string, object?>
@@ -402,8 +402,8 @@ public sealed class PublicPageReadingGradeTests
             ("home", Page<HomePage>(With("Data", home, ("BrowserApiUrl", "https://api.civic-lens.test"))),
                 ["Published", "Newest notice", "Health", "Current bill line", "Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski", "Ada Able", "Ben Baker"]),
             ("home empty", Page<HomePage>(With("Data", new HomePageData(7, null, [], null))), []),
-            ("officials", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], OfficialsFilterData.None, null))), []),
-            ("officials filtered", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], new(null, null, null, "zzq"), null))), []),
+            ("officials", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], RecordListFilter.Of(null, null), null))), []),
+            ("officials filtered", Page<OfficialsPage>(With("Data", new OfficialsPageData(7, 542, [], RecordListFilter.Of(null, null, ("name", "zzq")), null))), []),
             ("boards", Page<BoardsPage>(With("Data", boards)), ["Henry Cuellar"]),
             ("boards empty", Page<BoardsPage>(With("Data", new BoardsPageData(7, [], []))), []),
             ("board list", Page<BoardListPage>(With("Data", new BoardListPageData(7, boards.Boards[0]))), ["Henry Cuellar", BoardTabLabels]),
