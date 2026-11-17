@@ -153,7 +153,7 @@ public sealed class WithdrawalNoticePageTests
         var page = await RenderAsync(Notice with { Corrections = [] });
 
         Assert.Null(page.QuerySelector(".corrections"));
-        Assert.Null(page.QuerySelector("#withdrawal-corrections-title"));
+        Assert.Null(page.QuerySelector("#corrections-title"));
     }
 
     [Fact]
@@ -161,8 +161,8 @@ public sealed class WithdrawalNoticePageTests
     {
         var page = await RenderAsync(Notice);
 
-        var section = page.QuerySelector("[aria-labelledby=withdrawal-corrections-title]")!;
-        Assert.Equal(("H2", "Corrections"), (section.QuerySelector("#withdrawal-corrections-title")!.TagName, section.QuerySelector("#withdrawal-corrections-title")!.TextContent));
+        var section = page.QuerySelector("[aria-labelledby=corrections-title]")!;
+        Assert.Equal(("H2", "Corrections"), (section.QuerySelector("#corrections-title")!.TagName, section.QuerySelector("#corrections-title")!.TextContent));
         Assert.NotNull(section.QuerySelector(".corrections"));
     }
 

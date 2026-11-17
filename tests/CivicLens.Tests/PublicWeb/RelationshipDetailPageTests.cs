@@ -82,4 +82,17 @@ public sealed class RelationshipDetailPageTests
         Assert.Equal("Relationship | Describes own bill", page.QuerySelector(".detail-eyebrow")!.TextContent);
         Assert.Equal("Mark Kelly", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
     }
+
+    [Fact]
+    public async Task TheRelationshipRetainsItsFullHistoryAndKeepsOnlyTheNewestPersonCorrectionInItsBanner()
+    {
+        var corrected = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship() with { RevisionNumber = 4, Corrections = PublishedCorrectionListTests.History });
+        var plain = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(Relationship());
+
+        PublishedCorrectionListTests.AssertFullHistory(corrected);
+        PublishedCorrectionListTests.AssertEmptyHistory(plain);
+        Assert.Equal([PublishedCorrectionBannerTests.Newest.Note], corrected.QuerySelectorAll(".correction-banner dd").Select(item => item.TextContent.Trim()));
+        Assert.Null(corrected.QuerySelector(".update-line"));
+    }
+
 }

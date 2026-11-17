@@ -82,6 +82,7 @@
                 </section>
             </aside>
         </div>
+        <PublishedCorrectionList Kind="PublishedRecordKind.ExecutiveAction" Corrections="Data.Corrections" />
         <SourceFold>
             <Facts Items="ExecutiveActionWords.SourceFacts(Data)" />
             @if (Data.Summary is { Source: { } bodyText, Sentences.Length: > 0 } quoted)

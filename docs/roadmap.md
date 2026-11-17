@@ -26,7 +26,7 @@ Remaining route work. Each slice includes the data, source evidence, labels, and
 
 - [ ] Add the already approved kind parameter to `PublicationProtocol.ReportPageLink` after the page work and label unification. Until then the report subject keeps the approved "Revision {n}." text. Any newly introduced public wording still needs owner approval.
 - [ ] Add the later map layers: party breaks, seats up for election, issue activity, attendance, and boundaries by Congress. Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members.
-- [ ] Finish the other record pages. Remaining: linked votes on the statement page, and the full correction list of a record that is not withdrawn. The correction banner shows only the newest correction.
+- [ ] Finish the other record pages. Remaining: linked votes on the statement page. All seven record pages now show the full history. The correction banner shows only the newest person correction.
 - [ ] Add the document changes list once document changes are published.
 
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
