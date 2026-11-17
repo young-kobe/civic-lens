@@ -1,11 +1,25 @@
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
 
 public sealed class ExecutiveActionDetailPageTests
 {
+    [Theory]
+    [InlineData(PublishedTextOrigin.Code)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task NonModelProseWithAGlossaryNameStaysPlain(PublishedTextOrigin origin)
+    {
+        var data = WithSummary(cut: false) with { Summary = WithSummary(cut: false).Summary! with { TextOrigin = origin, Sentences = [Sentence("Bill", "Each agency shall act on this order.")] } };
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(data);
+
+        Assert.Empty(page.QuerySelectorAll(".ai-summary button.term"));
+        Assert.Empty(page.QuerySelectorAll(".ai-summary [popover]"));
+        Assert.Contains("Bill", page.QuerySelector(".ai-summary")!.TextContent);
+    }
+
     [Fact]
     public async Task TheLedeKeepsTheExactSignedAndPrintedDatesAndTheCitation()
     {
@@ -47,6 +61,26 @@ public sealed class ExecutiveActionDetailPageTests
         Assert.DoesNotContain("Civic Lens did not summarize", page.TextContent);
         Assert.DoesNotContain(ExecutiveSummaryWords.CutNote, page.TextContent);
         Assert.Contains(ExecutiveActionWords.SummaryWording, page.QuerySelector("#source")!.TextContent);
+    }
+
+    [Fact]
+    public async Task ModelSummaryExplainsExactTermsAndLeavesTheQuotedSourceTextPlain()
+    {
+        var source = Body with { Text = "Cloture remains in the record." };
+        var data = WithSummary(cut: false) with
+        {
+            Summary = WithSummary(cut: false).Summary! with
+            {
+                Source = source,
+                Sentences = [new PublishedExecutiveSentence { Sentence = "The bill directs agencies to act.", Citation = Cite(source, source.Text) }]
+            }
+        };
+        var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(data);
+
+        Assert.Equal("The bill directs agencies to act.", page.QuerySelector(".ai-summary-ai p")!.ShownText());
+        Assert.Equal("bill", page.QuerySelector(".ai-summary-ai button.term")!.TextContent);
+        Assert.Empty(page.QuerySelectorAll(".executive-quotes button.term"));
+        Assert.Equal(source.Text, page.QuerySelector(".executive-quotes blockquote")!.TextContent);
     }
 
     [Fact]

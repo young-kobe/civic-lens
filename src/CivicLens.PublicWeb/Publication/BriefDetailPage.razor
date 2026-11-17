@@ -12,7 +12,18 @@
         <PublishedCorrectionBanner Kind="PublishedRecordKind.Brief" Corrections="Data.Corrections" />
         <div class="detail-stack">
             <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
-                <ChildContent><PublishedBriefText Paragraphs="Data.Paragraphs" /></ChildContent>
+                <ChildContent>
+                    @foreach (var paragraph in Data.Paragraphs)
+                    {
+                        <p class="record-body">
+                            <AiText Text="@paragraph.Text" Origin="Data.TextOrigin" />
+                            @foreach (var id in paragraph.CitationIds)
+                            {
+                                <a class="small" href="@("#" + PublishedBriefView.CitationAnchor(id))">[@id]</a>
+                            }
+                        </p>
+                    }
+                </ChildContent>
                 <Check>@PublishedBriefView.SampleBeforeRelease(Data.Coverage)<Term Key="@PublishedBriefView.ReleaseTermKey">releases</Term>@PublishedBriefView.SampleAfterRelease(Data.CutoffReleaseNumber) <a href="#cited">@PublishedBriefView.CitedRecordsTitle</a></Check>
             </AiSummary>
             <section class="detail-section" id="cited" aria-labelledby="brief-cited-title">

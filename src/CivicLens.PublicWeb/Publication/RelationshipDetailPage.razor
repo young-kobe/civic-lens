@@ -14,7 +14,7 @@
         <div class="detail-layout">
             <div class="detail-main">
                 <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
-                    <ChildContent><p>@Data.Reason</p></ChildContent>
+                    <ChildContent><p><AiText Text="@Data.Reason" Origin="@Data.TextOrigin" /></p></ChildContent>
                     <Check>@RelationshipPageView.Caveat <a href="#source">@SourceFold.Title</a></Check>
                 </AiSummary>
                 <section class="detail-section" aria-labelledby="relationship-evidence-title">
