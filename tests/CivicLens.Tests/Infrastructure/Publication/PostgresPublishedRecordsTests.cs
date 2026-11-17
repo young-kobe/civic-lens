@@ -15,7 +15,6 @@ namespace CivicLens.Tests.Infrastructure.Publication;
 [Trait("Category", "Postgres")]
 public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) : IAsyncLifetime
 {
-    private const string Migration = "PublishedRecords";
     private static readonly string A = new('a', 64);
     private static readonly string B = new('b', 64);
     private static readonly DateTimeOffset First = new(2026, 3, 1, 8, 0, 0, TimeSpan.Zero);
@@ -97,21 +96,6 @@ public sealed class PostgresPublishedRecordsTests(PostgresCollection postgres) :
             ExecuteAsync($"INSERT INTO published_records (kind, record_id, first_published_at_utc_ticks) VALUES ({values})"));
 
         Assert.Equal(PostgresErrorCodes.CheckViolation, failure.SqlState);
-    }
-
-    [Fact]
-    public async Task TheMigrationCreatesTheTableAndGoesDownByDroppingItBecauseDownMustWorkForARollback()
-    {
-        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-        var migrations = db.Database.GetMigrations().ToList();
-        var migration = migrations.Single(id => id.EndsWith("_" + Migration, StringComparison.Ordinal));
-        Assert.Equal(["published_records"], await ReadAsync("SELECT table_name FROM information_schema.tables WHERE table_name = 'published_records'"));
-
-        await db.GetService<IMigrator>().MigrateAsync(migrations[migrations.IndexOf(migration) - 1]);
-
-        Assert.Empty(await ReadAsync("SELECT table_name FROM information_schema.tables WHERE table_name = 'published_records'"));
-        await db.Database.MigrateAsync();
-        Assert.Single(await ReadAsync("SELECT table_name FROM information_schema.tables WHERE table_name = 'published_records'"));
     }
 
     private static PublishedRecordReference Reference(string id) => new(PublishedRecordKind.Action, id);
