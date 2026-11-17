@@ -6,8 +6,11 @@ namespace CivicLens.Tests.Publication.Contracts;
 
 public sealed class PublishedOfficialsTests
 {
-    [Fact]
-    public void AReleaseKeepsItsOfficialsThroughAJsonRoundTrip()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void AReleaseKeepsItsOfficialsAndTheirSenateClassThroughAJsonRoundTrip(int senateClass)
     {
         var officials = new PublishedOfficials
         {
@@ -18,7 +21,7 @@ public sealed class PublishedOfficialsTests
                     Id = "mayor",
                     Name = "Mayor Example",
                     WikidataId = "Q1",
-                    Terms = [new() { Office = "sen", Kind = PublishedOfficeKind.Senator, State = "WA", District = null, Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3) }]
+                    Terms = [new() { Office = "sen", Kind = PublishedOfficeKind.Senator, State = "WA", District = null, Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3), SenateClass = senateClass }]
                 }
             ]
         };
@@ -28,6 +31,7 @@ public sealed class PublishedOfficialsTests
         officialsBack.Validate();
 
         Assert.Equal(new DateOnly(2025, 1, 3), officialsBack.Officials[0].Terms[0].Start);
+        Assert.Equal(senateClass, officialsBack.Officials[0].Terms[0].SenateClass);
     }
 
     [Theory]
@@ -74,14 +78,37 @@ public sealed class PublishedOfficialsTests
                 {
                     Id = "mayor",
                     Name = "Mayor Example",
-                    Terms = [new() { Office = "sen", Kind = PublishedOfficeKind.Senator, State = "WA", Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3) }]
+                    Terms = [new() { Office = "sen", Kind = PublishedOfficeKind.Senator, State = "WA", Party = "Democrat", Start = new(2025, 1, 3), End = new(2031, 1, 3), SenateClass = 1 }]
                 }
             ]
         };
 
         Assert.Equal(1, PublicationProtocol.SchemaVersion);
-        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"sen","kind":"senator","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03"}]}]}""",
+        Assert.Equal("""{"officials":[{"id":"mayor","name":"Mayor Example","wikidataId":null,"website":null,"photo":null,"terms":[{"office":"sen","kind":"senator","state":"WA","district":null,"party":"Democrat","caucus":null,"start":"2025-01-03","end":"2031-01-03","senateClass":1}]}]}""",
             JsonSerializer.Serialize(officials, PublicationProtocol.JsonOptions));
+    }
+
+    [Fact]
+    public void AReleasedSenateTermWithoutClassKeepsItUnknown()
+    {
+        var term = JsonSerializer.Deserialize<PublishedOfficeTerm>(
+            """{"office":"sen","kind":"senator","state":"WA","start":"2025-01-03","end":"2031-01-03"}""", PublicationProtocol.JsonOptions)!;
+
+        term.Validate();
+
+        Assert.Null(term.SenateClass);
+    }
+
+    [Theory]
+    [InlineData(PublishedOfficeKind.Senator, 0)]
+    [InlineData(PublishedOfficeKind.Senator, 4)]
+    [InlineData(PublishedOfficeKind.Representative, 1)]
+    [InlineData(PublishedOfficeKind.Executive, 1)]
+    public void OnlySenateTermsMayCarryAClassFromOneToThree(PublishedOfficeKind kind, int senateClass)
+    {
+        var term = new PublishedOfficeTerm { Office = "Office", Kind = kind, Start = new(2025, 1, 3), SenateClass = senateClass };
+
+        Assert.Throws<InvalidDataException>(term.Validate);
     }
 
     [Fact]

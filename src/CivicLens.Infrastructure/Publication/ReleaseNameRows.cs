@@ -68,6 +68,7 @@ internal static class ReleaseNameRows
         Party = term.Party,
         Caucus = term.Caucus,
         StartOn = term.Start,
-        EndOn = term.End
+        EndOn = term.End,
+        SenateClass = term.SenateClass
     };
 }

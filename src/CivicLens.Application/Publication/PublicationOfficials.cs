@@ -100,7 +100,8 @@ public sealed class PublicationOfficials(CollectionConfiguration configuration, 
         Party = term.Party,
         Caucus = term.Caucus,
         Start = term.Start,
-        End = term.End
+        End = term.End,
+        SenateClass = term.SenateClass
     };
 
     private static PublishedOfficeTerm ToTerm(ExecutiveTerm term) => new()

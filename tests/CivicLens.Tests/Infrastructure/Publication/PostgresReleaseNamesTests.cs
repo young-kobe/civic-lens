@@ -56,12 +56,33 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         await CommitAsync(1, null, Names("Old definition.", ["Rent caps"], []));
         var before = await ReadReleaseAsync(1);
 
-        await CommitAsync(2, 1, Names("New definition.", ["Rent caps", "Eviction rules"], ["Zoning votes"], officialName: "Mayor Renamed"));
+        await CommitAsync(2, 1, Names("New definition.", ["Rent caps", "Eviction rules"], ["Zoning votes"], officialName: "Mayor Renamed", senateClass: 2));
 
         Assert.Equal(before, await ReadReleaseAsync(1));
         Assert.Contains("2|mayor|Mayor Renamed", (await ReadReleaseAsync(2)).Single(row => row.StartsWith("official ", StringComparison.Ordinal)));
         Assert.Equal(["1 Old definition.", "2 New definition."], await ReadAsync("SELECT release_number || ' ' || definition FROM release_issues ORDER BY release_number"));
         Assert.Equal(["1:0:0", "2:0:0"], await ReadAsync("SELECT release_number || ':' || substantive_votes || ':' || bills FROM release_issues ORDER BY release_number"));
+        Assert.Equal(["1|unknown", "2|2"], await ReadAsync("""
+            SELECT release_number || '|' || coalesce(senate_class::text, 'unknown')
+              FROM release_official_terms WHERE kind = 'Senator' ORDER BY release_number
+            """));
+    }
+
+    [Fact]
+    public async Task ReleaseTermsRejectAnOutOfRangeSenateClassOrAClassOnAnotherOffice()
+    {
+        await CommitAsync(1, null, Names("Definition.", [], []));
+
+        (string Kind, int SenateClass)[] invalidTerms = [("Senator", 4), ("Representative", 1)];
+        foreach (var (kind, senateClass) in invalidTerms)
+        {
+            var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync($"""
+                INSERT INTO release_official_terms (release_number, official_id, "position", office, kind, start_on, senate_class)
+                VALUES (1, 'mayor', 2, 'Office', '{kind}', '2025-01-03', {senateClass})
+                """));
+            Assert.Equal(PostgresErrorCodes.CheckViolation, failure.SqlState);
+            Assert.Equal("ck_release_official_terms_senate_class", failure.ConstraintName);
+        }
     }
 
     [Fact]
@@ -134,7 +155,7 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
         ORDER BY 1
         """);
 
-    private static ReleaseNames Names(string definition, string[] includes, string[] excludes, string officialName = "Mayor Example")
+    private static ReleaseNames Names(string definition, string[] includes, string[] excludes, string officialName = "Mayor Example", int? senateClass = null)
     {
         PublishedOfficialProfile official = new()
         {
@@ -144,7 +165,7 @@ public sealed class PostgresReleaseNamesTests(PostgresCollection postgres) : IAs
             Terms =
             [
                 new() { Office = "Mayor", Kind = PublishedOfficeKind.Executive, Start = new(2024, 1, 1) },
-                new() { Office = "Senator", Kind = PublishedOfficeKind.Senator, State = "WA", Party = "Democratic", Start = new(2020, 1, 3), End = new(2023, 1, 3) }
+                new() { Office = "Senator", Kind = PublishedOfficeKind.Senator, State = "WA", Party = "Democratic", Start = new(2020, 1, 3), End = new(2023, 1, 3), SenateClass = senateClass }
             ]
         };
         var issue = new ReleaseFacet("housing", "Housing costs", new IssueDefinition(definition, [.. includes], [.. excludes]));

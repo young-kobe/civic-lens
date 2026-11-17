@@ -114,7 +114,7 @@ internal static class PublicApiGrants
             notice_citation_start, notice_citation_length) ON executive_action_documents TO civic_lens_public_owner;
         GRANT SELECT (zcta, state, district, land_area_square_meters, attempt_id) ON zcta_districts TO civic_lens_public_owner;
         GRANT SELECT (release_number, official_id, name, sort_name, wikidata_id, website, photo_path) ON release_officials TO civic_lens_public_owner;
-        GRANT SELECT (release_number, official_id, "position", office, kind, state, district, party, caucus, start_on, end_on)
+        GRANT SELECT (release_number, official_id, "position", office, kind, state, district, party, caucus, start_on, end_on, senate_class)
             ON release_official_terms TO civic_lens_public_owner;
         GRANT SELECT (release_number, issue_id, name, definition, count_congress, substantive_votes, bills) ON release_issues TO civic_lens_public_owner;
         GRANT SELECT (release_number, issue_id, unknown_bills) ON release_issue_party_lineups TO civic_lens_public_owner;
