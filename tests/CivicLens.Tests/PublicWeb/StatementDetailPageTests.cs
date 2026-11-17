@@ -1,6 +1,7 @@
 using AngleSharp.Dom;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -46,6 +47,111 @@ public sealed class StatementDetailPageTests
         Assert.Null(page.QuerySelector(".ai-summary .doc-text"));
         Assert.Equal(StatementText, page.QuerySelector("#source .doc-text")!.TextContent);
     }
+
+    [Fact]
+    public async Task ALinkedVoteKeepsItsRelationshipEvidenceCitedRevisionCurrentTitleAndKeysetLinks()
+    {
+        var linked = LinkedVote() with { CitedVoteCast = PublishedPartyMajority.Nay };
+        var data = Statement() with { LinkedVotes = new([linked], "sv.7.20260503." + new string('b', 64), "sv.7.20260510." + new string('c', 64)) };
+
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
+
+        var section = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!;
+        Assert.Equal("Votes linked to this statement", section.QuerySelector("h2")!.TextContent);
+        Assert.Equal("Current vote title", section.QuerySelector("h3 a")!.TextContent);
+        Assert.Equal("https://civic-lens.test/records/" + new string('b', 64) + ".html", section.QuerySelector("h3 a")!.GetAttribute("href"));
+        Assert.Contains(section.QuerySelectorAll("a"), link => link.GetAttribute("href") == "https://civic-lens.test/records/" + new string('d', 64) + ".html");
+        Assert.Contains("Vote, revision 1", section.TextContent);
+        Assert.Contains("Statement, revision 1", section.TextContent);
+        Assert.Contains("Relationship, revision 2", section.TextContent);
+        Assert.Contains(RelationshipPageView.LinkedNote, section.TextContent);
+        Assert.Contains("Statement about a vote", section.TextContent);
+        Assert.Contains("The speaker said this.", section.TextContent);
+        Assert.Contains("Result: Passed", section.TextContent);
+        Assert.Equal("The speaker’s statement ties to this result.", section.QuerySelector(".ai-summary p")!.ShownText());
+        Assert.Equal(PublishedWording.ModelRelationship, section.QuerySelector(".ai-summary .ai-label")!.TextContent);
+        Assert.Equal("model", section.QuerySelector(".ai-summary .ai-label")!.GetAttribute("data-origin"));
+        Assert.Single(section.QuerySelectorAll(".ai-summary button.term"));
+        Assert.Contains("No (Nay)", section.TextContent);
+        Assert.Equal("before=sv.7.20260510." + new string('c', 64), Uri.UnescapeDataString(section.QuerySelector(".pager a[rel=prev]")!.GetAttribute("href")!.Split('?')[1]));
+        Assert.Equal("cursor=sv.7.20260503." + new string('b', 64), Uri.UnescapeDataString(section.QuerySelector(".pager a[rel=next]")!.GetAttribute("href")!.Split('?')[1]));
+    }
+
+    [Fact]
+    public async Task ALinkedVoteReasonChecksItsRelationshipSourceInsteadOfTheCurrentStatementSource()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with
+        {
+            LinkedVotes = new([LinkedVote()], null, null)
+        });
+
+        var source = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!
+            .QuerySelector(".ai-summary-check a")!;
+        Assert.Equal(Root + PublicationProtocol.RecordPagePath(new string('d', 64)) + "#source", source.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ALinkedVoteWithNoSavedSpeakerCastUsesTheExistingNoPositionWording()
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with
+        {
+            LinkedVotes = new([LinkedVote()], null, null)
+        });
+
+        var section = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!;
+        Assert.Contains("Mark Kelly has no recorded position on this vote.", section.TextContent);
+        Assert.DoesNotContain("Not voting", section.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("No (Nay)", section.TextContent);
+        Assert.Null(section.QuerySelector(".pager"));
+    }
+
+    [Fact]
+    public async Task APersonAuthoredLinkedVoteReasonStaysPlainAndHasNoAiInk()
+    {
+        var linked = LinkedVote() with { Reason = "Cloture is pending.", ReasonTextOrigin = PublishedTextOrigin.Person, ReasonLabel = null };
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { LinkedVotes = new([linked], null, null) });
+
+        var section = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!;
+        var reason = section.QuerySelector(".ai-summary")!;
+        Assert.Equal("Cloture is pending.", reason.QuerySelector("p")!.TextContent);
+        Assert.Null(reason.QuerySelector(".ai-label"));
+        Assert.False(reason.ClassList.Contains("ai-summary-ai"));
+        Assert.Empty(reason.QuerySelectorAll("button.term"));
+    }
+
+    [Fact]
+    public async Task LinkedVoteReasonUsesTheViewLabelAndGlossaryFirstUseWhileItsQuoteStaysPlain()
+    {
+        var linked = LinkedVote() with { Reason = "Cloture is pending.", Quote = "Quorum." };
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { LinkedVotes = new([linked], null, null) });
+
+        var section = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!;
+        var firstTerm = page.QuerySelector("button.term")!;
+        Assert.Equal(PublishedWording.ModelRelationship, section.QuerySelector(".ai-summary .ai-label")!.TextContent);
+        Assert.Equal("Cloture", firstTerm.TextContent);
+        Assert.Equal("Quorum.", section.QuerySelector("blockquote")!.TextContent);
+        Assert.Empty(section.QuerySelector("blockquote")!.QuerySelectorAll("button.term"));
+    }
+
+    [Fact]
+    public async Task LinkedVoteReasonUsesTheGlossaryFirstUseAlreadyConsumedByTheStatementSummary()
+    {
+        var linked = LinkedVote() with { Reason = "Cloture is pending.", Quote = "Quorum." };
+        var statement = Statement() with { Summary = "Cloture will limit debate.", LinkedVotes = new([linked], null, null) };
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(statement);
+
+        Assert.Equal("Cloture", page.QuerySelector(".ai-summary-ai button.term")!.TextContent);
+        var linkedSection = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!;
+        Assert.Empty(linkedSection.QuerySelectorAll("button.term"));
+        Assert.Equal(PublishedWording.ModelRelationship, linkedSection.QuerySelector(".ai-summary .ai-label")!.TextContent);
+        Assert.Empty(linkedSection.QuerySelector("blockquote")!.QuerySelectorAll("button.term"));
+    }
+
+    private static StatementLinkedVoteData LinkedVote() => new(
+        new string('d', 64), 2, PublishedRelationshipType.StatementAboutVote, 1, "The speaker’s statement ties to this result.",
+        PublishedTextOrigin.Model, PublishedWording.ModelRelationship,
+        "The speaker said this.", "Result: Passed", null, null, new string('b', 64), 1, "Current vote title", PublishedTextOrigin.Code,
+        AiLabelWords.CodeWording, "official-a", "Mark Kelly", null, new DateOnly(2026, 5, 10));
 
     [Fact]
     public async Task ModelSummaryExplainsExactTermsAndKeepsWrittenTextAndUnsafeMarkupAsText()

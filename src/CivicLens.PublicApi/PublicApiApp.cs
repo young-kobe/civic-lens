@@ -64,7 +64,9 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(snapshot);
         builder.Services.AddSingleton(new StatementStore(views));
-        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
+        builder.Services.AddSingleton<StatementLinkedVoteReader>();
+        builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<CorrectionHistoryStore>(),
+            provider.GetRequiredService<RecordSnapshot>(), provider.GetRequiredService<StatementLinkedVoteReader>()));
         builder.Services.AddSingleton(new DocumentChangeStore(views));
         builder.Services.AddSingleton(provider => new DocumentChangePageReader(provider.GetRequiredService<DocumentChangeStore>(), provider.GetRequiredService<CorrectionHistoryStore>(), provider.GetRequiredService<RecordSnapshot>()));
         builder.Services.AddSingleton(new RelationshipStore());

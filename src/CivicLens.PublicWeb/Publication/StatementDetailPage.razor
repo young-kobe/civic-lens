@@ -47,6 +47,10 @@
                         <p class="small"><a href="@StatementPageView.AllQuotationsHref(Data)">@StatementPageView.AllQuotationsLink(Data)</a></p>
                     }
                 </section>
+                @if (Data.LinkedVotes.Votes.Length > 0 || Data.LinkedVotes.PreviousCursor is not null || Data.LinkedVotes.NextCursor is not null)
+                {
+                    <StatementLinkedVotes Data="Data.LinkedVotes" RootPath="@RootPath" StatementRecordId="@Data.RecordId" />
+                }
             </div>
             <aside class="detail-rail" aria-label="Speakers, issues, and source">
                 <section class="detail-card" aria-labelledby="statement-speakers-title">
