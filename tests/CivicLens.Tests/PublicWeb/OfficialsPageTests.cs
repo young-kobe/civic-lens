@@ -9,8 +9,8 @@ public sealed class OfficialsPageTests
     private static OfficialListRowData Row(string id, string name, PublishedOfficeKind kind, string? state, int? district, string? party,
         DateOnly? end, int count) => new(id, name, kind, kind.ToString(), state, district, party, end, count);
 
-    private static OfficialsPageData Page(OfficialListRowData[] rows, OfficialsFilterData? filter = null, string? next = null) =>
-        new(7, 542, rows, filter ?? OfficialsFilterData.None, next);
+    private static OfficialsPageData Page(OfficialListRowData[] rows, RecordListFilter? filter = null, string? next = null) =>
+        new(7, 542, rows, filter ?? RecordListFilter.Of(null, null), next);
 
     private static Task<AngleSharp.Dom.IDocument> RenderAsync(OfficialsPageData data) =>
         ListPageRender.RenderAsync<OfficialsPage>(data, nameof(OfficialsPage.Data));
@@ -42,7 +42,7 @@ public sealed class OfficialsPageTests
     [InlineData(1, "1 official has a page. Each page lists")]
     public async Task TheLedeStartsWithTheTotalOfTheReleaseWhateverTheFilter(int total, string start)
     {
-        var page = await RenderAsync(Page([], new("house", null, null, "zzz")) with { OfficialsInRelease = total });
+        var page = await RenderAsync(Page([], RecordListFilter.Of(null, null, ("chamber", "house"), ("name", "zzz"))) with { OfficialsInRelease = total });
 
         Assert.StartsWith(start, page.QuerySelector(".page-header-lede")!.TextContent);
     }
@@ -72,7 +72,7 @@ public sealed class OfficialsPageTests
     [Fact]
     public async Task NoMatchShowsGuidanceBeforeTheFiltersAndNoRowsOrPager()
     {
-        var page = await RenderAsync(Page([], new("house", null, null, "zzz"), next: null));
+        var page = await RenderAsync(Page([], RecordListFilter.Of(null, null, ("chamber", "house"), ("name", "zzz")), next: null));
 
         var empty = page.QuerySelector(".empty")!;
         Assert.Contains("No official matches these filters.", empty.TextContent);
@@ -86,12 +86,12 @@ public sealed class OfficialsPageTests
     public async Task TheNextLinkKeepsEveryFilterAndTheCursorAndIsAbsentOnTheLastPage()
     {
         var rows = new[] { Row("a", "Ann", PublishedOfficeKind.Senator, "MA", null, "Democrat", null, 0) };
-        var filter = new OfficialsFilterData("senate", "MA", "democrat", "an d");
+        var filter = RecordListFilter.Of(null, null, ("chamber", "senate"), ("state", "MA"), ("party", "democrat"), ("name", "an & d"));
 
         var next = await RenderAsync(Page(rows, filter, "o.7.abc"));
         var last = await RenderAsync(Page(rows, filter));
 
-        Assert.Equal("?chamber=senate&state=MA&party=democrat&name=an%20d&cursor=o.7.abc",
+        Assert.Equal("?chamber=senate&state=MA&party=democrat&name=an%20%26%20d&cursor=o.7.abc",
             next.QuerySelector(".pager a[rel=next]")!.GetAttribute("href"));
         Assert.Equal("Next page", next.QuerySelector(".pager a[rel=next]")!.TextContent.Trim());
         Assert.Single(next.QuerySelectorAll(".pager a, .pager button"));
@@ -103,7 +103,7 @@ public sealed class OfficialsPageTests
     public async Task TheFormKeepsTheChosenFiltersAndOffersClearOnlyWhenOneIsActive()
     {
         var filtered = await RenderAsync(Page([Row("a", "Ann", PublishedOfficeKind.Senator, "MA", null, "Democrat", null, 0)],
-            new("senate", "MA", "democrat", "An")));
+            RecordListFilter.Of(null, null, ("chamber", "senate"), ("state", "MA"), ("party", "democrat"), ("name", "An"))));
         var plain = await RenderAsync(Page([Row("a", "Ann", PublishedOfficeKind.Senator, "MA", null, "Democrat", null, 0)]));
 
         Assert.Equal("senate", filtered.QuerySelector("#officials-chamber option[selected]")!.GetAttribute("value"));
@@ -121,8 +121,8 @@ public sealed class OfficialsPageTests
     public async Task TheCountLineNamesNoReleaseAndEachActiveFilterHasOneChipInFormOrder()
     {
         var row = Row("a", "Ann", PublishedOfficeKind.Senator, "MA", null, "Democrat", null, 0);
-        var filtered = await RenderAsync(Page([row], new("senate", "MA", "democrat", "An")));
-        var party = await RenderAsync(Page([row], new(null, null, "independent", null)));
+        var filtered = await RenderAsync(Page([row], RecordListFilter.Of(null, null, ("chamber", "senate"), ("state", "MA"), ("party", "democrat"), ("name", "An"))));
+        var party = await RenderAsync(Page([row], RecordListFilter.Of(null, null, ("party", "independent"))));
         var plain = await RenderAsync(Page([row]));
 
         Assert.Equal("Showing 1 official on this page.", filtered.QuerySelector(".list-status")!.TextContent);
@@ -140,4 +140,56 @@ public sealed class OfficialsPageTests
         Assert.Equal("<script>x()</script>", page.QuerySelector(".list-row-title")!.TextContent);
         Assert.Equal(Root + "officials/a%20b.html", page.QuerySelector(".list-row-title")!.GetAttribute("href"));
     }
+
+    [Fact]
+    public async Task RefusedNameKeepsTypedTextMarksTheFieldAndDoesNotClaimThereAreNoMatches()
+    {
+        var name = "<script>bad & name" + new string('x', OfficialsPage.MaximumNameLength + 1);
+        var filter = RecordListFilter.Refused("name", ("name", name));
+        var page = await RenderAsync(Page([], filter));
+
+        var input = page.QuerySelector("#officials-name")!;
+        Assert.Equal(name, input.GetAttribute("value"));
+        Assert.Equal("true", input.GetAttribute("aria-invalid"));
+        Assert.Null(input.GetAttribute("aria-describedby"));
+        Assert.Null(page.QuerySelector(".empty"));
+        Assert.Null(page.QuerySelector(".list-rows"));
+        Assert.Null(page.QuerySelector(".list-status"));
+        Assert.Null(page.QuerySelector(".pager"));
+    }
+
+    [Theory]
+    [InlineData("chamber", "moon", "ma", "Republican")]
+    [InlineData("name", "senate", "<script>bad & choice</script>", "unlisted")]
+    public async Task ARefusedFieldDoesNotEraseOtherSelectedValues(string refusedField, string chamber, string state, string party)
+    {
+        var page = await RenderAsync(Page([], RecordListFilter.Refused(refusedField,
+            ("chamber", chamber), ("state", state), ("party", party))));
+
+        foreach (var (field, value) in new[] { ("chamber", chamber), ("state", state), ("party", party) })
+        {
+            var select = page.QuerySelector($"select[name={field}]")!;
+            Assert.Equal(value, select.QuerySelector("option[selected]")?.GetAttribute("value"));
+            Assert.Equal(field == refusedField ? "true" : null, select.GetAttribute("aria-invalid"));
+            Assert.Null(select.QuerySelector("script"));
+        }
+    }
+
+    [Theory]
+    [InlineData("chamber")]
+    [InlineData("state")]
+    [InlineData("party")]
+    public async Task ARefusedSelectKeepsItsUnknownValueVisibleAsTextInsteadOfShowingAll(string field)
+    {
+        const string value = "<script>bad & choice</script>";
+        var page = await RenderAsync(Page([], RecordListFilter.Refused(field, (field, value))));
+        var select = page.QuerySelector($"select[name={field}]")!;
+
+        Assert.Equal(value, select.QuerySelector("option[selected]")?.GetAttribute("value"));
+        Assert.Equal(value, select.QuerySelector("option[selected]")?.TextContent);
+        Assert.Equal("true", select.GetAttribute("aria-invalid"));
+        Assert.Null(select.QuerySelector("script"));
+        Assert.NotNull(select.QuerySelector("option[value='']"));
+    }
+
 }

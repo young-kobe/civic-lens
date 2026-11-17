@@ -3,6 +3,10 @@
 <Field Label="@Label" For="@Id" Error="@Filter.ErrorOf(Name)">
     <select id="@Id" name="@Name" @attributes="Filter.InputAttributes(Name, Id)">
         <option value="">@AnyText</option>
+        @if (Filter.Value(Name) is { Length: > 0 } selectedValue && !Choices.Any(choice => choice.Value == selectedValue))
+        {
+            <option value="@selectedValue" selected>@selectedValue</option>
+        }
         @foreach (var choice in Choices)
         {
             <option value="@choice.Value" selected="@(Filter.Value(Name) == choice.Value)">@choice.Label</option>
