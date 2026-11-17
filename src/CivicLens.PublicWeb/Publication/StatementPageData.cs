@@ -26,6 +26,9 @@ public sealed record StatementPageData(
     /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
     public PublishedCorrection[] Corrections { get; init; } = [];
 
+    /// <summary>The newest linked votes on this page, with keyset cursors for the surrounding pages.</summary>
+    public StatementLinkedVotePage LinkedVotes { get; init; } = new([], null, null);
+
     public string ShortName => string.Join(", ", Speakers.Select(speaker => speaker.Name));
 
     /// <summary>The page the statement came from. A feed source lists an article, and the article is the original page.</summary>

@@ -1,0 +1,55 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+<section class="detail-section" aria-labelledby="statement-linked-votes-title">
+    <h2 id="statement-linked-votes-title">Votes linked to this statement</h2>
+    <ul class="choices detail-quotes" role="list">
+        @foreach (var vote in Data.Votes)
+        {
+            <li>
+                <h3><a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.VoteRecordId))">@vote.VoteHeadline</a></h3>
+                <AiLabel Text="@vote.VoteLabel" Origin="vote.VoteTextOrigin" />
+                <p class="muted small">@Moment.Day(vote.VotedOn) · @RelationshipPageView.CitedRevision(PublishedRecordKind.Statement, vote.CitedStatementRevisionNumber) · @RelationshipPageView.CitedRevision(PublishedRecordKind.Vote, vote.CitedVoteRevisionNumber) · <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RelationshipRecordId))">@PublishedRecordLabels.RelationshipType(vote.RelationshipType)</a> · @RelationshipPageView.CitedRevision(PublishedRecordKind.Relationship, vote.RelationshipRevisionNumber)</p>
+                <p class="muted small">@RelationshipPageView.LinkedNote</p>
+                <AiSummary TextOrigin="vote.ReasonTextOrigin" Label="@vote.ReasonLabel">
+                    <ChildContent><p><AiText Text="@vote.Reason" Origin="vote.ReasonTextOrigin" /></p></ChildContent>
+                    <Check>@RelationshipPageView.Caveat <a href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RelationshipRecordId) + "#source")">@SourceFold.Title</a></Check>
+                </AiSummary>
+                <CitationQuote Label="@RelationshipPageView.QuoteLabel" Quote="@vote.Quote" />
+                <CitationQuote Label="@RelationshipPageView.FactLabel(PublishedRecordKind.Vote)" Quote="@vote.Fact">
+                    @if (vote.FactLabel is { } label)
+                    {
+                        <AiLabel Text="@label" Origin="vote.FactTextOrigin" />
+                    }
+                </CitationQuote>
+                @if (vote.LinkedOfficialName is { } name)
+                {
+                    <p class="muted small">
+                        @if (vote.CitedVoteCast is { } cast)
+                        {
+                            <a href="@(RootPath + PublicationProtocol.OfficialPagePath(vote.LinkedOfficialId))">@name</a>@(" voted ")<SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>@(" on ")@($"{Moment.Day(vote.VotedOn)}.")
+                        }
+                        else
+                        {
+                            @VotePageView.MemberNoPosition(name)
+                        }
+                    </p>
+                }
+            </li>
+        }
+    </ul>
+    <Pager Label="Votes linked to this statement" LinksOnly="true" NewerText="@ListPageLink.PreviousText" OlderText="@ListPageLink.NextText"
+           NewerHref="@PreviousHref" OlderHref="@NextHref" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public StatementLinkedVotePage Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter, EditorRequired] public string StatementRecordId { get; set; } = default!;
+
+    private string? PreviousHref => Data.PreviousCursor is { } cursor ? Href(ListPageLink.Previous(cursor)) : null;
+    private string? NextHref => Data.NextCursor is { } cursor ? Href(ListPageLink.Next(cursor)) : null;
+
+    private string Href(ListPageLink link) => RootPath + PublicationProtocol.RecordPagePath(StatementRecordId) + "?" + link.QueryPair;
+}

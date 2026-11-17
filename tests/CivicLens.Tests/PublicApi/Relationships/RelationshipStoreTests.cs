@@ -1,6 +1,7 @@
 using CivicLens.Application.Relationships;
 using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Relationships;
+using CivicLens.PublicApi.Statements;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -112,6 +113,104 @@ public sealed class RelationshipStoreTests(PostgresCollection postgres) : IAsync
         Assert.Equal(VoteFactTexts[1], page.Fact);
         Assert.Equal((null, null), (page.FactLabel, page.FactTextOrigin));
         Assert.Equal((PublishedRecordKind.Vote, VoteId, 1, "Vote on housing"), (page.Target.Kind, page.Target.RecordId, page.Target.RevisionNumber, page.Target.Headline));
+    }
+
+    [Fact]
+    public async Task TheRestrictedRelationshipsViewReturnsTheSavedCastAndDateFromTheCitedVoteRevision()
+    {
+        var newerVoteId = new string('2', 64);
+        await ViewsSeed.AddVotesAsync(database, new SeededVote('2', "2026-05-10")
+        {
+            ActiveRevision = 2,
+            Casts = ["Nay", "Yea"],
+            Result = "Passed 218 to 210",
+            PersonIds = ["official", "other"]
+        });
+        await ViewsSeed.ExecuteAsync(database, $"""
+            SET session_replication_role = replica;
+            UPDATE vote_revisions SET headline = 'Current vote title', text_origin = 'Person', voted_on = '2026-05-11'
+             WHERE record_id = '{newerVoteId}' AND revision_number = 2;
+            UPDATE vote_member_list_entries SET vote_cast = 'Yea'
+             WHERE list_id = (SELECT member_list_id FROM vote_revisions WHERE record_id = '{newerVoteId}' AND revision_number = 2) AND person_id = 'official';
+            UPDATE vote_member_lists SET yea_count = 2, nay_count = 0
+             WHERE list_id = (SELECT member_list_id FROM vote_revisions WHERE record_id = '{newerVoteId}' AND revision_number = 2);
+            UPDATE vote_revision_facts SET fact_text = 'Result: Changed'
+             WHERE record_id = '{newerVoteId}' AND revision_number = 2 AND "position" = 1;
+            UPDATE relationship_revisions SET target_vote_record_id = '{newerVoteId}', target_vote_revision_number = 1, target_fact_id = 'F2'
+             WHERE record_id = '{VoteLink}';
+            UPDATE published_entries SET target_record_id = '{newerVoteId}'
+             WHERE kind = 'relationship' AND record_id = '{VoteLink}';
+            """);
+
+        await using (var deniedConnection = await views.OpenConnectionAsync())
+        await using (var denied = new NpgsqlCommand("SELECT official_id FROM public.relationship_revisions", deniedConnection))
+        {
+            var error = await Assert.ThrowsAsync<PostgresException>(() => denied.ExecuteReaderAsync());
+            Assert.Equal("42501", error.SqlState);
+        }
+
+        await using (var active = await views.OpenConnectionAsync())
+        await using (var command = new NpgsqlCommand($"SELECT v.voted_on, m.vote_cast FROM public_api.votes v JOIN public_api.member_votes m ON m.record_id = v.record_id WHERE v.record_id = '{newerVoteId}' AND m.official_id = 'official'", active))
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(new DateOnly(2026, 5, 11), reader.GetFieldValue<DateOnly>(0));
+            Assert.Equal("Yea", reader.GetString(1));
+        }
+
+        var (connection, transaction) = await new RecordSnapshot(views).OpenAsync(CancellationToken.None);
+        await using var _ = connection;
+        await using var __ = transaction;
+        var page = await new StatementLinkedVoteReader().ReadAsync(transaction, StatementId, new(), CancellationToken.None);
+        var linked = Assert.Single(Assert.IsType<StatementLinkedVotePage>(page).Votes);
+        Assert.Equal(1, linked.CitedStatementRevisionNumber);
+        Assert.Equal((newerVoteId, 1, "Nay", new DateOnly(2026, 5, 10)),
+            (linked.VoteRecordId, linked.CitedVoteRevisionNumber, linked.CitedVoteCast, linked.VotedOn));
+        Assert.Equal((PublishedRelationshipType.StatementAboutVote, Reason, Quote, "Result: Passed 218 to 210"),
+            (linked.RelationshipType, linked.Reason, linked.Quote, linked.Fact));
+        Assert.Equal(("Current vote title", PublishedTextOrigin.Person, (string?)null),
+            (linked.VoteHeadline, linked.VoteTextOrigin, linked.VoteLabel));
+    }
+
+    [Fact]
+    public async Task LinkedVotesPageTenNewestAndCanWalkBackwardWithoutRepeats()
+    {
+        char[] ids = ['0', '2', '3', '4', '6', '9', 'b', 'c', 'd', 'e', 'f'];
+        var votes = ids.Select(id => new SeededVote(id, "2026-06-11")
+        {
+            Casts = ["Yea"],
+            PersonIds = ["official"]
+        }).ToArray();
+        await ViewsSeed.AddVotesAsync(database, votes);
+        await ViewsSeed.ExecuteAsync(database, "SET session_replication_role = replica;\n" + string.Join('\n', votes.Select(vote =>
+        {
+            var link = new string(vote.Id, 64);
+            return $"""
+                {PublicRecordPageRows.Link(link, StatementId, vote.RecordId, "vote", "StatementAboutVote", null)}
+                {PublicRecordPageRows.RelationshipRevision(link, 1, StatementId, vote.RecordId, "vote", "StatementAboutVote", Reason)}
+                UPDATE relationship_revisions SET statement_quote_extraction_id = '{ExtractionId}', statement_quote_start = {QuoteStart},
+                    statement_quote_length = {Quote.Length}, match_extraction_id = '{ExtractionId}', match_start = {QuoteStart + 1}, match_length = 4,
+                    target_fact_id = 'F2' WHERE record_id = '{link}';
+                """;
+        })));
+
+        var (connection, transaction) = await new RecordSnapshot(views).OpenAsync(CancellationToken.None);
+        await using var _ = connection;
+        await using var __ = transaction;
+        var reader = new StatementLinkedVoteReader();
+        var first = Assert.IsType<StatementLinkedVotePage>(await reader.ReadAsync(transaction, StatementId, new(), CancellationToken.None));
+        Assert.Equal(StatementLinkedVoteRequest.DefaultLimit, first.Votes.Length);
+        Assert.Null(first.PreviousCursor);
+        Assert.NotNull(first.NextCursor);
+        var second = Assert.IsType<StatementLinkedVotePage>(await reader.ReadAsync(transaction, StatementId,
+            new() { Cursor = StatementLinkedVoteCursor.Parse(first.NextCursor) }, CancellationToken.None));
+        Assert.Equal(2, second.Votes.Length);
+        Assert.Null(second.NextCursor);
+        Assert.NotNull(second.PreviousCursor);
+        var previous = Assert.IsType<StatementLinkedVotePage>(await reader.ReadAsync(transaction, StatementId,
+            new() { Cursor = StatementLinkedVoteCursor.Parse(second.PreviousCursor), Backward = true }, CancellationToken.None));
+        Assert.Equal(first.Votes.Select(vote => vote.VoteRecordId), previous.Votes.Select(vote => vote.VoteRecordId));
+        Assert.Equal(votes.Select(vote => vote.RecordId).Append(VoteId), first.Votes.Select(vote => vote.VoteRecordId).Concat(second.Votes.Select(vote => vote.VoteRecordId)));
     }
 
     [Fact]

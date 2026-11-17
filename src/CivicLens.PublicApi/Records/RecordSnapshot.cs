@@ -45,6 +45,19 @@ public sealed class RecordSnapshot(NpgsqlDataSource views)
             [.. issueIds.Where(issueNames.ContainsKey).Select(id => new RecordIssueData(id, issueNames[id]))]);
     }
 
+    /// <summary>Reads names that a page may show for a bounded set of optional officials. An ID absent from the active release is left out.</summary>
+    public async Task<Dictionary<string, string>> ReadOptionalOfficialNamesAsync(NpgsqlTransaction transaction, IReadOnlyCollection<string> officialIds,
+        CancellationToken cancellationToken)
+    {
+        if (officialIds.Count == 0) return new(StringComparer.Ordinal);
+        await using var command = new NpgsqlCommand("SELECT o.official_id, o.name FROM public_api.officials o WHERE o.official_id = ANY(@ids)", transaction.Connection, transaction);
+        command.Parameters.AddWithValue("ids", officialIds.Distinct(StringComparer.Ordinal).ToArray());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(cancellationToken)) names[reader.GetString(0)] = reader.GetString(1);
+        return names;
+    }
+
     private static async Task<Dictionary<string, string>> ReadMapAsync(NpgsqlDataReader reader, CancellationToken cancellationToken)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);

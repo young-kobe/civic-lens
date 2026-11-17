@@ -45,7 +45,9 @@ public static class VotePageView
         _ => unavailable
     };
 
-    public static string ZipMemberNoPosition(VoteZipMemberData member) => $"{member.Name} has no recorded position on this vote.";
+    public static string ZipMemberNoPosition(VoteZipMemberData member) => MemberNoPosition(member.Name);
+
+    public static string MemberNoPosition(string name) => $"{name} has no recorded position on this vote.";
 
     /// <summary>Says that the members of the other chamber do not vote on this roll call.</summary>
     public static string OtherChamberNote(PublishedChamber chamber, int count) => (chamber, count) switch

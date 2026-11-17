@@ -104,6 +104,19 @@ public static class ServerPageEndpoints
         {
             var rootPath = baseUrl.Join(string.Empty);
             var kind = PublicationProtocol.IsAnyRecordId(recordId) ? await kinds.FindAsync(recordId, cancellationToken) : null;
+            if (kind == PublishedRecordKind.Statement)
+            {
+                var linkedVoteRequest = StatementLinkedVoteRequest.Parse(context.Request.Query);
+                if (await statements.ReadAsync(recordId, linkedVoteRequest, cancellationToken) is not { } statement)
+                    return await NotFoundAsync(context, responder, baseUrl, cancellationToken);
+                if (linkedVoteRequest.Cursor is { } cursor && cursor.Release != statement.Release)
+                    return FirstPage(baseUrl, PublicationProtocol.RecordPagePath(recordId), context.Request.Query);
+                return await responder.RespondAsync<StatementDetailPage>(context, StatusCodes.Status200OK, statement.Release, new Dictionary<string, object?>
+                {
+                    [nameof(StatementDetailPage.Data)] = statement,
+                    [nameof(StatementDetailPage.RootPath)] = rootPath
+                }, cancellationToken);
+            }
             switch (kind)
             {
                 case PublishedRecordKind.Vote when await votes.ReadRecordPageAsync(recordId, cancellationToken) is { } vote:
@@ -121,12 +134,6 @@ public static class ServerPageEndpoints
                     {
                         [nameof(BillDetailPage.Data)] = bill,
                         [nameof(BillDetailPage.RootPath)] = rootPath
-                    }, cancellationToken);
-                case PublishedRecordKind.Statement when await statements.ReadAsync(recordId, cancellationToken) is { } statement:
-                    return await responder.RespondAsync<StatementDetailPage>(context, StatusCodes.Status200OK, statement.Release, new Dictionary<string, object?>
-                    {
-                        [nameof(StatementDetailPage.Data)] = statement,
-                        [nameof(StatementDetailPage.RootPath)] = rootPath
                     }, cancellationToken);
                 case PublishedRecordKind.ExecutiveAction when await actions.ReadAsync(recordId, cancellationToken) is { } action:
                     return await responder.RespondAsync<ExecutiveActionDetailPage>(context, StatusCodes.Status200OK, action.Release, new Dictionary<string, object?>
