@@ -20,21 +20,18 @@ R-68 serves every public page from `PublicApi`, rendered from restricted `public
 
 The restricted views, typed read APIs, shared Razor library, page cache, Home preview, and private ZIP cards and shared votes are merged. APIs also serve CRS bodies, bill histories, statement and document-change evidence, briefs, withdrawals, official figures, and party agreement. Their exact contracts are in [search](architecture/search.md#api) and [publication](architecture/publication.md#public-api-views). A merged API does not complete its reader page or live rollout.
 
-PublicApi serves every public page at its public path since the cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Cold-read and larger-selection performance checks remain open, including the member bill-count timeout.
+PublicApi serves every public page at its public path since cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Production correction history, tally, line-up, vote-bill, and official record-count checks have passed. The ZIP members fragment needs cold-read and larger-selection measurement. Slow responses are observed, but their cause has not been isolated.
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
-- [ ] Add a kind parameter to `PublicationProtocol.ReportPageLink`, so the report subject line names the kind. Until then it reads "Revision {n}.".
+- [ ] Add the already approved kind parameter to `PublicationProtocol.ReportPageLink` after the page work and label unification. Until then the report subject keeps the approved "Revision {n}." text. Any newly introduced public wording still needs owner approval.
 - [ ] Add the later map layers: party breaks, seats up for election, issue activity, attendance, and boundaries by Congress. Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members.
 - [ ] Finish the other record pages. Remaining: linked votes on the statement page, and the full correction list of a record that is not withdrawn. The correction banner shows only the newest correction.
 - [ ] Add the document changes list once document changes are published.
 
-Data work below is approved and remains part of R-68. Land each dependency before its consuming route.
+Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
 
-- [ ] Confirm the production correction history run. The owner runs `releases corrections backfill` and `releases corrections verify` for the active and retained rollback releases, and checks that `failed` is 0.
-- [ ] Confirm the production tally run. The owner runs the stored-column backfill and `releases tallies verify` on production, and checks that `failed` is 0.
-- [ ] Confirm the production line-up run. The owner runs `releases lineups backfill` and `releases lineups verify` for the active and retained rollback releases. The issue page already reads the stored line-up.
-- [ ] Turn on the executive document summary step. The step, its publication, its label, and the page slot are built and off by default. The owner runs a paid measure of 20 documents before the step goes on.
+- [ ] Finish the executive document summary work. The step, publication, label, and page slot are built and off by default; the paid 20-document measure and resulting owner review remain open. Keep the summary in R-68.
 - [ ] Recover historical bill actions from hash-verified saved captures through the existing bounded recovery flow. Preserve completed immutable snapshots, original as-of dates, and old releases. Source support is merged; historical pilot execution still needs separate approval.
 
 AI text and vocabulary remain required work, not optional follow-ups.
@@ -43,14 +40,14 @@ AI text and vocabulary remain required work, not optional follow-ups.
 - [ ] Measure each changed prompt on fixed records within an explicit budget, check its evidence, and obtain the required sample approval. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
 - [ ] Finish up to five bill key terms, defined only by exact quotations from the definitions section. Code finds the section, checks each quote, stores the terms, serves them in the bill detail API, and reports them in `actions text measure`, all behind `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS`, which is off. Open: the owner reads the measured sample and turns it on. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
 
-Return-visit features are parked and are not part of R-68.
+Return-visit features are parked and are not part of R-68. The approved "Get this data" links remain in R-68 after cutover.
 
 Complete these gates before closing R-68.
 
-- [ ] Reconcile every accepted audit row, including missing components M1 through M10, against the component inventory. The repository holds no audit file with those rows. Complete reader flows 6, 10, and 13 in [public site](architecture/public-site.md#reader-flow-matrix). Give the owner tests Engaging, Informative, Easy to use, and Professional look a check. Verify grade, accessibility, keyboard and mobile use, privacy, and API downloads. Every table has a "Get this data" link.
+- [ ] Close the full public-site audit in [public site](architecture/public-site.md): reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria. The source audit and decisions are available in the local audit evidence; keep the remaining evidence gates open until verified. Check the executive body experience against the accepted design, source flow, approved glossary text, each table's "Get this data" link, grade, accessibility, keyboard and mobile use, privacy, and API downloads. Unit tests alone do not complete owner criteria.
 - [ ] Measure cold reads, traffic, query work, and worker effects on the shared database. Close the open Home cold-read timeout and verify larger ZIP selections. Warm generated-data probes do not establish cold production performance.
-- [ ] Deploy reviewed, green main builds with matching artifacts, a fresh backup, functional checks, worker health, and the final live check. Verify Cloudflare compression and caching with private fragments excluded from shared caches.
-- [ ] Prune the code that lost its last caller at retirement, one batch at a time. Each batch keeps the build green and shows that each deleted member has no production caller. Then squash the EF migrations into one baseline.
+- [ ] Verify correction history, tallies, and line-ups for the latest selected release and retained rollback releases with the runbook verifiers. Then deploy reviewed, green main builds with matching artifacts, a fresh backup, functional checks, worker health, and the final live check. Verify Cloudflare compression and caching with private fragments excluded from shared caches.
+- [ ] Finish the EF migration squash after the merged prune batches (#567, #595, #598, #602). The squash remains open in #604.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
 
 ### Accepted plans
