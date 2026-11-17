@@ -85,11 +85,4 @@ internal static class DetailPageFixture
 
     public static Task<IDocument> RenderAsync<TPage, TData>(TData data) where TPage : IComponent =>
         ListPageRender.RenderAsync<TPage>(data!, "Data");
-
-    public static string VisibleText(IElement element)
-    {
-        var copy = (IElement)element.Clone(true);
-        foreach (var popover in copy.QuerySelectorAll("[popover]")) popover.Remove();
-        return copy.TextContent;
-    }
 }

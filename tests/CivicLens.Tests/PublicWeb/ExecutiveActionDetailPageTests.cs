@@ -1,5 +1,6 @@
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -76,7 +77,7 @@ public sealed class ExecutiveActionDetailPageTests
         };
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(data);
 
-        Assert.Equal("The bill directs agencies to act.", VisibleText(page.QuerySelector(".ai-summary-ai p")!));
+        Assert.Equal("The bill directs agencies to act.", page.QuerySelector(".ai-summary-ai p")!.ShownText());
         Assert.Equal("bill", page.QuerySelector(".ai-summary-ai button.term")!.TextContent);
         Assert.Empty(page.QuerySelectorAll(".executive-quotes button.term"));
         Assert.Equal(source.Text, page.QuerySelector(".executive-quotes blockquote")!.TextContent);

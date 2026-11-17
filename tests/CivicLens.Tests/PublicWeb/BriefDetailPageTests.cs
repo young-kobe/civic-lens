@@ -1,5 +1,6 @@
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -121,7 +122,7 @@ public sealed class BriefDetailPageTests
         };
         var page = await RenderAsync<BriefDetailPage, BriefPageData>(data);
 
-        Assert.Equal("A bill affects the releases.[R1]", VisibleText(page.QuerySelector(".record-body")!));
+        Assert.Equal("A bill affects the releases.[R1]", page.QuerySelector(".record-body")!.ShownText());
         Assert.Equal(["bill", "releases"], page.QuerySelectorAll("button.term").Select(button => button.TextContent));
         Assert.Equal(["term-bill", "term-release"], page.QuerySelectorAll(".ai-summary [popover]").Select(popover => popover.Id));
         Assert.Equal(page.QuerySelectorAll("button.term").Length, page.QuerySelectorAll(".ai-summary [popover]").Length);

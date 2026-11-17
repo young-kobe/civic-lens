@@ -1,5 +1,6 @@
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -26,7 +27,7 @@ public sealed class RelationshipDetailPageTests
         var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(data);
 
         var main = page.QuerySelector(".detail-main")!;
-        Assert.Equal(data.Reason, VisibleText(main.QuerySelector(".ai-summary p")!));
+        Assert.Equal(data.Reason, main.QuerySelector(".ai-summary p")!.ShownText());
         Assert.Equal([RelationshipPageView.QuoteLabel, "Fact of the bill or resolution"], main.QuerySelectorAll(".detail-quotes .choice-label").Select(label => label.TextContent));
         Assert.Equal([data.Quote, data.Fact], main.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
         Assert.Null(main.QuerySelector(".ai-summary p b"));
@@ -74,7 +75,7 @@ public sealed class RelationshipDetailPageTests
         var data = Relationship() with { Reason = "The bill affects the committee.", Quote = "Cloture <img src=x onerror=alert(1)>" };
         var page = await RenderAsync<RelationshipDetailPage, RelationshipPageData>(data);
 
-        Assert.Equal(data.Reason, VisibleText(page.QuerySelector(".ai-summary p")!));
+        Assert.Equal(data.Reason, page.QuerySelector(".ai-summary p")!.ShownText());
         Assert.Equal("bill", page.QuerySelector(".ai-summary p button.term")!.TextContent);
         Assert.Empty(page.QuerySelectorAll(".detail-quotes button.term"));
         Assert.Equal(data.Quote, page.QuerySelector(".detail-quotes blockquote")!.TextContent);
