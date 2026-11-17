@@ -159,6 +159,23 @@ public sealed class OfficialsPageTests
     }
 
     [Theory]
+    [InlineData("chamber", "moon", "ma", "Republican")]
+    [InlineData("name", "senate", "<script>bad & choice</script>", "unlisted")]
+    public async Task ARefusedFieldDoesNotEraseOtherSelectedValues(string refusedField, string chamber, string state, string party)
+    {
+        var page = await RenderAsync(Page([], RecordListFilter.Refused(refusedField,
+            ("chamber", chamber), ("state", state), ("party", party))));
+
+        foreach (var (field, value) in new[] { ("chamber", chamber), ("state", state), ("party", party) })
+        {
+            var select = page.QuerySelector($"select[name={field}]")!;
+            Assert.Equal(value, select.QuerySelector("option[selected]")?.GetAttribute("value"));
+            Assert.Equal(field == refusedField ? "true" : null, select.GetAttribute("aria-invalid"));
+            Assert.Null(select.QuerySelector("script"));
+        }
+    }
+
+    [Theory]
     [InlineData("chamber")]
     [InlineData("state")]
     [InlineData("party")]
