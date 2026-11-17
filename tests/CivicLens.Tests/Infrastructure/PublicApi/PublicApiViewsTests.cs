@@ -1036,6 +1036,8 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO release_officials (release_number, official_id, name) VALUES (1, 'mayor', 'Old Name'), (2, 'mayor', 'New Name');
             INSERT INTO release_official_terms (release_number, official_id, "position", office, kind, start_on) VALUES
               (1, 'mayor', 0, 'Mayor', 'Executive', '2020-01-01'), (2, 'mayor', 0, 'Mayor', 'Executive', '2020-01-01');
+            INSERT INTO release_official_terms (release_number, official_id, "position", office, kind, start_on, senate_class) VALUES
+              (1, 'mayor', 1, 'Senator', 'Senator', '2025-01-03', NULL), (2, 'mayor', 1, 'Senator', 'Senator', '2025-01-03', 3);
             INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'Old'), (2, 'housing', 'Housing costs', 'New');
             INSERT INTO release_issue_includes (release_number, issue_id, "position", text) VALUES (1, 'housing', 0, 'Old include'), (2, 'housing', 0, 'New include');
             INSERT INTO release_issue_excludes (release_number, issue_id, "position", text) VALUES (1, 'housing', 0, 'Old exclude'), (2, 'housing', 0, 'New exclude');
@@ -1049,7 +1051,10 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             """);
 
         Assert.Equal(["2 New Name"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_officials"));
-        Assert.Equal(["2 Mayor"], await PublicAsync("SELECT release_number || ' ' || office FROM public_api.release_official_terms"));
+        const string termsSql = """SELECT release_number || ' ' || office || ' ' || coalesce(senate_class::text, 'unknown') FROM public_api.release_official_terms ORDER BY "position" """;
+        Assert.Equal(["2 Mayor unknown", "2 Senator 3"], await PublicAsync(termsSql));
+        await using (var connection = await OpenPublicAsync())
+            await AssertDeniedAsync(connection, "SELECT senate_class FROM public.release_official_terms");
         Assert.Equal(["2 Housing costs New"], await PublicAsync("SELECT release_number || ' ' || name || ' ' || definition FROM public_api.release_issues"));
         Assert.Equal(["New include"], await PublicAsync("SELECT text FROM public_api.release_issue_includes"));
         Assert.Equal(["New exclude"], await PublicAsync("SELECT text FROM public_api.release_issue_excludes"));
@@ -1061,6 +1066,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
         await ExecuteAsync("UPDATE publication_releases SET is_active = false; UPDATE publication_releases SET is_active = true WHERE release_number = 1");
         Assert.Equal(["1 Old Name"], await PublicAsync("SELECT release_number || ' ' || name FROM public_api.release_officials"));
+        Assert.Equal(["1 Mayor unknown", "1 Senator unknown"], await PublicAsync(termsSql));
         Assert.Equal(["1 housing 1 Old party 2"], await PublicAsync("SELECT release_number || ' ' || issue_id || ' ' || unknown_bills || ' ' || party || ' ' || bills FROM public_api.release_issue_party_lineups"));
         Assert.Equal(["1 119 5"], await PublicAsync("SELECT release_number || ' ' || congress || ' ' || bills FROM public_api.release_bill_counts"));
         Assert.Equal(["1 119 mayor 4 1"], await PublicAsync("SELECT release_number || ' ' || congress || ' ' || official_id || ' ' || sponsored || ' ' || cosponsored FROM public_api.release_official_bill_counts"));

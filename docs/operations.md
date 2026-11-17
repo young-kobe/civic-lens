@@ -278,6 +278,8 @@ dotnet run --no-build --configuration Release --project src/CivicLens.Host -- db
 
 For other application composition, build `PostgresCollectionAttemptStore` with `FromConnectionString`, or supply an `IDbContextFactory<CollectionAttemptDbContext>`. Call `MigrateAsync` explicitly before you import.
 
+Published office terms can contain `senateClass` when the saved roster supplies it. The current code accepts older files without it. Older binaries reject this new field in `officials.json`. Before a binary rollback across this change, use the current binary to activate a retained release whose officials file has no new field, then follow the rollback runbook. The schema migration does not fill older releases from the current roster.
+
 The design-time context factory reads `CIVIC_LENS_DATABASE` when it is set. Otherwise it uses a local design database name for offline migration generation. The first migration, `InitialSchema`, holds the generated tables. Its partial file `InitialSchema.HandWritten.cs` holds the hand SQL in dependency order. That is the notify functions and triggers, the hand constraints and indexes, five stale column defaults, the `public_api` schema with its owner role, and every public view. Add later schema changes as new migrations.
 
 The EF tool version is pinned in `.config/dotnet-tools.json`. Restore it once, then add a migration for `src/CivicLens.Infrastructure`, with output under `Collection/Migrations`:

@@ -12,6 +12,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
 {
     private const string Newest = "20261116171634_ReleaseOfficialRecordCounts";
     private const string Current = "20261117143000_StatementLinkedVoteCast";
+    private static readonly string[] CurrentIds = [MigrationHistorySquash.BaselineId, Current, "20261117225018_PublishedSenateClass"];
     private string? connectionString;
 
     public async Task InitializeAsync() => connectionString = await postgres.CreateMigratedDatabaseAsync();
@@ -30,7 +31,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         await Store().MigrateAsync();
 
         Assert.Equal(Newest, MigrationHistorySquash.PreSquashIds[^1]);
-        Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync());
+        Assert.Equal(CurrentIds, await ReadHistoryAsync());
         Assert.Equal(["1"], await QueryAsync("SELECT release_number::text FROM public_api.active_release"));
     }
 
@@ -56,7 +57,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         {
             await PostgresCollectionAttemptStore.FromConnectionString(empty).MigrateAsync();
 
-            Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync(empty));
+            Assert.Equal(CurrentIds, await ReadHistoryAsync(empty));
             Assert.Equal(["76"], await QueryAsync("SELECT count(*)::text FROM pg_views WHERE schemaname = 'public_api'", empty));
         }
         finally
@@ -74,7 +75,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         {
             await PostgresCollectionAttemptStore.FromConnectionString(missing).MigrateAsync();
 
-            Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync(missing));
+            Assert.Equal(CurrentIds, await ReadHistoryAsync(missing));
         }
         finally
         {
@@ -95,7 +96,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
 
             await PostgresCollectionAttemptStore.FromConnectionString(empty).MigrateAsync();
 
-            Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync(empty));
+            Assert.Equal(CurrentIds, await ReadHistoryAsync(empty));
         }
         finally
         {
@@ -171,6 +172,56 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
     }
 
+    [Fact]
+    public async Task TheSenateClassMigrationKeepsTheThreeTermViewsIsolatedOnUpgradeAndRollback()
+    {
+        await ExecuteAsync("""
+            INSERT INTO publication_releases (release_number, directory_name, actor_subject, published_at_utc_ticks, record_count, is_active)
+            VALUES (1, '000001-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'owner', 0, 0, true);
+            INSERT INTO release_officials (release_number, official_id, name) VALUES (1, 'member', 'Member');
+            INSERT INTO release_official_terms (release_number, official_id, "position", office, kind, start_on, senate_class)
+            VALUES (1, 'member', 0, 'sen', 'Senator', '2025-01-03', 2);
+            """);
+        await AssertTermViewsAsync();
+        Assert.Equal(["2"], await QueryAsync("SET ROLE civic_lens_public; SELECT senate_class::text FROM public_api.release_official_terms"));
+
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
+            .UseNpgsql(connectionString).Options);
+        await db.GetService<IMigrator>().MigrateAsync(Current);
+
+        await AssertTermViewsAsync();
+        Assert.Equal(["member|sen"], await QueryAsync("SET ROLE civic_lens_public; SELECT official_id || '|' || office FROM public_api.release_official_terms"));
+        Assert.Equal(["0"], await QueryAsync("""
+            SELECT count(*)::text FROM information_schema.columns
+             WHERE table_schema IN ('public', 'public_api') AND table_name = 'release_official_terms' AND column_name = 'senate_class'
+            """));
+
+        await Store().MigrateAsync();
+
+        await AssertTermViewsAsync();
+        Assert.Equal(["unknown"], await QueryAsync("SET ROLE civic_lens_public; SELECT coalesce(senate_class::text, 'unknown') FROM public_api.release_official_terms"));
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+        Assert.False(db.Database.HasPendingModelChanges());
+    }
+
+    private async Task AssertTermViewsAsync()
+    {
+        Assert.Equal(["bill_sponsorship_parties|civic_lens_public_owner|true", "release_official_terms|civic_lens_public_owner|true", "statement_speaker_terms|civic_lens_public_owner|true"], await QueryAsync("""
+            SELECT relname || '|' || pg_get_userbyid(relowner) || '|' || coalesce(reloptions @> ARRAY['security_barrier=true'], false)::text
+              FROM pg_class WHERE relnamespace = 'public_api'::regnamespace
+               AND relname IN ('bill_sponsorship_parties', 'release_official_terms', 'statement_speaker_terms') ORDER BY relname
+            """));
+        await ExecuteAsync("""
+            SET ROLE civic_lens_public;
+            SELECT * FROM public_api.release_official_terms LIMIT 0;
+            SELECT * FROM public_api.bill_sponsorship_parties LIMIT 0;
+            SELECT * FROM public_api.statement_speaker_terms LIMIT 0;
+            """);
+        var denied = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(
+            "SET ROLE civic_lens_public; SELECT * FROM public.release_official_terms LIMIT 0"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
+    }
+
     private async Task AssertRelationshipViewOwnershipAsync() => Assert.Equal(["civic_lens_public_owner|true"], await QueryAsync("""
         SELECT pg_get_userbyid(relowner) || '|' || coalesce(reloptions @> ARRAY['security_barrier=true'], false)::text
           FROM pg_class WHERE oid = 'public_api.relationships'::regclass
@@ -184,9 +235,14 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
 
     private PostgresCollectionAttemptStore Store() => PostgresCollectionAttemptStore.FromConnectionString(connectionString!);
 
-    // The migrated database holds the baseline schema. Its history is replaced, so it looks like production at the newest pre-squash migration.
-    private Task WriteHistoryAsync(IEnumerable<string> ids) => ExecuteAsync(
-        $"""DELETE FROM "__EFMigrationsHistory"; INSERT INTO "__EFMigrationsHistory" SELECT id, '10.0.14' FROM unnest(ARRAY[{string.Join(", ", ids.Select(id => $"'{id}'"))}]::text[]) AS id;""");
+    private async Task WriteHistoryAsync(IEnumerable<string> ids)
+    {
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
+            .UseNpgsql(connectionString).Options);
+        await db.GetService<IMigrator>().MigrateAsync(MigrationHistorySquash.BaselineId);
+        await ExecuteAsync(
+            $"""DELETE FROM "__EFMigrationsHistory"; INSERT INTO "__EFMigrationsHistory" SELECT id, '10.0.14' FROM unnest(ARRAY[{string.Join(", ", ids.Select(id => $"'{id}'"))}]::text[]) AS id;""");
+    }
 
     private Task<string[]> ReadHistoryAsync(string? database = null) =>
         QueryAsync("""SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY 1""", database);

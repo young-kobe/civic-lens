@@ -217,6 +217,7 @@ release_official_terms party
 release_official_terms caucus
 release_official_terms start_on
 release_official_terms end_on
+release_official_terms senate_class
 release_issues release_number
 release_issues substantive_votes
 release_issues issue_id

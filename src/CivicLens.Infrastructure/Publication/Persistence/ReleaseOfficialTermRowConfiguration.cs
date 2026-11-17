@@ -15,6 +15,7 @@ internal sealed class ReleaseOfficialTermRowConfiguration : IEntityTypeConfigura
             table.HasCheckConstraint("ck_release_official_terms_district", "district IS NULL OR district >= 0");
             table.HasCheckConstraint("ck_release_official_terms_dates", "end_on IS NULL OR end_on >= start_on");
             table.HasCheckConstraint("ck_release_official_terms_kind", EnumChecks.InList("kind", Enum.GetNames<PublishedOfficeKind>()));
+            table.HasCheckConstraint("ck_release_official_terms_senate_class", "senate_class IS NULL OR (kind = 'Senator' AND senate_class BETWEEN 1 AND 3)");
         });
         builder.HasKey(row => new { row.ReleaseNumber, row.OfficialId, row.Position });
         builder.Property(row => row.ReleaseNumber).HasColumnName("release_number");
@@ -28,6 +29,7 @@ internal sealed class ReleaseOfficialTermRowConfiguration : IEntityTypeConfigura
         builder.Property(row => row.Caucus).HasColumnName("caucus").HasMaxLength(PublishedRecordEntry.MaximumFilterValueLength);
         builder.Property(row => row.StartOn).HasColumnName("start_on");
         builder.Property(row => row.EndOn).HasColumnName("end_on");
+        builder.Property(row => row.SenateClass).HasColumnName("senate_class");
         builder.HasOne<ReleaseOfficialRow>().WithMany().HasForeignKey(row => new { row.ReleaseNumber, row.OfficialId }).OnDelete(DeleteBehavior.Restrict);
     }
 }

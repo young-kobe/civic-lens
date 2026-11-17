@@ -6492,6 +6492,10 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("party");
 
+                    b.Property<int?>("SenateClass")
+                        .HasColumnType("integer")
+                        .HasColumnName("senate_class");
+
                     b.Property<DateOnly>("StartOn")
                         .HasColumnType("date")
                         .HasColumnName("start_on");
@@ -6514,6 +6518,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_release_official_terms_office", "length(btrim(office)) > 0");
 
                             t.HasCheckConstraint("ck_release_official_terms_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_release_official_terms_senate_class", "senate_class IS NULL OR (kind = 'Senator' AND senate_class BETWEEN 1 AND 3)");
                         });
                 });
 
