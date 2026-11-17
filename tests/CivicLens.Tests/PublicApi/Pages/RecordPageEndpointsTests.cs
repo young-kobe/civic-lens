@@ -66,6 +66,85 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         Assert.NotNull(page.QuerySelector(".ai-label"));
     }
 
+    [Theory]
+    [InlineData("?cursor=invalid")]
+    [InlineData("?cursor=sv.1.20260230.")]
+    [InlineData("?cursor=sv.1.20260303.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&before=sv.1.20260303.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public async Task InvalidLinkedVoteCursorsReturnBadRequest(string query)
+    {
+        await using var host = await StartAsync();
+        var id = await SeedPageAsync(host, PublishedRecordKind.Statement);
+
+        using var response = await host.Client.GetAsync(Path(id) + query);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ALinkedVoteCursorFromAnotherReleaseRedirectsToTheFirstPageAndKeepsUnrelatedQueryValues()
+    {
+        await using var host = await StartAsync();
+        var id = await SeedPageAsync(host, PublishedRecordKind.Statement);
+        await CorrectionHistorySeed.BindEmptyAsync(host.OperationalDatabase);
+        var cursor = "sv.2.20260303." + new string('f', 64);
+
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = host.Client.BaseAddress };
+        using var response = await client.GetAsync(Path(id) + "?q=kept&cursor=" + cursor);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(id)) + "?q=kept", response.Headers.Location!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task ALinkedVoteKeepsItsCitedSpeakerNameAfterTheCurrentStatementSpeakerIsCorrected()
+    {
+        await using var host = await StartAsync();
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        var statement = new SeededStatement('d', "2026-03-02", ["former-speaker"], [], "Person", "Person", AddUnpublishedRevision: true);
+        await StatementsSeed.AddAsync(host.OperationalDatabase, statement);
+        await StatementEndpointsTests.AddDetailEvidenceAsync(host.OperationalDatabase, statement.RecordId, ExtractionId, Source,
+            Source.IndexOf("exact quote", StringComparison.Ordinal), "exact quote".Length, Source.IndexOf("Friday", StringComparison.Ordinal), 6);
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
+            new SeededOfficial("former-speaker", "Former Speaker"), new SeededOfficial("current-speaker", "Current Speaker"));
+        var vote = new SeededVote('f', "2026-03-03") { PersonIds = ["former-speaker"], Casts = ["Nay"] };
+        await ViewsSeed.AddVotesAsync(host.OperationalDatabase, vote);
+        var linkId = new string('9', 64);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE publication_record_states SET revision_number = 2 WHERE kind = 'statement' AND record_id = '{statement.RecordId}';
+            UPDATE statement_revisions newer
+               SET headline = 'Corrected headline',
+                   statement_date_evidence_extraction_id = older.statement_date_evidence_extraction_id,
+                   statement_date_evidence_start = older.statement_date_evidence_start,
+                   statement_date_evidence_length = older.statement_date_evidence_length
+              FROM statement_revisions older
+             WHERE newer.candidate_id = '{statement.RecordId}' AND newer.revision_number = 2
+               AND older.candidate_id = newer.candidate_id AND older.revision_number = 1;
+            INSERT INTO statement_revision_quotations (candidate_id, revision_number, position, quotation_extraction_id, quotation_start, quotation_length, kind)
+              SELECT candidate_id, 2, position, quotation_extraction_id, quotation_start, quotation_length, kind
+                FROM statement_revision_quotations WHERE candidate_id = '{statement.RecordId}' AND revision_number = 1;
+            INSERT INTO statement_revision_speakers (candidate_id, revision_number, official_id, "position")
+              VALUES ('{statement.RecordId}', 2, 'current-speaker', 0);
+            INSERT INTO published_entries (kind, record_id, revision_number, headline, statement_candidate_id, statement_revision_number, approved_by)
+              VALUES ('statement', '{statement.RecordId}', 2, 'Corrected headline', '{statement.RecordId}', 2, 'Person');
+            {PublicRecordPageRows.Link(linkId, statement.RecordId, vote.RecordId, "vote", "StatementAboutVote", "2026-03-02")}
+            {PublicRecordPageRows.RelationshipRevision(linkId, 1, statement.RecordId, vote.RecordId, "vote", "StatementAboutVote", "The earlier statement cited this vote.")}
+            UPDATE relationship_revisions SET official_id = 'former-speaker', statement_quote_extraction_id = '{ExtractionId}',
+              match_extraction_id = '{ExtractionId}', match_start = {Source.IndexOf("exact quote", StringComparison.Ordinal)}, match_length = {"exact quote".Length},
+              statement_quote_start = {Source.IndexOf("exact quote", StringComparison.Ordinal)}, statement_quote_length = {"exact quote".Length},
+              target_fact_id = 'F2'
+              WHERE record_id = '{linkId}';
+            """);
+
+        var page = await GetPageAsync(host, Path(statement.RecordId));
+
+        var linkedVote = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!.QuerySelector("li")!;
+        Assert.Equal("Corrected headline", page.QuerySelector("h1")!.TextContent);
+        Assert.Equal(["Current Speaker"], page.QuerySelectorAll("[aria-labelledby=statement-speakers-title] a").Select(link => link.TextContent));
+        Assert.Contains("Former Speaker", linkedVote.TextContent);
+        Assert.Contains("No (Nay)", linkedVote.TextContent);
+    }
+
     [Fact]
     public async Task EachSpeakerShowsTheSeatAndThePartyOfTheTermOnTheStatementDateAndTheFoldShowsTheStoredTimes()
     {

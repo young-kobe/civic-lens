@@ -1,5 +1,8 @@
 using CivicLens.Infrastructure.Collection;
 using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CivicLens.Tests.Infrastructure.Collection;
 
@@ -8,6 +11,7 @@ namespace CivicLens.Tests.Infrastructure.Collection;
 public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : IAsyncLifetime
 {
     private const string Newest = "20261116171634_ReleaseOfficialRecordCounts";
+    private const string Current = "20261117143000_StatementLinkedVoteCast";
     private string? connectionString;
 
     public async Task InitializeAsync() => connectionString = await postgres.CreateMigratedDatabaseAsync();
@@ -26,7 +30,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         await Store().MigrateAsync();
 
         Assert.Equal(Newest, MigrationHistorySquash.PreSquashIds[^1]);
-        Assert.Equal([MigrationHistorySquash.BaselineId], await ReadHistoryAsync());
+        Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync());
         Assert.Equal(["1"], await QueryAsync("SELECT release_number::text FROM public_api.active_release"));
     }
 
@@ -52,7 +56,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         {
             await PostgresCollectionAttemptStore.FromConnectionString(empty).MigrateAsync();
 
-            Assert.Equal([MigrationHistorySquash.BaselineId], await ReadHistoryAsync(empty));
+            Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync(empty));
             Assert.Equal(["76"], await QueryAsync("SELECT count(*)::text FROM pg_views WHERE schemaname = 'public_api'", empty));
         }
         finally
@@ -70,7 +74,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         {
             await PostgresCollectionAttemptStore.FromConnectionString(missing).MigrateAsync();
 
-            Assert.Equal([MigrationHistorySquash.BaselineId], await ReadHistoryAsync(missing));
+            Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync(missing));
         }
         finally
         {
@@ -91,7 +95,7 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
 
             await PostgresCollectionAttemptStore.FromConnectionString(empty).MigrateAsync();
 
-            Assert.Equal([MigrationHistorySquash.BaselineId], await ReadHistoryAsync(empty));
+            Assert.Equal([MigrationHistorySquash.BaselineId, Current], await ReadHistoryAsync(empty));
         }
         finally
         {
@@ -138,8 +142,41 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         await Store().MigrateAsync();
 
         Assert.Equal(moved, await QueryAsync("""SELECT "MigrationId" || '|' || "ProductVersion" FROM "__EFMigrationsHistory" ORDER BY 1"""));
-        Assert.Equal($"{MigrationHistorySquash.BaselineId}|", moved.Single()[..(MigrationHistorySquash.BaselineId.Length + 1)]);
     }
+
+    [Fact]
+    public async Task TheLinkedVoteViewMigrationCanRollBackAndUpgradeWithoutChangingTheModelOrPublicIsolation()
+    {
+        await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>()
+            .UseNpgsql(connectionString).Options);
+        Assert.Contains(Current, db.Database.GetMigrations());
+        Assert.False(db.Database.HasPendingModelChanges());
+
+        await db.GetService<IMigrator>().MigrateAsync(MigrationHistorySquash.BaselineId);
+
+        Assert.Empty(await LinkedVoteColumnsAsync());
+        Assert.Equal(["civic_lens_public_owner|true"], await QueryAsync("""
+            SELECT pg_get_userbyid(relowner) || '|' || (reloptions @> ARRAY['security_barrier=true'])::text
+              FROM pg_class WHERE oid = 'public_api.relationships'::regclass
+            """));
+        await ExecuteAsync("SET ROLE civic_lens_public; SELECT record_id FROM public_api.relationships LIMIT 0");
+
+        await Store().MigrateAsync();
+
+        Assert.Equal(["cited_vote_cast", "cited_vote_date", "linked_official_id"], await LinkedVoteColumnsAsync());
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+        Assert.False(db.Database.HasPendingModelChanges());
+        await ExecuteAsync("SET ROLE civic_lens_public; SELECT linked_official_id, cited_vote_cast, cited_vote_date FROM public_api.relationships LIMIT 0");
+        var denied = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(
+            "SET ROLE civic_lens_public; SELECT official_id FROM public.relationship_revisions LIMIT 0"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
+    }
+
+    private Task<string[]> LinkedVoteColumnsAsync() => QueryAsync("""
+        SELECT column_name FROM information_schema.columns
+         WHERE table_schema = 'public_api' AND table_name = 'relationships'
+           AND column_name IN ('linked_official_id', 'cited_vote_cast', 'cited_vote_date') ORDER BY column_name
+        """);
 
     private PostgresCollectionAttemptStore Store() => PostgresCollectionAttemptStore.FromConnectionString(connectionString!);
 
