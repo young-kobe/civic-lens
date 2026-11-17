@@ -53,7 +53,7 @@ public static class ServerPageEndpoints
         pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Action)), ListPageEndpoints.BillsAsync);
         pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.Statement)), ListPageEndpoints.StatementsAsync);
         pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.ExecutiveAction)), ListPageEndpoints.ExecutiveActionsAsync);
-        pages.MapGet(Route(PublicationProtocol.OfficialsPagePath), OfficialsPageEndpoint.RespondAsync);
+        pages.MapGet(Route(PublicationProtocol.OfficialsPagePath), ListPageEndpoints.OfficialsAsync);
         pages.MapGet(Route(PublicationProtocol.BoardsPagePath), BoardsPageEndpoint.RespondAsync);
         foreach (var board in OfficialBoard.All)
             pages.MapGet(Route(board.PagePath), (HttpContext context, BoardsPageReader reader, ServerPageResponder responder,

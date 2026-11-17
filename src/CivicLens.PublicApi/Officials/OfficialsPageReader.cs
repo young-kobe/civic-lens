@@ -22,9 +22,21 @@ public sealed class OfficialsPageReader(OfficialStore officials)
         if (await officials.ListAsync(request with { Limit = PageSize }, cancellationToken) is not { } page) return null;
         var rows = page.Officials.Select(row => new OfficialListRowData(row.OfficialId, row.Name, row.Kind, row.Office, row.State,
             row.District, row.Party, row.TermEndsOn, row.RecordCount)).ToArray();
-        var filter = new OfficialsFilterData(Chamber(request.Kind), request.State, request.Party, request.NamePrefix);
+        var filter = RecordListFilter.Of(null, null, ("chamber", Chamber(request.Kind)), ("state", request.State), ("party", request.Party), ("name", request.NamePrefix));
         return new(page.Release, page.OfficialsInRelease, rows, filter, page.NextCursor) { PreviousCursor = page.PreviousCursor };
     }
+
+    /// <summary>The refused form keeps the release total and typed fields, with no result rows or cursors.</summary>
+    public async Task<OfficialsPageData?> ReadRefusedAsync(IQueryCollection query, string? invalid, CancellationToken cancellationToken) =>
+        await ReadAsync(new OfficialRequest(), cancellationToken) is { } data
+            ? data with
+            {
+                Officials = [],
+                NextCursor = null,
+                PreviousCursor = null,
+                Filter = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "chamber", "state", "party", "name"))
+            }
+            : null;
 
     private static string? Chamber(PublishedOfficeKind? kind) => kind switch
     {
