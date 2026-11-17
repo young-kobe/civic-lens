@@ -159,6 +159,11 @@ public sealed class ZipDistrictEndpointsTests(PostgresCollection postgres)
         var answer = await GetAsync(host, "/v1/zip-districts/36009");
         var house = answer.GetProperty("districts");
         var first = house[0].GetProperty("representative");
+        var attendance = first.GetProperty("missedVotes").EnumerateArray().ToArray();
+        Assert.Equal(["house", "senate"], attendance.Select(figure => figure.GetProperty("chamber").GetString()));
+        Assert.All(attendance, figure => Assert.Equal(120, figure.GetProperty("congress").GetInt32()));
+        Assert.Equal(2, attendance[0].GetProperty("held").GetInt32());
+        Assert.Equal(1, attendance[1].GetProperty("held").GetInt32());
         var firstLines = first.GetProperty("partyLines").EnumerateArray().ToArray();
         Assert.Equal(["house Democrat", "house Republican", "senate Democrat"], firstLines.Select(line => $"{line.GetProperty("chamber").GetString()} {line.GetProperty("party").GetString()}"));
         Assert.All(firstLines, line => Assert.Equal(120, line.GetProperty("congress").GetInt32()));

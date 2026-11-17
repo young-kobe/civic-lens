@@ -49,21 +49,19 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         """;
 
     private const string HolderFiguresSql = $"""
-        SELECT p.official_id, p.photo_path, a.chamber, a.congress, a.held, a.missed, a.first_voted_on, a.last_voted_on
+        WITH figures AS MATERIALIZED (
+            SELECT official_id, chamber, congress, party, held, missed, first_voted_on, last_voted_on,
+                   with_party, against_party, cast_count, first_cast_on, last_cast_on,
+                   {OfficialAttendanceReader.LatestCongressRankSql} AS newest
+              FROM public_api.official_vote_parties p
+             WHERE official_id = ANY(@attendanceIds)
+        )
+        SELECT p.official_id, p.photo_path, a.chamber, a.congress, a.held, a.missed, a.first_voted_on, a.last_voted_on,
+               a.chamber, a.congress, a.party, a.with_party, a.against_party, a.cast_count, a.first_cast_on, a.last_cast_on
           FROM public_api.officials p
-          LEFT JOIN ({OfficialAttendanceReader.LatestSql}) a ON a.official_id = p.official_id
+          LEFT JOIN figures a ON a.official_id = p.official_id AND a.newest = 1
          WHERE p.official_id = ANY(@attendanceIds)
-         ORDER BY p.official_id, a.chamber
-        """;
-
-    private const string HolderPartyLinesSql = """
-        SELECT lines.official_id, lines.chamber, lines.congress, lines.party, lines.with_party, lines.against_party,
-               lines.cast_count, lines.first_voted_on, lines.last_voted_on
-          FROM unnest(@officialIds, @congresses) AS latest(official_id, congress)
-          JOIN public_api.official_party_lines lines
-            ON lines.official_id = latest.official_id AND lines.congress = latest.congress
-         WHERE lines.official_id = ANY(@officialIds)
-         ORDER BY lines.official_id, lines.chamber, lines.party
+         ORDER BY p.official_id, a.chamber, a.party
         """;
 
     private const string NewVoteCountSql = """
@@ -116,17 +114,16 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
             return shape == LookupShape.Issue ? await WithSharedVotesAsync(connection, transaction, bare, shape, holderIds, issue, cancellationToken) : bare;
         }
         var figures = await ReadHolderFiguresAsync(connection, transaction, holderIds, cancellationToken);
-        var partyLines = await ReadHolderPartyLinesAsync(connection, transaction, holderIds, figures, cancellationToken);
         var activitySelections = figures.Select(pair => (OfficialId: pair.Key,
                 Congress: OfficialActivityReader.CongressForActivity(PublishedOfficeKind.Representative, pair.Value.AttendanceCongress, districts.PublishedAtUtcTicks)))
             .Where(selection => selection.Congress is not null)
             .Select(selection => (selection.OfficialId, selection.Congress!.Value)).ToArray();
         var activityCongressByOfficial = activitySelections.ToDictionary(selection => selection.OfficialId, selection => selection.Value, StringComparer.Ordinal);
         var activity = await OfficialActivityReader.ReadAsync(connection, transaction, activitySelections, cancellationToken);
-        var districtAnswers = districts.Rows.Select(row => new ZipDistrict(row.State, row.District, Enrich(row.Representative, figures, partyLines, activityCongressByOfficial, activity))).ToArray();
+        var districtAnswers = districts.Rows.Select(row => new ZipDistrict(row.State, row.District, Enrich(row.Representative, figures, activityCongressByOfficial, activity))).ToArray();
         var answer = new ZipDistrictAnswer(release, districts.Congress, request.Zcta,
             districtAnswers,
-            [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures, partyLines, activityCongressByOfficial, activity))] })]);
+            [.. stateAnswers.Select(state => state with { Senators = [.. state.Senators.Select(holder => Enrich(holder, figures, activityCongressByOfficial, activity))] })]);
         var lookup = ZipLookup.Of(answer);
         lookup = lookup with { NewVoteCount = newVoteCount };
         if (shape == LookupShape.Figures) return lookup;
@@ -219,7 +216,6 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         reader.IsDBNull(first) ? null : new(reader.GetString(first), reader.GetString(first + 1), ViewColumns.Text(reader, first + 2), ViewColumns.Date(reader, first + 3), null, [], []);
 
     private static SeatHolder? Enrich(SeatHolder? holder, Dictionary<string, HolderFigures> figures,
-        Dictionary<string, List<PartyLineFigure>> partyLines,
         Dictionary<string, int> activityCongressByOfficial,
         Dictionary<(string OfficialId, int Congress), OfficialActivityFigures> activity)
     {
@@ -232,7 +228,7 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         {
             PhotoPath = holderFigures.PhotoPath,
             MissedVotes = [.. holderFigures.MissedVotes],
-            PartyLines = [.. partyLines.GetValueOrDefault(holder.OfficialId) ?? []],
+            PartyLines = [.. holderFigures.PartyLines],
             Bills = holderActivity?.Bills,
             Issues = holderActivity?.Issues
         };
@@ -251,29 +247,12 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
             var id = reader.GetString(0);
             if (!figures.TryGetValue(id, out var holder))
                 figures[id] = holder = new(ViewColumns.Text(reader, 1), reader.IsDBNull(3) ? null : reader.GetInt32(3));
-            if (!reader.IsDBNull(2)) holder.MissedVotes.Add(OfficialAttendanceReader.ReadFigure(reader, 2));
+            if (reader.IsDBNull(2)) continue;
+            var attendance = OfficialAttendanceReader.ReadFigure(reader, 2);
+            if (holder.MissedVotes.All(figure => figure.Chamber != attendance.Chamber)) holder.MissedVotes.Add(attendance);
+            if (ViewColumns.Number(reader, 13) > 0) holder.PartyLines.Add(OfficialPartyLineReader.ReadFigure(reader, 8));
         }
         return figures;
-    }
-
-    private static async Task<Dictionary<string, List<PartyLineFigure>>> ReadHolderPartyLinesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string[] officialIds,
-        Dictionary<string, HolderFigures> holderFigures, CancellationToken cancellationToken)
-    {
-        var partyLines = new Dictionary<string, List<PartyLineFigure>>(StringComparer.Ordinal);
-        var withAttendance = officialIds.Where(id => holderFigures.GetValueOrDefault(id)?.AttendanceCongress is not null).ToArray();
-        if (withAttendance.Length == 0) return partyLines;
-        await using var command = new NpgsqlCommand(HolderPartyLinesSql, connection);
-        command.Transaction = transaction;
-        command.Parameters.AddWithValue("officialIds", withAttendance);
-        command.Parameters.AddWithValue("congresses", withAttendance.Select(id => holderFigures[id].AttendanceCongress!.Value).ToArray());
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var id = reader.GetString(0);
-            if (!partyLines.TryGetValue(id, out var rows)) partyLines[id] = rows = [];
-            rows.Add(OfficialPartyLineReader.ReadFigure(reader, 1));
-        }
-        return partyLines;
     }
 
     private sealed record DistrictRow(string State, int District, SeatHolder? Representative);
@@ -287,5 +266,6 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
         public string? PhotoPath { get; } = photoPath;
         public int? AttendanceCongress { get; } = attendanceCongress;
         public List<MissedVotesFigure> MissedVotes { get; } = [];
+        public List<PartyLineFigure> PartyLines { get; } = [];
     }
 }

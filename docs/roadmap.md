@@ -20,7 +20,7 @@ R-68 serves every public page from `PublicApi`, rendered from restricted `public
 
 The restricted views, typed read APIs, shared Razor library, page cache, Home preview, and private ZIP cards and shared votes are merged. APIs also serve CRS bodies, bill histories, statement and document-change evidence, briefs, withdrawals, official figures, and party agreement. Their exact contracts are in [search](architecture/search.md#api) and [publication](architecture/publication.md#public-api-views). A merged API does not complete its reader page or live rollout.
 
-PublicApi serves every public page at its public path since cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Production correction history, tally, line-up, vote-bill, and official record-count checks have passed. The ZIP members fragment needs cold-read and larger-selection measurement. Slow responses are observed, but their cause has not been isolated.
+PublicApi serves every public page at its public path since cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Production correction history, tally, line-up, vote-bill, and official record-count checks have passed. Repeated aggregation and late filtering account for part of the measured ZIP query cost. Cold reads and larger selections still need measurement after the query changes reach production.
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
