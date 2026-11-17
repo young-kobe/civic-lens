@@ -8,9 +8,8 @@
 @code {
     private static readonly Candidate[] Candidates = Glossary.Groups
         .SelectMany(group => group.Terms)
-        .Select((term, index) => new Candidate(term.Name, term.Key, index))
+        .Select(term => new Candidate(term.Name, term.Key))
         .OrderByDescending(candidate => candidate.Name.Length)
-        .ThenBy(candidate => candidate.CatalogOrder)
         .ToArray();
 
     private Segment[] segments = [];
@@ -20,21 +19,39 @@
     [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
     [Parameter, EditorRequired] public PublishedTextOrigin Origin { get; set; }
 
-    protected override void OnParametersSet() => segments = Origin == PublishedTextOrigin.Model ? Split(Text) : [];
+    protected override void OnParametersSet() => segments = Origin == PublishedTextOrigin.Model ? Split(Text, Candidates) : [];
 
     private static RenderFragment TextContent(string text) => builder => builder.AddContent(0, text);
 
-    internal static RenderFragment Render(GlossaryPageUse use, string text, PublishedTextOrigin origin) =>
-        RenderSegments(use, text, origin, origin == PublishedTextOrigin.Model ? Split(text) : []);
+    internal static RenderFragment Render(GlossaryPageUse use, string text, PublishedTextOrigin origin, Candidate[]? candidates = null) =>
+        RenderSegments(use, text, origin, origin == PublishedTextOrigin.Model ? Split(text, candidates ?? Candidates) : []);
+
+    internal static Candidate[] WithLocalDefinitions(Definition[] definitions)
+    {
+        return definitions.Select(definition =>
+            {
+                // A local definition and its glossary equivalent share the page's first use.
+                var glossary = Array.Find(Candidates, candidate => string.Equals(candidate.Name, definition.Name, StringComparison.OrdinalIgnoreCase));
+                return new Candidate(definition.Name, glossary?.Key ?? definition.PopoverId, definition);
+            })
+            // Stable sorting gives a local definition precedence over an equal glossary name.
+            .Concat(Candidates)
+            .OrderByDescending(candidate => candidate.Name.Length)
+            .ToArray();
+    }
 
     private static RenderFragment RenderSegments(GlossaryPageUse use, string text, PublishedTextOrigin origin, Segment[] parts) => @<text>
         @if (origin == PublishedTextOrigin.Model)
         {
             @foreach (var segment in parts)
             {
-                @if (segment.Key is { } key)
+                @if (segment.Match is { Definition: { } definition } local)
                 {
-                    @Term.Render(use, key, TextContent(segment.Text))
+                    @Term.Render(use, local.Key, definition.PopoverId, TextContent(segment.Text), definition.Body)
+                }
+                else if (segment.Match is { } glossary)
+                {
+                    @Term.Render(use, glossary.Key, TextContent(segment.Text))
                 }
                 else
                 {
@@ -48,7 +65,7 @@
         }
     </text>;
 
-    private static Segment[] Split(string text)
+    private static Segment[] Split(string text, Candidate[] candidates)
     {
         var result = new List<Segment>();
         var plainStart = 0;
@@ -57,9 +74,9 @@
         while (position < text.Length)
         {
             Candidate? match = null;
-            foreach (var candidate in Candidates)
+            foreach (var candidate in candidates)
             {
-                if (candidate.Name.Length > text.Length - position ||
+                if (candidate.Name.Length == 0 || candidate.Name.Length > text.Length - position ||
                     string.Compare(text, position, candidate.Name, 0, candidate.Name.Length, StringComparison.OrdinalIgnoreCase) != 0)
                     continue;
 
@@ -74,7 +91,7 @@
             if (match is { } found)
             {
                 if (plainStart < position) result.Add(new(null, text[plainStart..position]));
-                result.Add(new(found.Key, text.Substring(position, found.Name.Length)));
+                result.Add(new(found, text.Substring(position, found.Name.Length)));
                 position += found.Name.Length;
                 plainStart = position;
             }
@@ -119,6 +136,7 @@
         return status == OperationStatus.Done ? consumed : 1;
     }
 
-    private sealed record Candidate(string Name, string Key, int CatalogOrder);
-    private sealed record Segment(string? Key, string Text);
+    internal sealed record Definition(string Name, string PopoverId, RenderFragment Body);
+    internal sealed record Candidate(string Name, string Key, Definition? Definition = null);
+    private sealed record Segment(Candidate? Match, string Text);
 }

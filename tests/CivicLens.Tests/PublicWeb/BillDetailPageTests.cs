@@ -481,6 +481,150 @@ public sealed class BillDetailPageTests
     }
 
     [Fact]
+    public async Task ModelProseUsesTheLongestWholeTermAndKeepsOnlyItsFirstOccurrenceInteractive()
+    {
+        const string summary = "\U00010400Bill Bill\u0301 Bills use bIlL TeXt. A BiLl and a YeA appear with term-yea.";
+        const string why = "BILL TEXT, Bill and Yea appear again with the housing office.";
+        var page = await RenderAsync(TextBill with
+        {
+            Summary = summary,
+            WhyItMatters = why,
+            KeyTerms =
+            [
+                new("Bill", "A local bill definition.", false, "A local bill definition."),
+                new("Bill text", "A local bill text definition.", false, "A local bill text definition."),
+                new("term-yea", "A distinct definition.", false, "A distinct definition."),
+                new("Housing office", "An office that manages housing.", false, "An office that manages housing.")
+            ]
+        });
+        var prose = page.QuerySelectorAll(".bill-main > .ai-summary > p");
+        var triggers = prose[0].QuerySelectorAll("button.term");
+
+        Assert.Equal([summary, why], prose.Select(paragraph => paragraph.ShownText()));
+        Assert.Equal(["bIlL TeXt", "BiLl", "YeA", "term-yea"], triggers.Select(button => button.TextContent));
+        Assert.Equal("housing office", Assert.Single(prose[1].QuerySelectorAll("button.term")).TextContent);
+        Assert.Equal("\"An office that manages housing.\"", Assert.Single(prose[1].QuerySelectorAll("[popover] .quote")).TextContent);
+        var targets = triggers.Select(button => button.GetAttribute("popovertarget")!).ToArray();
+        Assert.Equal(targets.Length, targets.Distinct().Count());
+        Assert.All(targets, target => Assert.Single(page.QuerySelectorAll($"[id='{target}'][popover]")));
+        Assert.Equal("\"A local bill text definition.\"", page.GetElementById(targets[0])!.QuerySelector(".quote")!.TextContent);
+        Assert.Equal("\"A local bill definition.\"", page.GetElementById(targets[1])!.QuerySelector(".quote")!.TextContent);
+        Assert.Equal(Glossary.Term("yea").Means, page.GetElementById(targets[2])!.QuerySelector(".term-means")!.TextContent);
+        Assert.Equal("\"A distinct definition.\"", page.GetElementById(targets[3])!.QuerySelector(".quote")!.TextContent);
+        Assert.Null(page.GetElementById(Glossary.Term("bill").PopoverId));
+    }
+
+    [Fact]
+    public async Task AnEmptyDefinitionCannotStopRenderingAtAWordBoundary()
+    {
+        var page = await RenderAsync(TextBill with
+        {
+            Summary = "A tenant lives here.",
+            KeyTerms = [new("", "", false, ""), new("Tenant", "A renter.", false, "A renter.")]
+        });
+
+        var paragraph = page.QuerySelector(".bill-main > .ai-summary > p")!;
+        Assert.Equal("A tenant lives here.", paragraph.ShownText());
+        Assert.Equal("tenant", Assert.Single(paragraph.QuerySelectorAll("button.term")).TextContent);
+    }
+
+    [Fact]
+    public async Task TheLocalDefinitionOwnsFirstUseBeforeTheManualCorrectionsTermAndItsIdFollowsTheBillRevision()
+    {
+        const string name = "Correction (by us)";
+        const string quote = "“Correction (by us)” means a change to a filed copy.";
+        var data = TextBill with
+        {
+            Summary = name,
+            KeyTerms = [new(name, quote, false, quote)],
+            Corrections = PublishedCorrectionListTests.History
+        };
+        var page = await RenderAsync(data);
+        var newer = await RenderAsync(data with { RevisionNumber = data.RevisionNumber + 1 });
+        var anotherBill = await RenderAsync(data with { RecordId = new string('d', 64) });
+
+        static string Target(IDocument document) => Assert.Single(document.QuerySelectorAll(".bill-main > .ai-summary button.term"))
+            .GetAttribute("popovertarget")!;
+
+        var target = Target(page);
+        Assert.NotEqual(target, Target(newer));
+        Assert.NotEqual(target, Target(anotherBill));
+        Assert.Equal($"\"{quote}\"", page.GetElementById(target)!.QuerySelector(".quote")!.TextContent);
+        Assert.Null(page.GetElementById(Glossary.Term("correction").PopoverId));
+        Assert.Empty(page.QuerySelectorAll(".corrections button.term"));
+        Assert.StartsWith("Correction", page.QuerySelectorAll(".corrections strong")[1].TextContent);
+    }
+
+    [Fact]
+    public async Task AKeyTermPopoverPreservesExactQuoteCharactersAndUsesApprovedSourceWording()
+    {
+        const string quote = "“Tenant” means a person.\r\n\U00010400 § <img src=x onerror=alert(1)> & tax.";
+        const string completeQuote = "“Grant” means a payment.";
+        var page = await RenderAsync(TextBill with
+        {
+            Summary = "A tenant can receive a grant.",
+            KeyTermsLabel = BillTextWords.KeyTermsLabel,
+            KeyTerms =
+            [
+                new("Tenant", "Normalized definition", true, quote),
+                new("Grant", "Normalized grant definition", false, completeQuote)
+            ],
+            TextSentences = [new(PublishedTextPart.Summary, "A tenant can receive a grant.", "Each tenant may receive a grant.")]
+        });
+        var summary = page.QuerySelector(".bill-main > .ai-summary")!;
+        var popovers = summary.QuerySelectorAll("p > span[popover]");
+
+        Assert.Equal(2, popovers.Length);
+        Assert.Equal([$"\"{quote}\"", $"\"{completeQuote}\""], popovers.Select(popover => popover.QuerySelector(".quote")!.TextContent));
+        Assert.All(popovers, popover =>
+        {
+            Assert.Equal(BillTextWords.KeyTermsLabel, popover.QuerySelector(".ai-label")!.TextContent);
+            Assert.Empty(popover.QuerySelectorAll("img, script, p, blockquote, button, a a"));
+            Assert.Equal(TextBill.CongressGovUrl, Assert.Single(popover.QuerySelectorAll("a")).GetAttribute("href"));
+        });
+        Assert.Empty(summary.QuerySelectorAll("button a, button button, button [popover]"));
+        Assert.Equal($"{BillTextWords.KeyTermCutNote} {BillTextWords.KeyTermCutLink}", popovers[0].QuerySelector(".bill-term-cut")!.TextContent);
+        Assert.Equal(BillTextWords.KeyTermCutLink, popovers[0].QuerySelector("a")!.TextContent);
+        Assert.Null(popovers[1].QuerySelector(".bill-term-cut"));
+        Assert.Equal("Based on: Introduced in House, 11 Sep 2025. Read the full text on Congress.gov.", popovers[1].QuerySelector("a")!.TextContent);
+        var sourceQuote = Assert.Single(summary.QuerySelectorAll("blockquote.quote"));
+        Assert.Equal("Each tenant may receive a grant.", sourceQuote.TextContent);
+        Assert.Empty(sourceQuote.Children);
+        Assert.Equal([$"\"{quote}\"", $"\"{completeQuote}\""], page.QuerySelectorAll(".bill-terms blockquote.quote").Select(element => element.TextContent));
+        Assert.DoesNotContain("Normalized", page.Body!.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OnlyModelProseGetsTermPopoversAndTheBillLineAndCrsQuoteStayPlain()
+    {
+        const string text = "The bill explains a tenant.";
+        var data = Bill with
+        {
+            Title = text,
+            Headline = text,
+            BillLine = text,
+            CrsText = text,
+            Summary = text,
+            WhyItMatters = text,
+            KeyTerms = [new("Tenant", "A person who rents.", false, "A person who rents.")]
+        };
+        var model = await RenderAsync(data);
+        var person = await RenderAsync(data with { TextOrigin = PublishedTextOrigin.Person, Label = null });
+        var code = await RenderAsync(data with { TextOrigin = PublishedTextOrigin.Code });
+
+        Assert.Equal("H.R. 5334, " + text, model.QuerySelector("main h1")!.TextContent);
+        Assert.Equal(text, model.QuerySelector(".bill-head .bill-line")!.TextContent);
+        Assert.Equal(text, model.QuerySelector("details#crs-source p")!.TextContent);
+        Assert.Empty(model.QuerySelectorAll(".bill-head [popovertarget], details#crs-source [popovertarget]"));
+        var personProse = person.QuerySelectorAll(".bill-main > .ai-summary > p");
+        Assert.Equal([text, text], personProse.Select(paragraph => paragraph.TextContent));
+        Assert.Empty(person.QuerySelectorAll("button.term"));
+        Assert.Null(code.QuerySelector(".bill-main > .ai-summary"));
+        Assert.Equal(text, code.QuerySelector(".bill-crs p")!.TextContent);
+        Assert.Empty(code.QuerySelectorAll("button.term"));
+    }
+
+    [Fact]
     public async Task ATextSummaryShowsItsWhyItMattersPartAndTheSourceFoldCitesTheBillTextVersionDateAndCutNote()
     {
         var page = await RenderAsync(TextBill);
@@ -489,7 +633,7 @@ public sealed class BillDetailPageTests
         var source = fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Bill text").NextElementSibling!.TextContent;
 
         Assert.Equal(BillTextWords.Label, summary.QuerySelector(".ai-label")!.TextContent);
-        Assert.Equal(["The bill would add a tax credit. It would end in 2030.", "Families with a child could pay less tax."], summary.QuerySelectorAll("p").Select(paragraph => paragraph.TextContent));
+        Assert.Equal(["The bill would add a tax credit. It would end in 2030.", "Families with a child could pay less tax."], summary.QuerySelectorAll("p").Select(paragraph => paragraph.ShownText()));
         Assert.Equal(BillTextWords.WhyItMattersHeading, summary.QuerySelector("h2.bill-why-title")!.TextContent);
         Assert.Equal("Based on: Introduced in House, 11 Sep 2025. Read the full text on Congress.gov. This summary covers the first 60,000 of 84,210 characters. Later sections are not covered.", source);
         Assert.Equal(BillTextWords.Label, fold.QuerySelectorAll("dt").Single(term => term.TextContent == "Wording").NextElementSibling!.TextContent);

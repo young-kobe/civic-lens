@@ -4,6 +4,7 @@
     {
         <p>@CivicLens.PublicWeb.Publication.AiText.Render(Use, text, TextOrigin)</p>
     }
+    @(GlossaryContent?.Invoke(Use))
     @ChildContent
     @if (Check is not null)
     {
@@ -27,6 +28,8 @@
     [Parameter] public string? LabelId { get; set; }
     /// <summary>The text of the summary. A page with no summary shows only its check line.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
+    /// <summary>Summary prose that shares the page's glossary use and renders at this component's depth.</summary>
+    [Parameter] public RenderFragment<CivicLens.PublicWeb.Publication.GlossaryPageUse>? GlossaryContent { get; set; }
     /// <summary>The check line under the text. It holds the caveats of the page.</summary>
     [Parameter] public RenderFragment? Check { get; set; }
 }
