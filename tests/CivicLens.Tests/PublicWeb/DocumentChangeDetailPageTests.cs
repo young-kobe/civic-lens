@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using CivicLens.PublicWeb.Components.Evidence;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -7,6 +8,19 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class DocumentChangeDetailPageTests
 {
+    [Fact]
+    public async Task TheSummaryExplainsACorrectionTermBeforeTheLaterCorrectionHistory()
+    {
+        var name = Glossary.Term("correction").Name;
+        var data = Change() with { Summary = name, Corrections = PublishedCorrectionListTests.History };
+
+        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(data);
+
+        Assert.Equal(name, page.QuerySelector(".ai-summary button.term")?.TextContent);
+        Assert.Single(page.QuerySelectorAll("[id=term-correction]"));
+        Assert.Empty(page.QuerySelectorAll(".corrections button.term"));
+    }
+
     [Fact]
     public void TheRedlineStrikesTheOldWordsAddsTheNewWordsAndKeepsTheWordsBetweenUnchanged()
     {
@@ -78,6 +92,20 @@ public sealed class DocumentChangeDetailPageTests
     }
 
     [Fact]
+    public async Task ModelProseAcrossTheSummarySignificanceAndLimitsSharesOneFirstUsePopover()
+    {
+        var data = Change() with { Summary = "Bill", Significance = "BILL", Limits = "bill" };
+
+        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(data);
+
+        var prose = page.QuerySelectorAll(".ai-summary p:not(.ai-summary-check)");
+        Assert.Equal(3, prose.Length);
+        Assert.Equal(["Bill", "BILL", "bill"], prose.Select(VisibleText));
+        Assert.Single(page.QuerySelectorAll(".ai-summary button.term"));
+        Assert.Equal("term-bill", page.QuerySelector(".ai-summary [popover]")!.Id);
+    }
+
+    [Fact]
     public async Task ThePageShowsTheLabelOfTheViewAndNoLabelWhenTheViewSetsNone()
     {
         var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change(label: null));
@@ -85,6 +113,10 @@ public sealed class DocumentChangeDetailPageTests
         Assert.Null(page.QuerySelector(".ai-label"));
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
     }
+
+    private static string VisibleText(IElement element) => string.Concat(element.ChildNodes
+        .Where(node => node is not IElement child || !child.HasAttribute("popover"))
+        .Select(node => node.TextContent));
 
     [Fact]
     public async Task ACitationLinkNamesItsNumberOnlyWhenThereIsMoreThanOneCitation()

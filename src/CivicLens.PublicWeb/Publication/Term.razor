@@ -1,24 +1,28 @@
-@{
-    var term = Glossary.Term(Key);
-}
-@if (Use.IsFirstUse(Key))
-{
-    <InfoPopover Id="@term.PopoverId" TriggerClass="term">
-        <Trigger>@ChildContent</Trigger>
-        <ChildContent>
-            <span class="term-means">@term.Means</span>
-            <span class="term-why">@term.WhyItMatters</span>
-        </ChildContent>
-    </InfoPopover>
-}
-else
-{
-    @ChildContent
-}
+@Render(Use, Key, ChildContent)
 
 @code {
     [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
 
     [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
     [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    internal static RenderFragment Render(GlossaryPageUse use, string key, RenderFragment content) => @<text>
+        @{
+            var term = Glossary.Term(key);
+        }
+        @if (use.IsFirstUse(key))
+        {
+            <InfoPopover Id="@term.PopoverId" TriggerClass="term">
+                <Trigger>@content</Trigger>
+                <ChildContent>
+                    <span class="term-means">@term.Means</span>
+                    <span class="term-why">@term.WhyItMatters</span>
+                </ChildContent>
+            </InfoPopover>
+        }
+        else
+        {
+            @content
+        }
+    </text>;
 }
