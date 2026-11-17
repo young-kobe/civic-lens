@@ -151,19 +151,18 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
             .UseNpgsql(connectionString).Options);
         Assert.Contains(Current, db.Database.GetMigrations());
         Assert.False(db.Database.HasPendingModelChanges());
+        await AssertRelationshipViewOwnershipAsync();
 
         await db.GetService<IMigrator>().MigrateAsync(MigrationHistorySquash.BaselineId);
 
         Assert.Empty(await LinkedVoteColumnsAsync());
-        Assert.Equal(["civic_lens_public_owner|true"], await QueryAsync("""
-            SELECT pg_get_userbyid(relowner) || '|' || (reloptions @> ARRAY['security_barrier=true'])::text
-              FROM pg_class WHERE oid = 'public_api.relationships'::regclass
-            """));
+        await AssertRelationshipViewOwnershipAsync();
         await ExecuteAsync("SET ROLE civic_lens_public; SELECT record_id FROM public_api.relationships LIMIT 0");
 
         await Store().MigrateAsync();
 
         Assert.Equal(["cited_vote_cast", "cited_vote_date", "linked_official_id"], await LinkedVoteColumnsAsync());
+        await AssertRelationshipViewOwnershipAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
         Assert.False(db.Database.HasPendingModelChanges());
         await ExecuteAsync("SET ROLE civic_lens_public; SELECT linked_official_id, cited_vote_cast, cited_vote_date FROM public_api.relationships LIMIT 0");
@@ -171,6 +170,11 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
             "SET ROLE civic_lens_public; SELECT official_id FROM public.relationship_revisions LIMIT 0"));
         Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
     }
+
+    private async Task AssertRelationshipViewOwnershipAsync() => Assert.Equal(["civic_lens_public_owner|true"], await QueryAsync("""
+        SELECT pg_get_userbyid(relowner) || '|' || coalesce(reloptions @> ARRAY['security_barrier=true'], false)::text
+          FROM pg_class WHERE oid = 'public_api.relationships'::regclass
+        """));
 
     private Task<string[]> LinkedVoteColumnsAsync() => QueryAsync("""
         SELECT column_name FROM information_schema.columns

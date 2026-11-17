@@ -1247,7 +1247,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task TheLastColumnOfTheRelationshipViewNamesWhoWroteTheFactAndTheFactLabelFollowsIt()
+    public async Task TheRelationshipFactColumnsKeepTheirOriginWhenLinkedVoteColumnsAreAppended()
     {
         await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await RelationshipSeed.SeedAsync(connectionString);
@@ -1255,8 +1255,9 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
 
         Assert.Equal([$"{RelationshipSeed.BillLink}|{AiLabelWords.CodeWording}|Code", $"{RelationshipSeed.VoteLink}|-|-"], await PublicAsync(
             "SELECT record_id || '|' || coalesce(fact_label, '-') || '|' || coalesce(fact_text_origin, '-') FROM public_api.relationships ORDER BY record_id"));
-        Assert.Equal("fact_text_origin", (await PublicAsync(
-            "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public_api' AND table_name = 'relationships' ORDER BY ordinal_position"))[^1]);
+        var columns = await PublicAsync(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public_api' AND table_name = 'relationships' ORDER BY ordinal_position");
+        Assert.Equal(["fact", "fact_label", "fact_text_origin", "linked_official_id", "cited_vote_cast", "cited_vote_date"], columns[^6..]);
     }
 
     [Fact]

@@ -14,9 +14,9 @@ public sealed class StatementLinkedVoteCast : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.Sql(WithoutCitedVote);
 
-    // CREATE OR REPLACE appends the three columns so the established public view owner, grants, and security-barrier option remain in place.
+    // Append the columns, retain owner and grants, and set the barrier explicitly because replacement resets view options.
     private const string WithCitedVote = """
-        CREATE OR REPLACE VIEW public_api.relationships AS
+        CREATE OR REPLACE VIEW public_api.relationships WITH (security_barrier = true) AS
         SELECT a.record_id, a.revision_number, e.headline, e.link_type, e.event_date AS statement_date, r.reason,
                CASE r.author_kind WHEN 'Analysis' THEN 'Model' ELSE 'Person' END AS text_origin,
                CASE WHEN r.author_kind = 'Analysis' THEN 'Drafted by an AI model from these two records. A person checked it before publication.' END AS label,
