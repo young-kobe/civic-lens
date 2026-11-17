@@ -813,8 +813,14 @@ p.official-row-title { font-weight: 700; line-height: 1.35; overflow-wrap: anywh
 }
 
 /* Lists, boards and search */
-.lists-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; gap: var(--s3) var(--s4); margin: var(--s4) 0; padding: var(--s4); border-radius: var(--r-panel); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.lists-filter, .lists-filter-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; gap: var(--s3) var(--s4); }
+.lists-filter { margin: var(--s4) 0; padding: var(--s4); border-radius: var(--r-panel); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.content:has(> form.lists-filter) { gap: var(--s4); }
+.content:has(> form.lists-filter) > :is(.list-status, .list-chips, .list-rows) { margin: 0; }
+form.lists-filter { display: block; margin: 0; box-shadow: inset 0 0 0 2px var(--marigold); }
 .lists-filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); min-height: 44px; }
+.lists-filter-actions > a { display: inline-flex; min-height: 44px; align-items: center; }
+form.lists-filter > .lists-filter-actions { margin-top: var(--s4); }
 .lists-filter :is(select, input), .lists-filter-actions .btn, .list-fold .in > .btn { min-height: 44px; }
 .list-status { margin: var(--s4) 0 var(--s1); color: var(--muted); font-size: var(--t-sm); }
 .list-chips { margin: 0 0 var(--s3); }
