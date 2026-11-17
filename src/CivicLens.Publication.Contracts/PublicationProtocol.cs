@@ -69,10 +69,11 @@ public static class PublicationProtocol
     public static string RecordPagePath(string recordId) => $"records/{recordId}.html";
     /// <summary>The full map page of one vote. It sits under the record folder of the vote, beside no other page of that record.</summary>
     public static string VoteMapPagePath(string recordId) => $"records/{recordId}/map.html";
-    /// <summary>The one builder of the report link. The title is for display only. It is cut on a word boundary to <see cref="ReaderReportProtocol.MaximumTitleCharacters"/> characters, with an ellipsis, and is percent-encoded.</summary>
-    public static string ReportPageLink(string recordId, int revision, string title)
+    /// <summary>The one builder of the report link. The title is display-only and cut to its bound; the record kind is a controlled display hint.</summary>
+    public static string ReportPageLink(string recordId, int revision, PublishedRecordKind kind, string title)
     {
-        var link = $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}";
+        var wireKind = KindText(kind);
+        var link = $"{ReportPagePath}?{ReaderReportProtocol.RecordIdField}={recordId}&{ReaderReportProtocol.RevisionField}={revision}&{ReaderReportProtocol.KindParameter}={wireKind}";
         var shortTitle = CutAtWord(title, ReaderReportProtocol.MaximumTitleCharacters);
         return shortTitle.Length == 0 ? link : $"{link}&{ReaderReportProtocol.TitleParameter}={Uri.EscapeDataString(shortTitle)}";
     }
