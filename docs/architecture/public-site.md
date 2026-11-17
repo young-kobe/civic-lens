@@ -504,6 +504,15 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 
 The roadmap step [R-68](../roadmap.md#active-r-68-redesign) holds the plan: the views, the route moves, and the accepted design changes. This page holds no second plan.
 
+Planned interactive maps use `maps.html` and `/v1/maps`, with one shared renderer and the existing vote-map links. Both are approved and remain unimplemented. The accepted rules are:
+
+- One selected Congress scopes every comparison. The attendance base is published roll calls in that Congress and chamber that list the member. Bill and substantive-vote activity remain separate measures.
+- The holder date is the release's UTC publication day, clamped to the selected Congress. The page and API show that as-of date. Each seat shows its dated holder, and each person keeps only their own activity. Missing or ambiguous holders stay unavailable.
+- Issue activity compares the person's matching sponsored bills with all their published sponsored bills. It compares matching substantive votes with their own published substantive casts. These bases cover the whole selected Congress, including any chambers the person served in. The display names that scope. A missing or unknown measure or base stays unavailable, never zero. Absence from a top-ten issue list cannot establish zero.
+- The election layer groups known term ends by their exact dates. It does not claim ballot status, results, or predictions. Missing term evidence stays unknown.
+- Congress and layer controls, details on hover or keyboard focus, and selectable seats make the maps interactive. Seat selection opens the relevant official or evidence. Touch access and an equivalent table remain required. Geographic and tile views share the data.
+- House shapes need a boundary asset for the selected Congress. The current asset covers the 119th Congress only. Unsupported shapes cannot stand in for another Congress. Published figures can remain available in the table while matching shapes are unavailable.
+
 Limits:
 
 - The freshness read and the page read are two statements. When a release activates between them, the page shows no freshness line, because the days belong to another release. The next request renders the new release.
