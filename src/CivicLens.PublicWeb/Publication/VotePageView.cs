@@ -18,6 +18,7 @@ public static class VotePageView
     public const string StatementsNote = "A linked statement is the record's own words. It is not a reason Civic Lens gives for the vote.";
     public const string CastOnThisVote = "Cast on this vote";
     public const string ZipMembersHeading = "Your members on this vote";
+    public const string PartyLineUnavailable = "Party line unavailable";
 
     /// <summary>The source API for a vote's member positions, when the browser API has a configured root.</summary>
     public static string? MembersApiUrl(string recordId, string? browserApiRoot) => browserApiRoot is null
@@ -34,11 +35,14 @@ public static class VotePageView
         member.Cast is null ? $"{member.SeatTitle}." : $"{member.Party ?? VoteWords.NoKnownParty}. {member.SeatTitle}.";
 
     /// <summary>The party line of the member from <see cref="VoteZipMemberData.BreaksParty"/>, or null when the vote gives the member no party line.</summary>
-    public static string? ZipMemberPartyLine(VoteZipMemberData member) => (member.BreaksParty, member.Party) switch
+    public static string? ZipMemberPartyLine(VoteZipMemberData member) => MemberPartyLine(member.BreaksParty, member.Party, null);
+
+    /// <summary>The saved party-line wording shared by the ZIP card and the map. The optional fallback keeps the ZIP card's existing empty state.</summary>
+    public static string? MemberPartyLine(bool? breaksParty, string? party, string? unavailable = PartyLineUnavailable) => (breaksParty, party) switch
     {
-        (true, { } party) => "Voted " + VoteBreakers.AgainstMost(PublishedPartyNames.Members(party)),
-        (false, { } party) => "Voted " + VoteBreakers.WithMost(PublishedPartyNames.Members(party)),
-        _ => null
+        (true, { } lineParty) => "Voted " + VoteBreakers.AgainstMost(PublishedPartyNames.Members(lineParty)),
+        (false, { } lineParty) => "Voted " + VoteBreakers.WithMost(PublishedPartyNames.Members(lineParty)),
+        _ => unavailable
     };
 
     public static string ZipMemberNoPosition(VoteZipMemberData member) => MemberNoPosition(member.Name);

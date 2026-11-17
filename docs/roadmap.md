@@ -24,7 +24,7 @@ PublicApi serves every public page at its public path since cutover. Caddy serve
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
-- [ ] Add the later map layers: party breaks, seats up for election, issue activity, attendance, and boundaries by Congress. Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members.
+- [ ] Add the later map layers: seats up for election, issue activity, attendance, and boundaries by Congress. Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members. The optional party-break ring is implemented from the saved party-line value.
 - [ ] Add the document changes list once document changes are published.
 
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
