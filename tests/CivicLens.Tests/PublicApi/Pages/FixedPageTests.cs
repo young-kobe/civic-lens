@@ -134,7 +134,8 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Equal(Enum.GetValues<PublishedRecordKind>().Select(PublicationProtocol.KindText),
             page.QuerySelectorAll("[data-report-kind-option]").Select(option => option.GetAttribute("data-report-kind-option")));
         Assert.Equal(Enum.GetValues<PublishedRecordKind>().Select(PublishedRecordLabels.Kind),
-            page.QuerySelectorAll("[data-report-kind-option]").Select(option => option.TextContent));
+            page.QuerySelectorAll("[data-report-kind-option]").Select(option => option.GetAttribute("data-report-kind-label")));
+        Assert.All(page.QuerySelectorAll("[data-report-kind-option]"), option => Assert.Empty(option.TextContent));
         Assert.Empty(reportForm.QuerySelectorAll($"[name='{ReaderReportProtocol.KindParameter}']"));
         Assert.Equal(SiteKey, page.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
         Assert.Single(page.QuerySelectorAll("script[src^='https://challenges.cloudflare.com/turnstile/']"));

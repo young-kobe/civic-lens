@@ -46,7 +46,7 @@
         const kindOption = kind === null ? null : kindOptions.find(candidate => candidate.dataset.reportKindOption === kind);
         if (kindOption) {
             const kindLabel = document.querySelector("[data-report-subject-kind]");
-            kindLabel.textContent = kindOption.textContent;
+            kindLabel.textContent = kindOption.dataset.reportKindLabel;
             kindLabel.hidden = false;
         }
         const recordPage = form.dataset.recordPage.replace("{id}", recordId);

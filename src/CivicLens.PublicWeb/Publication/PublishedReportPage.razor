@@ -20,7 +20,7 @@
                 <div hidden data-report-kind-options>
                     @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
                     {
-                        <span data-report-kind-option="@PublicationProtocol.KindText(kind)">@PublishedRecordLabels.Kind(kind)</span>
+                        <span data-report-kind-option="@PublicationProtocol.KindText(kind)" data-report-kind-label="@PublishedRecordLabels.Kind(kind)"></span>
                     }
                 </div>
                 <p class="muted small"><span data-report-subject-revision></span> <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Wrong record? Choose another.</a></p>
