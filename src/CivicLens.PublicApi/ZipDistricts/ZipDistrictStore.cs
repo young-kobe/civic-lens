@@ -19,12 +19,17 @@ public sealed class ZipDistrictStore(NpgsqlDataSource views)
     private const string CurrentTerm = "t.start_on <= current_date AND (t.end_on IS NULL OR t.end_on >= current_date)";
 
     private const string DistrictsSql = $"""
+        WITH districts AS MATERIALIZED (
+            SELECT z.congress, z.state, z.district, z.land_share
+              FROM public_api.zip_districts z
+             WHERE z.zcta = @zcta
+        )
         SELECT a.release_number, a.published_at_utc_ticks, d.congress, d.state, d.district, h.official_id, h.name, h.party, h.end_on,
                EXISTS (SELECT 1 FROM public_api.release_officials) AS has_names
           FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
-               SELECT z.congress, z.state, z.district, z.land_share FROM public_api.zip_districts z
-                WHERE z.zcta = @zcta AND z.congress = COALESCE(@congress, (SELECT max(m.congress) FROM public_api.zip_districts m WHERE m.zcta = @zcta))) d
+               SELECT z.congress, z.state, z.district, z.land_share FROM districts z
+                WHERE z.congress = COALESCE(@congress, (SELECT max(m.congress) FROM districts m))) d
             ON TRUE
           LEFT JOIN LATERAL (
                SELECT t.official_id, o.name, t.party, t.end_on FROM public_api.release_official_terms t
