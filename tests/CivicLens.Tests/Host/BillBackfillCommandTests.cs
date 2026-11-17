@@ -47,6 +47,18 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
+    [InlineData("bill-stream/source/bill/119/hr/1/2025-01-01")]
+    [InlineData("bill-stream/source/part/bill/119/hr/1/2025-01-01")]
+    [InlineData("bill-stream/source with spaces/bill/119/hr/1/2025-01-01")]
+    public async Task AValidActionCursorReachesTheBoundedHandler(string cursor)
+    {
+        var result = await RunAsync("bills", "actions", "backfill", "5", cursor);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("\"examined\":0", result.Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("actions", "many")]
     [InlineData("actions", "-1")]
     [InlineData("actions", "0")]
@@ -64,7 +76,22 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
-    [InlineData("actions")]
+    [InlineData("0", "bill-stream/source/bill/119/hr/1/2025-01-01")]
+    [InlineData("5", "not-a-bill-job")]
+    [InlineData("5", "bill-stream/")]
+    [InlineData("5", "bill-stream/source/bill/119/hr/1/2025-01-01 extra")]
+    public async Task AnInvalidActionsLimitOrCursorIsRejectedBeforeDatabaseOrConfigurationAccess(string limit, string cursor)
+    {
+        var result = await HostProcess.RunWithEnvironmentAsync("not a connection string", null,
+            new Dictionary<string, string> { ["CIVIC_LENS_REVIEW_OWNER"] = "auth0|owner" },
+            "bills", "actions", "backfill", limit, cursor);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("Use bills actions backfill", result.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("database", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData("subjects")]
     [InlineData("status")]
     public async Task TooManyArgumentsShowTheUsage(string kind)
@@ -72,7 +99,17 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
         var result = await RunAsync("bills", kind, "backfill", "5", "6");
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Contains("Use bills actions backfill [limit], bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit]", result.Error, StringComparison.Ordinal);
+        Assert.Contains("Use bills actions backfill [limit] [cursor], bills subjects backfill [limit], bills status backfill [limit], bills text backfill [limit]", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TooManyActionsArgumentsAreRefusedBeforeConfigurationAccess()
+    {
+        var result = await HostProcess.RunWithEnvironmentAsync(null, null, new Dictionary<string, string>(),
+            "bills", "actions", "backfill", "5", "bill-stream/source/bill/119/hr/1/2025-01-01", "extra");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("Use bills actions backfill", result.Error, StringComparison.Ordinal);
     }
 
     [Theory]

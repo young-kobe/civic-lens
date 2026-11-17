@@ -15,17 +15,19 @@ public sealed class BackfillBillActions(IBillActionsBackfillStore store, ICollec
     private const int MaximumPagesPerBill = 100;
     private const int BatchSize = 25;
 
-    public async Task<BillActionsBackfillResult> ExecuteAsync(ReviewActor actor, int limit,
+    public async Task<BillActionsBackfillResult> ExecuteAsync(ReviewActor actor, int limit, string? afterDetailJobId = null,
         CancellationToken cancellationToken = default)
     {
         ReviewAuthorization.RequireOwner(actor);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        RequireCursor(afterDetailJobId);
         int examined = 0, recorded = 0, failed = 0;
-        string? after = null;
-        while (recorded < limit)
+        var after = afterDetailJobId;
+        string? nextCursor = null;
+        while (examined < limit)
         {
-            var detailJobIds = await store.ListBillsWithUnverifiedActionsAsync(after,
-                Math.Min(BatchSize, limit - recorded), cancellationToken);
+            var requested = Math.Min(BatchSize, limit - examined);
+            var detailJobIds = await store.ListBillsWithUnverifiedActionsAsync(after, requested, cancellationToken);
             if (detailJobIds.Count == 0) break;
             foreach (var detailJobId in detailJobIds)
             {
@@ -40,8 +42,17 @@ public sealed class BackfillBillActions(IBillActionsBackfillStore store, ICollec
                 }
                 after = detailJobId;
             }
+            if (detailJobIds.Count < requested) break;
         }
-        return new(examined, recorded, failed);
+        if (examined == limit && after is not null) nextCursor = after;
+        return new(examined, recorded, failed, nextCursor);
+    }
+
+    private static void RequireCursor(string? cursor)
+    {
+        if (cursor is null) return;
+        if (!BillStreamJobKeys.IsDetailJobId(cursor))
+            throw new ArgumentException("Bill actions backfill cursor is not valid.", nameof(cursor));
     }
 
     private async Task<bool> RecoverAsync(string detailJobId, CancellationToken cancellationToken)
