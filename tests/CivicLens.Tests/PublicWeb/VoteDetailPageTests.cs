@@ -432,14 +432,40 @@ public sealed class VoteDetailPageTests
         Assert.Contains(NextStep.NotShown, page.QuerySelector(".vote-explain")!.TextContent);
     }
 
-    [Fact]
-    public async Task TheSummaryKeepsItsAiLabelAndEscapesStoredText()
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model, AiLabelWords.ModelWording)]
+    [InlineData(PublishedTextOrigin.Person, null)]
+    public async Task TheSummaryKeepsItsPublishedOriginAndEscapesStoredText(PublishedTextOrigin origin, string? label)
     {
-        var page = await RenderAsync(Vote() with { Summary = "<script>x()</script>" });
+        const string text = "The bill passed. The bill changed. <script>x()</script>";
+        var page = await RenderAsync(Vote() with { Summary = text, TextOrigin = origin, Label = label });
+        var summary = page.QuerySelector(".vote-head .ai-summary")!;
+        var paragraph = summary.QuerySelector("p")!;
 
-        Assert.Equal(AiLabelWords.ModelWording, page.QuerySelector(".ai-label")!.TextContent);
-        Assert.Equal("<script>x()</script>", page.QuerySelector(".ai-summary p")!.TextContent);
-        Assert.Null(page.QuerySelector("main script"));
+        Assert.Equal(label, summary.QuerySelector(".ai-label")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("ai-summary-ai"));
+        Assert.Equal(text, paragraph.ShownText());
+        Assert.Equal(origin == PublishedTextOrigin.Model ? "bill" : null, paragraph.QuerySelector("button.term")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model ? 1 : 0, paragraph.QuerySelectorAll("[popover]").Length);
+        Assert.Null(paragraph.QuerySelector("script"));
+        var source = page.QuerySelector(".source-fold .doc-text")!;
+        Assert.Equal(Source.Text, source.TextContent);
+        Assert.Empty(source.QuerySelectorAll("button.term, [popover]"));
+    }
+
+    [Fact]
+    public async Task TheModelSummarySharesFirstUseWithTheEarlierVoteKindAndLaterCorrection()
+    {
+        const string text = "Passage came after Correction (by us).";
+        var page = await RenderAsync(Vote() with { Summary = text, Corrections = PublishedCorrectionListTests.History });
+        var paragraph = page.QuerySelector(".vote-head .ai-summary p")!;
+
+        Assert.Equal(text, paragraph.ShownText());
+        Assert.NotNull(page.QuerySelector(".vote-meta button[popovertarget=term-passage]"));
+        Assert.Single(page.QuerySelectorAll("#term-passage"));
+        Assert.Equal("Correction (by us)", Assert.Single(paragraph.QuerySelectorAll("button.term")).TextContent);
+        Assert.Single(page.QuerySelectorAll("#term-correction"));
+        Assert.Empty(page.QuerySelectorAll(".corrections button.term"));
     }
 
     private static int Position(AngleSharp.Dom.IDocument page, string selector) =>

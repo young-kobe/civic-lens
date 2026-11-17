@@ -1,5 +1,9 @@
 <div class="@(TextOrigin == PublishedTextOrigin.Model && Label is not null ? "ai-summary ai-summary-ai" : "ai-summary")">
     <AiLabel Text="@Label" Origin="TextOrigin" Look="LabelLook" Id="@LabelId" />
+    @if (Text is { } text)
+    {
+        <p>@CivicLens.PublicWeb.Publication.AiText.Render(Use, text, TextOrigin)</p>
+    }
     @ChildContent
     @if (Check is not null)
     {
@@ -8,6 +12,11 @@
 </div>
 
 @code {
+    [CascadingParameter] private CivicLens.PublicWeb.Publication.GlossaryPageUse Use { get; set; } = default!;
+
+    /// <summary>A single summary paragraph rendered at this component's depth so it precedes later manual glossary terms.</summary>
+    [Parameter] public string? Text { get; set; }
+
     [Parameter, EditorRequired] public PublishedTextOrigin TextOrigin { get; set; }
 
     /// <summary>The public label of the text, as the public view sets it. Null shows plain text with no label.</summary>

@@ -54,13 +54,20 @@ public sealed class HomePageTests
     [InlineData(PublishedTextOrigin.Person, null)]
     public async Task TheSummaryKeepsItsPublishedOriginAndEscapesStoredText(PublishedTextOrigin origin, string? wording)
     {
-        const string text = "<script>private()</script>";
-        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Label = wording, Summary = text }, [], null));
+        const string text = "A bill changed the bill. <script>private()</script>";
+        const string billLine = "The committee considered the proposal.";
+        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Label = wording, Summary = text, BillLine = billLine }, [], null));
         var summary = page.QuerySelector(".home-featured-summary, .home-featured .ai-summary")!;
+        var paragraph = summary.QuerySelector("p");
 
         Assert.Null(summary.QuerySelector("script"));
         // Code text repeats the headline, so the card shows only its label.
-        Assert.Equal(origin == PublishedTextOrigin.Code ? null : text, summary.QuerySelector("p")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Code ? null : text, paragraph?.ShownText());
+        Assert.Equal(origin == PublishedTextOrigin.Model ? "bill" : null, paragraph?.QuerySelector("button.term")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model ? 1 : 0, summary.QuerySelectorAll("[popover]").Length);
+        var about = summary.NextElementSibling!;
+        Assert.Equal(billLine + " " + PublishedWording.BillLineSource, about.TextContent.Trim());
+        Assert.Empty(about.QuerySelectorAll("button.term, [popover]"));
         var label = summary.QuerySelector(".ai-label");
         Assert.Equal(wording, label is null ? null : AiLabelAssert.FullText(label));
         if (label is not null)
@@ -71,6 +78,21 @@ public sealed class HomePageTests
             Assert.Null(descriptionId);
         else
             Assert.Same(label, Assert.Single(page.QuerySelectorAll("#" + descriptionId)));
+    }
+
+    [Fact]
+    public async Task TheFeaturedModelSummaryExplainsSubstantiveVoteBeforeTheRecentHeading()
+    {
+        const string text = "A substantive vote changed the bill.";
+        var page = await RenderAsync(new(7, Featured with { Summary = text }, RecentVotes(PublishedVoteAlignment.Split), null));
+        var summary = page.QuerySelector(".home-featured .ai-summary p")!;
+        var heading = page.QuerySelector("#home-recent-title")!;
+
+        Assert.Equal(text, summary.ShownText());
+        Assert.Equal("substantive vote", summary.QuerySelector("button[popovertarget=term-substantive-vote]")?.TextContent);
+        Assert.Single(page.QuerySelectorAll("#term-substantive-vote"));
+        Assert.Equal("Four recent substantive votes", heading.ShownText());
+        Assert.Empty(heading.QuerySelectorAll("button.term, [popover]"));
     }
 
     [Fact]
