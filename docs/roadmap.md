@@ -31,14 +31,14 @@ Remaining route work. Each slice includes the data, source evidence, labels, and
 
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
 
-- [ ] Finish the executive document summary work. The step, publication, label, and page slot are built and off by default; the paid 20-document measure and resulting owner review remain open. Keep the summary in R-68.
+- [ ] Finish the executive document summary work. The step, publication, label, and page slot are built and off by default. A budgeted sample was measured. Check its results against the current prompt, the recorded owner decision, and actual activation before closing this work.
 - [ ] Recover historical bill actions from hash-verified saved captures through the existing bounded recovery flow. Preserve completed immutable snapshots, original as-of dates, and old releases. Source support is merged; historical pilot execution still needs separate approval.
 
 AI text and vocabulary remain required work, not optional follow-ups.
 
 - [ ] Keep the page text gate whole as R-68 adds pages. Remaining: AI-text checks beyond the draft check, and first-use popovers for exact terms in AI text.
-- [ ] Measure each changed prompt on fixed records within an explicit budget, check its evidence, and obtain the required sample approval. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
-- [ ] Finish up to five bill key terms, defined only by exact quotations from the definitions section. Code finds the section, checks each quote, stores the terms, serves them in the bill detail API, and reports them in `actions text measure`, all behind `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS`, which is off. Open: the owner reads the measured sample and turns it on. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
+- [ ] Check each changed prompt against its fixed-record measurement, evidence, and required sample approval. Reuse completed measurements for their exact prompt versions. New paid runs need an explicit budget. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
+- [ ] Finish up to five bill key terms, defined only by exact quotations from the definitions section. Code finds the section, checks each quote, stores the terms, serves them in the bill detail API, and reports them in `actions text measure`, all behind `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS`, which is off. A combined bill-text and key-term sample was measured. Confirm the prompt version and activation against the recorded owner decisions. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
 
 Return-visit features are parked and are not part of R-68. The approved "Get this data" links remain in R-68 after cutover.
 
