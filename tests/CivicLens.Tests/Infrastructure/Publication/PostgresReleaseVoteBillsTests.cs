@@ -6,6 +6,7 @@ using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Application.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
+using CivicLens.Tests.PublicApi.Votes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Npgsql;
@@ -157,6 +158,79 @@ public sealed class PostgresReleaseVoteBillsTests(PostgresCollection postgres) :
         var result = await VerifyAsync(scenario);
 
         Assert.Equal((1, 1, "manifestInvalid"), (result.Passed, result.Failed, Assert.Single(result.FailedByReason).Key));
+    }
+
+    // The order and the lateral shape of VoteStore.ListSql, with no filter, for the first page of three rows.
+    private const string ListQuery = """
+        SELECT a.release_number, v.record_id, v.bill_record_id, v.yea
+          FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
+          LEFT JOIN LATERAL (
+               SELECT v.* FROM public_api.votes v
+                WHERE TRUE
+                ORDER BY v.voted_on DESC, v.chamber, v.session_number DESC, v.roll_call_number DESC, v.record_id LIMIT 3) v
+            ON TRUE
+         ORDER BY v.voted_on DESC, v.chamber, v.session_number DESC, v.roll_call_number DESC, v.record_id
+        """;
+
+    [Fact]
+    public async Task TheFirstPageOfTheVoteListReadsOnePinnedRowForEachVoteAndNoAggregateOfTheBillView()
+    {
+        const int bills = 5000;
+        await SeedManyBillsAsync(bills);
+        await ExecuteAsync($"""
+            INSERT INTO release_vote_bills (release_number, vote_record_id, bill_record_id)
+            SELECT 1, r.record_id, md5(r.bill_number::text) || md5('x' || r.bill_number::text) FROM vote_revisions r;
+            ANALYZE release_vote_bills;
+            """);
+
+        var plan = await ExplainAsync();
+
+        Assert.DoesNotContain("Aggregate", plan, StringComparison.Ordinal);
+        Assert.DoesNotContain("Seq Scan on action_revisions", plan, StringComparison.Ordinal);
+        Assert.Contains("release_vote_bills", plan, StringComparison.Ordinal);
+    }
+
+    // Vote n links bill n. The bills carry the record ids of md5(n) and md5('x' + n), as the seed of the issue fill test does.
+    private async Task SeedManyBillsAsync(int bills)
+    {
+        await ViewsSeed.ActivateReleaseAsync(connectionString, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
+        await ViewsSeed.AddVotesAsync(connectionString, [.. Enumerable.Range(0, 16).Select(index => new SeededVote("0123456789abcdef"[index], $"2026-03-{index + 1:00}") { BillNumber = index + 1 })]);
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        foreach (var statement in $"""
+            SET session_replication_role = replica;
+            {PublicActionRows.ActionRevision("template", 1, "Person", "2025-02-01", 1, introducedOn: null)}
+            CREATE TEMP TABLE bulk_ids AS
+            SELECT n, md5(n::text) || md5('x' || n::text) AS id FROM generate_series(1, {bills}) n;
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release)
+            SELECT 'action', id, 1, 1, NULL FROM bulk_ids;
+            INSERT INTO action_revisions
+            SELECT x.*
+              FROM action_revisions r, bulk_ids b,
+                   LATERAL jsonb_populate_record(NULL::action_revisions,
+                       to_jsonb(r) || jsonb_build_object('record_id', b.id, 'bill_number', b.n, 'run_id', NULL, 'headline', 'Headline ' || b.n)) x
+             WHERE r.record_id = 'template';
+            DELETE FROM action_revisions WHERE record_id = 'template';
+            INSERT INTO action_revision_sponsorships (record_id, revision_number, "position", person_id, bioguide_id, role, is_original, sponsored_on)
+            SELECT id, 1, 0, 'p1', 'Bp1', 'Sponsor', true, DATE '2025-02-01' FROM bulk_ids;
+            ANALYZE publication_record_states, action_revisions, action_revision_sponsorships, vote_revisions;
+            """.Split(";\n", StringSplitOptions.RemoveEmptyEntries))
+        {
+            await using var command = new NpgsqlCommand(statement, connection) { CommandTimeout = 0 };
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    private async Task<string> ExplainAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var role = new NpgsqlCommand("SET ROLE civic_lens_public", connection)) await role.ExecuteNonQueryAsync();
+        await using var command = new NpgsqlCommand($"EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF) {ListQuery}", connection);
+        var lines = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) lines.Add(reader.GetString(0));
+        return string.Join('\n', lines);
     }
 
     private async Task<(PublicationScenario Scenario, string Vote)> PublishedReleaseAsync()

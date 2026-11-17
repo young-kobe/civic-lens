@@ -11,7 +11,7 @@ public static class BillTextWords
     public const string Label = "AI summary of the bill text. An AI model wrote this. Each sentence comes with an exact quote from the text. Code checked the quotes, not the meaning of the sentences.";
 
     /// <summary>The owner approved label of the key terms. The view column <c>public_api.bill_key_terms.label</c> serves it, and the page reads that
-    /// column. The migrations <c>ActionRevisionKeyTerms</c> and <c>PublicApiBillTextQuotes</c> hold copies, because SQL cannot read this class. A test compares them.</summary>
+    /// column. The view <c>bill_key_terms</c> in the baseline migration holds a copy, because SQL cannot read this class. A test compares them.</summary>
     public const string KeyTermsLabel = "Key terms chosen by an AI model. Each definition is an exact quote from the definitions section of the bill. Code checked the quotes, not the choice of terms.";
 
     public const string WhyItMattersHeading = "Why it matters, as the text states it.";

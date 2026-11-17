@@ -1,7 +1,3 @@
-using CivicLens.Infrastructure.Collection;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
@@ -86,31 +82,6 @@ public sealed class PublicApiBriefContentViewsTests(PostgresCollection postgres)
         {
             await postgres.DropDatabaseAsync(connectionString);
         }
-    }
-
-
-
-    [Fact]
-    public async Task DowngradeRemovesTheAddedViewsAndTheirOwnerColumnGrants()
-    {
-        var connectionString = await postgres.CreateMigratedDatabaseAsync();
-        try
-        {
-            await using var db = new CollectionAttemptDbContext(new DbContextOptionsBuilder<CollectionAttemptDbContext>().UseNpgsql(connectionString).Options);
-            var previous = db.Database.GetMigrations().Last(id => string.CompareOrdinal(id, "20261107040000_PublicApiBriefContent") < 0);
-            await db.GetService<IMigrator>().MigrateAsync(previous);
-            Assert.Equal(0L, await ScalarAsync(connectionString, "SELECT count(*) FROM information_schema.views WHERE table_schema = 'public_api' AND table_name IN ('brief_paragraphs','brief_citations')", null));
-            await using var connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
-            await using var command = new NpgsqlCommand("""
-                SELECT has_column_privilege('civic_lens_public_owner', 'brief_revision_paragraphs', 'paragraph_text', 'SELECT')
-                    OR has_column_privilege('civic_lens_public_owner', 'brief_revision_citations', 'statement_candidate_id', 'SELECT')
-                    OR has_column_privilege('civic_lens_public_owner', 'brief_revision_paragraph_citations', 'citation_id', 'SELECT')
-                    OR has_column_privilege('civic_lens_public_owner', 'document_change_revisions', 'headline', 'SELECT')
-                """, connection);
-            Assert.False((bool)(await command.ExecuteScalarAsync())!);
-        }
-        finally { await postgres.DropDatabaseAsync(connectionString); }
     }
 
     private static async Task<string> TextAsync(string connectionString, string sql, string id)

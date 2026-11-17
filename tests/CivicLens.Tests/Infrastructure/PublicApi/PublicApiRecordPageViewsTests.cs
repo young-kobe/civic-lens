@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using CivicLens.Core.Review;
 using CivicLens.Application.Publication;
-using CivicLens.Infrastructure.Collection.Migrations;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using CivicLens.Tests.Fixtures;
@@ -254,6 +253,28 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
     }
 
     [Fact]
+    public async Task TheStatementsViewGivesTheLabelThatTheCSharpRuleGivesForEveryOriginAndApprover()
+    {
+        string[] statements = [new('1', 64), new('2', 64), new('3', 64), new('4', 64)];
+        (PublishedTextOrigin Origin, string Approver)[] cases =
+            [(PublishedTextOrigin.Model, ReviewAuthor.CodeSubject), (PublishedTextOrigin.Model, "auth0|owner"), (PublishedTextOrigin.Code, ReviewAuthor.CodeSubject), (PublishedTextOrigin.Person, "auth0|owner")];
+        await SeedAsync($"""
+            {PublicRecordPageRows.ActiveRelease}
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES
+              {string.Join(", ", statements.Select(id => $"('statement', '{id}', 1, 1, NULL)"))};
+            INSERT INTO statement_revision_speakers (candidate_id, revision_number, official_id, position)
+              VALUES {string.Join(", ", statements.Select(id => $"('{id}', 1, 'official', 0)"))};
+            {string.Join("\n", cases.Select((item, index) => PublicRecordPageRows.Headline("statement", statements[index], "Statement " + index, item.Origin.ToString(),
+                item.Approver == ReviewAuthor.CodeSubject ? null : "Person") + "\n" + PublicRecordPageRows.StatementApproval(statements[index], 1, 1, item.Approver)))}
+            """);
+        var expected = cases.Select((item, index) =>
+            $"Statement {index}|{item.Origin}|{LabelOfStatement(item.Origin, StatementApprover([item.Approver]))}").ToArray();
+
+        Assert.Equal(expected, await PublicAsync(
+            "SELECT headline || '|' || text_origin || '|' || coalesce(label, 'none') FROM public_api.statements ORDER BY headline"));
+    }
+
+    [Fact]
     public async Task LaterUnpublishedApprovalsAndReleaseRollbackNeverChangeThePublishedStatementLabel()
     {
         await SeedAsync($"""
@@ -293,7 +314,7 @@ public sealed class PublicApiRecordPageViewsTests(PostgresCollection postgres) :
         Assert.Empty(await PublicAsync("SELECT related_headline FROM public_api.record_links WHERE kind = 'action'"));
     }
 
-    // The label of an action or a House vote. ChamberVoteCodeLabelMigrationTests covers the Senate label.
+    // The label of an action or a House vote. PublicApiViewsTests covers the Senate label.
     private static string LabelOfRecord(PublishedTextOrigin origin) => origin switch
     {
         PublishedTextOrigin.Model => AiLabelWords.ModelWording,
