@@ -435,6 +435,7 @@ try
 
     if (BillBackfillCommand.Matches(args))
     {
+        if (!BillBackfillCommand.TryValidateActionBackfillArguments(args)) return 2;
         var (connectionString, owner) = OwnerCommand.ReadEnvironment();
         var jobs = CreateJobs(codeVersion);
         var responses = new ApiResponseReader(CreateDatabase(), new CaptureBodyReader());

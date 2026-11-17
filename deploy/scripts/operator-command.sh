@@ -74,6 +74,13 @@ case "$*" in
     number "$4"
     "$compose" run --rm cli bills subjects backfill "$4"
     ;;
+  # usage: bills actions backfill <count> [cursor]
+  "bills actions backfill "*)
+    [[ $# -eq 4 || $# -eq 5 ]] || refuse
+    [[ $1 == bills && $2 == actions && $3 == backfill ]] || refuse
+    number "$4"
+    "$compose" run --rm cli bills actions backfill "$4" "${@:5}"
+    ;;
   # usage: bills status backfill <count>
   "bills status backfill "*)
     [[ $# -eq 4 ]] || refuse

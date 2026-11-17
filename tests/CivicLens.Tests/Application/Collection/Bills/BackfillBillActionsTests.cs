@@ -13,6 +13,8 @@ namespace CivicLens.Tests.Application.Collection.Bills;
 public sealed class BackfillBillActionsTests
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
+    private const string DetailId = "bill-stream/" + ActionBillWorld.SourceId + "/bill/119/hr/2/2025-01-01";
+    private const string EarlierDetailId = "bill-stream/" + ActionBillWorld.SourceId + "/bill/119/hr/1/2025-01-01";
 
     [Theory]
     [InlineData(true)]
@@ -33,7 +35,7 @@ public sealed class BackfillBillActionsTests
         var result = await Backfill(world, store, new RecordingExtractions([extraction])).ExecuteAsync(Owner, 1);
 
         Assert.Equal(captured.AttemptId, extraction.SourceAttempt.AttemptId);
-        Assert.Equal(new BillActionsBackfillResult(1, 0, 1), result);
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 1, DetailId), result);
         Assert.Empty(store.RecordedChains);
         Assert.Equal(0, world.Stores.BodyReads);
     }
@@ -47,18 +49,18 @@ public sealed class BackfillBillActionsTests
         var extractions = await ExtractionsForAsync(world, "bad-actions", "actions-0");
         var store = new RecordingStore([new("actions-0", 0, extractions.Items[1].ExtractionId, true, 119, "hr", 1, ActionBillWorld.SourceId)])
         {
-            DetailIds = ["bad-detail", "detail"],
+            DetailIds = [EarlierDetailId, DetailId],
             OtherPages = new Dictionary<string, IReadOnlyList<BillActionsBackfillPage>>
             {
-                ["bad-detail"] = [new("bad-actions", 0, extractions.Items[0].ExtractionId, true, 119, "hr", 1, ActionBillWorld.SourceId)]
+                [EarlierDetailId] = [new("bad-actions", 0, extractions.Items[0].ExtractionId, true, 119, "hr", 1, ActionBillWorld.SourceId)]
             }
         };
         var backfill = new BackfillBillActions(store, world.Stores, extractions,
             new ApiResponseReader(world.Stores, new UnsupportedEncodingBodies(world.Stores)), "artifacts");
 
-        var result = await backfill.ExecuteAsync(Owner, 1);
+        var result = await backfill.ExecuteAsync(Owner, 2);
 
-        Assert.Equal(new BillActionsBackfillResult(2, 1, 1), result);
+        Assert.Equal(new BillActionsBackfillResult(2, 1, 1, DetailId), result);
         Assert.Equal("Recovered.", Assert.Single(Assert.Single(store.RecordedChains)[0].Page.Actions).Text);
     }
 
@@ -69,13 +71,94 @@ public sealed class BackfillBillActionsTests
         world.AddActionsPage("actions-0", 0, ActionBillWorld.ActionsBody(["Recovered."], null));
         var extractions = await ExtractionsForAsync(world, "actions-0");
         var store = new RecordingStore([new("actions-0", 0, extractions.Items[0].ExtractionId, true, 119, "hr", 1, ActionBillWorld.SourceId)])
-        { DetailIds = ["a-missing", "detail"] };
+        { DetailIds = [EarlierDetailId, DetailId] };
 
-        var result = await Backfill(world, store, extractions).ExecuteAsync(Owner, 1);
+        var result = await Backfill(world, store, extractions).ExecuteAsync(Owner, 2);
 
-        Assert.Equal(new BillActionsBackfillResult(2, 1, 1), result);
+        Assert.Equal(new BillActionsBackfillResult(2, 1, 1, DetailId), result);
         Assert.Single(store.RecordedChains);
-        Assert.Equal([(null, 1), ("a-missing", 1)], store.ListCalls);
+        Assert.Equal([(null, 2)], store.ListCalls);
+    }
+
+    [Fact]
+    public async Task AllFailingChainsConsumeTheLimitAndTheCursorResumesPastThem()
+    {
+        var world = ActionBillWorld.Create();
+        var store = new RecordingStore([]) { DetailIds = [EarlierDetailId, DetailId] };
+        var backfill = Backfill(world, store, new RecordingExtractions([]));
+
+        var first = await backfill.ExecuteAsync(Owner, 1);
+        var second = await backfill.ExecuteAsync(Owner, 1, first.NextCursor);
+
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 1, store.DetailIds[0]), first);
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 1, store.DetailIds[1]), second);
+        Assert.Equal([(null, 1), (store.DetailIds[0], 1)], store.ListCalls);
+    }
+
+    [Fact]
+    public async Task FailedChainsRespectTheLimitAcrossBatchesAndATailOrEmptyPageEndsTheScan()
+    {
+        var world = ActionBillWorld.Create();
+        var ids = Enumerable.Range(1, 27).Select(number =>
+            $"bill-stream/{ActionBillWorld.SourceId}/bill/119/hr/{number}/2025-01-01").Order(StringComparer.Ordinal).ToArray();
+        var store = new RecordingStore([]) { DetailIds = ids };
+        var backfill = Backfill(world, store, new RecordingExtractions([]));
+
+        var first = await backfill.ExecuteAsync(Owner, 26);
+        var tail = await backfill.ExecuteAsync(Owner, 5, first.NextCursor);
+        var empty = await backfill.ExecuteAsync(Owner, 5, ids[^1]);
+
+        Assert.Equal(new BillActionsBackfillResult(26, 0, 26, ids[25]), first);
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 1, null), tail);
+        Assert.Equal(new BillActionsBackfillResult(0, 0, 0, null), empty);
+        Assert.Equal([(null, 25), (ids[24], 1), (ids[25], 5), (ids[^1], 5)], store.ListCalls);
+    }
+
+    [Fact]
+    public async Task ConcurrentNoOpRecordOutcomeConsumesTheLimitAndShortBatchHasNoCursor()
+    {
+        var world = ActionBillWorld.Create();
+        world.AddActionsPage("actions-0", 0, ActionBillWorld.ActionsBody(["Captured."], null));
+        var extractions = await ExtractionsForAsync(world, "actions-0");
+        var store = new RecordingStore([new("actions-0", 0, extractions.Items[0].ExtractionId, true, 119, "hr", 1, ActionBillWorld.SourceId)])
+        { RecordResult = false };
+
+        var result = await Backfill(world, store, extractions).ExecuteAsync(Owner, 2);
+
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 0, null), result);
+        Assert.Single(store.RecordedChains);
+        Assert.Equal([(null, 2)], store.ListCalls);
+    }
+
+    [Theory]
+    [InlineData("source/part")]
+    [InlineData("source with spaces")]
+    [InlineData("source/bill/part")]
+    public async Task AGeneratedDetailKeyCanResumeWithoutRestrictingTheConfiguredSourceId(string sourceId)
+    {
+        var world = ActionBillWorld.Create();
+        var cursor = BillStreamJobKeys.Detail(sourceId, new(119, "hr", 1, new(2025, 1, 1)));
+        var store = new RecordingStore([]) { DetailIds = [] };
+
+        var result = await Backfill(world, store, new RecordingExtractions([])).ExecuteAsync(Owner, 1, cursor);
+
+        Assert.Equal(new BillActionsBackfillResult(0, 0, 0, null), result);
+        Assert.Equal([(cursor, 1)], store.ListCalls);
+    }
+
+    [Fact]
+    public async Task InvalidLimitOrCursorIsRejectedBeforeListingAndOnlyOwnerMayRun()
+    {
+        var world = ActionBillWorld.Create();
+        var store = new RecordingStore([]);
+        var backfill = Backfill(world, store, new RecordingExtractions([]));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => backfill.ExecuteAsync(Owner, 0));
+        await Assert.ThrowsAsync<ArgumentException>(() => backfill.ExecuteAsync(Owner, 1, "malformed"));
+        await Assert.ThrowsAsync<ArgumentException>(() => backfill.ExecuteAsync(Owner, 1, "bill-stream/"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => backfill.ExecuteAsync(new("auth0|reader", ReviewRole.Reviewer), 1));
+
+        Assert.Empty(store.ListCalls);
     }
 
     [Fact]
@@ -92,7 +175,7 @@ public sealed class BackfillBillActionsTests
 
         var result = await Backfill(world, store, extractionStore).ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new BillActionsBackfillResult(1, 1, 0), result);
+        Assert.Equal(new BillActionsBackfillResult(1, 1, 0, null), result);
         Assert.Equal(2, Assert.Single(store.RecordedChains).Count);
         Assert.Equal(["First."], store.RecordedChains[0][0].Page.Actions.Select(action => action.Text));
         Assert.Equal(["Second."], store.RecordedChains[0][1].Page.Actions.Select(action => action.Text));
@@ -114,7 +197,7 @@ public sealed class BackfillBillActionsTests
 
         var result = await Backfill(world, store, extractionStore).ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new BillActionsBackfillResult(1, 0, 1), result);
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 1, null), result);
         Assert.Empty(store.RecordedChains);
         Assert.Equal(0, world.Stores.BodyReads);
     }
@@ -132,7 +215,7 @@ public sealed class BackfillBillActionsTests
 
         var result = await Backfill(world, store, extractionStore).ExecuteAsync(Owner, 10);
 
-        Assert.Equal(new BillActionsBackfillResult(1, 0, 1), result);
+        Assert.Equal(new BillActionsBackfillResult(1, 0, 1, null), result);
         Assert.Empty(store.RecordedChains);
     }
 
@@ -171,11 +254,12 @@ public sealed class BackfillBillActionsTests
 
     private sealed class RecordingStore(IReadOnlyList<BillActionsBackfillPage> pages) : IBillActionsBackfillStore
     {
-        public string[] DetailIds { get; init; } = ["detail"];
+        public string[] DetailIds { get; init; } = [DetailId];
         public IReadOnlyDictionary<string, IReadOnlyList<BillActionsBackfillPage>> OtherPages { get; init; } =
             new Dictionary<string, IReadOnlyList<BillActionsBackfillPage>>();
         public List<IReadOnlyList<VerifiedBillActionsPage>> RecordedChains { get; } = [];
         public List<(string? After, int Limit)> ListCalls { get; } = [];
+        public bool RecordResult { get; init; } = true;
 
         public Task<IReadOnlyList<string>> ListBillsWithUnverifiedActionsAsync(string? after, int limit, CancellationToken cancellationToken)
         {
@@ -186,13 +270,13 @@ public sealed class BackfillBillActionsTests
 
         public Task<IReadOnlyList<BillActionsBackfillPage>> ListActionPagesAsync(string detailJobId,
             CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<BillActionsBackfillPage>>(
-                detailJobId == "detail" ? pages : OtherPages.GetValueOrDefault(detailJobId) ?? []);
+                detailJobId == DetailId ? pages : OtherPages.GetValueOrDefault(detailJobId) ?? []);
 
         public Task<bool> RecordVerifiedActionChainAsync(string detailJobId, IReadOnlyList<VerifiedBillActionsPage> pages,
             CancellationToken cancellationToken)
         {
             RecordedChains.Add(pages);
-            return Task.FromResult(true);
+            return Task.FromResult(RecordResult);
         }
     }
 
