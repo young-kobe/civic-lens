@@ -218,14 +218,17 @@ public sealed class ExecutiveActionDetailPageTests
     [Fact]
     public async Task TheCorrectionBannerFollowsTheHeadlineOnlyForAPersonCorrectionAndARoutineUpdateShowsTheMutedLineInTheHeader()
     {
-        var corrected = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action() with { Corrections = [PublishedCorrectionBannerTests.Newest] });
+        var corrected = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action() with { RevisionNumber = 4, Corrections = PublishedCorrectionListTests.History });
         var plain = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action());
         var updated = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(Action() with { Corrections = [PublishedUpdateLineTests.SourceUpdate] });
 
         PublishedCorrectionBannerTests.AssertTheBannerFollowsTheHeadline(corrected);
+        PublishedCorrectionListTests.AssertFullHistory(corrected);
+        PublishedCorrectionListTests.AssertEmptyHistory(plain);
         Assert.Null(plain.QuerySelector(".correction-banner"));
         Assert.Null(corrected.QuerySelector(".update-line"));
         Assert.Null(plain.QuerySelector(".update-line"));
         PublishedUpdateLineTests.AssertTheLineIsInTheRecordHeader(updated);
+        Assert.Single(updated.QuerySelectorAll(".corrections > li"));
     }
 }
