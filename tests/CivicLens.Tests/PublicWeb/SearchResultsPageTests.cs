@@ -14,8 +14,8 @@ public sealed class SearchResultsPageTests
         new(PublishedRecordKind.Action, new string(id, 64), headline, new(2026, 2, 23), billLine, snippet, ["Jimmy Panetta"]);
 
     private static SearchPageData Data(SearchQueryData? query = null, SearchOfficialData[]? officials = null, SearchBillData? bill = null,
-        SearchHitData[]? hits = null, string? next = null, string? filterName = null, bool moreOfficials = false, int? total = null) =>
-        new(query ?? Query(), 1028, officials ?? [], moreOfficials, bill, hits ?? [], total ?? hits?.Length ?? 0, next, [new("housing", "Housing")], filterName);
+        SearchHitData[]? hits = null, string? next = null, string? filterName = null, bool moreOfficials = false, int? total = null, SearchChoiceData[]? issues = null) =>
+        new(query ?? Query(), 1028, officials ?? [], moreOfficials, bill, hits ?? [], total ?? hits?.Length ?? 0, next, issues ?? [new("housing", "Housing")], filterName);
 
     private static SearchOfficialData Official(string id = "jimmy-panetta", string name = "Jimmy Panetta") =>
         new(id, name, PublishedOfficeKind.Representative, null, "CA", 19, "Democrat");
@@ -37,6 +37,163 @@ public sealed class SearchResultsPageTests
         Assert.True(ListPageRender.Precedes(empty, page.QuerySelector(".list-fold")!));
         Assert.Null(page.QuerySelector(".record-rows"));
         Assert.Null(page.QuerySelector(".list-status"));
+    }
+
+    [Fact]
+    public async Task ARefusedQueryKeepsItsTextAndOfficialRecoveryLinkWithoutShowingSearchClaimsOrResults()
+    {
+        var text = new string('x', SearchResultsPage.MaximumTextLength + 1);
+        var page = await RenderAsync(Data(Query(text) with { Official = "jimmy-panetta", Invalid = "q" },
+            officials: [Official()], bill: new(BillId, "H.R. 5334", 119, null, null, null, null, []),
+            hits: [Hit('a', "H.R. 5334")], filterName: "Jimmy Panetta", total: 1));
+
+        Assert.Equal(text, page.QuerySelector("#search-text")!.GetAttribute("value"));
+        Assert.Equal("true", page.QuerySelector("#search-text")!.GetAttribute("aria-invalid"));
+        Assert.True(page.QuerySelector("details.list-fold")!.HasAttribute("open"));
+        Assert.Null(page.QuerySelector(".list-scope.muted"));
+        Assert.Null(page.QuerySelector(".empty"));
+        Assert.Null(page.QuerySelector(".list-status"));
+        Assert.Null(page.QuerySelector(".record-rows"));
+        Assert.Null(page.QuerySelector(".search-official"));
+        Assert.Null(page.QuerySelector(".search-pin"));
+        var recovery = page.QuerySelector(".search-filter-official")!;
+        Assert.Equal("Show records about any official", recovery.TextContent.Trim());
+        Assert.Equal("?q=" + Uri.EscapeDataString(text), recovery.QuerySelector("a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task ARefusedKindKeepsTheUnknownSelectionAndHidesEveryClaimAboutSearchResults()
+    {
+        var page = await RenderAsync(Data(Query(null) with { Kind = "unexpected-kind", Invalid = "kind" },
+            officials: [Official()], hits: [Hit('a', "H.R. 5334")], total: 1));
+
+        var kind = page.QuerySelector("#search-kind")!;
+        Assert.Equal("true", kind.GetAttribute("aria-invalid"));
+        Assert.Equal("unexpected-kind", kind.QuerySelector("option[selected]")!.GetAttribute("value"));
+        Assert.True(page.QuerySelector("details.list-fold")!.HasAttribute("open"));
+        Assert.Null(page.QuerySelector(".empty"));
+        Assert.Null(page.QuerySelector(".list-status"));
+        Assert.Null(page.QuerySelector(".record-rows"));
+        Assert.Null(page.QuerySelector(".search-official"));
+    }
+
+    [Fact]
+    public async Task ARefusedIssueStillHasAFieldWhenTheReleaseHasNoIssueChoices()
+    {
+        var page = await RenderAsync(Data(Query(null) with { Issue = "unknown-issue", Invalid = "issue" },
+            hits: [Hit('a', "H.R. 5334")], issues: []));
+
+        var issue = page.QuerySelector("#search-issue")!;
+        Assert.Equal("true", issue.GetAttribute("aria-invalid"));
+        Assert.Equal("unknown-issue", issue.QuerySelector("option[selected]")!.GetAttribute("value"));
+        Assert.Null(page.QuerySelector(".record-rows"));
+        Assert.Null(page.QuerySelector(".empty"));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task AnIssueOutsideTheChoicesKeepsItsSelectedValueEvenWhenAnotherFieldWasRefused(bool hasChoices, bool refusedText)
+    {
+        const string issueValue = "former<issue>&name";
+        var query = Query("rent") with { Issue = issueValue, Invalid = refusedText ? "q" : null };
+        var page = await RenderAsync(Data(query, hits: [Hit('a', "A housing bill")],
+            issues: hasChoices ? [new("housing", "Housing")] : []));
+
+        var issue = page.QuerySelector("#search-issue");
+        Assert.NotNull(issue);
+        var selected = issue.QuerySelector("option[selected]");
+        Assert.Equal(issueValue, selected?.GetAttribute("value"));
+        Assert.Equal(issueValue, selected?.TextContent);
+        Assert.Null(issue.GetAttribute("aria-invalid"));
+        if (refusedText) Assert.Null(page.QuerySelector(".record-rows"));
+        else Assert.NotNull(page.QuerySelector(".record-rows"));
+    }
+
+    [Fact]
+    public async Task MalformedFromAndToDatesRemainEditableTextAndKeepTheirOriginalValues()
+    {
+        const string badFrom = "<2026-09-01";
+        const string badTo = "2026-13-40&";
+        var fromPage = await RenderAsync(Data(Query(null) with { From = badFrom, To = "2026-10-01", Invalid = "from" }));
+        var toPage = await RenderAsync(Data(Query(null) with { From = "2026-09-01", To = badTo, Invalid = "to" }));
+
+        foreach (var (page, value, id) in new[]
+        {
+            (fromPage, badFrom, "search-from"),
+            (toPage, badTo, "search-to")
+        })
+        {
+            var input = page.QuerySelector($"#{id}")!;
+            Assert.Equal("text", input.GetAttribute("type"));
+            Assert.Equal(value, input.GetAttribute("value"));
+            Assert.Equal("true", input.GetAttribute("aria-invalid"));
+            Assert.Equal($"{id}-error", input.GetAttribute("aria-describedby"));
+            Assert.Contains(RecordListFilter.DateError, page.QuerySelector($"#{id}-error")!.TextContent);
+            Assert.Null(page.QuerySelector(".record-rows"));
+        }
+        Assert.Equal("date", fromPage.QuerySelector("#search-to")!.GetAttribute("type"));
+        Assert.Equal("date", toPage.QuerySelector("#search-from")!.GetAttribute("type"));
+    }
+
+    [Fact]
+    public async Task ARefusedDateOrderKeepsNativeDateInputsAndShowsItsApprovedError()
+    {
+        var page = await RenderAsync(Data(Query(null) with { From = "2026-10-02", To = "2026-10-01", Invalid = "from" }));
+
+        Assert.Equal("date", page.QuerySelector("#search-from")!.GetAttribute("type"));
+        Assert.Equal("date", page.QuerySelector("#search-to")!.GetAttribute("type"));
+        Assert.Contains(RecordListFilter.DateOrderError, page.QuerySelector("#search-from-error")!.TextContent);
+        Assert.Null(page.QuerySelector(".empty"));
+        Assert.Null(page.QuerySelector(".record-rows"));
+    }
+
+    [Theory]
+    [InlineData("2026-01-01")]
+    [InlineData("2026-02-01")]
+    public async Task ARepeatedValidDateDoesNotClaimThatTheRangeIsOutOfOrder(string to)
+    {
+        var page = await RenderAsync(Data(Query(null) with { From = "2026-01-01", To = to, Invalid = "from" }));
+
+        var input = page.QuerySelector("#search-from")!;
+        Assert.Equal("true", input.GetAttribute("aria-invalid"));
+        Assert.Equal("date", input.GetAttribute("type"));
+        Assert.Null(input.GetAttribute("aria-describedby"));
+        Assert.Null(page.QuerySelector("#search-from-error"));
+    }
+
+    [Theory]
+    [InlineData("from")]
+    [InlineData("to")]
+    public async Task ARepeatedBlankOptionalDateHasNoMalformedDateMessage(string field)
+    {
+        var page = await RenderAsync(Data(Query(null) with
+        {
+            From = field == "from" ? string.Empty : null,
+            To = field == "to" ? string.Empty : null,
+            Invalid = field
+        }));
+
+        var input = page.QuerySelector($"#search-{field}")!;
+        Assert.Equal("true", input.GetAttribute("aria-invalid"));
+        Assert.Equal("date", input.GetAttribute("type"));
+        Assert.Null(input.GetAttribute("aria-describedby"));
+        Assert.Null(page.QuerySelector($"#search-{field}-error"));
+    }
+
+    [Fact]
+    public async Task ARefusedKindKeepsBothMalformedDatesVisibleBeforeTheirOwnValidationTurn()
+    {
+        var page = await RenderAsync(Data(Query(null) with { Kind = "unknown-kind", From = "not-a-date", To = "also-not-a-date", Invalid = "kind" }));
+
+        Assert.Equal("text", page.QuerySelector("#search-from")!.GetAttribute("type"));
+        Assert.Equal("not-a-date", page.QuerySelector("#search-from")!.GetAttribute("value"));
+        Assert.Equal("text", page.QuerySelector("#search-to")!.GetAttribute("type"));
+        Assert.Equal("also-not-a-date", page.QuerySelector("#search-to")!.GetAttribute("value"));
+        Assert.Null(page.QuerySelector("#search-from")!.GetAttribute("aria-invalid"));
+        Assert.Null(page.QuerySelector("#search-to")!.GetAttribute("aria-invalid"));
     }
 
     [Fact]

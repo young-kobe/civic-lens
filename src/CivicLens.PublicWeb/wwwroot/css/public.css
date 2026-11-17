@@ -846,6 +846,7 @@ form.lists-filter > .lists-filter-actions { margin-top: var(--s4); }
 .board-kind dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .search-box { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
 .search-box input { flex: 1 1 200px; min-height: 48px; padding: 0 var(--s3); border: 0; border-radius: var(--r-control); background: var(--surface); box-shadow: inset 0 0 0 2px var(--line-strong); font-size: var(--t-lg); }
+.search-box input[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--del); }
 .search-box input:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus), 0 0 0 3px var(--focus-halo); }
 .search-box .btn { min-height: 48px; padding: 0 var(--s5); }
 .search-official, .search-pin { margin-top: var(--s4); padding: var(--s4); border-radius: var(--r-panel); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }

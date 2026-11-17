@@ -15,7 +15,8 @@ public static class SearchPageEndpoint
     public static Task<IResult> RespondAsync(HttpContext context, SearchPageReader reader, ActiveReleaseReader releases, PageRenderer renderer, PublicBaseUrl baseUrl,
         CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
     {
-        if (await reader.ReadAsync(context.Request.Query, cancellationToken) is not { } data) return ApiResults.NoRelease();
+        var (data, statusCode) = await ReadAsync(context.Request.Query, reader, cancellationToken);
+        if (data is null) return ApiResults.NoRelease();
         if (await releases.FindFreshnessAsync(cancellationToken) is not { } freshness) return ApiResults.NoRelease();
         var html = await renderer.RenderPageAsync<SearchResultsPage>(new Dictionary<string, object?>
         {
@@ -23,6 +24,20 @@ public static class SearchPageEndpoint
             [nameof(SearchResultsPage.RootPath)] = baseUrl.Join(string.Empty)
         }, freshness.PageContextFor(data.Release));
         context.Response.Headers.CacheControl = CacheControl;
-        return Results.Content(html, "text/html; charset=utf-8");
+        return Results.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
     });
+
+    private static async Task<(SearchPageData? Data, int StatusCode)> ReadAsync(IQueryCollection query, SearchPageReader reader, CancellationToken cancellationToken)
+    {
+        SearchRequest request;
+        try
+        {
+            request = SearchRequest.ParsePage(query);
+        }
+        catch (ArgumentException refused)
+        {
+            return (await reader.ReadRefusedAsync(query, refused.ParamName, cancellationToken), StatusCodes.Status400BadRequest);
+        }
+        return (await reader.ReadAsync(request, cancellationToken), StatusCodes.Status200OK);
+    }
 }
