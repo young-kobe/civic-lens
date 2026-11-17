@@ -15,7 +15,7 @@
     }
     else
     {
-        <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" ColorModes="true" ShowIntro="false" />
+        <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" MembersDataUrl="@VotePageView.MembersApiUrl(Data.RecordId, BrowserApiUrl)" ColorModes="true" ShowIntro="false" />
         <Notice>@VoteMapWords.RecordedVotesOnly</Notice>
         <details class="vote-fold">
             <summary>@VoteMapWords.SourceFold</summary>
@@ -35,6 +35,7 @@
 
     [Parameter, EditorRequired] public VotePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public string? BrowserApiUrl { get; set; }
 
     protected override void OnParametersSet()
     {

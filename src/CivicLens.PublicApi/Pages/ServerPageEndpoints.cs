@@ -97,7 +97,7 @@ public static class ServerPageEndpoints
                 [nameof(OfficialRecordPage.RootPath)] = baseUrl.Join(string.Empty)
             }, cancellationToken);
         }));
-        pages.MapGet(Route(PublicationProtocol.RecordPagePath("{recordId}")), (string recordId, HttpContext context, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
+        pages.MapGet(Route(PublicationProtocol.RecordPagePath("{recordId}")), (string recordId, HttpContext context, HomePageReader home, RecordKindStore kinds, VotePageReader votes, BillPageReader bills, StatementPageReader statements,
             ExecutiveActionPageReader actions, DocumentChangePageReader changes, BriefPageReader briefs, RelationshipPageReader relationships, WithdrawalStore withdrawals, ServerPageResponder responder,
             CancellationToken cancellationToken) =>
             ApiResults.GuardAsync(async () =>
@@ -113,7 +113,8 @@ public static class ServerPageEndpoints
                     {
                         [nameof(VoteDetailPage.Data)] = vote,
                         [nameof(VoteDetailPage.RootPath)] = rootPath,
-                        [nameof(VoteDetailPage.Filter)] = filter
+                        [nameof(VoteDetailPage.Filter)] = filter,
+                        [nameof(VoteDetailPage.BrowserApiUrl)] = home.BrowserApiRoot
                     }, cancellationToken);
                 case PublishedRecordKind.Action when await bills.ReadAsync(recordId, cancellationToken) is { } bill:
                     return await responder.RespondAsync<BillDetailPage>(context, StatusCodes.Status200OK, bill.Release, new Dictionary<string, object?>

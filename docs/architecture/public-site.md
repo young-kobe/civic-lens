@@ -102,6 +102,7 @@ These decisions come from the component audit. The owner accepted every recommen
 - AI text always carries its label.
 - A fixed rule in code picks featured content. A person never picks it.
 - Party colors use red and blue, with patterns and an explicit legend. On the vote map, Yes is navy ink (`--ink`) and No is orange stripes (`--against`). The party mode of the map uses the party color. A solid fill is Yes, stripes are No, small dots are Present, and rings are Not voting. Patterns, the legend, and a table carry meaning, never color alone.
+- Published-data tables link to their existing typed source API with "Get this data". Static explanatory tables have no data link. The source API can page a broader set than the visible table.
 - Every UI pull request attaches screenshots at 360 px and 1280 px, light and dark.
 - Each per-kind list row shows its AI label from the view label column as a chip after the title link. A row with no label shows none. `AiLabel` draws it. A code chip stays muted, and every other chip takes the AI colors. Enforcers: `AiLabel`, `PublicRecordRow`, and the list readers. Test: `RecordListPageTests`.
 - A per-kind list shows 25 rows a page and pages with an opaque cursor. Each next and previous page link keeps the filters. A cursor of another release redirects to the first page. Enforcers: the list readers and `ListPageEndpoints`. Tests: `RecordListPageTests`.
@@ -345,6 +346,8 @@ These decisions come from the component audit. The owner accepted every recommen
 - One sitemap file holds at most 50,000 addresses. Over that count, `sitemap.xml` is a sitemap index of `sitemap-{n}.xml` files. Each file reads only its own slice of one snapshot. Enforcers: `SitemapReader.ReadAsync` and `SitemapEndpoints`. Tests: `SitemapEndpointsTests.OverTheProtocolLimitTheSitemapIsAnIndexAndEachFileHoldsAtMostTheLimit` and `SitemapEndpointsTests.AtTheProtocolLimitTheSitemapIsOneFileAndNoNumberedFileExists`.
 - The sitemap is `text/xml; charset=utf-8` with the release ETag and the shared page cache value, and a matching request gets 304. Enforcer: `ServerPageResponder.RespondFile`. Test: `SitemapEndpointsTests.TheSitemapIsXmlWithTheReleaseValidatorsAndAMatchingRequestGets304`.
 - The `robots.txt` file allows every crawler and names the public `sitemap.xml`. It is `text/plain; charset=utf-8` with the shared page cache value. The service adds no `X-Robots-Tag`, because Caddy owns that header. Enforcer: `SitemapEndpoints`. Test: `SitemapEndpointsTests.TheRobotsFileAllowsEveryCrawlerAndNamesThePublicSitemapAsPlainText`.
+
+- A nonempty vote member or map seat table has one "Get this data" link when the browser API origin is configured. It opens the paged vote-members API. The link does not reproduce local filters or synthetic vacant seats. Empty and static explanatory tables have no link. Enforcers: `DataTable`, `VotePageView.MembersApiUrl`, and the vote and map page endpoints. Tests: `DataTableTests.AConfiguredDataUrlAppearsBelowRowsButNotWhenTheTableIsEmpty`, `VoteDetailPageTests.TheMemberTableLinksToTheConfiguredPagedSourceAndKeepsEmptyFilteredResultsLinkFree`, `VotePageEndpointsTests.VoteDataLinkUsesTheConfiguredCrossOriginBrowserApiRoot`, and `VoteMapPageEndpointsTests.SeatDataLinkUsesTheConfiguredCrossOriginBrowserApiRoot`.
 
 ## Behavior
 

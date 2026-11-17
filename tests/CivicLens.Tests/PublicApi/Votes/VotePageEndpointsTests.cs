@@ -22,6 +22,7 @@ namespace CivicLens.Tests.PublicApi.Votes;
 public sealed class VotePageEndpointsTests(PostgresCollection postgres)
 {
     private static readonly PublicBaseUrl BaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test")!;
+    private static readonly PublicBaseUrl BrowserApiUrl = PublicBaseUrl.Parse("https://api.civic-lens.test", PublicApiOptions.BrowserApiUrlVariable)!;
     private static readonly SeededVote House = new('a', "2026-03-02") { Casts = ["Yea", "Nay", "Nay", "Not Voting"], PersonIds = ["p0", "p1", "p2", "p3"], Issues = ["health"] };
     private static readonly string Path = $"/records/{House.RecordId}.html";
     private static readonly SeededVote Senate = new('c', "2026-03-03")
@@ -32,9 +33,9 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         PersonIds = ["s0", "s1", "s2", "s3", "s4", "s5"]
     };
 
-    private async Task<ApiHost> StartAsync(bool withTallies = true)
+    private async Task<ApiHost> StartAsync(bool withTallies = true, bool withBrowserApi = false)
     {
-        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl });
+        var host = await ApiHost.StartAsync(postgres, options => options with { PublicBaseUrl = BaseUrl, BrowserApiUrl = withBrowserApi ? BrowserApiUrl : null });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, House);
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
@@ -75,6 +76,18 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.Equal(["House Democrats", "House Republicans"], page.QuerySelectorAll(".vote-parties figcaption").Select(caption => caption.TextContent));
         Assert.Equal("Health care", page.QuerySelector(".vote-chip")!.TextContent);
         Assert.Equal(["Ann Able", "Ben Baker", "Cy Cole", "Di Dole"], page.QuerySelectorAll(".vote-members tbody td:first-child").Select(cell => cell.TextContent));
+    }
+
+    [Fact]
+    public async Task VoteDataLinkUsesTheConfiguredCrossOriginBrowserApiRoot()
+    {
+        await using var host = await StartAsync(withBrowserApi: true);
+
+        var page = await GetPageAsync(host, Path);
+
+        var link = page.QuerySelector(".vote-members .table-wrap > p a")!;
+        Assert.Equal("Get this data", link.TextContent);
+        Assert.Equal(BrowserApiUrl.Join($"v1/votes/{House.RecordId}/members"), link.GetAttribute("href"));
     }
 
     [Fact]
