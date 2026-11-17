@@ -3,24 +3,7 @@
 @using System.Text
 @using CivicLens.Publication.Contracts
 
-@if (Origin == PublishedTextOrigin.Model)
-{
-    @foreach (var segment in segments)
-    {
-        @if (segment.Key is { } key)
-        {
-            @Term.Render(Use, key, TextContent(segment.Text))
-        }
-        else
-        {
-            @segment.Text
-        }
-    }
-}
-else
-{
-    @Text
-}
+@RenderSegments(Use, Text, Origin, segments)
 
 @code {
     private static readonly Candidate[] Candidates = Glossary.Groups
@@ -40,6 +23,30 @@ else
     protected override void OnParametersSet() => segments = Origin == PublishedTextOrigin.Model ? Split(Text) : [];
 
     private static RenderFragment TextContent(string text) => builder => builder.AddContent(0, text);
+
+    internal static RenderFragment Render(GlossaryPageUse use, string text, PublishedTextOrigin origin) =>
+        RenderSegments(use, text, origin, origin == PublishedTextOrigin.Model ? Split(text) : []);
+
+    private static RenderFragment RenderSegments(GlossaryPageUse use, string text, PublishedTextOrigin origin, Segment[] parts) => @<text>
+        @if (origin == PublishedTextOrigin.Model)
+        {
+            @foreach (var segment in parts)
+            {
+                @if (segment.Key is { } key)
+                {
+                    @Term.Render(use, key, TextContent(segment.Text))
+                }
+                else
+                {
+                    @segment.Text
+                }
+            }
+        }
+        else
+        {
+            @text
+        }
+    </text>;
 
     private static Segment[] Split(string text)
     {

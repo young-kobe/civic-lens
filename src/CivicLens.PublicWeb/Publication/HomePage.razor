@@ -41,7 +41,7 @@
                     }
                     @if (featured.TextOrigin == PublishedTextOrigin.Model)
                     {
-                        <AiSummary TextOrigin="@featured.TextOrigin" Label="@summaryLabel" LabelId="home-featured-origin" LabelLook="AiLabelLook.Chip"><p>@featured.Summary</p></AiSummary>
+                        <AiSummary Text="@featured.Summary" TextOrigin="@featured.TextOrigin" Label="@summaryLabel" LabelId="home-featured-origin" LabelLook="AiLabelLook.Chip" />
                     }
                     else
                     {
