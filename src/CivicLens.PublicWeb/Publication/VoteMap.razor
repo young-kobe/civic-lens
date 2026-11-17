@@ -158,7 +158,7 @@
         }
         <details class="vote-fold">
             <summary>@VoteMapWords.TableFold</summary>
-            <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber, RollCall)" Scroll="true" PagedRows="seats">
+            <DataTable TItem="VoteMapRow" Items="rows" Caption="@VoteMapWords.TableCaption(Data.Chamber, RollCall)" Scroll="true" PagedRows="seats" DataUrl="@MembersDataUrl">
                 <Head>
                     <TableCell Header>Seat</TableCell>
                     <TableCell Header>Member</TableCell>
@@ -190,6 +190,7 @@
     [Parameter, EditorRequired] public VoteMapData Data { get; set; } = default!;
     [Parameter, EditorRequired] public int RollCall { get; set; }
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public string? MembersDataUrl { get; set; }
     /// <summary>Draws the shapes alone, as Home does: no heading, legend, tiles, delegates, or table. The label of the shapes then holds the counts.</summary>
     [Parameter] public bool Compact { get; set; }
     /// <summary>Adds the choice between coloring by vote and coloring by party. Its buttons need script, so without it the map stays colored by vote.</summary>

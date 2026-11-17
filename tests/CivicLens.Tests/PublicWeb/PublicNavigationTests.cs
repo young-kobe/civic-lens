@@ -211,7 +211,7 @@ public sealed class PublicNavigationTests
         var page = await RenderAsync(section: PublicSection.AllRecords, title: "Vote", record: record);
         var link = Assert.Single(page.QuerySelectorAll("footer a[href*='report.html']"));
 
-        Assert.Equal(Root + PublicationProtocol.ReportPageLink("rec-1", 3, title), link.GetAttribute("href"));
+        Assert.Equal(Root + PublicationProtocol.ReportPageLink("rec-1", 3, PublishedRecordKind.Vote, title), link.GetAttribute("href"));
         Assert.Equal("Report a problem with this vote", link.FirstChild!.TextContent);
         Assert.Equal(": " + title, link.QuerySelector(".visually-hidden")!.TextContent);
         Assert.Empty(link.QuerySelectorAll("b"));

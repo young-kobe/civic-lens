@@ -129,6 +129,14 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         var (_, page) = await GetAsync(host, PublicationProtocol.ReportPagePath);
 
         Assert.Equal(ApiOrigin + ReaderReportProtocol.SubmitPath, page.QuerySelector("form[data-report-api]")!.GetAttribute("data-report-api"));
+        var reportForm = page.QuerySelector("form[data-report-api]")!;
+        Assert.Equal(ReaderReportProtocol.KindParameter, reportForm.GetAttribute("data-report-kind-parameter"));
+        Assert.Equal(Enum.GetValues<PublishedRecordKind>().Select(PublicationProtocol.KindText),
+            page.QuerySelectorAll("[data-report-kind-option]").Select(option => option.GetAttribute("data-report-kind-option")));
+        Assert.Equal(Enum.GetValues<PublishedRecordKind>().Select(PublishedRecordLabels.Kind),
+            page.QuerySelectorAll("[data-report-kind-option]").Select(option => option.GetAttribute("data-report-kind-label")));
+        Assert.All(page.QuerySelectorAll("[data-report-kind-option]"), option => Assert.Empty(option.TextContent));
+        Assert.Empty(reportForm.QuerySelectorAll($"[name='{ReaderReportProtocol.KindParameter}']"));
         Assert.Equal(SiteKey, page.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
         Assert.Single(page.QuerySelectorAll("script[src^='https://challenges.cloudflare.com/turnstile/']"));
         Assert.DoesNotContain("Reporting is not available", page.QuerySelector("main")!.TextContent);

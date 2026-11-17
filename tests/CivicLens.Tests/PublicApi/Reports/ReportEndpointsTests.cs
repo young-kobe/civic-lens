@@ -63,6 +63,26 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task APostedKindHintCannotChangeTheKindOfTheIndexedRecord()
+    {
+        await using var host = await StartAsync(new FakeTurnstile());
+        using var response = await host.Client.PostAsync(ReaderReportProtocol.SubmitPath,
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                [ReaderReportProtocol.RecordIdField] = RecordId,
+                [ReaderReportProtocol.RevisionField] = "1",
+                [ReaderReportProtocol.CategoryField] = "wrong-date",
+                [ReaderReportProtocol.TurnstileField] = "token-1",
+                [ReaderReportProtocol.KindParameter] = "vote"
+            }));
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        await using var database = NpgsqlDataSource.Create(host.Options.Database);
+        await using var command = database.CreateCommand("SELECT kind FROM reader_reports");
+        Assert.Equal("statement", await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task AReportAnswerSetsNoCookieBecauseTheAboutPageToldReadersThatNoCookieIsSet()
     {
         await using var host = await StartAsync(new FakeTurnstile());

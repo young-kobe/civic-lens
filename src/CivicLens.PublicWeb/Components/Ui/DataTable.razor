@@ -22,6 +22,10 @@ else
                 </tbody>
             </CascadingValue>
         </table>
+        @if (DataUrl is not null)
+        {
+            <p class="small muted"><a href="@DataUrl">Get this data</a></p>
+        }
     </div>
 }
 
@@ -35,6 +39,7 @@ else
     [Parameter] public Func<TItem, string?>? RowClass { get; set; }
     [Parameter] public Func<TItem, string?>? RowFilterKeys { get; set; }
     [Parameter] public bool Roles { get; set; }
+    [Parameter] public string? DataUrl { get; set; }
 
     /// <summary>The plural noun of the rows. When set, a script shows <see cref="PagedRowCount"/> rows a page. Without the script every row shows.</summary>
     [Parameter] public string? PagedRows { get; set; }
