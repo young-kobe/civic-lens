@@ -41,6 +41,14 @@
             && Number(revision) >= 1 && Number(revision) <= 2147483647;
         if (!validRecord) { document.querySelector("[data-report-missing]").hidden = false; return; }
         const title = query.get(form.dataset.reportTitleParameter) ?? "";
+        const kind = query.get(form.dataset.reportKindParameter);
+        const kindOptions = Array.from(document.querySelectorAll("[data-report-kind-option]"));
+        const kindOption = kind === null ? null : kindOptions.find(candidate => candidate.dataset.reportKindOption === kind);
+        if (kindOption) {
+            const kindLabel = document.querySelector("[data-report-subject-kind]");
+            kindLabel.textContent = kindOption.textContent;
+            kindLabel.hidden = false;
+        }
         const recordPage = form.dataset.recordPage.replace("{id}", recordId);
         if (title !== "" && title.length <= Number(form.dataset.reportTitleLimit)) {
             const link = document.querySelector("[data-report-subject-link]");
