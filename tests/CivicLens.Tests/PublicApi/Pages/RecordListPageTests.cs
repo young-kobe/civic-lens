@@ -127,6 +127,7 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         var order = await GetPageAsync(host, "/statements.html?from=2026-02-01&to=2026-01-01", HttpStatusCode.BadRequest);
         var voteOrder = await GetPageAsync(host, "/votes.html?from=2026-03-03&to=2026-03-01", HttpStatusCode.BadRequest);
         var choice = await GetPageAsync(host, "/executive-actions.html?type=law", HttpStatusCode.BadRequest);
+        var duplicate = await GetPageAsync(host, "/votes.html?from=2026-01-01&from=2026-02-01&to=2026-03-01", HttpStatusCode.BadRequest);
 
         var number = bill.QuerySelector("input[name=bill]")!;
         Assert.Equal(("5334a", "true"), (number.GetAttribute("value"), number.GetAttribute("aria-invalid")));
@@ -138,15 +139,22 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal("The bill number and the bill type name two different types.", ErrorOf(conflict, type));
         var from = date.QuerySelector("input[name=from]")!;
         Assert.Equal("true", from.GetAttribute("aria-invalid"));
+        Assert.Equal("text", from.GetAttribute("type"));
+        Assert.Equal("2026-13-45", from.GetAttribute("value"));
         Assert.Equal("Enter the date as year, month and day, for example 2026-09-01.", ErrorOf(date, from));
         Assert.Equal("house", date.QuerySelector("select[name=chamber] option[selected]")!.GetAttribute("value"));
         var orderFrom = order.QuerySelector("input[name=from]")!;
         Assert.Equal("true", orderFrom.GetAttribute("aria-invalid"));
+        Assert.Equal("date", orderFrom.GetAttribute("type"));
         Assert.Equal("The To date must be on or after the From date.", ErrorOf(order, orderFrom));
         Assert.Equal("The To date must be on or after the From date.", ErrorOf(voteOrder, voteOrder.QuerySelector("input[name=from]")!));
         var choiceType = choice.QuerySelector("select[name=type]")!;
         Assert.Equal(("true", null), (choiceType.GetAttribute("aria-invalid"), choiceType.GetAttribute("aria-describedby")));
-        foreach (var page in new[] { bill, conflict, date, order, voteOrder, choice })
+        var duplicateFrom = duplicate.QuerySelector("input[name=from]")!;
+        Assert.Equal(("2026-01-01", "date", "true"), (duplicateFrom.GetAttribute("value"), duplicateFrom.GetAttribute("type"), duplicateFrom.GetAttribute("aria-invalid")));
+        Assert.Null(duplicateFrom.GetAttribute("aria-describedby"));
+        Assert.Null(duplicate.QuerySelector(".field-error"));
+        foreach (var page in new[] { bill, conflict, date, order, voteOrder, choice, duplicate })
         {
             Assert.NotNull(page.QuerySelector(".list-fold[open] form"));
             Assert.Empty(Rows(page));

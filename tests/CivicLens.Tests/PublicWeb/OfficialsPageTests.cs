@@ -45,6 +45,7 @@ public sealed class OfficialsPageTests
         var page = await RenderAsync(Page([], RecordListFilter.Of(null, null, ("chamber", "house"), ("name", "zzz"))) with { OfficialsInRelease = total });
 
         Assert.StartsWith(start, page.QuerySelector(".page-header-lede")!.TextContent);
+        Assert.Contains("Looking for the parties? Compare the parties.", page.QuerySelector(".page-header-lede")!.TextContent);
     }
 
     private const string Root = ListPageRender.Root;

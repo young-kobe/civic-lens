@@ -372,7 +372,7 @@ The poll interval is 30 seconds and the statement timeout is 2 seconds. Both are
 
 ### Search page
 
-`SearchResultsPage` renders the search page at `search.html` as a server page. A form with the method GET sends the query as `q`. The page shows the officials that match, a bill number match, and the record hits of the search index. An empty query shows a hint. A query with no match shows next steps with links.
+`SearchResultsPage` renders the search page at `search.html` as a server page. A form with the method GET sends the query as `q`. The page shows the officials that match, a bill number match, and the record hits of the search index. An empty query shows a hint. A query with no match shows next steps with links. A refused page query keeps the typed form values and answers HTML with status 400 and private no-store. It shows no results or no-match claim. The JSON search endpoint keeps its own response contract.
 
 ### Operational pull
 
