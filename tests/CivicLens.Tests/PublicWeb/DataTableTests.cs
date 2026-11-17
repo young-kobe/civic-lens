@@ -11,6 +11,20 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class DataTableTests
 {
     [Fact]
+    public async Task AConfiguredDataUrlAppearsBelowRowsButNotWhenTheTableIsEmpty()
+    {
+        var document = new HtmlParser().ParseDocument(await RenderAsync(dataUrl: "https://api.civic-lens.test/v1/votes/record/members"));
+
+        var link = document.QuerySelector(".table-wrap > p a")!;
+        Assert.Equal("Get this data", link.TextContent);
+        Assert.Equal("https://api.civic-lens.test/v1/votes/record/members", link.GetAttribute("href"));
+
+        var empty = new HtmlParser().ParseDocument(await RenderAsync([], "https://api.civic-lens.test/v1/votes/record/members"));
+        Assert.Null(empty.QuerySelector("a"));
+        Assert.Null(empty.QuerySelector("table"));
+    }
+
+    [Fact]
     public async Task TheVisuallyHiddenCaptionNamesTheTableWithTheGivenTextOnly()
     {
         var document = new HtmlParser().ParseDocument(await RenderAsync());
@@ -19,7 +33,7 @@ public sealed class DataTableTests
         Assert.Equal(["a", "b"], document.QuerySelectorAll("tbody tr > td:first-child").Select(cell => cell.TextContent));
     }
 
-    private static async Task<string> RenderAsync()
+    private static async Task<string> RenderAsync(IReadOnlyList<string>? items = null, string? dataUrl = null)
     {
         await using var renderer = new HtmlRenderer(new ServiceCollection().BuildServiceProvider(), NullLoggerFactory.Instance);
         return await renderer.Dispatcher.InvokeAsync(async () =>
@@ -36,10 +50,11 @@ public sealed class DataTableTests
             };
             var parameters = new Dictionary<string, object?>
             {
-                [nameof(DataTable<string>.Items)] = new[] { "a", "b" },
+                [nameof(DataTable<string>.Items)] = items ?? new[] { "a", "b" },
                 [nameof(DataTable<string>.Head)] = head,
                 [nameof(DataTable<string>.Row)] = row,
-                [nameof(DataTable<string>.Caption)] = "Words"
+                [nameof(DataTable<string>.Caption)] = "Words",
+                [nameof(DataTable<string>.DataUrl)] = dataUrl
             };
             return (await renderer.RenderComponentAsync<DataTable<string>>(ParameterView.FromDictionary(parameters))).ToHtmlString();
         });

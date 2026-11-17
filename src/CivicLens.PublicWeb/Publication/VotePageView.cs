@@ -20,6 +20,11 @@ public static class VotePageView
     public const string ZipMembersHeading = "Your members on this vote";
     public const string PartyLineUnavailable = "Party line unavailable";
 
+    /// <summary>The source API for a vote's member positions, when the browser API has a configured root.</summary>
+    public static string? MembersApiUrl(string recordId, string? browserApiRoot) => browserApiRoot is null
+        ? null
+        : $"{browserApiRoot}/v1/votes/{recordId}/members";
+
     /// <summary>The line that the members card shows to a reader with no saved ZIP. The device fills the card from the private fragment when a ZIP is saved.</summary>
     public static string ZipMembersPrompt(PublishedChamber chamber) => chamber == PublishedChamber.Senate
         ? "Enter your ZIP to see how your senators voted."

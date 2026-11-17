@@ -28,9 +28,27 @@ public sealed class VoteMapPageTests
 
     private static VotePageData House(params VoteMemberData[] members) => Vote() with { Members = members };
 
-    private static Task<IDocument> RenderPageAsync(VotePageData data) =>
-        ListPageRender.RenderAsync<VoteMapPage>(data, nameof(VoteMapPage.Data));
+    private static Task<IDocument> RenderPageAsync(VotePageData data, string? browserApiUrl = null) =>
+        ListPageRender.RenderPageAsync<VoteMapPage>(new Dictionary<string, object?>
+        {
+            [nameof(VoteMapPage.Data)] = data,
+            [nameof(VoteMapPage.RootPath)] = ListPageRender.Root,
+            [nameof(VoteMapPage.BrowserApiUrl)] = browserApiUrl
+        });
 
+    [Fact]
+    public async Task TheSeatTableLinksToTheConfiguredVoteMembersApi()
+    {
+        const string apiRoot = "https://api.civic-lens.test";
+        var page = await RenderPageAsync(House(Members), apiRoot);
+        var link = page.QuerySelector(".vote-map .table-wrap > p a")!;
+
+        Assert.Equal("Get this data", link.TextContent);
+        Assert.Equal($"{apiRoot}/v1/votes/{RecordId}/members", link.GetAttribute("href"));
+
+        var withoutApi = await RenderPageAsync(House(Members));
+        Assert.Null(withoutApi.QuerySelector(".vote-map .table-wrap > p a"));
+    }
 
     [Fact]
     public async Task TheMapPageNamesTheVoteLinksBackToItAndEndsTheTrailWithMap()

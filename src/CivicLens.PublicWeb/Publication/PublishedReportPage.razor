@@ -16,9 +16,16 @@
             <div class="report-subject" data-report-subject>
                 <p class="report-subject-eyebrow">You are reporting this record</p>
                 <h2 class="report-subject-title" hidden data-report-subject-title><a data-report-subject-link></a></h2>
+                <p class="muted small" hidden data-report-subject-kind></p>
+                <div hidden data-report-kind-options>
+                    @foreach (var kind in Enum.GetValues<PublishedRecordKind>())
+                    {
+                        <span data-report-kind-option="@PublicationProtocol.KindText(kind)" data-report-kind-label="@PublishedRecordLabels.Kind(kind)"></span>
+                    }
+                </div>
                 <p class="muted small"><span data-report-subject-revision></span> <a href="@(RootPath + PublicationProtocol.ReportPagePath)">Wrong record? Choose another.</a></p>
             </div>
-            <form class="form report-form" data-report-title-parameter="@ReaderReportProtocol.TitleParameter" data-report-title-limit="@ReaderReportProtocol.MaximumTitleCharacters" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@(RootPath + PublicationProtocol.RecordPagePath("{id}"))">
+            <form class="form report-form" data-report-title-parameter="@ReaderReportProtocol.TitleParameter" data-report-kind-parameter="@ReaderReportProtocol.KindParameter" data-report-title-limit="@ReaderReportProtocol.MaximumTitleCharacters" data-report-api="@(PublicApiUrl + ReaderReportProtocol.SubmitPath)" data-record-page="@(RootPath + PublicationProtocol.RecordPagePath("{id}"))">
                 <input type="hidden" name="@ReaderReportProtocol.RecordIdField" data-report-query />
                 <input type="hidden" name="@ReaderReportProtocol.RevisionField" data-report-query />
                 <FieldSet Legend="What is wrong" Id="report-category">

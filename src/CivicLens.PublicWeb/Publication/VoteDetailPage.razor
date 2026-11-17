@@ -81,7 +81,7 @@
                 }
                 @if (map is not null)
                 {
-                    <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" ColorModes="true" />
+                    <VoteMap Data="map" RollCall="Data.RollCall" RootPath="@RootPath" MembersDataUrl="@MemberDataUrl" ColorModes="true" />
                 }
                 @if (Data.Statements.Length > 0)
                 {
@@ -202,7 +202,7 @@
                             </div>
                         </form>
                         <p class="small muted" role="status" data-member-finder-status data-no-match="@VoteMemberFilter.NoMatch">@rows.Count of @Data.Members.Length tracked members shown.</p>
-                        <DataTable TItem="VoteMemberData" Items="rows" Caption="Tracked members and their votes" Scroll="true" PagedRows="members" RowFilterKeys="VoteMemberFilter.Keys">
+                        <DataTable TItem="VoteMemberData" Items="rows" Caption="Tracked members and their votes" Scroll="true" PagedRows="members" RowFilterKeys="VoteMemberFilter.Keys" DataUrl="@MemberDataUrl">
                             <Head>
                                 <TableCell Header>Member</TableCell>
                                 <TableCell Header>Party</TableCell>
@@ -269,10 +269,12 @@
     private VoteMapData? map;
     private IReadOnlyList<VoteBreakerGroup> breakers = [];
     private IReadOnlyList<VoteMemberData> rows = [];
+    private string? MemberDataUrl => VotePageView.MembersApiUrl(Data.RecordId, BrowserApiUrl);
     private IReadOnlyList<Fact> facts = [];
 
     [Parameter, EditorRequired] public VotePageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public string? BrowserApiUrl { get; set; }
     /// <summary>The public address of this vote page. The filter form and the clear link keep the reader on it.</summary>
     private string PagePath => RootPath + PublicationProtocol.RecordPagePath(Data.RecordId);
     [Parameter] public VoteMemberFilter Filter { get; set; } = new();
