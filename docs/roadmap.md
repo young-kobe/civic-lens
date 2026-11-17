@@ -36,7 +36,7 @@ Data work below remains part of R-68. Follow the production commands and verific
 
 AI text and vocabulary remain required work, not optional follow-ups.
 
-- [ ] Keep the page text gate whole as R-68 adds pages. Remaining: AI-text checks beyond the draft check, and first-use popovers for exact terms in AI text.
+- [ ] Keep the page text gate whole as R-68 adds pages. Statement summaries and document-change prose have exact-name glossary popovers. Remaining: AI-text checks beyond the draft check, cited bill definitions, other model prose, and term controls beside linked headlines and search snippets.
 - [ ] Check each changed prompt against its fixed-record measurement, evidence, and required sample approval. Reuse completed measurements for their exact prompt versions. New paid runs need an explicit budget. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
 - [ ] Verify up to five bill key terms, defined only by exact quotations from the definitions section. Code finds the section, checks each quote, stores the terms, serves them in the bill detail API, and reports them in `actions text measure`, all behind `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS`, which is off by default. A combined bill-text and key-term sample was measured. Confirm the prompt version and activation against the recorded owner decisions. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
 

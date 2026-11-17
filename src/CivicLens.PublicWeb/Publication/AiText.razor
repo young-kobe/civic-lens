@@ -1,0 +1,117 @@
+@using System.Buffers
+@using System.Globalization
+@using System.Text
+@using CivicLens.Publication.Contracts
+
+@if (Origin == PublishedTextOrigin.Model)
+{
+    @foreach (var segment in segments)
+    {
+        @if (segment.Key is { } key)
+        {
+            @Term.Render(Use, key, TextContent(segment.Text))
+        }
+        else
+        {
+            @segment.Text
+        }
+    }
+}
+else
+{
+    @Text
+}
+
+@code {
+    private static readonly Candidate[] Candidates = Glossary.Groups
+        .SelectMany(group => group.Terms)
+        .Select((term, index) => new Candidate(term.Name, term.Key, index))
+        .OrderByDescending(candidate => candidate.Name.Length)
+        .ThenBy(candidate => candidate.CatalogOrder)
+        .ToArray();
+
+    private Segment[] segments = [];
+
+    [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public PublishedTextOrigin Origin { get; set; }
+
+    protected override void OnParametersSet() => segments = Origin == PublishedTextOrigin.Model ? Split(Text) : [];
+
+    private static RenderFragment TextContent(string text) => builder => builder.AddContent(0, text);
+
+    private static Segment[] Split(string text)
+    {
+        var result = new List<Segment>();
+        var plainStart = 0;
+        var position = 0;
+
+        while (position < text.Length)
+        {
+            Candidate? match = null;
+            foreach (var candidate in Candidates)
+            {
+                if (candidate.Name.Length > text.Length - position ||
+                    string.Compare(text, position, candidate.Name, 0, candidate.Name.Length, StringComparison.OrdinalIgnoreCase) != 0)
+                    continue;
+
+                var end = position + candidate.Name.Length;
+                if (HasLeftBoundary(text, position) && HasRightBoundary(text, end))
+                {
+                    match = candidate;
+                    break;
+                }
+            }
+
+            if (match is { } found)
+            {
+                if (plainStart < position) result.Add(new(null, text[plainStart..position]));
+                result.Add(new(found.Key, text.Substring(position, found.Name.Length)));
+                position += found.Name.Length;
+                plainStart = position;
+            }
+            else
+            {
+                position += RuneLengthAt(text, position);
+            }
+        }
+
+        if (plainStart < text.Length) result.Add(new(null, text[plainStart..]));
+        return [.. result];
+    }
+
+    private static bool HasLeftBoundary(string text, int index) => index == 0 || !IsWordRune(RuneBefore(text, index));
+
+    private static bool HasRightBoundary(string text, int index) => index == text.Length || !IsWordRune(RuneAt(text, index));
+
+    private static bool IsWordRune(Rune rune)
+    {
+        var category = Rune.GetUnicodeCategory(rune);
+        return category is UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter or UnicodeCategory.TitlecaseLetter
+            or UnicodeCategory.ModifierLetter or UnicodeCategory.OtherLetter or UnicodeCategory.DecimalDigitNumber
+            or UnicodeCategory.LetterNumber or UnicodeCategory.OtherNumber or UnicodeCategory.NonSpacingMark
+            or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark or UnicodeCategory.ConnectorPunctuation;
+    }
+
+    private static Rune RuneAt(string text, int index)
+    {
+        var status = Rune.DecodeFromUtf16(text.AsSpan(index), out var rune, out _);
+        return status == OperationStatus.Done ? rune : Rune.ReplacementChar;
+    }
+
+    private static Rune RuneBefore(string text, int index)
+    {
+        var status = Rune.DecodeLastFromUtf16(text.AsSpan(0, index), out var rune, out _);
+        return status == OperationStatus.Done ? rune : Rune.ReplacementChar;
+    }
+
+    private static int RuneLengthAt(string text, int index)
+    {
+        var status = Rune.DecodeFromUtf16(text.AsSpan(index), out _, out var consumed);
+        return status == OperationStatus.Done ? consumed : 1;
+    }
+
+    private sealed record Candidate(string Name, string Key, int CatalogOrder);
+    private sealed record Segment(string? Key, string Text);
+}

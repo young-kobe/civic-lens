@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
@@ -47,6 +48,36 @@ public sealed class StatementDetailPageTests
     }
 
     [Fact]
+    public async Task ModelSummaryExplainsExactTermsAndKeepsWrittenTextAndUnsafeMarkupAsText()
+    {
+        const string summary = "bill BILL bills billing _Bill 2Bill Bill2 e\u0301Bill \U00010400Bill Bill\u0301 <img src=x onerror=alert(1)>";
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { Summary = summary });
+        var summaryElement = page.QuerySelector(".ai-summary-ai p")!;
+
+        Assert.Equal(summary, VisibleText(summaryElement));
+        Assert.Empty(summaryElement.QuerySelectorAll("img"));
+        Assert.Single(summaryElement.QuerySelectorAll("button.term"));
+        Assert.Equal("bill", summaryElement.QuerySelector("button.term")!.TextContent);
+        Assert.Single(summaryElement.QuerySelectorAll("[popover]"));
+        Assert.Equal("term-bill", summaryElement.QuerySelector("[popover]")!.Id);
+        Assert.Equal(StatementText, page.QuerySelector("#source .doc-text")!.TextContent);
+        Assert.Equal(["First quote.", "Second quote.", "Third quote."], page.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
+    }
+
+    [Theory]
+    [InlineData(PublishedTextOrigin.Code)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task NonModelStatementTextDoesNotReceiveGlossaryPopoverMarkup(PublishedTextOrigin origin)
+    {
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(origin) with { Summary = "Bill" });
+
+        var summary = page.QuerySelector(".ai-summary")!;
+        Assert.Empty(summary.QuerySelectorAll("button.term"));
+        var prose = origin == PublishedTextOrigin.Code ? summary.QuerySelector(".doc-text")! : summary.QuerySelector("p")!;
+        Assert.Equal(origin == PublishedTextOrigin.Code ? StatementText : "Bill", prose.TextContent);
+    }
+
+    [Fact]
     public async Task APersonSummaryHasNoAiLabelAndNeverSaysAModelWroteIt()
     {
         var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(PublishedTextOrigin.Person));
@@ -89,6 +120,10 @@ public sealed class StatementDetailPageTests
         Assert.Equal(": statement, quote", one.QuerySelector(".detail-quotes a .visually-hidden")!.TextContent);
         Assert.Equal(": statement, quote 1", many.QuerySelector(".detail-quotes a .visually-hidden")!.TextContent);
     }
+
+    private static string VisibleText(IElement element) => string.Concat(element.ChildNodes
+        .Where(node => node is not IElement child || !child.HasAttribute("popover"))
+        .Select(node => node.TextContent));
 
     [Fact]
     public async Task OnlyTheFirstThreeQuotesShowButEveryQuoteIsMarkedInTheSavedTextOfTheFold()
