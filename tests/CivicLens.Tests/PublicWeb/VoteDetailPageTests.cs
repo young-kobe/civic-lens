@@ -9,6 +9,21 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class VoteDetailPageTests
 {
     [Fact]
+    public async Task TheMemberTableLinksToTheConfiguredPagedSourceAndKeepsEmptyFilteredResultsLinkFree()
+    {
+        const string apiRoot = "https://api.civic-lens.test";
+        var page = await RenderAsync(Vote(), browserApiUrl: apiRoot);
+        var link = page.QuerySelector(".vote-members .table-wrap > p a")!;
+
+        Assert.Equal("Get this data", link.TextContent);
+        Assert.Equal($"{apiRoot}/v1/votes/{RecordId}/members", link.GetAttribute("href"));
+
+        var empty = await RenderAsync(Vote(), new VoteMemberFilter { Name = "Nobody" }, apiRoot);
+        Assert.Contains(VoteMemberFilter.NoMatch, empty.QuerySelector(".vote-members")!.TextContent);
+        Assert.Null(empty.QuerySelector(".vote-members .table-wrap"));
+    }
+
+    [Fact]
     public async Task TheAnswerComesFirstThenTheResultTheExplainersThePartyBarsAndTheMembers()
     {
         var page = await RenderAsync(Vote());

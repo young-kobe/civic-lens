@@ -1,3 +1,4 @@
+using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicWeb.Publication;
@@ -9,7 +10,7 @@ namespace CivicLens.PublicApi.Votes;
 /// <summary>The full map page of one vote. It reads the same vote page snapshot as the vote page, so the map and the vote agree. Its ETag uses that release.</summary>
 public static class VoteMapPageEndpoint
 {
-    public static Task<IResult> RespondAsync(string recordId, HttpContext context, VotePageReader reader, ServerPageResponder responder,
+    public static Task<IResult> RespondAsync(string recordId, HttpContext context, VotePageReader reader, ServerPageResponder responder, HomePageReader home,
         PublicBaseUrl baseUrl, CancellationToken cancellationToken) => ApiResults.GuardAsync(async () =>
     {
         var rootPath = baseUrl.Join(string.Empty);
@@ -17,7 +18,8 @@ public static class VoteMapPageEndpoint
             return await responder.RespondAsync<VoteMapPage>(context, StatusCodes.Status200OK, vote.Release, new Dictionary<string, object?>
             {
                 [nameof(VoteMapPage.Data)] = vote,
-                [nameof(VoteMapPage.RootPath)] = rootPath
+                [nameof(VoteMapPage.RootPath)] = rootPath,
+                [nameof(VoteMapPage.BrowserApiUrl)] = home.BrowserApiRoot
             }, cancellationToken);
         return await responder.RespondAsync<PublishedNotFoundPage>(context, StatusCodes.Status404NotFound,
             new Dictionary<string, object?> { [nameof(PublishedNotFoundPage.RootPath)] = rootPath }, cancellationToken);
