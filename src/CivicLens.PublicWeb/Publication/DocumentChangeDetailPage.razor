@@ -48,16 +48,16 @@
             </section>
             <AiSummary TextOrigin="@Data.TextOrigin" Label="@Data.Label">
                 <ChildContent>
-                    <p>@Data.Summary</p>
+                    <p><AiText Text="@Data.Summary" Origin="Data.TextOrigin" /></p>
                     @if (Data.Significance is { Length: > 0 } significance)
                     {
                         <h3>@DocumentChangeWords.WhyItMatters</h3>
-                        <p>@significance</p>
+                        <p><AiText Text="@significance" Origin="Data.TextOrigin" /></p>
                     }
                     @if (Data.Limits is { Length: > 0 } limits)
                     {
                         <h3>@DocumentChangeWords.EvidenceLimits</h3>
-                        <p>@limits</p>
+                        <p><AiText Text="@limits" Origin="Data.TextOrigin" /></p>
                     }
                 </ChildContent>
                 <Check>@DocumentChangeWords.Check(Data.TextOrigin) <a href="#source">@SourceFold.Title</a></Check>
