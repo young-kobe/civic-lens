@@ -46,6 +46,21 @@ public sealed class OperatorCommandTests
     }
 
     [Theory]
+    [InlineData("100", null)]
+    [InlineData("25", "bill-stream/congress-bills/bill/119/hr/1943/2025-01-01")]
+    [InlineData("25", "bill-stream/$(touch cursor-executed)/bill/119/hr/1943/2025-01-01")]
+    public async Task TheBillActionsBackfillForwardsTheBoundedCountAndOptionalCursor(string count, string? cursor)
+    {
+        var arguments = cursor is null ? new[] { "bills", "actions", "backfill", count } : ["bills", "actions", "backfill", count, cursor];
+
+        var result = await RunAsync(arguments, 0);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(result.CursorExecuted);
+        Assert.Equal(new[] { "run", "--rm", "cli" }.Concat(arguments), result.ComposeArguments);
+    }
+
+    [Theory]
     [InlineData("votes", "text", "backfill")]
     [InlineData("votes", "text", "backfill", "0")]
     [InlineData("votes", "text", "backfill", "1", "a", "extra")]
@@ -62,6 +77,18 @@ public sealed class OperatorCommandTests
     [InlineData("actions", "text", "backfill", "0")]
     [InlineData("actions", "text", "backfill", "1", "a", "extra")]
     public async Task InvalidActionTextBackfillArgumentsNeverInvokeCompose(params string[] arguments)
+    {
+        var result = await RunAsync(arguments, 0);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Empty(result.ComposeArguments);
+    }
+
+    [Theory]
+    [InlineData("bills", "actions", "backfill")]
+    [InlineData("bills", "actions", "backfill", "0")]
+    [InlineData("bills", "actions", "backfill", "1", "cursor", "extra")]
+    public async Task InvalidBillActionsBackfillArgumentsNeverInvokeCompose(params string[] arguments)
     {
         var result = await RunAsync(arguments, 0);
 

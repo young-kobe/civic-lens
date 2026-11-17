@@ -32,7 +32,7 @@ Remaining route work. Each slice includes the data, source evidence, labels, and
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
 
 - [ ] Finish the executive document summary work. The step, publication, label, and page slot are built and off by default. A budgeted sample was measured. Check its results against the current prompt, the recorded owner decision, and actual activation before closing this work.
-- [ ] Recover historical bill actions from hash-verified saved captures through the existing bounded recovery flow. Preserve completed immutable snapshots, original as-of dates, and old releases. Source support is merged; historical pilot execution still needs separate approval.
+- [ ] Run and verify historical bill-action recovery from hash-verified saved captures with bounded owner commands. Preserve completed immutable snapshots, original as-of dates, and old releases.
 
 AI text and vocabulary remain required work, not optional follow-ups.
 

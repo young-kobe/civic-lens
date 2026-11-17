@@ -1,3 +1,4 @@
+using System.Globalization;
 using CivicLens.Collection.Contracts;
 
 namespace CivicLens.Application.Collection.Bills;
@@ -8,6 +9,16 @@ public static class BillStreamJobKeys
 
     public static string Detail(string sourceId, CongressBillListItem bill) =>
         $"{Prefix}{sourceId}/bill/{bill.Congress}/{bill.Type}/{bill.Number}/{bill.UpdateDate:yyyy-MM-dd}";
+
+    public static bool IsDetailJobId(string? value)
+    {
+        if (value is null || value.Length > 512 || !value.StartsWith(Prefix, StringComparison.Ordinal)) return false;
+        var parts = value[Prefix.Length..].Split('/');
+        return parts.Length >= 6 && !string.IsNullOrWhiteSpace(string.Join('/', parts[..^5])) &&
+            parts[^5] == "bill" &&
+            CongressBillListItem.TryReadIdentity(parts[^4], parts[^3], parts[^2]) is { Congress: > 0, Number: > 0 } &&
+            DateOnly.TryParseExact(parts[^1], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+    }
 
     public static string NextPage(string sourceId, string listJobId) => $"{Prefix}{sourceId}/page/{listJobId}";
 
