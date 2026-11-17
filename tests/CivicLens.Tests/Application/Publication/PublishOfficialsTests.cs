@@ -121,7 +121,8 @@ public sealed class PublishOfficialsTests
         var summary = await PublishAsync(scenario, scenario.AddStatement('a'));
 
         var terms = Assert.Single(OfficialsOf(scenario, summary.DirectoryName).Officials).Terms;
-        Assert.Equal([("rep", "WA", 1, 1993), ("sen", "WA", null, 2025)], terms.Select(term => (term.Office, term.State, term.District, term.Start.Year)));
+        Assert.Equal([("rep", "WA", 1, 1993, null), ("sen", "WA", null, 2025, 1)],
+            terms.Select(term => (term.Office, term.State, term.District, term.Start.Year, term.SenateClass)));
         Assert.Equal(new DateOnly(2031, 1, 3), terms[1].End);
     }
 

@@ -15,4 +15,5 @@ internal sealed class ReleaseOfficialTermRow
     public string? Caucus { get; set; }
     public DateOnly StartOn { get; set; }
     public DateOnly? EndOn { get; set; }
+    public int? SenateClass { get; set; }
 }
