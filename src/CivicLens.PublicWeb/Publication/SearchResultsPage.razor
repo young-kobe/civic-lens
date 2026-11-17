@@ -105,7 +105,7 @@
                 }
                 <div class="lists-filter">
                     <RecordListSelect Id="search-kind" Name="kind" Label="Kind of record" Choices="KindChoices" Filter="Filter" />
-                    @if (Data.Issues.Count > 0 || Filter.IsInvalid("issue"))
+                    @if (Data.Issues.Count > 0 || Filter.Value("issue") is not null || Filter.IsInvalid("issue"))
                     {
                         <RecordListSelect Id="search-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Filter" />
                     }

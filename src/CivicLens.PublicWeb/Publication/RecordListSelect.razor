@@ -3,9 +3,9 @@
 <Field Label="@Label" For="@Id" Error="@Filter.ErrorOf(Name)">
     <select id="@Id" name="@Name" @attributes="Filter.InputAttributes(Name, Id)">
         <option value="">@AnyText</option>
-        @if (Filter.IsInvalid(Name) && Filter.Value(Name) is { } refused && !Choices.Any(choice => choice.Value == refused))
+        @if (Filter.Value(Name) is { Length: > 0 } selectedValue && !Choices.Any(choice => choice.Value == selectedValue))
         {
-            <option value="@refused" selected>@refused</option>
+            <option value="@selectedValue" selected>@selectedValue</option>
         }
         @foreach (var choice in Choices)
         {

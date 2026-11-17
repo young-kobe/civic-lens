@@ -90,6 +90,28 @@ public sealed class SearchResultsPageTests
         Assert.Null(page.QuerySelector(".empty"));
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task AnIssueOutsideTheChoicesKeepsItsSelectedValueEvenWhenAnotherFieldWasRefused(bool hasChoices, bool refusedText)
+    {
+        const string issueValue = "former<issue>&name";
+        var query = Query("rent") with { Issue = issueValue, Invalid = refusedText ? "q" : null };
+        var page = await RenderAsync(Data(query, hits: [Hit('a', "A housing bill")],
+            issues: hasChoices ? [new("housing", "Housing")] : []));
+
+        var issue = page.QuerySelector("#search-issue");
+        Assert.NotNull(issue);
+        var selected = issue.QuerySelector("option[selected]");
+        Assert.Equal(issueValue, selected?.GetAttribute("value"));
+        Assert.Equal(issueValue, selected?.TextContent);
+        Assert.Null(issue.GetAttribute("aria-invalid"));
+        if (refusedText) Assert.Null(page.QuerySelector(".record-rows"));
+        else Assert.NotNull(page.QuerySelector(".record-rows"));
+    }
+
     [Fact]
     public async Task MalformedFromAndToDatesRemainEditableTextAndKeepTheirOriginalValues()
     {

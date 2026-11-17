@@ -428,6 +428,37 @@ public sealed class ListPageTests(PostgresCollection postgres)
         Assert.Equal(["air", "tax"], page.QuerySelectorAll("#search-issue option").Select(option => option.GetAttribute("value")).Where(value => !string.IsNullOrEmpty(value)));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnAcceptedIssueOutsideTheCurrentOptionsStaysSelectedWhenTheReaderChangesAnotherFilter(bool hasChoices)
+    {
+        await using var host = await StartAsync(site => site.PublishAsync(1, PublishedSamples.Statement('a', "Rent cap", official: "p1")));
+        await host.WaitForReleaseAsync();
+        if (hasChoices)
+            await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
+                "INSERT INTO release_issues (release_number, issue_id, name, definition) VALUES (1, 'housing', 'Housing', 'd');");
+
+        using var response = await host.Client.GetAsync("/search.html?q=rent&issue=retired-housing&kind=statement");
+        var page = await ParseAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        AssertPrivateSearch(response);
+        var issue = page.QuerySelector("#search-issue");
+        Assert.NotNull(issue);
+        Assert.Equal("retired-housing", issue.QuerySelector("option[selected]")?.GetAttribute("value"));
+        Assert.Null(issue.GetAttribute("aria-invalid"));
+        Assert.Equal("statement", page.QuerySelector("#search-kind option[selected]")!.GetAttribute("value"));
+        Assert.NotNull(page.QuerySelector(".empty"));
+
+        using var listResponse = await host.Client.GetAsync("/statements.html?issue=retired-housing&from=2026-01-01");
+        var list = await ParseAsync(listResponse);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        Assert.Equal("retired-housing", list.QuerySelector("#statements-issue option[selected]")?.GetAttribute("value"));
+        Assert.Null(list.QuerySelector("#statements-issue")!.GetAttribute("aria-invalid"));
+        Assert.Equal("2026-01-01", list.QuerySelector("#statements-from")!.GetAttribute("value"));
+    }
+
     [Fact]
     public async Task ASearchWithNoMatchGivesGuidanceAndABlankSearchRunsNoQuery()
     {
