@@ -2,6 +2,7 @@ using CivicLens.PublicApi.Issues;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.Officials;
+using CivicLens.PublicApi.Http;
 using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Http;
 
@@ -21,11 +22,10 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
     /// <summary>A shorter query would match too many names.</summary>
     public const int MinimumOfficialText = 3;
 
-    public async Task<SearchPageData?> ReadAsync(IQueryCollection query, CancellationToken cancellationToken)
+    public async Task<SearchPageData?> ReadAsync(SearchRequest request, CancellationToken cancellationToken)
     {
-        var request = SearchRequest.ParsePage(query);
         if (await index.FindReleaseAsync(request.Release, cancellationToken) is not { } release) return null;
-        var issues = (await issueStore.ListOptionsAsync(cancellationToken)).Select(issue => new SearchChoiceData(issue.IssueId, issue.Name)).ToArray();
+        var issues = await ReadIssueChoicesAsync(cancellationToken);
         var typed = Typed(request);
         if (typed.IsEmpty) return new(typed, release.ReleaseNumber, [], false, null, [], 0, null, issues, null);
 
@@ -39,6 +39,22 @@ public sealed class SearchPageReader(SearchIndex index, IssueStore issueStore, O
         var filterName = page.Hits.SelectMany(hit => hit.Officials).FirstOrDefault(official => official.Id == request.Official)?.Name;
         return new(typed, release.ReleaseNumber, officials, moreOfficials, bill, hits, total, page.NextCursor, issues, filterName) { PreviousCursor = page.PreviousCursor };
     }
+
+    /// <summary>A refused query reads only the searchable release and issue choices. It keeps the first typed value of each form field and has no result rows.</summary>
+    public async Task<SearchPageData?> ReadRefusedAsync(IQueryCollection query, string? invalid, CancellationToken cancellationToken)
+    {
+        if (await index.FindReleaseAsync(null, cancellationToken) is not { } release) return null;
+        var issues = await ReadIssueChoicesAsync(cancellationToken);
+        var fields = RecordListFilter.Refused(invalid, QueryValues.Typed(query, "q", "kind", "official", "issue", "from", "to"));
+        var typed = new SearchQueryData(fields.Value("q"), fields.Value("kind"), fields.Value("official"), fields.Value("issue"), fields.Value("from"), fields.Value("to"))
+        {
+            Invalid = invalid
+        };
+        return new(typed, release.ReleaseNumber, [], false, null, [], 0, null, issues, null);
+    }
+
+    private async Task<SearchChoiceData[]> ReadIssueChoicesAsync(CancellationToken cancellationToken) =>
+        [.. (await issueStore.ListOptionsAsync(cancellationToken)).Select(issue => new SearchChoiceData(issue.IssueId, issue.Name))];
 
     private static SearchQueryData Typed(SearchRequest request) => new(request.Text,
         request.Kind is { } kind ? PublicationProtocol.KindText(kind) : null, request.Official, request.Issue,

@@ -15,6 +15,9 @@ public sealed record SearchPageData(SearchQueryData Query, int Release, IReadOnl
 /// <summary>The request as the reader typed it. <see cref="Official"/> is an official ID from an official card link.</summary>
 public sealed record SearchQueryData(string? Text, string? Kind, string? Official, string? Issue, string? From, string? To)
 {
+    /// <summary>The field the server refused, or null when the query was accepted.</summary>
+    public string? Invalid { get; init; }
+
     /// <summary>The accepted parameters that the form has no field for. The search API accepts them, so the next page link carries each one,
     /// and a later page keeps the same filters, sort, and page size.</summary>
     public string? PolicyArea { get; init; }

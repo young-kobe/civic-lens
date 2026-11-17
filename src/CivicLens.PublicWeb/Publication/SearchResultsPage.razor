@@ -5,34 +5,43 @@
     <PageHeader Title="Search records" />
     <form class="search-box" role="search" method="get" aria-label="Search records">
         <label class="visually-hidden" for="search-text">Search bills, votes, officials and statements</label>
-        <input id="search-text" type="search" name="q" maxlength="@MaximumTextLength" value="@Data.Query.Text" autocomplete="off" />
+        <input id="search-text" type="search" name="q" maxlength="@MaximumTextLength" value="@Data.Query.Text" autocomplete="off" @attributes="QueryAttributes" />
         <Button Type="submit" Variant="ButtonVariant.Primary">Search</Button>
     </form>
-    @if (Data.Query.IsEmpty)
+    @if (Data.Query.IsEmpty && !IsRefused)
     {
         <p class="list-scope muted">Type a topic, a bill number, or the name of an official.</p>
     }
     @if (Data.Query.Official is not null)
     {
-        <p class="list-scope search-filter-official">Only records that name @(Data.FilterOfficialName ?? "one official") are shown. <a href="@WithoutOfficialHref">Show records about any official</a></p>
+        <p class="list-scope search-filter-official">
+            @if (!IsRefused)
+            {
+                <text>Only records that name @(Data.FilterOfficialName ?? "one official") are shown. </text>
+            }
+            <a href="@WithoutOfficialHref">Show records about any official</a>
+        </p>
     }
-    @foreach (var official in Data.Officials)
+    @if (!IsRefused)
     {
-        var headingId = $"search-official-{official.OfficialId}";
-        <section class="search-official" aria-labelledby="@headingId">
-            <h2 id="@headingId"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))">@official.Name</a></h2>
-            <p class="muted">@OfficialLine(official)</p>
-            <p class="search-official-actions">
-                <Button Href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))" Small="true">Open the page of @official.Name</Button>
-                <a href="@RecordsOfHref(official)">Records that name @official.Name</a>
-            </p>
-        </section>
+        @foreach (var official in Data.Officials)
+        {
+            var headingId = $"search-official-{official.OfficialId}";
+            <section class="search-official" aria-labelledby="@headingId">
+                <h2 id="@headingId"><a href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))">@official.Name</a></h2>
+                <p class="muted">@OfficialLine(official)</p>
+                <p class="search-official-actions">
+                    <Button Href="@(RootPath + PublicationProtocol.OfficialPagePath(Uri.EscapeDataString(official.OfficialId)))" Small="true">Open the page of @official.Name</Button>
+                    <a href="@RecordsOfHref(official)">Records that name @official.Name</a>
+                </p>
+            </section>
+        }
     }
-    @if (Data.MoreOfficials)
+    @if (!IsRefused && Data.MoreOfficials)
     {
         <p class="search-more-officials">More officials match. <a href="@MoreOfficialsHref">See all of them in the officials list.</a></p>
     }
-    @if (Data.Bill is { } bill)
+    @if (!IsRefused && Data.Bill is { } bill)
     {
         <section class="search-pin" aria-label="Bill number match">
             <p class="search-pin-label">Bill number match</p>
@@ -47,7 +56,7 @@
             </p>
         </section>
     }
-    @if (!Data.Query.IsEmpty && Data.Hits.Count == 0)
+    @if (!IsRefused && !Data.Query.IsEmpty && Data.Hits.Count == 0)
     {
         <EmptyState Level="2" Title="@NoRecords" Text="Next steps:">
             <ul class="search-next">
@@ -61,7 +70,7 @@
             </ul>
         </EmptyState>
     }
-    @if (Data.Hits.Count > 0)
+    @if (!IsRefused && Data.Hits.Count > 0)
     {
         <p class="list-status" role="status">@StatusLine</p>
         <h2 class="search-results-title">Records</h2>
@@ -86,7 +95,7 @@
                NewerHref="@(Data.PreviousCursor is { } previous ? Href(ListPageLink.Previous(previous)) : null)"
                OlderHref="@(Data.NextCursor is { } next ? Href(ListPageLink.Next(next)) : null)" />
     }
-    <details class="list-fold" open="@(!Data.Query.IsEmpty && Data.Query.Text is null)">
+    <details class="list-fold" open="@(IsRefused || (!Data.Query.IsEmpty && Data.Query.Text is null))">
             <summary>Filter by kind, issue or date</summary>
             <form class="in" method="get">
                 <input type="hidden" name="q" value="@Data.Query.Text" />
@@ -95,30 +104,12 @@
                     <input type="hidden" name="official" value="@officialId" />
                 }
                 <div class="lists-filter">
-                    <Field Label="Kind of record" For="search-kind">
-                        <select id="search-kind" name="kind">
-                            <option value="">Any</option>
-                            @foreach (var kind in PublishedRecordLabels.FilterOrder)
-                            {
-                                var text = PublicationProtocol.KindText(kind);
-                                <option value="@text" selected="@(Data.Query.Kind == text)">@PublishedRecordLabels.Kind(kind)</option>
-                            }
-                        </select>
-                    </Field>
-                    @if (Data.Issues.Count > 0)
+                    <RecordListSelect Id="search-kind" Name="kind" Label="Kind of record" Choices="KindChoices" Filter="Filter" />
+                    @if (Data.Issues.Count > 0 || Filter.IsInvalid("issue"))
                     {
-                        <Field Label="Issue" For="search-issue">
-                            <select id="search-issue" name="issue">
-                                <option value="">Any</option>
-                                @foreach (var issue in Data.Issues)
-                                {
-                                    <option value="@issue.Value" selected="@(Data.Query.Issue == issue.Value)">@issue.Label</option>
-                                }
-                            </select>
-                        </Field>
+                        <RecordListSelect Id="search-issue" Name="issue" Label="Issue" Choices="Data.Issues" Filter="Filter" />
                     }
-                    <Field Label="From date" For="search-from"><input id="search-from" name="from" type="date" value="@Data.Query.From" /></Field>
-                    <Field Label="To date" For="search-to"><input id="search-to" name="to" type="date" value="@Data.Query.To" /></Field>
+                    <RecordListDates IdPrefix="search" Filter="Filter" />
                 </div>
                 <Button Type="submit">Apply filters</Button>
             </form>
@@ -133,6 +124,19 @@
 
     [Parameter, EditorRequired] public SearchPageData Data { get; set; } = default!;
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+
+    private RecordListFilter Filter { get; set; } = RecordListFilter.Of(null, null);
+    private bool IsRefused => Data.Query.Invalid is not null;
+    private IReadOnlyDictionary<string, object> QueryAttributes => Filter.InputAttributes("q", "search-text");
+    private static readonly SearchChoiceData[] KindChoices = [.. PublishedRecordLabels.FilterOrder
+        .Select(kind => new SearchChoiceData(PublicationProtocol.KindText(kind), PublishedRecordLabels.Kind(kind)))];
+
+    protected override void OnParametersSet()
+    {
+        Filter = RecordListFilter.Refused(Data.Query.Invalid,
+            ("q", Data.Query.Text), ("kind", Data.Query.Kind), ("issue", Data.Query.Issue),
+            ("from", Data.Query.From), ("to", Data.Query.To));
+    }
 
     private string NoRecords => Data.Query.Text is { } text ? $"No records match \"{text}\"." : "No records match these filters.";
 
