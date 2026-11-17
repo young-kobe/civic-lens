@@ -8,7 +8,7 @@ namespace CivicLens.PublicWeb.Publication;
 /// </summary>
 public sealed record ReportedRecord(string RecordId, int Revision, PublishedRecordKind Kind, string Title, string? ShortName = null)
 {
-    public string ReportPath => PublicationProtocol.ReportPageLink(RecordId, Revision, Title);
+    public string ReportPath => PublicationProtocol.ReportPageLink(RecordId, Revision, Kind, Title);
 
     public PublicSections.NavLink ReportLink => new(null, PublishedRecordLabels.ReportKindLink(Kind), ReportPath, Title);
 }

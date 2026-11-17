@@ -8,6 +8,7 @@ public static class ReaderReportProtocol
     public const string RecordIdField = "recordId";
     public const string RevisionField = "revision";
     public const string TitleParameter = "title";
+    public const string KindParameter = "kind";
     public const string CategoryField = "category";
     public const string TextField = "text";
     public const string TurnstileField = "cf-turnstile-response";

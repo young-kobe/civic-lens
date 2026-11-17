@@ -24,7 +24,6 @@ PublicApi serves every public page at its public path since cutover. Caddy serve
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
-- [ ] Add the already approved kind parameter to `PublicationProtocol.ReportPageLink` after the page work and label unification. Until then the report subject keeps the approved "Revision {n}." text. Any newly introduced public wording still needs owner approval.
 - [ ] Add the later map layers: party breaks, seats up for election, issue activity, attendance, and boundaries by Congress. Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members.
 - [ ] Finish the other record pages. Remaining: linked votes on the statement page. All seven record pages now show the full history. The correction banner shows only the newest person correction.
 - [ ] Add the document changes list once document changes are published.
@@ -40,11 +39,11 @@ AI text and vocabulary remain required work, not optional follow-ups.
 - [ ] Check each changed prompt against its fixed-record measurement, evidence, and required sample approval. Reuse completed measurements for their exact prompt versions. New paid runs need an explicit budget. Keep model activation and historical backfills separate from routine implementation and deployment permission. Reuse the established [R-67 measurement flow](architecture/actions.md#limits-and-planned-work).
 - [ ] Verify up to five bill key terms, defined only by exact quotations from the definitions section. Code finds the section, checks each quote, stores the terms, serves them in the bill detail API, and reports them in `actions text measure`, all behind `CIVIC_LENS_ACTION_DRAFTING_KEY_TERMS`, which is off by default. A combined bill-text and key-term sample was measured. Confirm the prompt version and activation against the recorded owner decisions. Executive summaries describe what the document states, never its motive. Amendment-purpose summaries wait for amendment data under R-58.
 
-Return-visit features are parked and are not part of R-68. The approved "Get this data" links remain in R-68 after cutover.
+Return-visit features are parked and are not part of R-68.
 
 Complete these gates before closing R-68.
 
-- [ ] Close the full public-site audit in [public site](architecture/public-site.md): reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria. The source audit and decisions are available in the local audit evidence; keep the remaining evidence gates open until verified. Check the executive body experience against the accepted design, source flow, approved glossary text, each table's "Get this data" link, grade, accessibility, keyboard and mobile use, privacy, and API downloads. Unit tests alone do not complete owner criteria.
+- [ ] Close the full public-site audit in [public site](architecture/public-site.md): reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria. The source audit and decisions are available in the local audit evidence; keep the remaining evidence gates open until verified. Check the executive body experience against the accepted design, source flow, approved glossary text, "Get this data" links on published-data tables, grade, accessibility, keyboard and mobile use, privacy, and the paged source APIs. Unit tests alone do not complete owner criteria.
 - [ ] Measure cold reads, traffic, query work, and worker effects on the shared database. Close the open Home cold-read timeout and verify larger ZIP selections. Warm generated-data probes do not establish cold production performance.
 - [ ] Complete remaining R-68 deployments under the [runbook](operations.md#production-runbook). Require matching artifacts and images, fresh backups, functional and privacy checks, and worker health. After the final rollout and conversions, verify corrections, tallies, and line-ups for the selected release and retained rollback releases. Verify Cloudflare compression and caching, with private fragments excluded from shared caches. Run the final live check last.
 - [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
