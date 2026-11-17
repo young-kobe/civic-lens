@@ -348,6 +348,8 @@ Every server page route is the public path that `PublicationProtocol` names, wit
 
 The ZIP member route renders `ZipMemberCards` from one existing `ZipDistrictStore` snapshot through `ZipMemberCardsMapper`. It reuses `PageRenderer` without the full-page cache pipeline. The browser requests HTML, validates the content type and ZIP, release, and Congress metadata, then inserts the fragment. Shared page HTML stays free of personal data. Only the validated five-digit ZIP is remembered on the device after a successful current answer. Loading, retry, stale-response, focus, and Forget behavior remain in `initZipLookup`.
 
+ZIP attendance and party figures share one materialized read of `official_vote_parties`, restricted to the current holders. The shared attendance rank keeps every chamber in each holder's latest Congress. Mapping retains one attendance row per chamber and only positive party cast counts. `OfficialActivityReader` restricts issue counts by the selected IDs, Congresses, and substantive kinds before grouping. Its exact pair join still prevents counts from another selected member's Congress. Tests: `ZipDistrictEndpointsTests` and `ZipMemberSnapshotTests`.
+
 ### Configuration
 
 | Variable | Meaning |

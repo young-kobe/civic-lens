@@ -7,11 +7,13 @@ namespace CivicLens.PublicApi.Officials;
 /// <summary>Reads the latest attendance Congress and its figures for each official.</summary>
 internal static class OfficialAttendanceReader
 {
-    public const string LatestSql = """
+    public const string LatestCongressRankSql = "dense_rank() OVER (PARTITION BY official_id ORDER BY congress DESC)";
+
+    public const string LatestSql = $"""
         SELECT official_id, chamber, congress, held, missed, first_voted_on, last_voted_on
           FROM (
               SELECT official_id, chamber, congress, held, missed, first_voted_on, last_voted_on,
-                     dense_rank() OVER (PARTITION BY official_id ORDER BY congress DESC) AS newest
+                     {LatestCongressRankSql} AS newest
                 FROM public_api.official_attendance
                WHERE official_id = ANY(@attendanceIds)
           ) ranked

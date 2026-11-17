@@ -42,6 +42,8 @@ internal static class OfficialActivityReader
               FROM selected
               JOIN public_api.official_issue_counts counts
                 ON counts.official_id = selected.official_id AND counts.congress = selected.congress
+             WHERE counts.official_id = ANY(@officialIds) AND counts.congress = ANY(@congresses)
+               AND (counts.source = 'bill' OR counts.vote_kind = ANY(@kinds))
              GROUP BY selected.official_id, selected.congress, counts.issue_id
             HAVING sum(counts.records) FILTER (WHERE counts.source = 'bill' OR counts.vote_kind = ANY(@kinds)) > 0
         ), ranked AS (
