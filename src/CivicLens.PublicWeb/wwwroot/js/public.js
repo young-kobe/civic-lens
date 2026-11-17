@@ -722,6 +722,7 @@
         showWidthView();
         views.hidden = false;
         initVoteMapColors(map);
+        initVoteMapPartyBreaks(map);
     };
     // The color buttons switch between coloring by vote and by party. Without script the map stays colored by vote.
     const initVoteMapColors = map => {
@@ -735,6 +736,20 @@
         buttons.forEach(button => button.addEventListener("click", () => show(button.dataset.color)));
         show("vote");
         colors.hidden = false;
+    };
+    // Party-break rings are an optional overlay. Without script, every map keeps its existing fills and no rings.
+    const initVoteMapPartyBreaks = map => {
+        const control = map.querySelector("[data-vote-map-breaks]");
+        if (!control) return;
+        const button = control.querySelector("[data-party-breaks]");
+        const key = map.querySelector("[data-party-breaks-key]");
+        button.addEventListener("click", () => {
+            const enabled = map.dataset.partyBreaks !== "true";
+            map.dataset.partyBreaks = String(enabled);
+            button.setAttribute("aria-pressed", String(enabled));
+            if (key) key.hidden = !enabled;
+        });
+        control.hidden = false;
     };
 
     document.querySelectorAll("table[data-paged]").forEach(initPaged);

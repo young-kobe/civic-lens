@@ -78,6 +78,14 @@ public sealed class VoteMapPageTests
         Assert.Equal(["vote", "party"], colors.QuerySelectorAll("button").Select(button => button.GetAttribute("data-color")));
         Assert.True(colors.HasAttribute("hidden"));
 
+        var breaks = page.QuerySelector("[data-vote-map-breaks]")!;
+        Assert.True(breaks.HasAttribute("hidden"));
+        Assert.Equal("false", page.QuerySelector("[data-vote-map]")!.GetAttribute("data-party-breaks"));
+        Assert.Equal("false", breaks.QuerySelector("button")!.GetAttribute("aria-pressed"));
+        Assert.Equal(VoteMapWords.PartyBreaks, breaks.QuerySelector("button")!.TextContent);
+        Assert.True(page.QuerySelector("[data-party-breaks-key]")!.HasAttribute("hidden"));
+        Assert.Equal(VoteMapWords.PartyBreaks, page.QuerySelector("[data-party-breaks-key]")!.TextContent.Trim());
+
         Assert.Equal(["2 Yes", "2 No", "1 Present", "1 Not voting", "430 No member in the record"],
             page.QuerySelectorAll(".vote-map-legend-vote li").Select(item => item.TextContent.Trim()));
         Assert.Equal(["Democrats: 1 Yes, 1 No, 1 Present", "Republicans: 1 Yes, 1 Not voting", "Independents: 1 No", "430 No member in the record"],

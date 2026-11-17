@@ -11,6 +11,7 @@ public static class VoteMapWords
     public const string ColorGroup = "Color";
     public const string ByVote = "By vote";
     public const string ByParty = "By party";
+    public const string PartyBreaks = "Party breaks";
     public const string OpenFullMap = "Open the full map";
     public const string BackToVote = "Back to the vote page";
     public const string RecordedVotesOnly = "This map shows recorded votes only. It makes no predictions and gives no ratings.";
@@ -70,9 +71,11 @@ public static class VoteMapWords
         $"{UsStates.NameOf(member.State!)}, {UsStates.HouseOfficeByNonStateCode[member.State!]}";
 
     /// <summary>The hover text of a seat: the seat, then the member, party, and cast, or the no-member words.</summary>
-    public static string Describe(VoteMapSeat seat) =>
-        seat.Member is { } member ? $"{SeatName(seat)}: {Member(member)}" : $"{SeatName(seat)}: {VoteMapMarks.NoMember}";
+    public static string Describe(VoteMapSeat seat, bool includePartyLine) => seat.Member is { } member
+        ? $"{SeatName(seat)}: {Member(member, includePartyLine)}"
+        : $"{SeatName(seat)}: {VoteMapMarks.NoMember}";
 
-    public static string Member(VoteMemberData member) =>
-        $"{member.Name}, {member.PartyLabel}, {PlainVoteWords.Cast(member.Cast)}";
+    public static string Member(VoteMemberData member, bool includePartyLine = false) =>
+        $"{member.Name}, {member.PartyLabel}, {PlainVoteWords.Cast(member.Cast)}"
+        + (includePartyLine ? $". {VotePageView.MemberPartyLine(member.BreaksParty, member.Party)}" : "");
 }
