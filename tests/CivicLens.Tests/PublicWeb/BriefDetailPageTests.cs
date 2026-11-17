@@ -1,5 +1,6 @@
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -16,6 +17,19 @@ public sealed class BriefDetailPageTests
         [new PublishedBriefCitation { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = StatementCited, RevisionNumber = 2, Headline = "Kelly announces a bill" },
          new PublishedBriefCitation { Id = "R2", Kind = PublishedRecordKind.ExecutiveAction, RecordId = ActionId, RevisionNumber = 1, Headline = "An order" }],
         9, new PublishedBriefCoverage { Considered = 12, SentToModel = 8, Cited = 2 }, new DateTimeOffset(2026, 11, 6, 13, 5, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero));
+
+    [Theory]
+    [InlineData(PublishedTextOrigin.Code)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task NonModelProseWithAGlossaryNameStaysPlain(PublishedTextOrigin origin)
+    {
+        var data = Brief() with { TextOrigin = origin, Paragraphs = [new PublishedBriefParagraph { Text = "Bill", CitationIds = ["R1"] }] };
+        var page = await RenderAsync<BriefDetailPage, BriefPageData>(data);
+
+        Assert.Empty(page.QuerySelectorAll(".record-body button.term"));
+        Assert.Empty(page.QuerySelectorAll(".record-body [popover]"));
+        Assert.Contains("Bill", page.QuerySelector(".record-body")!.TextContent);
+    }
 
     [Fact]
     public async Task TheHeadWeekAndEyebrowNameTheWeekFromTheStoredWeekStart()
@@ -97,6 +111,33 @@ public sealed class BriefDetailPageTests
 
         Assert.NotNull(model.QuerySelector(".ai-summary-ai"));
         Assert.Null(person.QuerySelector(".ai-summary-ai"));
+    }
+
+    [Fact]
+    public async Task ModelParagraphsExplainGlossaryTermsWithoutChangingCitationMarkers()
+    {
+        var data = Brief() with
+        {
+            Paragraphs = [new PublishedBriefParagraph { Text = "A bill affects the releases.", CitationIds = ["R1"] }]
+        };
+        var page = await RenderAsync<BriefDetailPage, BriefPageData>(data);
+
+        Assert.Equal("A bill affects the releases.[R1]", page.QuerySelector(".record-body")!.ShownText());
+        Assert.Equal(["bill", "releases"], page.QuerySelectorAll("button.term").Select(button => button.TextContent));
+        Assert.Equal(["term-bill", "term-release"], page.QuerySelectorAll(".ai-summary [popover]").Select(popover => popover.Id));
+        Assert.Equal(page.QuerySelectorAll("button.term").Length, page.QuerySelectorAll(".ai-summary [popover]").Length);
+        Assert.Equal("#citation-R1", page.QuerySelector(".record-body a")!.GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task AnEarlierModelParagraphOwnsTheReleaseExplanationBeforeTheLaterCheckLine()
+    {
+        var data = Brief() with { Paragraphs = [new PublishedBriefParagraph { Text = "Release.", CitationIds = ["R1"] }] };
+        var page = await RenderAsync<BriefDetailPage, BriefPageData>(data);
+
+        Assert.Equal("Release", page.QuerySelector(".record-body button.term")?.TextContent);
+        Assert.Empty(page.QuerySelectorAll(".ai-summary-check button.term"));
+        Assert.Single(page.QuerySelectorAll("[id=term-release]"));
     }
 
     [Fact]

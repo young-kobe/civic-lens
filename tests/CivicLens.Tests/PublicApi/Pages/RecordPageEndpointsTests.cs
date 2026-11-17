@@ -330,7 +330,7 @@ public sealed class RecordPageEndpointsTests(PostgresCollection postgres)
         await GetPageAsync(host, Path(RelationshipSeed.VoteLink), HttpStatusCode.NotFound);
 
         Assert.Equal("Doe on rent and Housing bill", page.QuerySelector("h1")!.TextContent);
-        Assert.Equal(RelationshipSeed.Reason, page.QuerySelector(".ai-summary p")!.TextContent);
+        Assert.Equal(RelationshipSeed.Reason, page.QuerySelector(".ai-summary p")!.ShownText());
         Assert.Equal(PublishedWording.ModelRelationship, page.QuerySelector(".ai-summary-ai .ai-label-tag")!.TextContent);
         Assert.Equal([RelationshipSeed.Quote, $"Summary: {RelationshipSeed.ActionSummary}"], page.QuerySelectorAll(".detail-quotes blockquote").Select(quote => quote.TextContent));
         Assert.Equal("Said on 1 May 2026.", page.QuerySelector(".detail-lede")!.TextContent);
