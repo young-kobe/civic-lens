@@ -743,6 +743,18 @@ p.official-row-title { font-weight: 700; line-height: 1.35; overflow-wrap: anywh
 #vote-map-no .vote-map-ink { fill: var(--against); }
 #vote-map-present .vote-map-ink { fill: var(--muted); }
 .vote-map-ring { fill: none; stroke: var(--muted); stroke-width: 1px; }
+.vote-map-party-break-halo, .vote-map-party-break-ring { display: none; fill: none; pointer-events: none; stroke-linejoin: round; }
+.vote-map-party-break-halo { stroke: var(--vote-surface); stroke-width: 9px; }
+.vote-map-party-break-ring { stroke: var(--ink); stroke-width: 5px; }
+.vote-map[data-party-breaks="true"] .vote-map-party-break-halo, .vote-map[data-party-breaks="true"] .vote-map-party-break-ring { display: block; }
+.vote-map-tiles .vote-map-party-break-halo { stroke-width: 4px; }
+.vote-map-tiles .vote-map-party-break-ring { stroke-width: 2px; }
+.vote-map-circle .vote-map-party-break-halo { stroke-width: 5px; }
+.vote-map-circle .vote-map-party-break-ring { stroke-width: 3px; }
+.vote-map-swatch .vote-map-party-break-halo { stroke-width: 4px; }
+.vote-map-swatch .vote-map-party-break-ring { stroke-width: 2px; }
+.vote-map-party-breaks-key { display: flex; align-items: center; gap: var(--s2); margin: 0 0 var(--s3); font-size: .875rem; }
+.vote-map-party-breaks-key[hidden] { display: none; }
 .vote-map-line { fill: none; stroke: var(--muted); stroke-width: 1px; }
 .vote-map-seat { stroke: var(--surface); stroke-width: .6px; }
 .vote-map-tiles .vote-map-seat, .vote-map-swatch .vote-map-seat, .vote-map-circle .vote-map-seat { stroke-width: 1.5px; }

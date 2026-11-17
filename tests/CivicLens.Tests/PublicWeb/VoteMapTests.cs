@@ -31,7 +31,7 @@ public sealed class VoteMapTests
             Assert.Equal("yes", Seat(page, view, "Massachusetts district 7").GetAttribute("data-mark"));
         }
         var row = page.QuerySelectorAll(".vote-map tbody tr").Single(item => item.Children[0].TextContent == "Texas district 23");
-        Assert.Equal(["No member in the record", "", ""], row.Children.Skip(1).Select(cell => cell.TextContent));
+        Assert.Equal(["No member in the record", "", "", ""], row.Children.Skip(1).Select(cell => cell.TextContent));
         Assert.Equal(["1 Yes", "434 No member in the record"], page.QuerySelectorAll(".vote-map-legend-vote li").Select(item => item.TextContent));
         Assert.DoesNotContain("acant", page.QuerySelector(".vote-map")!.TextContent);
     }
@@ -46,16 +46,64 @@ public sealed class VoteMapTests
     }
 
     [Fact]
+    public async Task PartyBreaksOverlayOnlyKnownBreaksInShapesTilesAndDelegates()
+    {
+        var page = await RenderAsync(House(
+            Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7) with { BreaksParty = true },
+            Member("o2", "Ben Baker", "Nay", "Democrat", "TX", 1) with { BreaksParty = false },
+            Member("d1", "Dee Cee", "Aye", "Democrat", "DC", 0) with { BreaksParty = true },
+            Member("d2", "Pat Rico", "Nay", "Republican", "PR", 0)));
+
+        Assert.Equal(3, page.QuerySelectorAll(".vote-map-frame .vote-map-party-break-halo, .vote-map-delegates .vote-map-party-break-halo").Length);
+        Assert.Equal(3, page.QuerySelectorAll(".vote-map-frame .vote-map-party-break-ring, .vote-map-delegates .vote-map-party-break-ring").Length);
+        Assert.Equal(1, page.QuerySelectorAll(".vote-map-shapes .vote-map-party-break-ring").Length);
+        Assert.Equal(1, page.QuerySelectorAll(".vote-map-tiles .vote-map-party-break-ring").Length);
+        Assert.Equal(1, page.QuerySelectorAll(".vote-map-delegates .vote-map-party-break-ring").Length);
+        Assert.Contains("Party line unavailable", page.QuerySelectorAll(".vote-map-delegates li").Single(item => item.TextContent.Contains("Pat Rico", StringComparison.Ordinal)).TextContent);
+        Assert.DoesNotContain("Party line unavailable", Seat(page, "shapes", "Texas district 23").QuerySelector("title")!.TextContent);
+
+        var rows = page.QuerySelectorAll(".vote-map tbody tr");
+        string PartyLine(string name) => rows.Single(row => row.Children[1].TextContent == name).Children[4].TextContent;
+        Assert.Equal("Voted against most Democrats", PartyLine("Ada Able"));
+        Assert.Equal("Voted with most Democrats", PartyLine("Ben Baker"));
+        Assert.Equal("Party line unavailable", PartyLine("Pat Rico"));
+        Assert.Equal("", rows.Single(row => row.Children[0].TextContent == "Texas district 23").Children[4].TextContent);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task CompactMapKeepsItsTitleAndRendersNoPartyBreakControlOrRings(bool? breaksParty)
+    {
+        var member = Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7) with { BreaksParty = breaksParty };
+        var map = VoteMapData.Of(House(member))!;
+        var page = await ListPageRender.RenderPageAsync<VoteMap>(new Dictionary<string, object?>
+        {
+            [nameof(VoteMap.Data)] = map,
+            [nameof(VoteMap.RollCall)] = 308,
+            [nameof(VoteMap.RootPath)] = Root,
+            [nameof(VoteMap.Compact)] = true,
+            [nameof(VoteMap.ColorModes)] = true
+        });
+
+        Assert.Null(page.QuerySelector("[data-party-breaks], [data-party-breaks-key], .vote-map-party-break-halo, .vote-map-party-break-ring"));
+        Assert.Equal("Massachusetts district 7: Ada Able, Democrat, Yes (Aye)",
+            Seat(page, "shapes", "Massachusetts district 7").QuerySelector("title")!.TextContent);
+    }
+
+    [Fact]
     public async Task ASenateStateSplitsInTwoInThePositionOrderOfTheVoteMembersInBothViews()
     {
         var page = await RenderAsync(Senate(
-            Member("s1", "Ed Ward", "Nay", "Democrat", "MA", null),
+            Member("s1", "Ed Ward", "Nay", "Democrat", "MA", null) with { BreaksParty = true },
             Member("s2", "Bea Lee", "Yea", "Democrat", "MA", null),
             Member("s3", "Cal Ray", "Not Voting", "Republican", "TX", null)));
 
         var shapes = page.QuerySelectorAll(".vote-map-shapes .vote-map-seat").Where(seat => seat.QuerySelector("title")!.TextContent.StartsWith("Massachusetts:", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(["Massachusetts: Ed Ward, Democrat, No (Nay)", "Massachusetts: Bea Lee, Democrat, Yes (Yea)"], shapes.Select(seat => seat.QuerySelector("title")!.TextContent));
+        Assert.Equal(["Massachusetts: Ed Ward, Democrat, No (Nay). Voted against most Democrats", "Massachusetts: Bea Lee, Democrat, Yes (Yea). Party line unavailable"], shapes.Select(seat => seat.QuerySelector("title")!.TextContent));
         Assert.Equal(["url(#vote-map-clip-ma-0)", "url(#vote-map-clip-ma-1)"], shapes.Select(seat => seat.GetAttribute("clip-path")));
+        Assert.Equal("url(#vote-map-clip-ma-0)", page.QuerySelector(".vote-map-shapes .vote-map-party-break-ring")!.GetAttribute("clip-path"));
         var tiles = page.QuerySelectorAll(".vote-map-tiles .vote-map-seat").Where(seat => seat.QuerySelector("title")!.TextContent.StartsWith("Massachusetts:", StringComparison.Ordinal)).ToArray();
         Assert.Equal(["no", "yes"], tiles.Select(seat => seat.GetAttribute("data-mark")));
         Assert.True(double.Parse(tiles[0].GetAttribute("x")!, System.Globalization.CultureInfo.InvariantCulture) < double.Parse(tiles[1].GetAttribute("x")!, System.Globalization.CultureInfo.InvariantCulture));
@@ -75,8 +123,8 @@ public sealed class VoteMapTests
         Assert.Equal(435, page.QuerySelectorAll(".vote-map-shapes .vote-map-seat").Length);
         Assert.Equal(435, page.QuerySelectorAll(".vote-map-tiles .vote-map-seat").Length);
         Assert.DoesNotContain(page.QuerySelectorAll(".vote-map-frame title"), title => title.TextContent.Contains("Dee Cee") || title.TextContent.Contains("Pat Rico"));
-        Assert.Equal(["District of Columbia, Delegate: Dee Cee, Democrat, Present", "Puerto Rico, Resident Commissioner: Pat Rico, Republican, No (Nay)"],
-            page.QuerySelectorAll(".vote-map-delegates li").Select(item => item.TextContent));
+        Assert.Equal(["District of Columbia, Delegate: Dee Cee, Democrat, Present. Party line unavailable", "Puerto Rico, Resident Commissioner: Pat Rico, Republican, No (Nay). Party line unavailable"],
+            page.QuerySelectorAll(".vote-map-delegates li > span").Select(item => item.TextContent));
         Assert.Equal(["present", "no"], page.QuerySelectorAll(".vote-map-delegates circle").Select(circle => circle.GetAttribute("data-mark")));
         Assert.True(Position(page, ".vote-map-delegates") > Position(page, ".vote-map-frame"));
     }

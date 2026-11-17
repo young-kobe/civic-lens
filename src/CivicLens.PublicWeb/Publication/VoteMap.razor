@@ -2,7 +2,7 @@
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
-<section class="vote-map" aria-labelledby="@(Compact ? null : "vote-map-title")" data-vote-map data-view="@(Compact ? "shape" : null)" data-compact="@(Compact ? "" : null)">
+<section class="vote-map" aria-labelledby="@(Compact ? null : "vote-map-title")" data-vote-map data-view="@(Compact ? "shape" : null)" data-compact="@(Compact ? "" : null)" data-party-breaks="@(PartyBreaksEnabled ? "false" : null)">
     @if (!Compact)
     {
         <h2 id="vote-map-title">@VoteMapWords.Heading</h2>
@@ -22,6 +22,13 @@
                 <button class="segmented-item" type="button" data-color="vote" aria-pressed="true">@VoteMapWords.ByVote</button>
                 <button class="segmented-item" type="button" data-color="party" aria-pressed="false">@VoteMapWords.ByParty</button>
             </div>
+            @if (PartyBreaksEnabled)
+            {
+                <div class="segmented vote-map-views" role="group" aria-label="@VoteMapWords.PartyBreaks" hidden data-vote-map-breaks>
+                    <button class="segmented-item" type="button" data-party-breaks="true" aria-pressed="false">@VoteMapWords.PartyBreaks</button>
+                </div>
+                <p class="vote-map-party-breaks-key" data-party-breaks-key hidden><svg class="vote-map-swatch" viewBox="0 0 18 18" aria-hidden="true" focusable="false"><rect class="vote-map-seat" data-mark="yes" x="2" y="2" width="14" height="14" rx="2" /><rect class="vote-map-party-break-halo" x="2" y="2" width="14" height="14" rx="2" /><rect class="vote-map-party-break-ring" x="2" y="2" width="14" height="14" rx="2" /></svg> @VoteMapWords.PartyBreaks</p>
+            }
         }
         @if (Data.Chamber == PublishedChamber.House)
         {
@@ -113,16 +120,32 @@
             {
                 if (seat.Path is { } path)
                 {
-                    <path class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" d="@path"><title>@VoteMapWords.Describe(seat)</title></path>
+                    <path class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" d="@path"><title>@VoteMapWords.Describe(seat, PartyBreaksEnabled)</title></path>
                 }
                 else
                 {
-                    <use class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@VoteMapWords.Describe(seat)</title></use>
+                    <use class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@VoteMapWords.Describe(seat, PartyBreaksEnabled)</title></use>
                 }
             }
             @foreach (var state in Data.SplitStates)
             {
                 <line class="vote-map-split" x1="@N(state.Middle)" x2="@N(state.Middle)" y1="@N(state.Top)" y2="@N(state.Bottom)" clip-path="url(#@ClipId(state.State, 2))" />
+            }
+            @if (PartyBreaksEnabled)
+            {
+                @foreach (var seat in Data.Seats.Where(seat => seat.Member?.BreaksParty == true))
+                {
+                    if (seat.Path is { } path)
+                    {
+                        <path class="vote-map-party-break-halo" d="@path" />
+                        <path class="vote-map-party-break-ring" d="@path" />
+                    }
+                    else
+                    {
+                        <use class="vote-map-party-break-halo" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))" />
+                        <use class="vote-map-party-break-ring" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))" />
+                    }
+                }
             }
         </svg>
         @if (!Compact)
@@ -134,7 +157,15 @@
                 }
                 @foreach (var seat in Data.Seats)
                 {
-                    <rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@VoteMapWords.Describe(seat)</title></rect>
+                    <rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@VoteMapWords.Describe(seat, PartyBreaksEnabled)</title></rect>
+                }
+                @if (PartyBreaksEnabled)
+                {
+                    @foreach (var seat in Data.Seats.Where(seat => seat.Member?.BreaksParty == true))
+                    {
+                        <rect class="vote-map-party-break-halo" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3" />
+                        <rect class="vote-map-party-break-ring" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3" />
+                    }
                 }
             </svg>
         }
@@ -148,7 +179,17 @@
             <ul class="vote-map-delegates" role="list">
                 @foreach (var member in Data.Delegates)
                 {
-                    <li><svg class="vote-map-circle" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="vote-map-seat" data-mark="@VoteMapMarks.Name(VoteMapMarks.Of(member))" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(member))" cx="12" cy="12" r="10" /></svg><span>@VoteMapWords.DelegateSeat(member): @VoteMapWords.Member(member)</span></li>
+                    <li>
+                        <svg class="vote-map-circle" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <circle class="vote-map-seat" data-mark="@VoteMapMarks.Name(VoteMapMarks.Of(member))" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(member))" cx="12" cy="12" r="10" />
+                            @if (PartyBreaksEnabled && member.BreaksParty == true)
+                            {
+                                <circle class="vote-map-party-break-halo" cx="12" cy="12" r="10" />
+                                <circle class="vote-map-party-break-ring" cx="12" cy="12" r="10" />
+                            }
+                        </svg>
+                        <span>@VoteMapWords.DelegateSeat(member): @VoteMapWords.Member(member, PartyBreaksEnabled)</span>
+                    </li>
                 }
             </ul>
         }
@@ -164,18 +205,30 @@
                     <TableCell Header>Member</TableCell>
                     <TableCell Header>Party</TableCell>
                     <TableCell Header>Vote</TableCell>
+                    @if (PartyBreaksEnabled)
+                    {
+                        <TableCell Header>@VoteMapWords.PartyBreaks</TableCell>
+                    }
                 </Head>
                 <Row Context="row">
                     <TableCell Main Label="Seat">@row.Seat</TableCell>
                     @if (row.Member is { } member)
                     {
                         <VoteMemberCells Member="member" RootPath="@RootPath" />
+                        @if (PartyBreaksEnabled)
+                        {
+                            <TableCell Label="@VoteMapWords.PartyBreaks">@VotePageView.MemberPartyLine(member.BreaksParty, member.Party)</TableCell>
+                        }
                     }
                     else
                     {
                         <TableCell Label="Member">@VoteMapMarks.NoMember</TableCell>
                         <TableCell Label="Party"></TableCell>
                         <TableCell Label="Vote"></TableCell>
+                        @if (PartyBreaksEnabled)
+                        {
+                            <TableCell Label="@VoteMapWords.PartyBreaks"></TableCell>
+                        }
                     }
                 </Row>
             </DataTable>
@@ -206,6 +259,8 @@
     private static readonly string[] ToneNames = [VoteMapMarks.Name(PartyTone.Democrat), VoteMapMarks.Name(PartyTone.Republican), VoteMapMarks.Name(PartyTone.Neutral)];
 
     private string Description => Compact ? VoteMapWords.CompactDescription(Data.Chamber, legend) : VoteMapWords.Description(Data.Chamber);
+
+    private bool PartyBreaksEnabled => ColorModes && !Compact;
 
     private static string ShapeId(string state) => $"vote-map-state-{state.ToLowerInvariant()}";
 
