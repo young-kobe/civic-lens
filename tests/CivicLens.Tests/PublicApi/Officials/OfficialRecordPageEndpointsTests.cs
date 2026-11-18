@@ -443,19 +443,35 @@ public sealed class OfficialRecordPageEndpointsTests(PostgresCollection postgres
     }
 
     [Fact]
-    public async Task TheStatementsTabShowsTheChipOfTheTextOriginOfTheViewSoTheSourceTextOfAShortReleaseReadsNoAi()
+    public async Task TheStatementsTabExplainsGlossaryTermsOnlyBesideModelHeadlinesAndKeepsTheOriginChips()
     {
+        const string headline = "The Amendment";
+        var modelId = new string('5', 64);
         await using var host = await StartAsync();
         await StatementsSeed.AddAsync(host.OperationalDatabase, new SeededStatement('5', "2026-02-10", ["p0"], [], "Analysis", "Code"),
-            new SeededStatement('8', null, ["p0"], [], "Analysis", "Code"));
-        // The seed writes model text. An undated revision with a run may hold code text, the saved text of a short release.
-        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"UPDATE statement_revisions SET author_kind = 'Code' WHERE candidate_id = '{new string('8', 64)}'");
+            new SeededStatement('8', null, ["p0"], [], "Analysis", "Code"),
+            new SeededStatement('6', "2026-02-12", ["p0"], [], "Person", "Person"));
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE statement_revisions SET headline = CASE candidate_id
+                WHEN '{modelId}' THEN '{headline}'
+                WHEN '{new string('6', 64)}' THEN 'Cloture and Amendment'
+                ELSE 'Amendment and Motion to proceed' END,
+                author_kind = CASE WHEN candidate_id = '{new string('8', 64)}' THEN 'Code' ELSE author_kind END;
+            """);
 
-        var labels = (await GetPageAsync(host, "/officials/p0/record.html?kind=statements")).QuerySelectorAll(".record-row .ai-label");
+        var page = await GetPageAsync(host, "/officials/p0/record.html?kind=statements");
+        var labels = page.QuerySelectorAll(".record-row .ai-label");
 
         Assert.Equal(["model", "code"], labels.Select(label => label.GetAttribute("data-origin")));
         AiLabelAssert.IsChip(labels[0], AiLabelWords.ModelChip, AiLabelWords.StatementModelWording);
         AiLabelAssert.IsChip(labels[1], AiLabelWords.CodeChip, AiLabelWords.StatementSourceTextWording);
+        var links = page.QuerySelectorAll(".record-row div > a");
+        Assert.Equal(["Cloture and Amendment", headline, "Amendment and Motion to proceed"], links.Select(link => link.QuerySelector("span")!.TextContent));
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(modelId)), links[1].GetAttribute("href"));
+        var button = Assert.Single(page.QuerySelectorAll(".record-row button.term"));
+        Assert.Same(button, links[1].NextElementSibling);
+        Assert.Equal("Explain Amendment", button.TextContent);
+        Assert.Equal(Glossary.Term("amendment").PopoverId, button.GetAttribute("popovertarget"));
     }
 
     [Fact]

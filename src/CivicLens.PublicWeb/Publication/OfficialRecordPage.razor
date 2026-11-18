@@ -69,7 +69,7 @@
                         @foreach (var statement in Data.Statements)
                         {
                             <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline"
-                                             Label="@statement.Label" LabelOrigin="statement.TextOrigin" Meta="@StatementPageView.RowDate(statement.StatementDate)" />
+                                             HeadlineOrigin="statement.TextOrigin" Label="@statement.Label" LabelOrigin="statement.TextOrigin" Meta="@StatementPageView.RowDate(statement.StatementDate)" />
                         }
                     </ul>
                     break;
