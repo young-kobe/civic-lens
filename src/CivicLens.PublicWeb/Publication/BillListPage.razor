@@ -23,7 +23,7 @@
         @foreach (var bill in Data.Bills)
         {
             <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label" LabelOrigin="bill.TextOrigin"
-                             Sponsor="@bill.Sponsor">
+                             HeadlineOrigin="bill.TextOrigin" HeadlineTerms="bill.HeadlineTerms" Sponsor="@bill.Sponsor">
                 @if (BillLatestActionWords.Line(bill.LatestActionText, bill.LatestActionDate, bill.BillType) is { } latestAction)
                 {
                     <p class="small muted">@latestAction</p>

@@ -1,0 +1,27 @@
+@using System.Globalization
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Evidence
+@using CivicLens.PublicWeb.Components.Ui
+
+@code {
+    internal const string SourceLinkLabel = "Bill on Congress.gov";
+
+    internal static AiText.Candidate[] Candidates(BillTermContext context, bool scopeToBill) =>
+        AiText.WithLocalDefinitions(context.Terms.Select((term, index) => new AiText.Definition(term.Term,
+            string.Create(CultureInfo.InvariantCulture, $"bill-term-{context.RecordId}-{context.RevisionNumber}-{index}"), Definition(term, context))).ToArray(), scopeToBill);
+
+    private static RenderFragment Definition(BillKeyTermData term, BillTermContext context) => @<text>
+        <span class="quote">"@EncodedEvidence.Markup(term.Quote)"</span>
+        <AiLabel Text="@(context.Label ?? BillTextWords.KeyTermsLabel)" Origin="PublishedTextOrigin.Model" Look="AiLabelLook.Line" />
+        @if (term.Cut)
+        {
+            <span class="bill-term-cut">@CutNote(context.CongressGovUrl)</span>
+        }
+        else
+        {
+            <a href="@context.CongressGovUrl" rel="noopener noreferrer">@(context.SourceLabel ?? SourceLinkLabel)</a>
+        }
+    </text>;
+
+    internal static RenderFragment CutNote(string url) => @<text>@BillTextWords.KeyTermCutNote <a href="@url" rel="noopener noreferrer">@BillTextWords.KeyTermCutLink</a></text>;
+}

@@ -26,12 +26,22 @@
     internal static RenderFragment Render(GlossaryPageUse use, string text, PublishedTextOrigin origin, Candidate[]? candidates = null) =>
         RenderSegments(use, text, origin, origin == PublishedTextOrigin.Model ? Split(text, candidates ?? Candidates) : []);
 
-    internal static Candidate[] WithLocalDefinitions(Definition[] definitions)
+    internal static RenderFragment RenderControls(GlossaryPageUse use, string text, Candidate[]? candidates = null) => @<text>
+        @foreach (var segment in Split(text, candidates ?? Candidates))
+        {
+            @if (segment.Match is { } match)
+            {
+                @RenderTerm(use, match, TextContent($"Explain {segment.Text}"), standalone: true)
+            }
+        }
+    </text>;
+
+    internal static Candidate[] WithLocalDefinitions(Definition[] definitions, bool scopeToBill)
     {
         return definitions.Select(definition =>
             {
-                // A local definition and its glossary equivalent share the page's first use.
-                var glossary = Array.Find(Candidates, candidate => string.Equals(candidate.Name, definition.Name, StringComparison.OrdinalIgnoreCase));
+                // On a detail page a local definition and its glossary equivalent share first use.
+                var glossary = scopeToBill ? null : Array.Find(Candidates, candidate => string.Equals(candidate.Name, definition.Name, StringComparison.OrdinalIgnoreCase));
                 return new Candidate(definition.Name, glossary?.Key ?? definition.PopoverId, definition);
             })
             // Stable sorting gives a local definition precedence over an equal glossary name.
@@ -45,13 +55,9 @@
         {
             @foreach (var segment in parts)
             {
-                @if (segment.Match is { Definition: { } definition } local)
+                @if (segment.Match is { } match)
                 {
-                    @Term.Render(use, local.Key, definition.PopoverId, TextContent(segment.Text), definition.Body)
-                }
-                else if (segment.Match is { } glossary)
-                {
-                    @Term.Render(use, glossary.Key, TextContent(segment.Text))
+                    @RenderTerm(use, match, TextContent(segment.Text))
                 }
                 else
                 {
@@ -64,6 +70,11 @@
             @text
         }
     </text>;
+
+    private static RenderFragment RenderTerm(GlossaryPageUse use, Candidate match, RenderFragment content, bool standalone = false) =>
+        match.Definition is { } definition
+            ? Term.Render(use, match.Key, definition.PopoverId, content, definition.Body, standalone)
+            : Term.Render(use, match.Key, content, standalone);
 
     private static Segment[] Split(string text, Candidate[] candidates)
     {

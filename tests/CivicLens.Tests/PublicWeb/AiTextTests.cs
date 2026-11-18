@@ -1,5 +1,6 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
 using Microsoft.AspNetCore.Components;
@@ -91,6 +92,41 @@ public sealed class AiTextTests
         Assert.Single(document.QuerySelectorAll("button.term"));
         Assert.Equal("bIlL", document.QuerySelector("button.term")!.TextContent);
     }
+
+    [Fact]
+    public async Task LinkedHeadlineControlsShareManualFirstUseAndNeedAnExplicitHeadlineOrigin()
+    {
+        var document = await RenderAsync(builder =>
+        {
+            builder.OpenComponent<Term>(0);
+            builder.AddAttribute(1, nameof(Term.Key), "bill");
+            builder.AddAttribute(2, nameof(Term.ChildContent), (RenderFragment)(content => content.AddContent(0, "Bill")));
+            builder.CloseComponent();
+            builder.OpenElement(3, "ul");
+            builder.AddContent(4, RecordRow("Amendment", null));
+            builder.AddContent(5, RecordRow("Bill and Amendment", PublishedTextOrigin.Model));
+            builder.CloseElement();
+        });
+
+        var rows = document.QuerySelectorAll(".record-row");
+        Assert.Empty(rows[0].QuerySelectorAll("button.term"));
+        var control = Assert.Single(rows[1].QuerySelectorAll("button.term"));
+        Assert.Equal("Explain Amendment", control.TextContent);
+        Assert.Same(control, rows[1].QuerySelector("a")!.NextElementSibling);
+        Assert.Single(document.QuerySelectorAll("#term-bill"));
+    }
+
+    private static RenderFragment RecordRow(string headline, PublishedTextOrigin? headlineOrigin) => builder =>
+    {
+        builder.OpenComponent<PublicRecordRow>(0);
+        builder.AddAttribute(1, nameof(PublicRecordRow.Icon), IconName.Bill);
+        builder.AddAttribute(2, nameof(PublicRecordRow.Href), "/bill");
+        builder.AddAttribute(3, nameof(PublicRecordRow.Headline), headline);
+        builder.AddAttribute(4, nameof(PublicRecordRow.HeadlineOrigin), headlineOrigin);
+        builder.AddAttribute(5, nameof(PublicRecordRow.LabelOrigin), PublishedTextOrigin.Model);
+        builder.AddAttribute(6, nameof(PublicRecordRow.Label), BillTextWords.Label);
+        builder.CloseComponent();
+    };
 
     private static RenderFragment AiTextContent(string text, PublishedTextOrigin origin = PublishedTextOrigin.Model) => builder =>
     {

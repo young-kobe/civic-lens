@@ -6,25 +6,29 @@
     [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
     [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
 
-    internal static RenderFragment Render(GlossaryPageUse use, string key, RenderFragment content)
+    internal static RenderFragment Render(GlossaryPageUse use, string key, RenderFragment content, bool standalone = false)
     {
         var term = Glossary.Term(key);
         RenderFragment body = @<text>
             <span class="term-means">@term.Means</span>
             <span class="term-why">@term.WhyItMatters</span>
         </text>;
-        return Render(use, key, term.PopoverId, content, body);
+        return Render(use, key, term.PopoverId, content, body, standalone);
     }
 
-    internal static RenderFragment Render(GlossaryPageUse use, string key, string popoverId, RenderFragment content, RenderFragment body) => @<text>
+    internal static RenderFragment Render(GlossaryPageUse use, string key, string popoverId, RenderFragment content, RenderFragment body, bool standalone = false) => @<text>
         @if (use.IsFirstUse(key))
         {
-            <InfoPopover Id="@popoverId" TriggerClass="term">
+            @if (standalone)
+            {
+                @(" ")
+            }
+            <InfoPopover Id="@popoverId" TriggerClass="@(standalone ? "term term-control" : "term")">
                 <Trigger>@content</Trigger>
                 <ChildContent>@body</ChildContent>
             </InfoPopover>
         }
-        else
+        else if (!standalone)
         {
             @content
         }
