@@ -752,6 +752,73 @@
         control.hidden = false;
     };
 
+    const initMaps = map => {
+        if (map.querySelector("[data-vote-map-views]")) initVoteMapView(map);
+        const details = map.querySelector("[data-maps-details]");
+        const templates = new Map(Array.from(map.querySelectorAll("template[data-map-detail]"), item => [item.dataset.memberHref, item]));
+        const links = Array.from(map.querySelectorAll(".vote-map-frame a"));
+        let dismissing = false;
+        details.addEventListener("beforetoggle", event => {
+            if (event.newState !== "closed") return;
+            // Native dismissal restores seat focus before it finishes closing the popover.
+            dismissing = true;
+            setTimeout(() => { dismissing = false; }, 0);
+        });
+        const show = link => {
+            const template = templates.get(link.getAttribute("href"));
+            if (!template) return;
+            const changed = details.dataset.memberHref !== template.dataset.memberHref;
+            if (changed) {
+                details.replaceChildren(template.content.cloneNode(true));
+                details.dataset.memberHref = template.dataset.memberHref;
+            }
+            links.forEach(item => item.toggleAttribute("data-selected", item.getAttribute("href") === template.dataset.memberHref));
+            if (!details.matches(":popover-open")) details.showPopover();
+        };
+        details.addEventListener("toggle", event => {
+            if (event.newState === "closed") links.forEach(link => link.removeAttribute("data-selected"));
+        });
+        map.querySelectorAll(".vote-map-frame svg").forEach(svg => {
+            const seats = Array.from(svg.querySelectorAll("a"));
+            seats.forEach((link, index) => {
+                link.tabIndex = index === 0 ? 0 : -1;
+                link.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") show(link); });
+                link.addEventListener("focus", () => {
+                    seats.forEach(item => { item.tabIndex = item === link ? 0 : -1; });
+                    if (!dismissing) show(link);
+                });
+                link.addEventListener("click", event => {
+                    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                    event.preventDefault();
+                    show(link);
+                    // Touch keeps the seat selected. The explicit member link remains a normal link.
+                    if (event.detail === 0) details.querySelector("a")?.focus();
+                });
+                link.addEventListener("keydown", event => {
+                    let next;
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % seats.length;
+                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + seats.length - 1) % seats.length;
+                    else if (event.key === "Home") next = 0;
+                    else if (event.key === "End") next = seats.length - 1;
+                    else return;
+                    event.preventDefault();
+                    seats[next].focus();
+                });
+            });
+        });
+    };
+    document.querySelectorAll("[data-maps]").forEach(initMaps);
+    document.querySelectorAll("[data-maps-form]").forEach(form => {
+        const layer = form.querySelector('[name="layer"]');
+        const fields = { issue: "issueActivity", measure: "issueActivity", end: "termEnds" };
+        const update = () => Object.entries(fields).forEach(([name, wanted]) => {
+            const field = form.querySelector(`[data-maps-field="${name}"]`);
+            field.hidden = layer.value !== wanted && !field.querySelector('[aria-invalid="true"]');
+        });
+        layer.addEventListener("change", update);
+        update();
+    });
+
     document.querySelectorAll("table[data-paged]").forEach(initPaged);
     document.querySelectorAll("form[data-member-finder]").forEach(initMemberFinder);
     document.querySelectorAll("[data-vote-map]:not([data-compact])").forEach(initVoteMapView);

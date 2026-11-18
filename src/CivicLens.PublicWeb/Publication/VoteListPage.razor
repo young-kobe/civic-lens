@@ -5,7 +5,7 @@
                  Lede="@Lede"
                  FilterSummary="Filter by chamber, issue or date" Singular="vote" Plural="votes" EmptyTitle="No vote matches these filters."
                  EmptyReleaseTitle="No votes are published yet." Heading="@Heading">
-    <LedeContent>@LedeLead<a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>.</LedeContent>
+    <LedeContent>@LedeLead<a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Officials</a>. <a href="@(RootPath + PublicationProtocol.MapsPagePath)">@MapsWords.Explore</a></LedeContent>
     <Fields>
         <RecordListSelect Id="votes-chamber" Name="chamber" Label="Chamber" Choices="Chambers" Filter="Data.Filter" AnyText="All" />
         <RecordListSelect Id="votes-kind" Name="kind" Label="Kind of vote" Choices="Data.Kinds" Filter="Data.Filter" />

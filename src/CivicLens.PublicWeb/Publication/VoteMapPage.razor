@@ -4,7 +4,7 @@
 <PublicPage Section="PublicSection.Votes" Title="@title" Description="@description" CanonicalPath="@PublicationProtocol.VoteMapPagePath(Data.RecordId)" RootPath="@RootPath"
             TrailKind="PublishedRecordKind.Vote" TrailName="Map" TrailParent="parent">
     <PageHeader Title="@title" Eyebrow="@($"{Data.Chamber} vote, {Moment.Day(Data.VotedOn)} | Map")" Lede="@VoteMapWords.Intro(Data.Chamber)">
-        <Meta><a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId))">@VoteMapWords.BackToVote</a></Meta>
+        <Meta><a href="@(RootPath + PublicationProtocol.RecordPagePath(Data.RecordId))">@VoteMapWords.BackToVote</a> <a href="@(RootPath + PublicationProtocol.MapsPagePath)">@MapsWords.Explore</a></Meta>
     </PageHeader>
     @if (map is null)
     {

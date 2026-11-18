@@ -17,6 +17,7 @@ public static class PublicationProtocol
     /// <summary>The ZIP results of the home page, where a reader sees and compares their members.</summary>
     public const string YourMembersPath = HomePath + "#zip-results";
     public const string FacetsPath = "issues.html";
+    public const string MapsPagePath = "maps.html";
     public const int MaximumManifestBytes = 64 * 1024 * 1024;
     public const int SearchSourceTextCharacters = 200_000;
     public const string SearchPagePath = "search.html";

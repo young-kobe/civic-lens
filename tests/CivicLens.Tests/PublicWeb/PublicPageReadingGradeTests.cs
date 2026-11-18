@@ -464,8 +464,16 @@ public sealed class PublicPageReadingGradeTests
         static Dictionary<string, object?> With(string name, object? data, params (string Name, object? Value)[] more) =>
             new Dictionary<string, object?> { [name] = data, ["RootPath"] = Root }.Concat(more.Select(pair => KeyValuePair.Create(pair.Name, pair.Value))).ToDictionary();
 
+        var maps = new MapsPageData(7, 119, 119, PublishedChamber.House, "attendance", new(2026, 11, 17), null,
+            [new("map-member", "Map Member", PublicationProtocol.OfficialPagePath("map-member"), "Representative for Massachusetts", "Democrat", new(2027, 1, 3), new(0, 0), null, new(2, 5), true)],
+            [new("MA", 7, null, "map-member")], [new("health", "Health")], RecordListFilter.Of(null, null), "bills", new(2027, 1, 3))
+        { EndDates = [new(2027, 1, 3)] };
+
         return
         [
+            .. MapsWords.Layers.Select(layer => ($"maps {layer.Value}", Page<MapsPage>(With("Data", maps with { Layer = layer.Value, IssueName = layer.Value == "issueActivity" ? "Health" : null })), new[] { "Map Member", "Representative for Massachusetts", "Health" })),
+            ("maps empty", Page<MapsPage>(With("Data", maps with { Members = [], Seats = [] })), []),
+            ("maps refused", Page<MapsPage>(With("Data", maps with { Members = [], Seats = [], Filter = RecordListFilter.Refused("congress", ("congress", "soon")) })), ["soon"]),
             ("home", Page<HomePage>(With("Data", home, ("BrowserApiUrl", "https://api.civic-lens.test"))),
                 ["Published", "Newest notice", "Health", "Current bill line", "Henry Cuellar", "James Moylan", "John Fetterman", "Lisa Murkowski", "Ada Able", "Ben Baker"]),
             ("home empty", Page<HomePage>(With("Data", new HomePageData(7, null, [], null))), []),
