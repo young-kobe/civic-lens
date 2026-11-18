@@ -10,6 +10,7 @@ using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Ingest;
 using CivicLens.PublicApi.Issues;
+using CivicLens.PublicApi.Maps;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Pages;
 using CivicLens.PublicApi.PartyAgreement;
@@ -63,6 +64,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton<VoteMembersReader>();
         builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(snapshot);
+        builder.Services.AddSingleton<MapStore>();
         builder.Services.AddSingleton(new StatementStore(views));
         builder.Services.AddSingleton<StatementLinkedVoteReader>();
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<CorrectionHistoryStore>(),
@@ -142,6 +144,7 @@ public static class PublicApiApp
         app.MapVotes();
         app.MapPartyAgreement();
         app.MapBoards();
+        app.MapMaps();
         app.MapMemberVotes();
         app.MapBills();
         app.MapStatements();
