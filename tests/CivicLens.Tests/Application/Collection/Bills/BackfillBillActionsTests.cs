@@ -1,3 +1,4 @@
+using System.Globalization;
 using CivicLens.Application.Collection.Bills;
 using CivicLens.Application.Collection;
 using CivicLens.Application.Collection.Jobs;
@@ -13,8 +14,8 @@ namespace CivicLens.Tests.Application.Collection.Bills;
 public sealed class BackfillBillActionsTests
 {
     private static readonly ReviewActor Owner = new("auth0|owner", ReviewRole.Owner);
-    private const string DetailId = "bill-stream/" + ActionBillWorld.SourceId + "/bill/119/hr/2/2025-01-01";
-    private const string EarlierDetailId = "bill-stream/" + ActionBillWorld.SourceId + "/bill/119/hr/1/2025-01-01";
+    private const string DetailId = "b9be52474a2e4b158c4a58dadee04a11";
+    private const string EarlierDetailId = "0002de92eb7149b39db2aafac8d0f6c1";
 
     [Theory]
     [InlineData(true)]
@@ -99,8 +100,7 @@ public sealed class BackfillBillActionsTests
     public async Task FailedChainsRespectTheLimitAcrossBatchesAndATailOrEmptyPageEndsTheScan()
     {
         var world = ActionBillWorld.Create();
-        var ids = Enumerable.Range(1, 27).Select(number =>
-            $"bill-stream/{ActionBillWorld.SourceId}/bill/119/hr/{number}/2025-01-01").Order(StringComparer.Ordinal).ToArray();
+        var ids = Enumerable.Range(1, 27).Select(number => number.ToString("x32", CultureInfo.InvariantCulture)).ToArray();
         var store = new RecordingStore([]) { DetailIds = ids };
         var backfill = Backfill(world, store, new RecordingExtractions([]));
 
@@ -131,13 +131,11 @@ public sealed class BackfillBillActionsTests
     }
 
     [Theory]
-    [InlineData("source/part")]
-    [InlineData("source with spaces")]
-    [InlineData("source/bill/part")]
-    public async Task AGeneratedDetailKeyCanResumeWithoutRestrictingTheConfiguredSourceId(string sourceId)
+    [InlineData(EarlierDetailId)]
+    [InlineData(DetailId)]
+    public async Task AStoredDetailJobIdIsPassedUnchangedToTheStore(string cursor)
     {
         var world = ActionBillWorld.Create();
-        var cursor = BillStreamJobKeys.Detail(sourceId, new(119, "hr", 1, new(2025, 1, 1)));
         var store = new RecordingStore([]) { DetailIds = [] };
 
         var result = await Backfill(world, store, new RecordingExtractions([])).ExecuteAsync(Owner, 1, cursor);
@@ -146,16 +144,34 @@ public sealed class BackfillBillActionsTests
         Assert.Equal([(cursor, 1)], store.ListCalls);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("bill-stream/source/bill/119/hr/1/2025-01-01")]
+    [InlineData("B9be52474a2e4b158c4a58dadee04a11")]
+    [InlineData("g9be52474a2e4b158c4a58dadee04a11")]
+    [InlineData("\uff419be52474a2e4b158c4a58dadee04a11")]
+    [InlineData("b9be52474a2e4b158c4a58dadee04a1")]
+    [InlineData(DetailId + "0")]
+    [InlineData(DetailId + " ")]
+    public async Task AnInvalidCursorIsRejectedBeforeListing(string cursor)
+    {
+        var world = ActionBillWorld.Create();
+        var store = new RecordingStore([]);
+        var backfill = Backfill(world, store, new RecordingExtractions([]));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => backfill.ExecuteAsync(Owner, 1, cursor));
+
+        Assert.Empty(store.ListCalls);
+    }
+
     [Fact]
-    public async Task InvalidLimitOrCursorIsRejectedBeforeListingAndOnlyOwnerMayRun()
+    public async Task InvalidLimitOrNonOwnerIsRejectedBeforeListing()
     {
         var world = ActionBillWorld.Create();
         var store = new RecordingStore([]);
         var backfill = Backfill(world, store, new RecordingExtractions([]));
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => backfill.ExecuteAsync(Owner, 0));
-        await Assert.ThrowsAsync<ArgumentException>(() => backfill.ExecuteAsync(Owner, 1, "malformed"));
-        await Assert.ThrowsAsync<ArgumentException>(() => backfill.ExecuteAsync(Owner, 1, "bill-stream/"));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => backfill.ExecuteAsync(new("auth0|reader", ReviewRole.Reviewer), 1));
 
         Assert.Empty(store.ListCalls);

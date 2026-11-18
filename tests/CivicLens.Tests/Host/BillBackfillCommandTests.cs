@@ -7,6 +7,7 @@ namespace CivicLens.Tests.Host;
 [Trait("Category", "Postgres")]
 public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsyncLifetime
 {
+    private const string DetailJobId = "0002de92eb7149b39db2aafac8d0f6c1";
     private string connectionString = null!;
     private string artifactDirectory = null!;
 
@@ -46,13 +47,10 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
         Assert.Contains("\"examined\":0", result.Output, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("bill-stream/source/bill/119/hr/1/2025-01-01")]
-    [InlineData("bill-stream/source/part/bill/119/hr/1/2025-01-01")]
-    [InlineData("bill-stream/source with spaces/bill/119/hr/1/2025-01-01")]
-    public async Task AValidActionCursorReachesTheBoundedHandler(string cursor)
+    [Fact]
+    public async Task AStoredDetailJobIdReachesTheBoundedActionsHandler()
     {
-        var result = await RunAsync("bills", "actions", "backfill", "5", cursor);
+        var result = await RunAsync("bills", "actions", "backfill", "5", DetailJobId);
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("\"examined\":0", result.Output, StringComparison.Ordinal);
@@ -76,10 +74,12 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     }
 
     [Theory]
-    [InlineData("0", "bill-stream/source/bill/119/hr/1/2025-01-01")]
-    [InlineData("5", "not-a-bill-job")]
-    [InlineData("5", "bill-stream/")]
-    [InlineData("5", "bill-stream/source/bill/119/hr/1/2025-01-01 extra")]
+    [InlineData("0", DetailJobId)]
+    [InlineData("5", "bill-stream/source/bill/119/hr/1/2025-01-01")]
+    [InlineData("5", "0002DE92EB7149B39DB2AAFAC8D0F6C1")]
+    [InlineData("5", "0002de92eb7149b39db2aafac8d0f6cg")]
+    [InlineData("5", "0002de92eb7149b39db2aafac8d0f6c")]
+    [InlineData("5", DetailJobId + " ")]
     public async Task AnInvalidActionsLimitOrCursorIsRejectedBeforeDatabaseOrConfigurationAccess(string limit, string cursor)
     {
         var result = await HostProcess.RunWithEnvironmentAsync("not a connection string", null,
@@ -106,7 +106,7 @@ public sealed class BillBackfillCommandTests(PostgresCollection postgres) : IAsy
     public async Task TooManyActionsArgumentsAreRefusedBeforeConfigurationAccess()
     {
         var result = await HostProcess.RunWithEnvironmentAsync(null, null, new Dictionary<string, string>(),
-            "bills", "actions", "backfill", "5", "bill-stream/source/bill/119/hr/1/2025-01-01", "extra");
+            "bills", "actions", "backfill", "5", DetailJobId, "extra");
 
         Assert.Equal(2, result.ExitCode);
         Assert.Contains("Use bills actions backfill", result.Error, StringComparison.Ordinal);
