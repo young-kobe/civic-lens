@@ -109,36 +109,46 @@
 
                 @if (showStatements)
                 {
-                    <section id="statements" class="official-section official-statements" aria-labelledby="statements-title">
-                        <h2 id="statements-title">@OfficialPageText.StatementsHeading</h2>
-                        <ul class="official-rows" role="list">
-                            @foreach (var statement in Data.Statements)
-                            {
-                                var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? AiLabelWords.ModelWording : null);
-                                <li>
-                                    <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
-                                    <div>
-                                        <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                        <AiLabel Text="@statement.Label" Origin="statement.TextOrigin" Look="AiLabelLook.Chip" />
-                                        <p class="official-meta"><span>@StatementPageView.RowDate(statement.StatementDate)</span></p>
-                                        <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@VoteWords.RollCall(statement.VoteChamber, statement.VoteRollCall), @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>
-                                            <AiLabel Text="@voteLabel" Origin="statement.VoteTextOrigin" Look="AiLabelLook.Chip" />
-                                            @if (statement.Cast is { } cast)
+                    <GlossaryContent Context="use">
+                        <section id="statements" class="official-section official-statements" aria-labelledby="statements-title">
+                            <h2 id="statements-title">@OfficialPageText.StatementsHeading</h2>
+                            <ul class="official-rows" role="list">
+                                @foreach (var statement in Data.Statements)
+                                {
+                                    var voteLabel = statement.VoteLabel ?? (statement.VoteTextOrigin == PublishedTextOrigin.Model ? AiLabelWords.ModelWording : null);
+                                    <li>
+                                        <span class="official-icon" aria-hidden="true"><Icon Name="IconName.Statements" /></span>
+                                        <div>
+                                            <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
+                                            @if (statement.TextOrigin == PublishedTextOrigin.Model)
                                             {
-                                                <SharedVoteCast Side="@PublishedOfficialVote.SideOf(cast)"><CastWord Cast="@cast" /></SharedVoteCast>
+                                                @AiText.RenderControls(use, statement.Headline)
                                             }
-                                            @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
-                                            {
-                                                <span class="link-checker">@checker</span>
-                                            }
-                                        </p>
-                                    </div>
-                                </li>
-                            }
-                        </ul>
-                        <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
-                        <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Statements)">See all statements by @Data.Name</a></p>
-                    </section>
+                                            <AiLabel Text="@statement.Label" Origin="statement.TextOrigin" Look="AiLabelLook.Chip" />
+                                            <p class="official-meta"><span>@StatementPageView.RowDate(statement.StatementDate)</span></p>
+                                            <p class="official-related"><span>Related vote</span> <a href="@(RootPath + PublicationProtocol.RecordPagePath(statement.VoteRecordId))">@VoteWords.RollCall(statement.VoteChamber, statement.VoteRollCall), @Moment.Day(statement.VotedOn): @statement.VoteHeadline</a>@(" ")
+                                                @if (statement.VoteTextOrigin == PublishedTextOrigin.Model)
+                                                {
+                                                    @AiText.RenderControls(use, statement.VoteHeadline)
+                                                }
+                                                <AiLabel Text="@voteLabel" Origin="statement.VoteTextOrigin" Look="AiLabelLook.Chip" />
+                                                @if (statement.Cast is { } cast)
+                                                {
+                                                    @SharedVoteCast.Render(PublishedOfficialVote.SideOf(cast), CastWord.Render(use, cast))
+                                                }
+                                                @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
+                                                {
+                                                    <span class="link-checker">@checker</span>
+                                                }
+                                            </p>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                            <p class="muted small">@OfficialPageText.LinkMeaning <a href="@(RootPath + PublicationProtocol.MethodPagePath)">What a link is</a></p>
+                            <p class="official-more"><a href="@RecordPath(OfficialRecordKind.Statements)">See all statements by @Data.Name</a></p>
+                        </section>
+                    </GlossaryContent>
                 }
 
                 @if (showBills)
