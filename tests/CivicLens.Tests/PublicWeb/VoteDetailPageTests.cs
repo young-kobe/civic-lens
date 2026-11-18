@@ -353,12 +353,13 @@ public sealed class VoteDetailPageTests
 
         var anchors = page.QuerySelectorAll(".vote-members .source-line").Select(link => link.GetAttribute("href")![1..]).ToArray();
         Assert.Equal(5, anchors.Length);
-        var fold = page.QuerySelector("details.source-fold")!;
+        var fold = page.QuerySelector("details#source")!;
+        var savedText = Assert.Single(fold.QuerySelectorAll("details.source-fold"));
         Assert.All(anchors, anchor =>
         {
-            var target = page.GetElementById(anchor)!;
+            var target = savedText.QuerySelector($"mark#{anchor}")!;
             Assert.Contains("Member:", target.TextContent);
-            Assert.Same(fold, target.Closest("details"));
+            Assert.Same(target, page.GetElementById(anchor));
         });
         var script = File.ReadAllText(Path.Combine(RepositoryRoot.FullName, "src", "CivicLens.PublicWeb", "wwwroot", "js", "public.js"));
         Assert.Contains("closest(\"details\")", script, StringComparison.Ordinal);
@@ -392,12 +393,36 @@ public sealed class VoteDetailPageTests
     [Fact]
     public async Task OneCheckTheSourceFoldHoldsTheCitedFactsAndTheSourceTextAndNoTimelineExists()
     {
-        var page = await RenderAsync(Vote());
+        var data = Vote();
+        var secondSource = Source with { ExtractionId = "ex2", Url = "https://final.example/second", Text = Source.Text + "\nSecond saved source." };
+        var page = await RenderAsync(data with
+        {
+            Sources = [Source, secondSource],
+            VotedOnCitation = data.VotedOnCitation with { ExtractionId = secondSource.ExtractionId }
+        });
 
-        var fold = Assert.Single(page.QuerySelectorAll("details.source-fold"));
+        var fold = Assert.Single(page.QuerySelectorAll("details#source"));
         Assert.Equal("Check the source", fold.QuerySelector("summary")!.TextContent);
-        Assert.Contains("Casts of all House members: Yes 6, No 4, Present 1, Not voting 3", fold.QuerySelector("dl.facts")!.TextContent);
-        Assert.Equal(1, fold.QuerySelectorAll(".doc-text").Length);
+        Assert.False(fold.HasAttribute("open"));
+        var facts = fold.QuerySelector("dl.facts")!;
+        Assert.Contains("Casts of all House members: Yes 6, No 4, Present 1, Not voting 3", facts.TextContent);
+        Assert.Same(fold, facts.Closest("details"));
+        var versions = fold.QuerySelectorAll("details.source-fold");
+        Assert.Equal(["Source text 1 of 2", "Source text 2 of 2"], versions.Select(version => version.QuerySelector("summary")!.TextContent));
+        foreach (var (version, source) in versions.Zip(new[] { Source, secondSource }))
+        {
+            Assert.False(version.HasAttribute("open"));
+            Assert.Contains(source.Url, version.QuerySelector("p")!.TextContent);
+            var saved = Assert.Single(version.QuerySelectorAll(".doc-text"));
+            Assert.Equal(version.QuerySelector("summary")!.TextContent, saved.GetAttribute("aria-label"));
+            Assert.Equal(source.Text, saved.TextContent);
+        }
+        var votedOn = facts.QuerySelectorAll("dt").Single(term => term.TextContent == "Voted on");
+        var dateHref = Assert.Single(votedOn.NextElementSibling!.QuerySelectorAll("a.source-line")).GetAttribute("href")!;
+        var dateTarget = Assert.Single(page.QuerySelectorAll("mark" + dateHref));
+        Assert.Same(versions[1], dateTarget.Closest("details"));
+        Assert.Equal(data.VotedOnCitation.Quote, dateTarget.TextContent);
+        Assert.Null(versions[0].QuerySelector(dateHref));
         Assert.Null(page.QuerySelector(".timeline, #timeline-title"));
         Assert.DoesNotContain("Timeline", page.QuerySelector("main")!.TextContent);
     }

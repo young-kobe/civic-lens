@@ -87,17 +87,24 @@
                     </DateEvidenceLine>
                 }
             </ul>
-            <h3 id="@DocumentChangeWords.EarlierAnchor">Earlier version</h3>
-            <p class="muted small">@DocumentChangeWords.SavedLine(Data.Before). Source: <a href="@Data.Before.Url" rel="noopener noreferrer nofollow">@Data.Before.Url</a></p>
-            <DocumentText Label="Earlier version text" Runs="CitedText.Split(Data.Before.Text, DocumentChangeWords.RangesIn(Data.Citations, Data.ChangeDateEvidence, Data.Before))" />
-            <h3 id="@DocumentChangeWords.LaterAnchor">Later version</h3>
-            <p class="muted small">@DocumentChangeWords.SavedLine(Data.After). Source: <a href="@Data.After.Url" rel="noopener noreferrer nofollow">@Data.After.Url</a></p>
-            <DocumentText Label="Later version text" Runs="CitedText.Split(Data.After.Text, DocumentChangeWords.RangesIn(Data.Citations, Data.ChangeDateEvidence, Data.After))" />
+            <SourceFold Summary="@EarlierLabel" FoldId="@((string?)null)">
+                <h3 id="@DocumentChangeWords.EarlierAnchor">Earlier version</h3>
+                <p class="muted small">@DocumentChangeWords.SavedLine(Data.Before). Source: <a href="@Data.Before.Url" rel="noopener noreferrer nofollow">@Data.Before.Url</a></p>
+                <DocumentText Label="@EarlierLabel" Runs="CitedText.Split(Data.Before.Text, DocumentChangeWords.RangesIn(Data.Citations, Data.ChangeDateEvidence, Data.Before))" />
+            </SourceFold>
+            <SourceFold Summary="@LaterLabel" FoldId="@((string?)null)">
+                <h3 id="@DocumentChangeWords.LaterAnchor">Later version</h3>
+                <p class="muted small">@DocumentChangeWords.SavedLine(Data.After). Source: <a href="@Data.After.Url" rel="noopener noreferrer nofollow">@Data.After.Url</a></p>
+                <DocumentText Label="@LaterLabel" Runs="CitedText.Split(Data.After.Text, DocumentChangeWords.RangesIn(Data.Citations, Data.ChangeDateEvidence, Data.After))" />
+            </SourceFold>
         </SourceFold>
     </article>
 </PublicPage>
 
 @code {
+    private const string EarlierLabel = "Earlier version text";
+    private const string LaterLabel = "Later version text";
+
     private ReportedRecord record = default!;
 
     [Parameter, EditorRequired] public DocumentChangePageData Data { get; set; } = default!;

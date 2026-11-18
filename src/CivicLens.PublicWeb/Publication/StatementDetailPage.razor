@@ -96,7 +96,9 @@
             }
             @if (!StatementPageView.ShowsSourceText(Data))
             {
-                <DocumentText Label="@StatementPageView.SourceTextLabel" Runs="sourceRuns" />
+                <SourceFold Summary="@StatementPageView.SourceTextLabel" FoldId="@((string?)null)">
+                    <DocumentText Label="@StatementPageView.SourceTextLabel" Runs="sourceRuns" />
+                </SourceFold>
             }
         </SourceFold>
     </article>
