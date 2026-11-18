@@ -1,4 +1,3 @@
-@using System.Globalization
 @using CivicLens.Publication.Contracts
 @using CivicLens.PublicWeb.Components.Ui
 
@@ -102,74 +101,8 @@
             }
         </defs>
     </svg>
-    <div class="vote-map-frame">
-        <svg class="vote-map-shapes" viewBox="@VoteMapGeometry.ViewBox" role="img" aria-label="@Description" focusable="false">
-            @if (Data.SplitStates.Count > 0)
-            {
-                <defs>
-                    @foreach (var state in Data.SplitStates)
-                    {
-                        <path id="@ShapeId(state.State)" d="@state.Path" />
-                        <clipPath id="@ClipId(state.State, 0)"><rect x="@N(state.Left)" y="@N(state.Top)" width="@N(state.Middle - state.Left)" height="@N(state.Bottom - state.Top)" /></clipPath>
-                        <clipPath id="@ClipId(state.State, 1)"><rect x="@N(state.Middle)" y="@N(state.Top)" width="@N(state.Right - state.Middle)" height="@N(state.Bottom - state.Top)" /></clipPath>
-                        <clipPath id="@ClipId(state.State, 2)"><use href="#@ShapeId(state.State)" /></clipPath>
-                    }
-                </defs>
-            }
-            @foreach (var seat in Data.Seats)
-            {
-                if (seat.Path is { } path)
-                {
-                    <path class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" d="@path"><title>@VoteMapWords.Describe(seat, PartyBreaksEnabled)</title></path>
-                }
-                else
-                {
-                    <use class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@VoteMapWords.Describe(seat, PartyBreaksEnabled)</title></use>
-                }
-            }
-            @foreach (var state in Data.SplitStates)
-            {
-                <line class="vote-map-split" x1="@N(state.Middle)" x2="@N(state.Middle)" y1="@N(state.Top)" y2="@N(state.Bottom)" clip-path="url(#@ClipId(state.State, 2))" />
-            }
-            @if (PartyBreaksEnabled)
-            {
-                @foreach (var seat in Data.Seats.Where(seat => seat.Member?.BreaksParty == true))
-                {
-                    if (seat.Path is { } path)
-                    {
-                        <path class="vote-map-party-break-halo" d="@path" />
-                        <path class="vote-map-party-break-ring" d="@path" />
-                    }
-                    else
-                    {
-                        <use class="vote-map-party-break-halo" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))" />
-                        <use class="vote-map-party-break-ring" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))" />
-                    }
-                }
-            }
-        </svg>
-        @if (!Compact)
-        {
-            <svg class="vote-map-tiles" viewBox="0 0 @N(VoteMapTiles.Width) @N(Data.Tiles.Height)" role="img" aria-label="@VoteMapWords.Description(Data.Chamber)" focusable="false">
-                @foreach (var label in Data.Tiles.Labels)
-                {
-                    @Label(label)
-                }
-                @foreach (var seat in Data.Seats)
-                {
-                    <rect class="vote-map-seat" data-mark="@VoteMapMarks.Name(seat.Mark)" data-party="@VoteMapMarks.Name(VoteMapMarks.Party(seat.Member))" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@VoteMapWords.Describe(seat, PartyBreaksEnabled)</title></rect>
-                }
-                @if (PartyBreaksEnabled)
-                {
-                    @foreach (var seat in Data.Seats.Where(seat => seat.Member?.BreaksParty == true))
-                    {
-                        <rect class="vote-map-party-break-halo" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3" />
-                        <rect class="vote-map-party-break-ring" x="@N(seat.Tile.X)" y="@N(seat.Tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3" />
-                    }
-                }
-            </svg>
-        }
-    </div>
+    <MapFrame IdPrefix="vote-map" Seats="frameSeats" SplitStates="Data.SplitStates" ShapesViewBox="@VoteMapGeometry.ViewBox"
+              ShapesLabel="@Description" TileLayout="@(Compact ? null : Data.Tiles)" TilesLabel="@VoteMapWords.Description(Data.Chamber)" />
     @if (!Compact)
     {
         @if (Data.Delegates.Count > 0)
@@ -237,6 +170,7 @@
 </section>
 
 @code {
+    private IReadOnlyList<MapFrameSeat> frameSeats = [];
     private IReadOnlyList<VoteMapRow> rows = [];
     private IReadOnlyList<(VoteMapMark Mark, int Count)> legend = [];
 
@@ -253,6 +187,11 @@
 
     protected override void OnParametersSet()
     {
+        var partyBreaksEnabled = PartyBreaksEnabled;
+        frameSeats = [.. Data.Seats.Select(seat => new MapFrameSeat(
+            seat.State, seat.Path, seat.Half, seat.Tile, VoteMapMarks.Name(seat.Mark),
+            VoteMapMarks.Name(VoteMapMarks.Party(seat.Member)), VoteMapWords.Describe(seat, partyBreaksEnabled),
+            partyBreaksEnabled && seat.Member?.BreaksParty == true))];
         legend = Data.Legend;
         rows = [.. Data.Seats.Select(seat => new VoteMapRow(VoteMapWords.SeatName(seat), seat.Member)), .. Data.Delegates.Select(member => new VoteMapRow(VoteMapWords.DelegateSeat(member), member))];
     }
@@ -262,14 +201,4 @@
     private string Description => Compact ? VoteMapWords.CompactDescription(Data.Chamber, legend) : VoteMapWords.Description(Data.Chamber);
 
     private bool PartyBreaksEnabled => ColorModes && !Compact;
-
-    private static string ShapeId(string state) => $"vote-map-state-{state.ToLowerInvariant()}";
-
-    private static string ClipId(string state, int part) => $"vote-map-clip-{state.ToLowerInvariant()}-{part}";
-
-    /// <summary>Razor reserves the text tag, so the label markup is built here. The state code is encoded.</summary>
-    private static MarkupString Label(VoteMapTileLabel label) =>
-        new($"<text class=\"vote-map-tile-label\" x=\"{N(label.X)}\" y=\"{N(label.Y)}\">{System.Net.WebUtility.HtmlEncode(label.State)}</text>");
-
-    private static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 }

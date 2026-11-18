@@ -164,7 +164,9 @@ public sealed class MapEndpointsTests(PostgresCollection postgres)
         Assert.Equal(new MapIssueActivityAnswer(new(1, 1), null), Assert.Single(incomplete.Members).IssueActivity);
         Assert.Null(Assert.Single((await ReadAsync(host, "/v1/maps")).Members).Attendance);
 
-        var inFlight = await ReadWhileRollingBackAsync(host);
+        var request = new MapRequest(null, PublishedChamber.House, MapLayer.IssueActivity, "zz-target");
+        var inFlight = await ReadDuringReleaseChangeAsync(host, store => store.FindAsync(request, default),
+            () => ViewsSeed.ActivateReleaseAsync(database, 1, ReleaseDay));
         Assert.Equal((2, "New Issue", "New Name"), (inFlight.Release, inFlight.Issue!.Name, Assert.Single(inFlight.Members).Name));
         Assert.Equal(new MapIssueActivityAnswer(new(1, 1), null), Assert.Single(inFlight.Members).IssueActivity);
 
@@ -174,11 +176,72 @@ public sealed class MapEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task PageKeepsTheHistoricalMapAndFullIssueCatalogTogetherWhenTheActiveReleaseChanges()
+    {
+        await using var host = await StartAsync();
+        var database = host.OperationalDatabase;
+        await OfficialsSeed.AddOfficialsAsync(database, new SeededOfficial("member", "Earlier Name", House("2023-01-03", "AL", 1)));
+        await ViewsSeed.ExecuteAsync(database, """
+            INSERT INTO release_issues (release_number, issue_id, name)
+            SELECT 1, 'issue-' || lpad((12 - number)::text, 2, '0'), 'Issue ' || lpad(number::text, 2, '0')
+              FROM generate_series(1, 11) AS issue(number);
+            INSERT INTO release_issues (release_number, issue_id, name)
+            VALUES (1, 'zz-target', 'Shared label'), (1, 'aa-other', 'Shared label');
+            """);
+        await ViewsSeed.AddVotesAsync(database, new SeededVote('a', "2024-05-11")
+        {
+            Congress = 118,
+            LastRelease = 1,
+            PersonIds = ["member"],
+            Casts = ["Yea"],
+            Issues = ["zz-target"]
+        });
+
+        var request = new MapRequest(118, PublishedChamber.House, MapLayer.IssueActivity, "zz-target");
+        var first = await ReadDuringReleaseChangeAsync(host, store => store.FindPageAsync(request, default),
+            () => ViewsSeed.ExecuteAsync(database, $"""
+                {ViewsSeed.ActivateReleaseSql(2, new DateTimeOffset(2027, 6, 1, 0, 0, 0, TimeSpan.Zero), 0)}
+                INSERT INTO release_officials (release_number, official_id, name) VALUES (2, 'member', 'New Name');
+                INSERT INTO release_official_terms (release_number, official_id, "position", office, kind, state, district, start_on)
+                VALUES (2, 'member', 0, 'House', 'Representative', 'AL', 1, '2023-01-03');
+                INSERT INTO release_issues (release_number, issue_id, name) VALUES (2, 'zz-target', 'New Issue');
+                """));
+
+        Assert.Equal(119, first.ReleaseCongress);
+        Assert.Equal(1, first.Map.Release);
+        Assert.Equal(118, first.Map.Congress);
+        Assert.Equal(new DateOnly(2025, 1, 2), first.Map.AsOf);
+        var selectedIssue = new MapIssueAnswer("zz-target", "Shared label");
+        Assert.Equal(selectedIssue, first.Map.Issue);
+        MapIssueAnswer[] expectedIssues =
+        [
+            .. Enumerable.Range(1, 11).Select(number => new MapIssueAnswer($"issue-{12 - number:00}", $"Issue {number:00}")),
+            new("aa-other", "Shared label"), selectedIssue
+        ];
+        Assert.Equal(expectedIssues, first.IssueChoices);
+        var member = Assert.Single(first.Map.Members);
+        Assert.Equal("Earlier Name", member.Name);
+        Assert.Equal(new MapCounts(1, 1), member.IssueActivity?.SubstantiveCasts);
+
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        var next = await new MapStore(new RecordSnapshot(views)).FindPageAsync(request, default);
+        Assert.NotNull(next);
+        Assert.Equal(120, next.ReleaseCongress);
+        Assert.Equal(2, next.Map.Release);
+        Assert.Equal(new MapIssueAnswer("zz-target", "New Issue"), Assert.Single(next.IssueChoices));
+        Assert.Equal("New Name", Assert.Single(next.Map.Members).Name);
+    }
+
+    [Fact]
     public async Task InvalidFiltersAreRefusedAndAnEmptyReleaseKeepsItsIdentityWithoutInventingCalendarScope()
     {
         await using var host = await ApiHost.StartAsync(postgres);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        var store = new MapStore(new RecordSnapshot(views));
+        var request = new MapRequest(null, PublishedChamber.House, MapLayer.Attendance, null);
         using var noRelease = await host.Client.GetAsync("/v1/maps");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, noRelease.StatusCode);
+        Assert.Null(await store.FindPageAsync(request, default));
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, ReleaseDay, recordCount: 0);
         var empty = await ReadAsync(host, "/v1/maps");
@@ -199,6 +262,11 @@ public sealed class MapEndpointsTests(PostgresCollection postgres)
             using var response = await host.Client.GetAsync("/v1/maps?" + query);
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
+        var future = await Assert.ThrowsAsync<ArgumentException>(() => store.FindPageAsync(request with { Congress = 120 }, default));
+        Assert.Equal("congress", future.ParamName);
+        var missingIssue = await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.FindPageAsync(request with { Layer = MapLayer.IssueActivity, Issue = "missing" }, default));
+        Assert.Equal("issue", missingIssue.ParamName);
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, DateTimeOffset.UnixEpoch.AddYears(-45), recordCount: 0);
         var unsupported = await ReadAsync(host, "/v1/maps");
@@ -206,6 +274,11 @@ public sealed class MapEndpointsTests(PostgresCollection postgres)
         Assert.Null(unsupported.Congress);
         Assert.Null(unsupported.AsOf);
         Assert.Empty(unsupported.Members);
+        var unsupportedPage = await store.FindPageAsync(request, default);
+        Assert.NotNull(unsupportedPage);
+        Assert.Null(unsupportedPage.ReleaseCongress);
+        Assert.Equal(2, unsupportedPage.Map.Release);
+        Assert.Empty(unsupportedPage.IssueChoices);
 
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 3, DateTimeOffset.MaxValue, recordCount: 0);
         var lastDay = await ReadAsync(host, "/v1/maps");
@@ -229,7 +302,8 @@ public sealed class MapEndpointsTests(PostgresCollection postgres)
         }
     }
 
-    private static async Task<MapAnswer> ReadWhileRollingBackAsync(ApiHost host)
+    private static async Task<T> ReadDuringReleaseChangeAsync<T>(ApiHost host, Func<MapStore, Task<T?>> readMap,
+        Func<Task> changeRelease) where T : class
     {
         var timeout = TimeSpan.FromSeconds(15);
         using var gate = new FirstPublicApiReadGate(timeout);
@@ -238,19 +312,20 @@ public sealed class MapEndpointsTests(PostgresCollection postgres)
         dataSourceBuilder.UseLoggerFactory(loggerFactory);
         await using var views = dataSourceBuilder.Build();
         var store = new MapStore(new RecordSnapshot(views));
-        var request = new MapRequest(null, PublishedChamber.House, MapLayer.IssueActivity, "zz-target");
-        var read = Task.Run(() => store.FindAsync(request, default));
+        var read = Task.Run(() => readMap(store));
         try
         {
             await gate.FirstRead.WaitAsync(timeout);
-            await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, ReleaseDay);
+            await changeRelease();
         }
         finally
         {
             gate.Resume();
             await read.WaitAsync(timeout);
         }
-        return (await read)!;
+        var result = await read;
+        Assert.NotNull(result);
+        return result;
     }
 
     private static async Task<MapAnswer> ReadAsync(ApiHost host, string path) =>

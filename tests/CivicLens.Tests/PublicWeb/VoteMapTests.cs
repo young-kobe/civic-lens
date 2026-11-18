@@ -88,8 +88,13 @@ public sealed class VoteMapTests
         });
 
         Assert.Null(page.QuerySelector("[data-party-breaks], [data-party-breaks-key], .vote-map-party-break-halo, .vote-map-party-break-ring"));
-        Assert.Equal("Massachusetts district 7: Ada Able, Democrat, Yes (Aye)",
-            Seat(page, "shapes", "Massachusetts district 7").QuerySelector("title")!.TextContent);
+        var shapes = page.QuerySelector(".vote-map-shapes")!;
+        Assert.Equal("img", shapes.GetAttribute("role"));
+        Assert.Equal("false", shapes.GetAttribute("focusable"));
+        Assert.Null(shapes.QuerySelector("a"));
+        var seat = Seat(page, "shapes", "Massachusetts district 7");
+        Assert.False(seat.HasAttribute("fill-opacity"));
+        Assert.Equal("Massachusetts district 7: Ada Able, Democrat, Yes (Aye)", seat.QuerySelector("title")!.TextContent);
     }
 
     [Fact]
@@ -110,6 +115,80 @@ public sealed class VoteMapTests
         Assert.Equal(["not-voting", "no-member"], page.QuerySelectorAll(".vote-map-tiles .vote-map-seat")
             .Where(seat => seat.QuerySelector("title")!.TextContent.StartsWith("Texas:", StringComparison.Ordinal)).Select(seat => seat.GetAttribute("data-mark")));
         Assert.Equal(100, page.QuerySelectorAll(".vote-map-tiles .vote-map-seat").Length);
+    }
+
+    [Fact]
+    public async Task ALinkedSeatKeepsItsGeometryAndLabelAlongsideAnUnlinkedSeatInBothViews()
+    {
+        var tiles = VoteMapTiles.Place([("MA", 2)]);
+        MapFrameSeat[] seats =
+        [
+            new("MA", null, 0, tiles.Tiles[0], "custom", null, "Ada & Bea", Href: "/officials/ada.html"),
+            new("MA", null, 1, tiles.Tiles[1], "unknown", null, "Unavailable")
+        ];
+        var page = await ListPageRender.RenderPageAsync<MapFrame>(new Dictionary<string, object?>
+        {
+            [nameof(MapFrame.IdPrefix)] = "test-map",
+            [nameof(MapFrame.Seats)] = seats,
+            [nameof(MapFrame.SplitStates)] = new[] { VoteMapGeometry.States["MA"] },
+            [nameof(MapFrame.ShapesViewBox)] = VoteMapGeometry.ViewBox,
+            [nameof(MapFrame.ShapesLabel)] = "Shapes",
+            [nameof(MapFrame.TileLayout)] = tiles,
+            [nameof(MapFrame.TilesLabel)] = "Tiles"
+        });
+
+        var views = page.QuerySelectorAll(".vote-map-frame > svg");
+        Assert.Equal(2, views.Length);
+        foreach (var view in views)
+        {
+            Assert.Equal("group", view.GetAttribute("role"));
+            var link = Assert.Single(view.QuerySelectorAll("a"));
+            Assert.Equal("/officials/ada.html", link.GetAttribute("href"));
+            Assert.Equal("Ada & Bea", link.GetAttribute("aria-label"));
+            Assert.Equal("Ada & Bea", link.QuerySelector("title")!.TextContent);
+            Assert.Equal("custom", link.QuerySelector(".vote-map-seat")!.GetAttribute("data-mark"));
+            Assert.Same(view, view.QuerySelector(".vote-map-seat[data-mark=unknown]")!.ParentElement);
+        }
+        Assert.Equal("url(#test-map-clip-ma-0)", page.QuerySelector(".vote-map-shapes a use")!.GetAttribute("clip-path"));
+        Assert.NotNull(page.GetElementById("test-map-clip-ma-0"));
+        Assert.NotNull(page.QuerySelector(".vote-map-tiles a rect"));
+    }
+
+    [Fact]
+    public async Task ASeatWithGeometryInOnlyOneViewAddsNoMarkOrLinkToTheOtherView()
+    {
+        var tiles = VoteMapTiles.Place([("MA", 1)]);
+        MapFrameSeat[] seats =
+        [
+            new("VT", "M0 0H10V10H0Z", 0, null, "unavailable", null, "Unavailable", Emphasized: true, FillOpacity: 0.375),
+            new("MA", null, 0, tiles.Tiles[0], "percentage", null, "Ada Able", Emphasized: true, Href: "/officials/ada.html",
+                DrawShape: false, FillOpacity: 0)
+        ];
+        var page = await ListPageRender.RenderPageAsync<MapFrame>(new Dictionary<string, object?>
+        {
+            [nameof(MapFrame.IdPrefix)] = "test-map",
+            [nameof(MapFrame.Seats)] = seats,
+            [nameof(MapFrame.ShapesViewBox)] = "0 0 10 10",
+            [nameof(MapFrame.ShapesLabel)] = "Shapes",
+            [nameof(MapFrame.TileLayout)] = tiles,
+            [nameof(MapFrame.TilesLabel)] = "Tiles"
+        });
+
+        var shapes = page.QuerySelector(".vote-map-shapes")!;
+        Assert.Equal("img", shapes.GetAttribute("role"));
+        Assert.Null(shapes.QuerySelector("a, use"));
+        var shapeMark = Assert.Single(shapes.QuerySelectorAll(".vote-map-seat"));
+        Assert.Equal("unavailable", shapeMark.GetAttribute("data-mark"));
+        Assert.Equal("0.375", shapeMark.GetAttribute("fill-opacity"));
+        Assert.Single(shapes.QuerySelectorAll("path.vote-map-party-break-ring"));
+
+        var tileView = page.QuerySelector(".vote-map-tiles")!;
+        Assert.Equal("group", tileView.GetAttribute("role"));
+        var tileMark = Assert.Single(tileView.QuerySelectorAll(".vote-map-seat"));
+        Assert.Equal("percentage", tileMark.GetAttribute("data-mark"));
+        Assert.Equal("0", tileMark.GetAttribute("fill-opacity"));
+        Assert.Equal("/officials/ada.html", tileMark.ParentElement!.GetAttribute("href"));
+        Assert.Single(tileView.QuerySelectorAll("rect.vote-map-party-break-ring"));
     }
 
     [Fact]

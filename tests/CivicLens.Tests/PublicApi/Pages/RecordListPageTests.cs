@@ -232,9 +232,11 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Contains("2 Yes", Text(model));
         Assert.Equal("Showing 2 votes on this page.", page.QuerySelector(".list-status")!.TextContent);
         Assert.Empty(Chips(page));
-        Assert.Equal("2 votes are in this release. House and Senate roll call votes, newest first. To see how one member voted, open their page from Officials.", Lede(page));
+        Assert.Equal("2 votes are in this release. House and Senate roll call votes, newest first. To see how one member voted, open their page from Officials. Explore maps", Lede(page));
         var officials = page.QuerySelector(".page-header-lede a")!;
         Assert.Equal(("Officials", "https://civic-lens.test/officials.html"), (officials.TextContent, officials.GetAttribute("href")));
+        var maps = page.QuerySelector(".page-header-lede a[href='https://civic-lens.test/maps.html']")!;
+        Assert.Equal("Explore maps", maps.TextContent);
         Assert.Null(page.QuerySelector(".page-header-meta"));
         Assert.Equal("model", model.QuerySelector(".ai-label")!.GetAttribute("data-origin"));
     }

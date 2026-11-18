@@ -1,0 +1,117 @@
+@using System.Globalization
+
+<div class="vote-map-frame">
+    @if (ShapesViewBox is not null)
+    {
+        var shapeSeats = Seats.Where(seat => seat.DrawShape);
+        var role = shapeSeats.Any(seat => seat.Href is not null) ? "group" : "img";
+        <svg class="vote-map-shapes" viewBox="@ShapesViewBox" role="@role" aria-label="@ShapesLabel" focusable="false">
+            @if (SplitStates.Count > 0)
+            {
+                <defs>
+                    @foreach (var state in SplitStates)
+                    {
+                        <path id="@ShapeId(state.State)" d="@state.Path" />
+                        <clipPath id="@ClipId(state.State, 0)"><rect x="@N(state.Left)" y="@N(state.Top)" width="@N(state.Middle - state.Left)" height="@N(state.Bottom - state.Top)" /></clipPath>
+                        <clipPath id="@ClipId(state.State, 1)"><rect x="@N(state.Middle)" y="@N(state.Top)" width="@N(state.Right - state.Middle)" height="@N(state.Bottom - state.Top)" /></clipPath>
+                        <clipPath id="@ClipId(state.State, 2)"><use href="#@ShapeId(state.State)" /></clipPath>
+                    }
+                </defs>
+            }
+            @foreach (var seat in shapeSeats)
+            {
+                @WithLink(seat, Shape(seat))
+            }
+            @foreach (var state in SplitStates)
+            {
+                <line class="vote-map-split" x1="@N(state.Middle)" x2="@N(state.Middle)" y1="@N(state.Top)" y2="@N(state.Bottom)" clip-path="url(#@ClipId(state.State, 2))" />
+            }
+            @foreach (var seat in shapeSeats.Where(seat => seat.Emphasized))
+            {
+                if (seat.Path is { } path)
+                {
+                    <path class="vote-map-party-break-halo" d="@path" />
+                    <path class="vote-map-party-break-ring" d="@path" />
+                }
+                else
+                {
+                    <use class="vote-map-party-break-halo" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))" />
+                    <use class="vote-map-party-break-ring" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))" />
+                }
+            }
+        </svg>
+    }
+    @if (TileLayout is { } tiles)
+    {
+        var role = Seats.Any(seat => seat.Tile is not null && seat.Href is not null) ? "group" : "img";
+        <svg class="vote-map-tiles" viewBox="0 0 @N(VoteMapTiles.Width) @N(tiles.Height)" role="@role" aria-label="@TilesLabel" focusable="false">
+            @foreach (var label in tiles.Labels)
+            {
+                @Label(label)
+            }
+            @foreach (var seat in Seats)
+            {
+                if (seat.Tile is { } tile)
+                {
+                    @WithLink(seat, Tile(seat, tile))
+                }
+            }
+            @foreach (var seat in Seats.Where(seat => seat.Emphasized))
+            {
+                if (seat.Tile is { } tile)
+                {
+                    <rect class="vote-map-party-break-halo" x="@N(tile.X)" y="@N(tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3" />
+                    <rect class="vote-map-party-break-ring" x="@N(tile.X)" y="@N(tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3" />
+                }
+            }
+        </svg>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<MapFrameSeat> Seats { get; set; } = default!;
+    [Parameter] public IReadOnlyList<VoteMapStateShape> SplitStates { get; set; } = [];
+    [Parameter] public string? ShapesViewBox { get; set; }
+    [Parameter] public string? ShapesLabel { get; set; }
+    [Parameter] public VoteMapTileLayout? TileLayout { get; set; }
+    [Parameter] public string? TilesLabel { get; set; }
+
+    private RenderFragment Shape(MapFrameSeat seat) => @<text>
+        @if (seat.Path is { } path)
+        {
+            <path class="vote-map-seat" data-mark="@seat.Mark" data-party="@seat.Party" fill-opacity="@Opacity(seat.FillOpacity)" d="@path"><title>@seat.Description</title></path>
+        }
+        else
+        {
+            <use class="vote-map-seat" data-mark="@seat.Mark" data-party="@seat.Party" fill-opacity="@Opacity(seat.FillOpacity)" href="#@ShapeId(seat.State)" clip-path="url(#@ClipId(seat.State, seat.Half))"><title>@seat.Description</title></use>
+        }
+    </text>;
+
+    private static RenderFragment Tile(MapFrameSeat seat, VoteMapTile tile) => @<text>
+        <rect class="vote-map-seat" data-mark="@seat.Mark" data-party="@seat.Party" fill-opacity="@Opacity(seat.FillOpacity)" x="@N(tile.X)" y="@N(tile.Y)" width="@N(VoteMapTiles.Size)" height="@N(VoteMapTiles.Size)" rx="3"><title>@seat.Description</title></rect>
+    </text>;
+
+    private static RenderFragment WithLink(MapFrameSeat seat, RenderFragment drawing) => seat.Href is { } href
+        ? @<a href="@href" aria-label="@seat.Description">@drawing</a>
+        : drawing;
+
+    private string ShapeId(string state) => $"{IdPrefix}-state-{state.ToLowerInvariant()}";
+
+    private string ClipId(string state, int part) => $"{IdPrefix}-clip-{state.ToLowerInvariant()}-{part}";
+
+    /// <summary>Razor reserves the text tag, so the label markup is built here. The state code is encoded.</summary>
+    private static MarkupString Label(VoteMapTileLabel label) =>
+        new($"<text class=\"vote-map-tile-label\" x=\"{N(label.X)}\" y=\"{N(label.Y)}\">{System.Net.WebUtility.HtmlEncode(label.State)}</text>");
+
+    private static string? Opacity(double? value)
+    {
+        if (value is not { } opacity)
+            return null;
+        if (opacity is not (>= 0 and <= 1))
+            throw new ArgumentOutOfRangeException(nameof(value), opacity, "Map fill opacity must be between 0 and 1.");
+        return opacity.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

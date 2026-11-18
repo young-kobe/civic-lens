@@ -1,4 +1,5 @@
 using CivicLens.PublicApi.Http;
+using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
 using CivicLens.Publication.Contracts;
@@ -35,17 +36,32 @@ public sealed partial class MapStore(RecordSnapshot snapshot)
         var (connection, transaction) = await snapshot.OpenAsync(cancellationToken);
         await using var ownedConnection = connection;
         await using var ownedTransaction = transaction;
-        var release = await ReadReleaseAsync(connection, transaction, request.Issue, cancellationToken);
-        if (release is null) return null;
+        if (await ReadReleaseAsync(connection, transaction, request.Issue, cancellationToken) is not { } release) return null;
+        return await ReadMapAsync(connection, transaction, release, request, cancellationToken);
+    }
 
-        var releaseCongress = CongressCalendar.CongressOn(release.Day);
-        if (request.Congress is { } selected && (releaseCongress is null || selected > releaseCongress))
+    public async Task<MapPageAnswer?> FindPageAsync(MapRequest request, CancellationToken cancellationToken)
+    {
+        var (connection, transaction) = await snapshot.OpenAsync(cancellationToken);
+        await using var ownedConnection = connection;
+        await using var ownedTransaction = transaction;
+        if (await ReadReleaseAsync(connection, transaction, request.Issue, cancellationToken) is not { } release) return null;
+
+        var map = await ReadMapAsync(connection, transaction, release, request, cancellationToken);
+        var issues = await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken);
+        return new(map, release.Congress, [.. issues.Select(issue => new MapIssueAnswer(issue.IssueId, issue.Name))]);
+    }
+
+    private static async Task<MapAnswer> ReadMapAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        MapRelease release, MapRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Congress is { } selected && (release.Congress is null || selected > release.Congress))
             throw new ArgumentException("congress is later than the Congress of the active release.", "congress");
-        if ((request.Congress ?? releaseCongress) is not { } congress)
+        if ((request.Congress ?? release.Congress) is not { } congress)
             return new(release.Number, null, request.Chamber, request.Layer, null, release.Issue, [], []);
 
         // With no future Congress allowed, a historical selection clamps to its last day.
-        var asOf = congress == releaseCongress ? release.Day : CongressCalendar.StartOf(congress + 1).AddDays(-1);
+        var asOf = congress == release.Congress ? release.Day : CongressCalendar.StartOf(congress + 1).AddDays(-1);
         var members = await ReadMembersAsync(connection, transaction, release.Number, request.Chamber, asOf, cancellationToken);
         var seats = SeatsOf(members, request.Chamber);
         if (members.Length > 0)
@@ -71,7 +87,7 @@ public sealed partial class MapStore(RecordSnapshot snapshot)
             throw new ArgumentException("issue must name an issue in the active release.", "issue");
 
         var day = DateOnly.FromDateTime(ViewColumns.Utc(reader, 1)!.Value.UtcDateTime);
-        return new(reader.GetInt32(0), day, issueId is null ? null : new MapIssueAnswer(issueId, issueName!));
+        return new(reader.GetInt32(0), day, CongressCalendar.CongressOn(day), issueId is null ? null : new MapIssueAnswer(issueId, issueName!));
     }
 
     private static async Task<MapMemberAnswer[]> ReadMembersAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
@@ -120,14 +136,19 @@ public sealed partial class MapStore(RecordSnapshot snapshot)
         })];
     }
 
-    private static MapSeatAnswer[] SeatsOf(MapMemberAnswer[] members, PublishedChamber chamber) =>
-        [.. members.Select(member => (member.OfficialId, Seat: SeatOf(member.Terms, chamber)))
+    private static MapSeatAnswer[] SeatsOf(MapMemberAnswer[] members, PublishedChamber chamber)
+    {
+        var seats = members.Select(member => (member.OfficialId, Seat: SeatOf(member.Terms, chamber)))
             .Where(claim => claim.Seat is not null)
             .GroupBy(claim => claim.Seat!)
             .OrderBy(group => group.Key.State, StringComparer.Ordinal)
             .ThenBy(group => group.Key.District)
             .ThenBy(group => group.Key.SenateClass)
-            .Select(group => group.Key with { OfficialId = group.Count() == 1 ? group.First().OfficialId : null })];
+            .Select(group => group.Key with { OfficialId = group.Count() == 1 ? group.First().OfficialId : null }).ToArray();
+        return chamber == PublishedChamber.Senate
+            ? [.. seats.GroupBy(seat => seat.State).Where(state => state.Count() <= 2).SelectMany(state => state)]
+            : seats;
+    }
 
     private static MapSeatAnswer? SeatOf(PublishedOfficeTerm[] terms, PublishedChamber chamber)
     {
@@ -143,5 +164,5 @@ public sealed partial class MapStore(RecordSnapshot snapshot)
         };
     }
 
-    private sealed record MapRelease(int Number, DateOnly Day, MapIssueAnswer? Issue);
+    private sealed record MapRelease(int Number, DateOnly Day, int? Congress, MapIssueAnswer? Issue);
 }

@@ -6,6 +6,7 @@ using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Home;
 using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Issues;
+using CivicLens.PublicApi.Maps;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Relationships;
@@ -55,6 +56,7 @@ public static class ServerPageEndpoints
         pages.MapGet(Route(PublicationProtocol.ListPagePath(PublishedRecordKind.ExecutiveAction)), ListPageEndpoints.ExecutiveActionsAsync);
         pages.MapGet(Route(PublicationProtocol.OfficialsPagePath), ListPageEndpoints.OfficialsAsync);
         pages.MapGet(Route(PublicationProtocol.BoardsPagePath), BoardsPageEndpoint.RespondAsync);
+        pages.MapGet(Route(PublicationProtocol.MapsPagePath), MapsPageEndpoint.RespondAsync);
         foreach (var board in OfficialBoard.All)
             pages.MapGet(Route(board.PagePath), (HttpContext context, BoardsPageReader reader, ServerPageResponder responder,
                 CancellationToken cancellationToken) => BoardsPageEndpoint.RespondBoardAsync(board, context, reader, responder, baseUrl, cancellationToken));

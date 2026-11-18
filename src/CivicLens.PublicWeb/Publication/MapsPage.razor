@@ -1,0 +1,144 @@
+@using CivicLens.Publication.Contracts
+@using CivicLens.PublicWeb.Components.Ui
+
+<PublicPage Section="PublicSection.Votes" Title="@MapsWords.Heading" Description="@MapsWords.Intro" CanonicalPath="@PublicationProtocol.MapsPagePath" RootPath="@RootPath">
+    <PageHeader Title="@MapsWords.Heading" Lede="@MapsWords.Intro" />
+    <form class="maps-controls" method="get" action="@(RootPath + PublicationProtocol.MapsPagePath)" data-maps-form>
+        @Select("congress", "Congress", Congresses)
+        @Select("chamber", "Chamber", MapsWords.Chambers)
+        @Select("layer", "Layer", MapsWords.Layers)
+        <div data-maps-field="issue">@Select("issue", "Issue", Data.Issues, true)</div>
+        <div data-maps-field="measure" hidden="@(Data.Layer != "issueActivity" && !Data.Filter.IsInvalid("measure"))">@Select("measure", "Measure", MapsWords.Measures)</div>
+        <div data-maps-field="end" hidden="@(Data.Layer != "termEnds" && !Data.Filter.IsInvalid("end"))">@Select("end", "Term end date", EndDates, true)</div>
+        <Button Type="submit" Variant="ButtonVariant.Primary">Apply</Button>
+    </form>
+    @if (Data.Filter.Invalid is null)
+    {
+        @if (Data.AsOf is { } asOf)
+        {
+            <p class="muted small">Seat holders as of @Moment.Day(asOf).</p>
+        }
+        @if (Data.Members.Count == 0)
+        {
+            <p>@MapsWords.Empty</p>
+        }
+        else
+        {
+            <section class="vote-map maps-explorer" data-maps data-view="@(drawing.HasShapes ? null : "tile")" aria-labelledby="maps-caption">
+                <h2 id="maps-caption">@MapsWords.Caption(Data)</h2>
+                <p>@MapsWords.Scope(Data)</p>
+                @if (Data.IssueName is { } issue)
+                {
+                    <p class="muted">Published records tagged @issue.</p>
+                }
+                @if (drawing.HasShapes)
+                {
+                    <div class="segmented vote-map-views" role="group" aria-label="View" hidden data-vote-map-views>
+                        <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
+                        <button class="segmented-item" type="button" data-view="tile" aria-pressed="false">@VoteMapWords.TileView</button>
+                    </div>
+                }
+                else
+                {
+                    <p class="muted small">@MapsWords.NoGeometry</p>
+                }
+                <h3>@VoteMapWords.LegendHeading</h3>
+                @if (Data.Layer != "termEnds") { <p>@MapsWords.Scale</p> }
+                <ul class="maps-key" role="list">
+                    @if (Data.Layer == "termEnds")
+                    {
+                        <li><i class="maps-key-term"></i>@MapsWords.TermEnd(Data.SelectedEnd)</li>
+                        <li><i class="maps-key-other"></i>@MapsWords.OtherDates</li>
+                    }
+                    else
+                    {
+                        <li><span>0%</span><span class="maps-scale" aria-hidden="true">@foreach (var step in Enumerable.Range(0, 5)) { <i data-step="@step"></i> }</span><span>100%</span></li>
+                        <li><i class="maps-key-empty"></i>@MapsWords.EmptyBase</li>
+                    }
+                    <li><i class="maps-key-unknown"></i>@MapsWords.Unknown</li>
+                </ul>
+                <svg class="vote-map-defs" aria-hidden="true" focusable="false"><defs>
+                    <pattern id="maps-unavailable" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="maps-paper" width="6" height="6" /><path class="maps-hatch" d="M0 6L6 0" /></pattern>
+                    <pattern id="maps-empty" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="maps-paper" width="6" height="6" /><circle class="maps-dot" cx="3" cy="3" r="1" /></pattern>
+                </defs></svg>
+                <MapFrame IdPrefix="maps" Seats="drawing.Seats" SplitStates="drawing.SplitStates" ShapesViewBox="@(drawing.HasShapes ? VoteMapGeometry.ViewBox : null)"
+                          ShapesLabel="@MapsWords.Caption(Data)" TileLayout="drawing.Tiles" TilesLabel="@VoteMapWords.TileView" />
+                <p class="muted small">@MapsWords.Hint</p>
+                <div class="maps-details" data-maps-details popover aria-live="polite" aria-atomic="true"></div>
+                @foreach (var member in Data.Members.Where(member => member.HasSeat))
+                {
+                    <template data-map-detail data-member-href="@(RootPath + member.PagePath)">
+                        <p><b>@member.Name</b> <span class="maps-party" data-party="@PartyToken(member)">@member.Party</span></p>
+                        <p class="small">@member.Seat</p>
+                        @Figures(member)
+                        <Button Href="@(RootPath + member.PagePath)">Member</Button>
+                    </template>
+                }
+            </section>
+            <details class="vote-fold" id="maps-table">
+                <summary>@VoteMapWords.TableFold</summary>
+                <p class="small muted">@MapsWords.TableNote</p>
+                <DataTable TItem="MapMemberData" Items="Data.Members" Caption="@MapsWords.Caption(Data)" Scroll="true" DataUrl="@DataUrl">
+                    <Head>
+                        <TableCell Header>Seat</TableCell><TableCell Header>Member</TableCell><TableCell Header>Party</TableCell>
+                        @if (Data.Layer == "termEnds") { <TableCell Header>Term ends</TableCell> }
+                        else if (Data.Layer == "issueActivity") { <TableCell Header>Sponsored bills</TableCell><TableCell Header>Substantive votes cast</TableCell> }
+                        else { <TableCell Header>Attendance</TableCell> }
+                    </Head>
+                    <Row Context="member">
+                        <TableCell Label="Seat">@member.Seat @if (!member.HasSeat) { <span class="muted small">@MapsWords.UnknownSeat</span> }</TableCell>
+                        <TableCell Main Label="Member"><a href="@(RootPath + member.PagePath)">@member.Name</a></TableCell>
+                        <TableCell Label="Party"><span class="maps-party" data-party="@PartyToken(member)">@(member.Party ?? MapsWords.Unknown)</span></TableCell>
+                        @if (Data.Layer == "termEnds") { <TableCell Label="Term ends">@MapsWords.TermEnd(member.TermEndsOn)</TableCell> }
+                        else if (Data.Layer == "issueActivity")
+                        {
+                            <TableCell Label="Sponsored bills">@MapsWords.Figure(member.Bills)</TableCell><TableCell Label="Substantive votes cast">@MapsWords.Figure(member.Votes)</TableCell>
+                        }
+                        else { <TableCell Label="Attendance">@MapsWords.Figure(member.Attendance)</TableCell> }
+                    </Row>
+                </DataTable>
+            </details>
+            <Notice>@MapsWords.Limits</Notice>
+            <details class="vote-fold">
+                <summary>@VoteMapWords.SourceFold</summary>
+                <p>@MapsWords.Scope(Data)</p>
+                @if (drawing.HasShapes) { <dl class="vote-map-sources"><dt>@VoteMapWords.ShapesTerm</dt><dd>@VoteMapWords.ShapesSource</dd></dl> }
+                @if (DataUrl is { } source) { <a href="@source">Get this data</a> }
+            </details>
+        }
+    }
+</PublicPage>
+
+@code {
+    private MapsDrawing drawing = default!;
+    [Parameter, EditorRequired] public MapsPageData Data { get; set; } = default!;
+    [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
+    [Parameter] public string? BrowserApiUrl { get; set; }
+
+    protected override void OnParametersSet() => drawing = new(Data, RootPath);
+
+    private IReadOnlyList<SearchChoiceData> Congresses => Data.ReleaseCongress is { } last
+        ? Enumerable.Range(74, last - 74 + 1).Reverse().Select(number => new SearchChoiceData(number.ToString(System.Globalization.CultureInfo.InvariantCulture), CongressCalendar.Ordinal(number))).ToArray() : [];
+    private IReadOnlyList<SearchChoiceData> EndDates => [.. Data.EndDates.Select(date => new SearchChoiceData(Moment.Iso(date), Moment.Day(date)))];
+    private string? DataUrl => string.IsNullOrWhiteSpace(BrowserApiUrl) ? null : BrowserApiUrl.TrimEnd('/') + "/v1/maps" + RecordListFilter.Of(null, null,
+        ("congress", Data.Congress?.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("chamber", Data.Chamber.ToString().ToLowerInvariant()),
+        ("layer", Data.Layer), ("issue", Data.Layer == "issueActivity" ? Data.Filter.Value("issue") : null)).Query();
+    private static string? PartyToken(MapMemberData member) => member.Party is { } party ? VoteMapMarks.Name(PartyTones.Of(party)) : null;
+
+    private RenderFragment Select(string name, string label, IReadOnlyList<SearchChoiceData> choices, bool empty = false) => @<Field Label="@label" For="@($"maps-{name}")">
+        <select id="@($"maps-{name}")" name="@name" @attributes="@(Data.Filter.InputAttributes(name, $"maps-{name}"))">
+            @if (empty) { <option value="">@label</option> }
+            @if (Data.Filter.Value(name) is { Length: > 0 } value && !choices.Any(choice => choice.Value == value)) { <option value="@value" selected>@value</option> }
+            @foreach (var choice in choices) { <option value="@choice.Value" selected="@(Data.Filter.Value(name) == choice.Value)">@choice.Label</option> }
+        </select>
+    </Field>;
+
+    private RenderFragment Figures(MapMemberData member) => @<dl class="maps-figures">
+        @if (Data.Layer == "termEnds") { <dt>Term ends</dt><dd>@MapsWords.TermEnd(member.TermEndsOn)</dd> }
+        else if (Data.Layer == "issueActivity")
+        {
+            <dt>Sponsored bills</dt><dd>@MapsWords.Figure(member.Bills)</dd><dt>Substantive votes cast</dt><dd>@MapsWords.Figure(member.Votes)</dd>
+        }
+        else { <dt>Attendance</dt><dd>@MapsWords.Figure(member.Attendance)</dd> }
+    </dl>;
+}
