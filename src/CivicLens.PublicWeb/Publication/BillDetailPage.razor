@@ -132,6 +132,8 @@
                 <PublishedCorrectionList Kind="PublishedRecordKind.Action" Corrections="Data.Corrections" />
                 <SourceFold>
                     <dl class="bill-kv">
+                        <dt>Official bill page</dt>
+                        <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">@BillTermPopover.SourceLinkLabel</a></dd>
                         @if (Data.Status is not null && Data.StatusDate is { } statusDate)
                         {
                             <dt>Latest action</dt>
@@ -157,8 +159,6 @@
                             <dt>@PublishedRecordLabels.WordingFact</dt>
                             <dd><AiLabel Text="@Data.Label" Origin="Data.TextOrigin" /></dd>
                         }
-                        <dt>Official bill page</dt>
-                        <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">@BillTermPopover.SourceLinkLabel</a></dd>
                         <dt>Revision</dt>
                         <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
                     </dl>

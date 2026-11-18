@@ -361,8 +361,11 @@ public sealed class BillDetailPageTests
     [Fact]
     public async Task TheSourceFoldLinksTheCongressGovPageOfTheBill()
     {
-        var link = (await RenderAsync(Bill)).QuerySelector("details#source a")!;
+        var facts = (await RenderAsync(Bill)).QuerySelector("details#source dl.bill-kv")!;
+        var firstLabel = facts.QuerySelector("dt:first-child")!;
+        var link = firstLabel.NextElementSibling!.QuerySelector("a")!;
 
+        Assert.Equal("Official bill page", firstLabel.TextContent);
         Assert.Equal("Bill on Congress.gov", link.TextContent);
         Assert.Equal(Bill.CongressGovUrl, link.GetAttribute("href"));
     }
