@@ -23,9 +23,35 @@ public sealed class MapsPageTests
     }
 
     [Fact]
+    public async Task TheHistoricalHouseMapDrawsOnlyKnownSeatsWithMatchingCongressGeometry()
+    {
+        var known = Member("a", "Ada", new(4, 5));
+        var unmatched = Member("b", "Bea", new(3, 5));
+        var data = Data(known, unmatched) with
+        {
+            Congress = 118,
+            AsOf = new(2025, 1, 2),
+            Seats = [new("AL", 2, null, known.OfficialId), new("AL", 40, null, unmatched.OfficialId)],
+            Filter = RecordListFilter.Of(null, null, ("congress", "118"), ("chamber", "house"), ("layer", "attendance"))
+        };
+        var page = await RenderAsync(data);
+        var geometry = VoteMapGeometry.ForHouseCongress(118)!;
+        var shapes = page.QuerySelector(".vote-map-shapes")!;
+        var path = Assert.Single(shapes.QuerySelectorAll(".vote-map-seat"));
+
+        Assert.Equal(geometry.ViewBox, shapes.GetAttribute("viewBox"));
+        Assert.Equal(geometry.Districts[("AL", 2)], path.GetAttribute("d"));
+        Assert.NotEqual(VoteMapGeometry.ForHouseCongress(119)!.Districts[("AL", 2)], path.GetAttribute("d"));
+        Assert.Equal(ListPageRender.Root + known.PagePath, path.ParentElement!.GetAttribute("href"));
+        Assert.Contains("Census Bureau 2023 cartographic boundary file for the 118th Congress", page.QuerySelector(".vote-map-sources dd")!.TextContent);
+        Assert.Equal(2, page.QuerySelectorAll(".vote-map-tiles a").Length);
+        Assert.Equal(2, page.QuerySelectorAll("#maps-table tbody tr").Length);
+    }
+
+    [Fact]
     public async Task AnOlderHouseCongressKeepsTilesAndTheEquivalentTableWithoutBorrowedDistrictShapes()
     {
-        var page = await RenderAsync(Data(Member("a", "Ada", new(4, 5))) with { Congress = 118 });
+        var page = await RenderAsync(Data(Member("a", "Ada", new(4, 5))) with { Congress = 117 });
         Assert.Null(page.QuerySelector(".vote-map-shapes"));
         Assert.Single(page.QuerySelectorAll(".vote-map-tiles a"));
         Assert.Contains(MapsWords.NoGeometry, page.Body!.TextContent);

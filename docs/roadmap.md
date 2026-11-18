@@ -24,7 +24,7 @@ PublicApi serves every public page at its public path since cutover. Caddy serve
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
-- [ ] Add matching House boundary layers for supported Congresses, including the 118th. The interactive Maps page and shared renderer cover term ends, issue activity and attendance; the current geographic asset covers the 119th. Other Congresses retain tiles and tables. Complete the Maps reader-flow, keyboard, touch and production checks under the full audit below. Accepted dates, holders, bases and unavailable states are in [public site](architecture/public-site.md#interactive-maps).
+- [ ] Complete the Maps reader-flow, keyboard, touch and production checks under the full audit below. The interactive Maps page and shared renderer cover term ends, issue activity and attendance. Matching House shapes cover the 118th and 119th Congresses; other Congresses retain tiles and tables. Accepted dates, holders, bases and unavailable states are in [public site](architecture/public-site.md#interactive-maps).
 - [ ] Add the document changes list once document changes are published.
 
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).

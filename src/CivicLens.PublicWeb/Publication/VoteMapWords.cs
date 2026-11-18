@@ -17,7 +17,6 @@ public static class VoteMapWords
     public const string RecordedVotesOnly = "This map shows recorded votes only. It makes no predictions and gives no ratings.";
     public const string SourceFold = "Where the data comes from";
     public const string ShapesTerm = "Shapes";
-    public static readonly string ShapesSource = $"Census Bureau 2024 cartographic boundary file for the {CongressCalendar.Ordinal(VoteMapGeometry.Congress)} Congress, at 1:20,000,000 scale, simplified more for the web. Alaska and Hawaii sit in boxes. Use the shapes to see the pattern, not to find an address.";
     public const string TileView = "One tile per seat";
     public const string TileNote = "Each seat casts one vote, but large rural districts take up more room on a map. The tile view gives every seat the same size.";
     public const string TableFold = "See the table";
@@ -26,6 +25,9 @@ public static class VoteMapWords
 
     public const string NoMapTitle = "No map for this vote";
     public const string NoMap = "The record does not hold the seats that a map needs. The vote page lists every tracked member.";
+
+    public static string ShapesSource(VoteMapGeometry geometry) =>
+        $"Census Bureau {geometry.SourceYear} cartographic boundary file for the {CongressCalendar.Ordinal(geometry.Congress)} Congress, at 1:20,000,000 scale, simplified more for the web. Alaska and Hawaii sit in boxes. Use the shapes to see the pattern, not to find an address.";
 
     /// <summary>"How the House voted: roll call 308, H.R. 5334". The bill number comes from the one bill number owner.</summary>
     public static string PageTitle(VotePageData vote) => vote.BillType is { } type && vote.BillNumber is { } number

@@ -24,14 +24,14 @@
         }
         else
         {
-            <section class="vote-map maps-explorer" data-maps data-view="@(drawing.HasShapes ? null : "tile")" aria-labelledby="maps-caption">
+            <section class="vote-map maps-explorer" data-maps data-view="@(drawing.Geometry is null ? "tile" : null)" aria-labelledby="maps-caption">
                 <h2 id="maps-caption">@MapsWords.Caption(Data)</h2>
                 <p>@MapsWords.Scope(Data)</p>
                 @if (Data.IssueName is { } issue)
                 {
                     <p class="muted">Published records tagged @issue.</p>
                 }
-                @if (drawing.HasShapes)
+                @if (drawing.Geometry is not null)
                 {
                     <div class="segmented vote-map-views" role="group" aria-label="View" hidden data-vote-map-views>
                         <button class="segmented-item" type="button" data-view="shape" aria-pressed="false">@VoteMapWords.ShapeView(Data.Chamber)</button>
@@ -61,7 +61,7 @@
                     <pattern id="maps-unavailable" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="maps-paper" width="6" height="6" /><path class="maps-hatch" d="M0 6L6 0" /></pattern>
                     <pattern id="maps-empty" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="maps-paper" width="6" height="6" /><circle class="maps-dot" cx="3" cy="3" r="1" /></pattern>
                 </defs></svg>
-                <MapFrame IdPrefix="maps" Seats="drawing.Seats" SplitStates="drawing.SplitStates" ShapesViewBox="@(drawing.HasShapes ? VoteMapGeometry.ViewBox : null)"
+                <MapFrame IdPrefix="maps" Seats="drawing.Seats" SplitStates="drawing.SplitStates" ShapesViewBox="@(drawing.Geometry?.ViewBox)"
                           ShapesLabel="@MapsWords.Caption(Data)" TileLayout="drawing.Tiles" TilesLabel="@VoteMapWords.TileView" />
                 <p class="muted small">@MapsWords.Hint</p>
                 <div class="maps-details" data-maps-details popover aria-live="polite" aria-atomic="true"></div>
@@ -102,7 +102,7 @@
             <details class="vote-fold">
                 <summary>@VoteMapWords.SourceFold</summary>
                 <p>@MapsWords.Scope(Data)</p>
-                @if (drawing.HasShapes) { <dl class="vote-map-sources"><dt>@VoteMapWords.ShapesTerm</dt><dd>@VoteMapWords.ShapesSource</dd></dl> }
+                @if (drawing.Geometry is { } geometry) { <dl class="vote-map-sources"><dt>@VoteMapWords.ShapesTerm</dt><dd>@VoteMapWords.ShapesSource(geometry)</dd></dl> }
                 @if (DataUrl is { } source) { <a href="@source">Get this data</a> }
             </details>
         }

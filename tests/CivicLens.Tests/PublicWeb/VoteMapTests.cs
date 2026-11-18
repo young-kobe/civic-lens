@@ -130,8 +130,8 @@ public sealed class VoteMapTests
         {
             [nameof(MapFrame.IdPrefix)] = "test-map",
             [nameof(MapFrame.Seats)] = seats,
-            [nameof(MapFrame.SplitStates)] = new[] { VoteMapGeometry.States["MA"] },
-            [nameof(MapFrame.ShapesViewBox)] = VoteMapGeometry.ViewBox,
+            [nameof(MapFrame.SplitStates)] = new[] { VoteMapGeometry.Senate.States["MA"] },
+            [nameof(MapFrame.ShapesViewBox)] = VoteMapGeometry.Senate.ViewBox,
             [nameof(MapFrame.ShapesLabel)] = "Shapes",
             [nameof(MapFrame.TileLayout)] = tiles,
             [nameof(MapFrame.TilesLabel)] = "Tiles"
@@ -264,7 +264,7 @@ public sealed class VoteMapTests
     [Fact]
     public async Task TheMapStaysOffWhenItCannotShowTheVoteTruly()
     {
-        var otherCongress = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)) with { Congress = 118 };
+        var otherCongress = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)) with { Congress = 117 };
         var twoOnOneSeat = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7), Member("o2", "Ben Baker", "Nay", "Democrat", "MA", 7));
         var noShape = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 40));
         var noDistrict = House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", null));
@@ -340,8 +340,8 @@ public sealed class VoteMapTests
     [Fact]
     public void EachSenateStateSplitsInHalvesThatHoldHalfOfItsArea()
     {
-        Assert.NotEmpty(VoteMapGeometry.States);
-        foreach (var state in VoteMapGeometry.States.Values)
+        Assert.NotEmpty(VoteMapGeometry.Senate.States);
+        foreach (var state in VoteMapGeometry.Senate.States.Values)
         {
             var rings = VoteMapArea.Rings(state.Path);
             var share = VoteMapArea.LeftOf(rings, state.Middle) / VoteMapArea.Total(rings);

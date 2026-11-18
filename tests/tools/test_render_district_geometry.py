@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -18,37 +19,37 @@ FIXTURE = Path(__file__).resolve().parent / 'fixtures/cb_2024_us_cd119_20m.zip'
 spec = importlib.util.spec_from_file_location('render_district_geometry', SCRIPT)
 tool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tool)
+CENSUS_119 = tool.SOURCES[119]
+MEMBER_119 = f'{CENSUS_119.stem}.kml'
 
 
-def pinned_to(path):
-    """Patch the pinned size and hash of the tool to the values of the KML member of a local zip."""
-    data = zipfile.ZipFile(path).read(tool.SOURCE_MEMBER)
-    stack = contextlib.ExitStack()
-    stack.enter_context(mock.patch.object(tool, 'SOURCE_SIZE', len(data)))
-    stack.enter_context(mock.patch.object(tool, 'SOURCE_SHA256', hashlib.sha256(data).hexdigest()))
-    return stack
+def fixture_source(path, census=CENSUS_119):
+    """Pin the bytes of a synthetic KML member for a fixture test."""
+    with zipfile.ZipFile(path) as archive:
+        data = archive.read(f'{census.stem}.kml')
+    return replace(census, size=len(data), sha256=hashlib.sha256(data).hexdigest())
 
 
 def points(path):
     return [(int(x), int(y)) for x, y in re.findall(r'(-?\d+) (-?\d+)', path)]
 
 
-def zip_with(directory, kml_text):
+def zip_with(directory, kml_text, member=MEMBER_119):
     target = Path(directory) / 'sample.zip'
     with zipfile.ZipFile(target, 'w') as archive:
-        archive.writestr(tool.SOURCE_MEMBER, kml_text)
+        archive.writestr(member, kml_text)
     return target
 
 
 class RenderDistrictGeometryTests(unittest.TestCase):
     def build(self):
-        with pinned_to(FIXTURE):
-            return tool.build(tool.parse_districts(tool.read_kml(FIXTURE)))
+        census = fixture_source(FIXTURE)
+        return tool.build(tool.parse_districts(tool.read_kml(FIXTURE, census), census.congress), census)
 
     def test_the_asset_has_the_agreed_shape(self):
         asset = self.build()
         self.assertEqual(['source', 'sha256', 'congress', 'viewBox', 'districts', 'states'], list(asset))
-        self.assertEqual(tool.SOURCE_URL, asset['source'])
+        self.assertEqual(CENSUS_119.url, asset['source'])
         self.assertEqual(119, asset['congress'])
         self.assertRegex(asset['viewBox'], r'^0 0 800 \d+$')
         self.assertEqual(['state', 'district', 'delegate', 'path'], list(asset['districts'][0]))
@@ -106,22 +107,22 @@ class RenderDistrictGeometryTests(unittest.TestCase):
         self.assertEqual(6, len(points(outline)))  # 4 corners and the 2 ends of the shared border
 
     def test_a_delegate_area_is_listed_with_its_code_and_marked_and_it_has_no_shape(self):
-        kml = zipfile.ZipFile(FIXTURE).read(tool.SOURCE_MEMBER).decode()
+        kml = zipfile.ZipFile(FIXTURE).read(MEMBER_119).decode()
         delegate = (kml.split('<Placemark>')[1].split('</Placemark>')[0]
                     .replace('>08<', '>11<').replace('>01<', '>98<').replace('>0801<', '>1198<'))
         kml = kml.replace('  </Document>', f'    <Placemark>{delegate}</Placemark>\n  </Document>')
         with tempfile.TemporaryDirectory() as directory:
             source = zip_with(directory, kml)
-            with pinned_to(source):
-                asset = tool.build(tool.parse_districts(tool.read_kml(source)))
+            census = fixture_source(source)
+            asset = tool.build(tool.parse_districts(tool.read_kml(source, census), census.congress), census)
         delegates = [d['state'] for d in asset['districts'] if d['delegate']]
         self.assertEqual(['AS', 'DC', 'GU', 'MP', 'PR', 'VI'], delegates)
         self.assertEqual('', next(d['path'] for d in asset['districts'] if d['state'] == 'DC'))
         self.assertEqual(['AK', 'CO'], [s['state'] for s in asset['states']])
 
     def test_the_text_is_stable_and_has_one_district_on_each_line(self):
-        with pinned_to(FIXTURE):
-            first, second = tool.generate(FIXTURE), tool.generate(FIXTURE)
+        census = fixture_source(FIXTURE)
+        first, second = tool.generate(FIXTURE, census), tool.generate(FIXTURE, census)
         self.assertEqual(first, second)
         self.assertTrue(first.endswith('}\n'))
         self.assertEqual(9, sum('"district":' in line for line in first.splitlines()))
@@ -131,10 +132,11 @@ class RenderDistrictGeometryTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(1, result.returncode)
         self.assertIn('bytes', result.stderr)
-        self.assertIn(tool.SOURCE_MEMBER, result.stderr)
+        self.assertIn(MEMBER_119, result.stderr)
 
     def test_a_member_with_another_sha256_is_rejected_and_writes_nothing(self):
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(tool, 'SOURCE_SIZE', len(zipfile.ZipFile(FIXTURE).read(tool.SOURCE_MEMBER))):
+        census = replace(CENSUS_119, size=fixture_source(FIXTURE).size)
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(tool.SOURCES, {119: census}):
             output = Path(directory) / 'out.json'
             with contextlib.redirect_stderr(io.StringIO()) as errors:
                 code = tool.main(['--source', str(FIXTURE), '--output', str(output)])
@@ -143,15 +145,44 @@ class RenderDistrictGeometryTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_a_missing_census_field_is_rejected(self):
-        kml = zipfile.ZipFile(FIXTURE).read(tool.SOURCE_MEMBER).decode().replace('CD119FP', 'OTHER')
+        kml = zipfile.ZipFile(FIXTURE).read(MEMBER_119).decode().replace('CD119FP', 'OTHER')
         with tempfile.TemporaryDirectory() as directory:
             source = zip_with(directory, kml)
-            with pinned_to(source), contextlib.redirect_stderr(io.StringIO()) as errors:
+            with mock.patch.dict(tool.SOURCES, {119: fixture_source(source)}), contextlib.redirect_stderr(io.StringIO()) as errors:
                 self.assertEqual(1, tool.main(['--source', str(source), '--output', str(Path(directory) / 'o.json')]))
             self.assertIn('CD119FP', errors.getvalue())
 
+    def test_selecting_118_rejects_the_119_member_and_119_fields(self):
+        census = tool.SOURCES[118]
+        with self.assertRaisesRegex(tool.GeometryError, f'no member {census.stem}'):
+            tool.read_kml(FIXTURE, census)
+        with zipfile.ZipFile(FIXTURE) as archive:
+            kml = archive.read(MEMBER_119)
+        with tempfile.TemporaryDirectory() as directory:
+            source = zip_with(directory, kml, f'{census.stem}.kml')
+            with self.assertRaisesRegex(tool.GeometryError, 'no SimpleData field CD118FP'):
+                tool.generate(source, fixture_source(source, census))
+
+    def test_selecting_118_writes_and_checks_only_its_own_asset_with_its_provenance(self):
+        census = tool.SOURCES[118]
+        with zipfile.ZipFile(FIXTURE) as archive:
+            kml = archive.read(MEMBER_119).replace(b'CD119FP', b'CD118FP')
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            source = zip_with(directory, kml, f'{census.stem}.kml')
+            asset_dir = Path(directory) / 'assets'
+            pinned = fixture_source(source, census)
+            with mock.patch.dict(tool.SOURCES, {118: pinned}), mock.patch.object(tool, 'ASSET_DIR', asset_dir):
+                args = ['--congress', '118', '--source', str(source)]
+                self.assertEqual(0, tool.main(args))
+                self.assertEqual(0, tool.main([*args, '--check']))
+            self.assertEqual(['districts-118.json'], [file.name for file in asset_dir.iterdir()])
+            asset = (asset_dir / 'districts-118.json').read_text(encoding='utf-8')
+        self.assertIn('"congress": 118', asset)
+        self.assertIn(census.url, asset)
+        self.assertIn(pinned.sha256, asset)
+
     def test_check_passes_for_a_fresh_asset_and_fails_for_a_changed_or_missing_one(self):
-        with tempfile.TemporaryDirectory() as directory, pinned_to(FIXTURE), contextlib.redirect_stdout(io.StringIO()):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(tool.SOURCES, {119: fixture_source(FIXTURE)}), contextlib.redirect_stdout(io.StringIO()):
             output = Path(directory) / 'districts.json'
             args = ['--source', str(FIXTURE), '--output', str(output)]
             with contextlib.redirect_stderr(io.StringIO()):
@@ -162,7 +193,7 @@ class RenderDistrictGeometryTests(unittest.TestCase):
                 self.assertEqual(1, tool.main([*args, '--check']))  # changed
 
     def test_check_writes_nothing(self):
-        with tempfile.TemporaryDirectory() as directory, pinned_to(FIXTURE):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(tool.SOURCES, {119: fixture_source(FIXTURE)}):
             output = Path(directory) / 'districts.json'
             with contextlib.redirect_stderr(io.StringIO()):
                 tool.main(['--source', str(FIXTURE), '--output', str(output), '--check'])
