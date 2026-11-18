@@ -12,7 +12,7 @@ public sealed class BriefListReader(NpgsqlDataSource views)
 {
     private const string Sql = """
         SELECT a.release_number, a.published_at_utc_ticks, (SELECT count(*) FROM public_api.briefs),
-               b.record_id, b.week_start, b.headline, b.label, b.first_published_at_utc_ticks
+               b.record_id, b.week_start, b.headline, b.label, b.first_published_at_utc_ticks, b.text_origin
           FROM (SELECT release_number, published_at_utc_ticks FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT * FROM public_api.briefs ORDER BY week_start DESC, record_id LIMIT @take OFFSET @skip
@@ -50,7 +50,7 @@ public sealed class BriefListReader(NpgsqlDataSource views)
         {
             if (reader.IsDBNull(3)) continue;
             briefs.Add(new(reader.GetString(3), reader.GetFieldValue<DateOnly>(4), reader.GetString(5), ViewColumns.Text(reader, 6),
-                reader.IsDBNull(7) ? null : new DateTimeOffset(reader.GetInt64(7), TimeSpan.Zero)));
+                reader.IsDBNull(7) ? null : new DateTimeOffset(reader.GetInt64(7), TimeSpan.Zero), ViewColumns.Enum<PublishedTextOrigin>(reader, 8)));
         }
         while (await reader.ReadAsync(cancellationToken));
         return new(release, publishedAt, page, total, [.. briefs]);

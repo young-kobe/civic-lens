@@ -17,7 +17,15 @@
                 var summaryLabel = featured.Label;
                 <section class="panel panel-padded home-featured" aria-labelledby="home-featured-title">
                     <p class="home-featured-label">Featured vote</p>
-                    <h2 id="home-featured-title" aria-describedby="@(summaryLabel is null ? null : "home-featured-origin")"><a href="@(RootPath + PublicationProtocol.RecordPagePath(featured.RecordId))">@featured.Headline</a></h2>
+                    <div>
+                        <h2 id="home-featured-title" aria-describedby="@(summaryLabel is null ? null : "home-featured-origin")"><a href="@(RootPath + PublicationProtocol.RecordPagePath(featured.RecordId))">@featured.Headline</a></h2>
+                        @if (featured.TextOrigin == PublishedTextOrigin.Model)
+                        {
+                            <GlossaryContent Context="use">
+                                @AiText.RenderControls(use, featured.Headline)
+                            </GlossaryContent>
+                        }
+                    </div>
                     <p class="home-featured-meta muted small"><span class="home-featured-result">@featured.ResultWords</span><span>@featured.Chamber</span><span>@featured.VotedOn.ToString("d MMM yyyy")</span></p>
                     @if (featured.Yea is { } yea && featured.Nay is { } nay)
                     {
@@ -83,7 +91,13 @@
                 <p class="home-brief-line">
                     <span>This week:</span>
                     <a href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))">@brief.Headline</a>
-                    <AiLabel Text="@brief.Label" Look="AiLabelLook.Chip" />
+                    @if (brief.TextOrigin == PublishedTextOrigin.Model)
+                    {
+                        <GlossaryContent Context="use">
+                            @AiText.RenderControls(use, brief.Headline)
+                        </GlossaryContent>
+                    }
+                    <AiLabel Text="@brief.Label" Origin="brief.TextOrigin" Look="AiLabelLook.Chip" />
                 </p>
             }
             @if (Data.Votes.Length > 0)
@@ -103,7 +117,7 @@
                         @foreach (var vote in Data.Votes)
                         {
                             <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label" LabelOrigin="vote.TextOrigin"
-                                             Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" ResultWords="@vote.ResultWords" BillLine="@vote.BillLine">
+                                             HeadlineOrigin="vote.TextOrigin" Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" ResultWords="@vote.ResultWords" BillLine="@vote.BillLine">
                                 @if (vote.Totals is { } totals)
                                 {
                                     <PartyBar Id="@($"home-vote-{vote.RecordId}")" Data="totals" />

@@ -26,7 +26,7 @@ public sealed class HomePageReader(HomeStore home, VotePageReader votes, BoardsP
         var votes = answer.Votes.Select(vote => new HomeVoteData(vote.RecordId, vote.VotedOn, vote.Chamber, vote.Headline, vote.Label,
             vote.TextOrigin, vote.ResultWords, TotalsOf(vote), vote.BillLine)
         { Alignment = vote.Alignment }).ToArray();
-        var brief = answer.Brief is { } item ? new HomeBriefData(item.RecordId, item.Headline, item.Label) : null;
+        var brief = answer.Brief is { } item ? new HomeBriefData(item.RecordId, item.Headline, item.Label, item.TextOrigin) : null;
         var executiveActions = answer.ExecutiveActions.Select(group => new HomeExecutiveGroupData(
             group.Kind, group.Count, group.NewestRecordId, group.NewestTitle, group.NewestSignedOn, group.OldestSignedOn)).ToArray();
         var issues = answer.Issues.Select(issue => new IssuesIndexItemData(

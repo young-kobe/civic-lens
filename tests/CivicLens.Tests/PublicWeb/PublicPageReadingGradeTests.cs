@@ -360,7 +360,7 @@ public sealed class PublicPageReadingGradeTests
             { Delegates = [new(PublicationProtocol.OfficialPagePath("james-moylan"), "James Moylan", "Delegate for Guam", 51, 26)] },
             Board(PublishedChamber.Senate, "Democrat", "John Fetterman", 337, 66), Board(PublishedChamber.Senate, "Republican", "Lisa Murkowski", 341, 58)
         ];
-        var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief))
+        var home = new HomePageData(7, featured, recent, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief, PublishedTextOrigin.Model))
         {
             Issues = [new("health", "Health", 119, 3, 12)],
             ExecutiveActions = [new(PublishedExecutiveActionKind.Notice, 4, new string('c', 64), "Newest notice title", new(2026, 5, 31), new(2025, 1, 20))],
@@ -524,7 +524,7 @@ public sealed class PublicPageReadingGradeTests
             ("glossary", Page<PublishedGlossaryPage>(new() { ["RootPath"] = Root }), []),
             ("about", Page<AboutPage>(new() { ["RootPath"] = Root }), []),
             ("method", Page<MethodPage>(new() { ["RootPath"] = Root }), []),
-            ("briefs", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 1, [new(new string('b', 64), new(2026, 11, 2), "The week in Congress", "An AI draft from reviewed records.", new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero))]))), ["The week in Congress"]),
+            ("briefs", Page<BriefsPage>(With("Data", new BriefsPageData(7, new(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), 1, 1, [new(new string('b', 64), new(2026, 11, 2), "The week in Congress", "An AI draft from reviewed records.", new DateTimeOffset(2026, 11, 6, 14, 0, 0, TimeSpan.Zero), PublishedTextOrigin.Model)]))), ["The week in Congress"]),
             ("issues index", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, [new("firearms", "Firearms", 119, 3, 186)]))), ["Firearms"]),
             ("issues index empty", Page<IssuesIndexPage>(With("Data", new IssuesIndexData(7, []))), []),
             ("official votes", Page<OfficialRecordPage>(With("Data", new OfficialRecordPageData(7, "p1", "Ann Able", PublishedOfficeKind.Representative, [new(OfficialRecordKind.Votes, 1), new(OfficialRecordKind.Bills, 0)], OfficialRecordKind.Votes) { Votes = [new SharedVoteRowData(new string('b', 64), new(2026, 9, 16), 119, 2, 410, "House agrees to Senate changes", null, PublishedTextOrigin.Model, "Vote to pass or agree to", "Passed", [])], NextCursor = "next" })), ["Ann Able", "House agrees"]),
