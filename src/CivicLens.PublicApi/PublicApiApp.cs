@@ -65,6 +65,7 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new RecordKindStore(views));
         builder.Services.AddSingleton(snapshot);
         builder.Services.AddSingleton<MapStore>();
+        builder.Services.AddSingleton<MapsPageReader>();
         builder.Services.AddSingleton(new StatementStore(views));
         builder.Services.AddSingleton<StatementLinkedVoteReader>();
         builder.Services.AddSingleton(provider => new StatementPageReader(provider.GetRequiredService<StatementStore>(), provider.GetRequiredService<CorrectionHistoryStore>(),

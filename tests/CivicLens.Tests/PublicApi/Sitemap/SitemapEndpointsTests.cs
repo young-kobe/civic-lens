@@ -53,8 +53,8 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
         SELECT 'statement', lpad(to_hex(n), 64, '0'), 1, 1, NULL FROM generate_series(1, {count}) n;
         """);
 
-    /// <summary>The fixed pages of a release with no brief: home, officials, boards, the four board lists, issues, the four lists, vote kinds, glossary, method, and about.</summary>
-    private const int FixedPages = 16;
+    /// <summary>The fixed pages of a release with no brief: home, officials, boards, maps, the four board lists, issues, the four lists, vote kinds, glossary, method, and about.</summary>
+    private const int FixedPages = 17;
 
     [Fact]
     public async Task TheSitemapListsEveryPublicPageOfTheReleaseAtItsPublicPathAndLeavesOutSearchReportAndWithdrawnRecords()
@@ -76,7 +76,7 @@ public sealed class SitemapEndpointsTests(PostgresCollection postgres)
 
         string[] pages =
         [
-            "", "officials.html", "boards.html", "board-house-democrat.html", "board-house-republican.html", "board-senate-democrat.html",
+            "", "officials.html", "boards.html", "maps.html", "board-house-democrat.html", "board-house-republican.html", "board-senate-democrat.html",
             "board-senate-republican.html", "issues.html", "votes.html", "bills.html", "statements.html", "executive-actions.html",
             "vote-kinds.html", "glossary.html", "method.html", "about.html", "briefs.html", "briefs-2.html",
             "officials/a0.html", "officials/b0.html", "officials/a0/record.html", "officials/b0/record.html", "issues/tax.html",

@@ -765,7 +765,7 @@ p.official-row-title { font-weight: 700; line-height: 1.35; overflow-wrap: anywh
 .vote-map-seat[data-mark="other"] { fill: url(#vote-map-other); stroke: var(--muted); }
 .vote-map-seat[data-mark="no-member"] { fill: var(--raised); stroke: var(--line-strong); stroke-dasharray: 3 2; }
 .vote-map-tiles .vote-map-seat[data-mark="yes"] { stroke: var(--ink); }
-.vote-map-split { stroke: var(--surface); stroke-width: 1.5px; }
+.vote-map-split { stroke: var(--surface); stroke-width: 1.5px; pointer-events: none; }
 .vote-map-tile-label { fill: var(--muted); font-size: 13px; font-weight: 700; }
 .vote-map-legend, .vote-map-delegates { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin: 0; padding: 0; list-style: none; font-size: .875rem; }
 .vote-map-legend { margin-bottom: var(--s4); }
@@ -892,3 +892,49 @@ form.lists-filter > .lists-filter-actions { margin-top: var(--s4); }
 .vote-note p { margin: 0; }
 .vote-note-tag { color: var(--muted); font-size: var(--t-sm); font-weight: 700; }
 .vote-bill-status { margin: 0 0 var(--s2); }
+
+.maps-controls { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: end; margin-block: var(--s5); }
+.maps-controls .field { min-width: 8rem; }
+.maps-controls [data-maps-field="issue"] { flex: 1 1 14rem; max-width: 24rem; }
+.maps-controls select { max-width: 100%; min-height: 44px; }
+.maps-controls .btn, .maps-details .btn { min-height: 44px; }
+.maps-controls [hidden] { display: none; }
+.maps-explorer { margin-block: var(--s6); }
+.maps-explorer .vote-map-frame { background: var(--surface); border-radius: var(--r-panel); padding: var(--s3); }
+.maps-explorer .vote-map-seat[data-mark="measure"], .maps-explorer .vote-map-seat[data-mark="term-selected"] { fill: var(--ink); stroke: var(--line-strong); }
+.maps-explorer .vote-map-seat[data-mark="term-other"] { fill: var(--raised); stroke: var(--line-strong); }
+.maps-explorer .vote-map-seat[data-mark="unavailable"] { fill: url(#maps-unavailable); stroke: var(--line-strong); }
+.maps-explorer .vote-map-seat[data-mark="empty-base"] { fill: url(#maps-empty); stroke: var(--line-strong); }
+.maps-paper { fill: var(--surface); }
+.maps-hatch { fill: none; stroke: var(--muted); stroke-width: .8; }
+.maps-dot { fill: var(--muted); }
+.maps-explorer .vote-map-frame a { cursor: pointer; }
+.maps-explorer .vote-map-frame a:hover .vote-map-seat,
+.maps-explorer .vote-map-frame a:focus-visible .vote-map-seat,
+.maps-explorer .vote-map-frame a[data-selected] .vote-map-seat { stroke: var(--ink); stroke-width: 3; paint-order: stroke fill; }
+.maps-explorer .vote-map-frame a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.maps-key { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; margin: 0 0 var(--s4); padding: 0; list-style: none; font-size: var(--t-sm); }
+.maps-key > li { display: inline-flex; align-items: center; gap: var(--s2); }
+.maps-key i { display: inline-block; width: 1rem; height: 1rem; background: var(--ink); border: 1px solid var(--line-strong); }
+.maps-key .maps-scale { gap: 0; }
+.maps-key .maps-key-other { background: var(--raised); }
+.maps-key .maps-key-empty { background: radial-gradient(var(--muted) 1px, var(--surface) 1px); background-size: 5px 5px; }
+.maps-key .maps-key-unknown { background: repeating-linear-gradient(135deg, var(--surface), var(--surface) 3px, var(--muted) 3px, var(--muted) 4px); }
+.maps-details:empty { display: none; }
+.maps-details { position: fixed; inset: auto var(--s4) var(--s4) auto; width: min(32rem, calc(100vw - 2 * var(--s4))); max-height: calc(100dvh - 2 * var(--s4)); overflow: auto; overflow-wrap: anywhere; margin: 0; padding: var(--s4); border: 1px solid var(--line-strong); border-radius: var(--r-panel); background: var(--surface); color: var(--ink); }
+.maps-details p { margin-block: var(--s2); }
+.maps-figures { display: grid; grid-template-columns: max-content 1fr; gap: var(--s2) var(--s4); margin-block: var(--s3); font-variant-numeric: tabular-nums; }
+.maps-figures dd { margin: 0; }
+.maps-party[data-party="democrat"] { color: var(--party-dem); }
+.maps-party[data-party="republican"] { color: var(--party-rep); }
+@media (max-width: 719px) {
+    .maps-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .maps-controls > [data-maps-field="issue"] { grid-column: 1 / -1; max-width: none; }
+    .maps-controls .field { min-width: 0; }
+    .maps-controls select { width: 100%; min-width: 0; }
+}
+.maps-scale [data-step="0"] { opacity: .15; }
+.maps-scale [data-step="1"] { opacity: .35; }
+.maps-scale [data-step="2"] { opacity: .55; }
+.maps-scale [data-step="3"] { opacity: .75; }
+.maps-scale [data-step="4"] { opacity: 1; }
