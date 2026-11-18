@@ -4,6 +4,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.Publication.Contracts;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicWeb.Publication;
 using CivicLens.Tests.Fixtures;
 using CivicLens.Tests.Infrastructure.Collection;
 using CivicLens.Tests.PublicApi.Bills;
@@ -19,12 +20,14 @@ public sealed class IssuePageTests(PostgresCollection postgres)
 {
     private const string Path = "/issues/tax.html";
 
-    private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[] bills)
+    private async Task<ApiHost> StartAsync(SeededVote[] votes, SeededBill[] bills, string? publicViewOptions = null)
     {
         var host = await ApiHost.StartAsync(postgres, options => options with
         {
             PublicBaseUrl = PublicBaseUrl.Parse("https://civic-lens.test", "test"),
-            BrowserApiUrl = PublicBaseUrl.Parse("https://api.civic-lens.test", "test")
+            BrowserApiUrl = PublicBaseUrl.Parse("https://api.civic-lens.test", "test"),
+            PublicViewsDatabase = publicViewOptions is null ? options.PublicViewsDatabase
+                : new NpgsqlConnectionStringBuilder(options.PublicViewsDatabase) { Options = publicViewOptions }.ConnectionString
         });
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "SET session_replication_role = replica;" +
@@ -211,6 +214,128 @@ public sealed class IssuePageTests(PostgresCollection postgres)
             Assert.All(labels, label => Assert.NotEmpty(label.TextContent));
         }
     }
+
+    [Fact]
+    public async Task ModelBillHeadlinesKeepTheExactDefinitionOfEachBillAndFallBackWhenTheCitationIsMissing()
+    {
+        const string firstHeadline = "bIlL and Bill, \U00010400Amendment, amendment\u0301 and AmEndment";
+        const string firstQuote = "“Bill” means a tax filing.\r\n\U00010400 § <img src=x onerror=alert(1)> & tax.";
+        const string secondQuote = "“Bill” means an invoice.";
+        const string missingQuote = "“Bill” means an unusable citation.";
+        var first = new SeededBill('a', "2026-03-02") { Issues = ["tax"], Text = new(100, 100, [("Bill", "Tax filing", true, firstQuote)]) };
+        var second = new SeededBill('b', "2026-03-03") { BillNumber = 8, Issues = ["tax"], Text = new(100, 100, [("Bill", "Invoice", false, secondQuote)]) };
+        var missing = new SeededBill('c', "2026-03-04") { BillNumber = 9, Issues = ["tax"], Text = new(100, 100, [("Bill", "Unusable citation", false, missingQuote)]) };
+        var code = new SeededBill('d', "2026-03-05") { BillNumber = 10, Issues = ["tax"], TextOrigin = "Code" };
+        var person = new SeededBill('e', "2026-03-06") { BillNumber = 11, Issues = ["tax"], TextOrigin = "Person" };
+        await using var host = await StartAsync([], [first, second, missing, code, person]);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE action_revisions SET headline = CASE record_id
+                WHEN '{first.RecordId}' THEN '{firstHeadline}'
+                WHEN '{code.RecordId}' THEN 'Nomination'
+                WHEN '{person.RecordId}' THEN 'Joint resolution'
+                ELSE 'Bill and Cloture' END;
+            UPDATE action_revision_key_terms SET citation_extraction_id = repeat('f', 64) WHERE record_id = '{missing.RecordId}';
+            """);
+
+        var page = await GetPageAsync(host);
+        var rows = page.QuerySelectorAll("#bills .record-row");
+        Assert.Equal(["a", "b", "c", "d", "e"], rows.Select(BillId));
+        Assert.Equal(firstHeadline, rows[0].QuerySelector("div > a > span")!.TextContent);
+        Assert.Equal(["Explain bIlL", "Explain AmEndment"], rows[0].QuerySelectorAll("button.term").Select(button => button.TextContent));
+        Assert.Equal(["Explain Bill", "Explain Cloture"], rows[1].QuerySelectorAll("button.term").Select(button => button.TextContent));
+        Assert.All(rows.Take(3), row => Assert.Same(row.QuerySelector("button.term"), row.QuerySelector("div > a")!.NextElementSibling));
+        Assert.All(rows, row => Assert.Empty(row.QuerySelectorAll("a button, button a, button button")));
+        Assert.Equal(Glossary.Term("bill").PopoverId, Assert.Single(rows[2].QuerySelectorAll("button.term")).GetAttribute("popovertarget"));
+        Assert.All(rows.Skip(3), row => Assert.Empty(row.QuerySelectorAll("button.term")));
+
+        var firstDefinition = Definition(page, rows[0]);
+        var secondDefinition = Definition(page, rows[1]);
+        Assert.NotEqual(firstDefinition.Id, secondDefinition.Id);
+        Assert.Equal($"\"{firstQuote}\"", firstDefinition.QuerySelector(".quote")!.TextContent);
+        Assert.Equal($"\"{secondQuote}\"", secondDefinition.QuerySelector(".quote")!.TextContent);
+        Assert.Empty(firstDefinition.QuerySelectorAll("img"));
+        Assert.Equal(BillTextWords.KeyTermsLabel, firstDefinition.QuerySelector(".ai-label")!.TextContent);
+        var firstSource = Assert.Single(firstDefinition.QuerySelectorAll("a"));
+        Assert.Equal(CongressGovBillPage.Url(119, "hr", 7), firstSource.GetAttribute("href"));
+        Assert.Equal(BillTextWords.KeyTermCutLink, firstSource.TextContent);
+        var secondSource = Assert.Single(secondDefinition.QuerySelectorAll("a"));
+        Assert.Equal(CongressGovBillPage.Url(119, "hr", 8), secondSource.GetAttribute("href"));
+        Assert.Equal(BillTextWords.SourceLine("Introduced in House", "3 Jan 2025"), secondSource.TextContent);
+    }
+
+    [Fact]
+    public async Task ReleaseActivationWhileReadingTheIssuePageKeepsTheHeadlineAndItsCitedVersionTogether()
+    {
+        const string key = "issue-bill-page-snapshot";
+        const string beforeQuote = "First citation.";
+        const string afterQuote = "Second citation.";
+        const string afterPackage = "BILLS-119hr7rh";
+        var afterExtraction = new string('d', 64);
+        var bill = new SeededBill('a', "2026-03-02") { Issues = ["tax"], Text = new(100, 100, [("Bill", "First", false, beforeQuote)]) };
+        await using var host = await StartAsync([], [bill], "-c statement_timeout=30000");
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            UPDATE action_revisions SET headline = 'Bill before', run_id = 'issue-first-revision-run' WHERE record_id = '{bill.RecordId}';
+            {PublicActionRows.ActionRevision(bill.RecordId, 2, "Model", bill.EventOn, 0, headline: "Bill after")}
+            {PublicActionRows.ActionSponsorship(bill.RecordId, 2, 0, "p1", "Sponsor", original: true, sponsoredOn: bill.EventOn)}
+            {PublicActionRows.ActionIssue(bill.RecordId, 2, "tax", position: 0, tracked: true)}
+            INSERT INTO document_extractions (extraction_id, attempt_id, extraction_version, text, text_sha256)
+            VALUES ('{afterExtraction}', 'attempt', 'extraction', '{afterQuote}', repeat('f', 64));
+            INSERT INTO bill_text_versions (congress, bill_type, bill_number, package_id, version_type, version_date, source_url, extraction_id, chars_total, chars_read)
+            VALUES (119, 'hr', 7, '{afterPackage}', 'Reported in House', '2025-05-06',
+                    'https://www.congress.gov/119/bills/hr7/{afterPackage}.htm', '{afterExtraction}', 100, 100);
+            UPDATE action_revisions SET text_package_id = '{afterPackage}', why_it_matters = 'Second version.' WHERE record_id = '{bill.RecordId}' AND revision_number = 2;
+            INSERT INTO action_revision_key_terms (record_id, revision_number, position, term, citation_extraction_id, citation_start, citation_length, definition, cut)
+            VALUES ('{bill.RecordId}', 2, 0, 'Bill', '{afterExtraction}', 0, {afterQuote.Length}, 'Second', false);
+            UPDATE publication_record_states SET last_release = 1 WHERE kind = 'action' AND record_id = '{bill.RecordId}';
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{bill.RecordId}', 2, 2);
+            INSERT INTO release_issues (release_number, issue_id, name, definition, count_congress, substantive_votes, bills)
+            VALUES (2, 'tax', 'Taxes after', 'd', 119, 0, 1);
+            CREATE FUNCTION wait_for_issue_bills() RETURNS boolean LANGUAGE plpgsql
+                SECURITY DEFINER SET search_path = pg_catalog AS $function$
+            BEGIN
+                PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('{key}', 0));
+                RETURN true;
+            END;
+            $function$;
+            DO $gate$
+            BEGIN
+                EXECUTE format(
+                    'CREATE OR REPLACE VIEW public_api.bills WITH (security_barrier = true) AS SELECT original.* FROM (%s) original WHERE public.wait_for_issue_bills()',
+                    rtrim(pg_get_viewdef('public_api.bills'::regclass), E';\n'));
+            END;
+            $gate$;
+            """);
+        var published = new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero);
+        await using var held = await HeldAdvisoryLock.AcquireAsync(host.OperationalDatabase, key);
+
+        var reading = GetPageAsync(host);
+        await HeldAdvisoryLock.WaitForWaiterAsync(host.OperationalDatabase, key);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 2, published.AddDays(1));
+        await held.DisposeAsync();
+        var before = await reading;
+        var after = await GetPageAsync(host);
+        await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, published);
+        var rollback = await GetPageAsync(host);
+
+        AssertBillVersion(before, bill.RecordId, 1, "Bill before", beforeQuote, "Introduced in House", "3 Jan 2025");
+        AssertBillVersion(after, bill.RecordId, 2, "Bill after", afterQuote, "Reported in House", "6 May 2025");
+        AssertBillVersion(rollback, bill.RecordId, 1, "Bill before", beforeQuote, "Introduced in House", "3 Jan 2025");
+    }
+
+    private static void AssertBillVersion(IDocument page, string recordId, int revision, string headline, string quote, string version, string date)
+    {
+        var row = Assert.Single(page.QuerySelectorAll("#bills .record-row"));
+        Assert.Equal(headline, row.QuerySelector("div > a > span")!.TextContent);
+        var definition = Definition(page, row);
+        Assert.Equal($"bill-term-{recordId}-{revision}-0", definition.Id);
+        Assert.Equal($"\"{quote}\"", definition.QuerySelector(".quote")!.TextContent);
+        Assert.Equal(BillTextWords.SourceLine(version, date), Assert.Single(definition.QuerySelectorAll("a")).TextContent);
+    }
+
+    private static IElement Definition(IDocument page, IElement row) =>
+        page.GetElementById(row.QuerySelector("button.term")!.GetAttribute("popovertarget")!)!;
 
     [Fact]
     public async Task ABillRowNamesItsSponsorAndNotItsCosponsorAndAnUnnamedSponsorShowsNoSponsorLine()

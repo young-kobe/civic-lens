@@ -432,9 +432,9 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{bill.RecordId}', 2, 2);
             """);
 
-        var originalFacts = await store.ReadListFactsAsync(transaction, original.Bills, CancellationToken.None);
+        var originalFacts = await BillStore.ReadListFactsAsync(transaction, [(originalBill.RecordId, originalBill.RevisionNumber)], CancellationToken.None);
         Assert.Equal(firstQuote, Assert.Single(originalFacts[(originalBill.RecordId, originalBill.RevisionNumber)].KeyTerms).Quote);
-        Assert.Empty(await store.ReadListFactsAsync(transaction, [originalBill with { RevisionNumber = 2 }], CancellationToken.None));
+        Assert.Empty(await BillStore.ReadListFactsAsync(transaction, [(originalBill.RecordId, 2)], CancellationToken.None));
         var current = (await store.FindAsync(bill.RecordId, CancellationToken.None))!;
         Assert.Equal(2, current.Bill.RevisionNumber);
         Assert.Empty(current.KeyTerms);

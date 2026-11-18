@@ -28,7 +28,7 @@ public sealed class BillStore(NpgsqlDataSource views)
     private const int LatestActionColumn = 23;
 
     /// <summary>The name of the first sponsor of the bill <c>b</c>, in stored order, or null when the release names none. The one owner of that rule.</summary>
-    internal const string SponsorNameSql = """
+    private const string SponsorNameSql = """
         (SELECT o.name FROM public_api.bill_sponsorships s
            JOIN public_api.officials o ON o.official_id = s.official_id
           WHERE s.record_id = b.record_id AND s.revision_number = b.revision_number AND s.role = 'Sponsor'
@@ -212,8 +212,8 @@ public sealed class BillStore(NpgsqlDataSource views)
     }
 
     /// <summary>Reads the sponsor, status, and key terms of the exact revisions on one bounded bill page in its snapshot.</summary>
-    public async Task<Dictionary<(string RecordId, int RevisionNumber), BillListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction,
-        IReadOnlyList<BillRow> bills, CancellationToken cancellationToken)
+    public static async Task<Dictionary<(string RecordId, int RevisionNumber), BillListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction,
+        IReadOnlyList<(string RecordId, int RevisionNumber)> bills, CancellationToken cancellationToken)
     {
         var facts = new Dictionary<(string, int), BillListFacts>();
         if (bills.Count == 0) return facts;

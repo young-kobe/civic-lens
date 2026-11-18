@@ -12,8 +12,12 @@ public sealed class IssuePageReader(IssueStore issues)
         if (issueId.Length > PublishedRecordEntry.MaximumFilterValueLength) return null;
         if (await issues.FindPageAsync(issueId, cancellationToken) is not { } answer) return null;
         var votes = answer.Votes.Select(vote => new IssueVoteData(vote.RecordId, vote.VotedOn, vote.Chamber, vote.Headline, vote.Label, vote.TextOrigin, vote.ResultWords, vote.Yea, vote.Nay)).ToArray();
-        var bills = answer.Bills.Select(bill => new IssueBillData(bill.RecordId, bill.Headline, bill.Label, bill.TextOrigin, bill.BillType, bill.BillLine, bill.Sponsor,
-            bill.LatestActionText, bill.LatestActionDate)).ToArray();
+        var bills = answer.Bills.Select(bill => new IssueBillData(bill.RecordId, bill.Headline, bill.Label, bill.TextOrigin, bill.BillType, bill.BillLine,
+            bill.Facts?.Sponsor, bill.Facts?.LatestActionText, bill.Facts?.LatestActionDate)
+        {
+            HeadlineTerms = bill.Facts?.HeadlineTerms(bill.RecordId, bill.RevisionNumber, bill.Congress, bill.BillType, bill.BillNumber,
+                bill.TextVersionName, bill.TextVersionDate)
+        }).ToArray();
         var lineUp = answer.LineUp is { } split
             ? new IssueLineUpData(split.Congress, split.Bills, [.. split.Parties.Select(party => new IssueLineUpPartyData(party.Party, party.Bills))], split.UnknownBills)
             : null;
