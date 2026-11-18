@@ -140,6 +140,29 @@ public sealed class BriefDetailPageTests
         Assert.Single(page.QuerySelectorAll("[id=term-release]"));
     }
 
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task TheHeadlineCanExplainReleaseBeforeTheCitedParagraphAndTheCheckLine(PublishedTextOrigin origin)
+    {
+        const string headline = "Release for the week";
+        var data = Brief() with
+        {
+            Headline = headline,
+            TextOrigin = origin,
+            Paragraphs = [new PublishedBriefParagraph { Text = "This release covers the week.", CitationIds = ["R1"] }]
+        };
+        var page = await RenderAsync<BriefDetailPage, BriefPageData>(data);
+
+        Assert.Equal(headline, page.QuerySelector("h1")!.ShownText());
+        Assert.Empty(page.QuerySelectorAll(".record-body button.term"));
+        Assert.Equal("This release covers the week.[R1]", page.QuerySelector(".record-body")!.ShownText());
+        Assert.Equal("#citation-R1", page.QuerySelector(".record-body a")!.GetAttribute("href"));
+        Assert.Single(page.QuerySelectorAll("#term-release"));
+        var firstUse = origin == PublishedTextOrigin.Model ? "h1" : ".ai-summary-check";
+        Assert.NotNull(page.QuerySelector($"{firstUse} button[popovertarget=term-release]"));
+    }
+
     [Fact]
     public async Task AnUnlabeledBriefShowsPlainTextAndInventsNoAiLabel()
     {

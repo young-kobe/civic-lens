@@ -123,7 +123,11 @@ public sealed class StatementDetailPageTests
     public async Task LinkedVoteReasonUsesTheViewLabelAndGlossaryFirstUseWhileItsQuoteStaysPlain()
     {
         var linked = LinkedVote() with { Reason = "Cloture is pending.", Quote = "Quorum." };
-        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { LinkedVotes = new([linked], null, null) });
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with
+        {
+            Headline = "Kelly announces his proposal",
+            LinkedVotes = new([linked], null, null)
+        });
 
         var section = page.QuerySelector("#statement-linked-votes-title")!.ParentElement!;
         var firstTerm = page.QuerySelector("button.term")!;
@@ -157,7 +161,7 @@ public sealed class StatementDetailPageTests
     public async Task ModelSummaryExplainsExactTermsAndKeepsWrittenTextAndUnsafeMarkupAsText()
     {
         const string summary = "bill BILL bills billing _Bill 2Bill Bill2 e\u0301Bill \U00010400Bill Bill\u0301 <img src=x onerror=alert(1)>";
-        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { Summary = summary });
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement() with { Headline = "Kelly announces his proposal", Summary = summary });
         var summaryElement = page.QuerySelector(".ai-summary-ai p")!;
 
         Assert.Equal(summary, VisibleText(summaryElement));
@@ -171,12 +175,33 @@ public sealed class StatementDetailPageTests
     }
 
     [Theory]
+    [InlineData(PublishedTextOrigin.Model)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task TheHeadlineKeepsItsExactTextAndOnlyModelTextExplainsReleaseBeforeTheSummary(PublishedTextOrigin origin)
+    {
+        const string headline = "e\u0301Release Release\u0301 <img src=x> RELEASE";
+        const string summary = "The release is available.";
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(origin) with { Headline = headline, Summary = summary });
+
+        var heading = page.QuerySelector("h1")!;
+        Assert.Equal(headline, heading.ShownText());
+        Assert.Null(heading.QuerySelector("img"));
+        Assert.Equal(origin == PublishedTextOrigin.Model ? "RELEASE" : null, heading.QuerySelector("button[popovertarget=term-release]")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model ? 1 : 0, page.QuerySelectorAll("#term-release").Length);
+        Assert.Equal(summary, page.QuerySelector(".ai-summary p")!.ShownText());
+        Assert.Empty(page.QuerySelectorAll(".ai-summary button.term"));
+    }
+
+    [Theory]
     [InlineData(PublishedTextOrigin.Code)]
     [InlineData(PublishedTextOrigin.Person)]
     public async Task NonModelStatementTextDoesNotReceiveGlossaryPopoverMarkup(PublishedTextOrigin origin)
     {
-        var page = await RenderAsync<StatementDetailPage, StatementPageData>(Statement(origin) with { Summary = "Bill" });
+        var data = Statement(origin) with { Summary = "Bill" };
+        var page = await RenderAsync<StatementDetailPage, StatementPageData>(data);
 
+        Assert.Equal(data.Headline, page.QuerySelector("h1")!.TextContent);
+        Assert.Empty(page.QuerySelectorAll("h1 button.term, h1 [popover]"));
         var summary = page.QuerySelector(".ai-summary")!;
         Assert.Empty(summary.QuerySelectorAll("button.term"));
         var prose = origin == PublishedTextOrigin.Code ? summary.QuerySelector(".doc-text")! : summary.QuerySelector("p")!;

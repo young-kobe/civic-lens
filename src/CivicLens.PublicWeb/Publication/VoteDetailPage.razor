@@ -16,7 +16,7 @@
                     <span>@VoteFacts.KindName(Data.Kind, Data.KindCitation)</span>
                 }
             </p>
-            <h1 class="vote-headline">@Data.Headline</h1>
+            <h1 class="vote-headline"><AiText Text="@Data.Headline" Origin="Data.TextOrigin" /></h1>
             @if (about is { } aboutLine)
             {
                 <p class="vote-about">@aboutLine.Text@if (aboutLine.FromBill){<PublishedBillLineNote Inline="true" />}</p>
