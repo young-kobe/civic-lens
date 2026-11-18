@@ -11,7 +11,4 @@ public static class PublishedCountRules
 
     /// <summary>Substantive votes of each chamber in the latest list of the home page.</summary>
     public const int HomeVotesPerChamber = 2;
-
-    /// <summary>Executive actions in the latest list of the home page.</summary>
-    public const int HomeExecutiveActionCount = 3;
 }
