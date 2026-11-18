@@ -507,10 +507,12 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 
 The roadmap step [R-68](../roadmap.md#active-r-68-redesign) holds the plan: the views, the route moves, and the accepted design changes. This page holds no second plan.
 
-Planned interactive maps use `maps.html` and `/v1/maps`, with one shared renderer and the existing vote-map links. Both are approved and remain unimplemented. The accepted rules are:
+The approved interactive maps will use `maps.html`, one shared renderer, and the existing vote-map links. The typed `/v1/maps` reader is implemented; the page and shared renderer remain planned. The API contract and protecting tests are in [search](search.md#api). The accepted rules are:
 
 - Each API request selects one chamber and one layer. One repeatable-read snapshot supplies the release identity, holder date, holders, and selected figures. It does not calculate every layer for each request.
-- Senate seat identity uses the saved class in the release's office terms. A class absent from an older release stays unknown. Publishing this nullable projection is implemented; the map reader and UI remain planned.
+- The planned page will use shareable GET controls for Congress, chamber, layer and issue, with local hover, keyboard, touch and map/tile interaction. Its release-day Congress and issue choices will come from the same MapStore snapshot, without adding them to the compact API answer.
+- Senate seat identity uses the saved class in the release's office terms. A class absent from an older release stays unknown. Publishing this nullable projection and reading it through the map API are implemented; the UI remains planned.
+- The selector and API allow supported historical Congresses through the release-day Congress. They refuse future Congresses. Officials without a saved Senate class remain named in the table data, with no guessed map position.
 - One selected Congress scopes every comparison. The attendance base is published roll calls in that Congress and chamber that list the member. Bill and substantive-vote activity remain separate measures.
 - The holder date is the release's UTC publication day, clamped to the selected Congress. The page and API show that as-of date. Each seat shows its dated holder, and each person keeps only their own activity. Missing or ambiguous holders stay unavailable.
 - Issue activity compares the person's matching sponsored bills with all their published sponsored bills. It compares matching substantive votes with their own published substantive casts. These bases cover the whole selected Congress, including any chambers the person served in. The display names that scope. A missing or unknown measure or base stays unavailable, never zero. Absence from a top-ten issue list cannot establish zero.

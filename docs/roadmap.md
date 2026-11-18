@@ -24,7 +24,7 @@ PublicApi serves every public page at its public path since cutover. Caddy serve
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
-- [ ] Build the shared interactive Maps page and API, then add term-end, issue-activity, attendance, and boundary layers by Congress. The accepted dates, holders, bases, interactions, and unavailable-data rules are in [public site](architecture/public-site.md#limits-and-planned-work). Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members. The optional party-break ring is implemented from the saved party-line value.
+- [ ] Build the shared interactive Maps page and renderer over the implemented API for term ends, issue activity, and attendance. Add matching boundary layers by Congress. The accepted dates, holders, bases, interactions, and unavailable-data rules are in [public site](architecture/public-site.md#limits-and-planned-work). Party data uses red and blue, with patterns and an explicit legend. Maps never predict or rate members. The optional party-break ring is implemented from the saved party-line value.
 - [ ] Add the document changes list once document changes are published.
 
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
