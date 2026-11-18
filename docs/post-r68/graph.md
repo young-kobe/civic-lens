@@ -1,0 +1,32 @@
+# Phase 2. Graph and statistical research
+
+**Recommendation.** Model typed relationships now. Keep the authoritative evidence and review decisions in PostgreSQL. Use a disposable graph built from a single published release to explore questions with many paths. The [two-bill experiment](experiments/published-graph.md) found one useful shared backer and showed why a dense network can overstate the evidence.
+
+## Which questions need a graph?
+
+| Reader question | Proposed paths and methods | What must remain visible |
+|---|---|---|
+| Who spoke about this bill and then acted? | Start with the existing approved statement, relationship and vote or action revisions. Use SQL for a known path. Add explicit cross-speaker links only after reviewing the attribution. | Quote, speaker, dated cast or sponsorship, vote question, and bill or amendment version. A motion to table changes the interpretation. |
+| Who explicitly backed or challenged a president's claim? | Link claim revision to a legislator's own response and its quotation. Display their subsequent action on the exact measure alongside it. Define a cohort in advance, such as chamber leadership on the claim date. | Keep the member's expressed position separate from a cast, party identity or silence. Show coverage and unobserved responses. |
+| Which commitments progressed? | Connect the directive to a named agency, deadline, implementation record and outcome series. A missing step narrows the next search. Add spending or judicial records when identifiers establish scope. | Distinguish an order, appropriation, obligation, payment, injunction and measured outcome. Track subsequent legal status. [Congress API](https://api.congress.gov/), [USAspending data sources](https://www.usaspending.gov/data-sources) and [CourtListener search](https://wiki.free.law/c/courtlistener/help/api/rest/v4/search). |
+| Which coalitions recur on this issue? | Compare co-sponsorship and voting separately, within a chamber, time window and motion type. Show shared bills or eligible votes and denominators. | Unanimous bills generate many member pairs. Compare against bill popularity and member activity. Retain record-level drill-down and missing casts. |
+
+Use nodes for identifiable, versioned evidence and edges for a specific predicate and direction. Keep event time, knowledge cutoff, source family and approval on the relevant facts. A derived edge must retain its contributing record revisions. A general-purpose triple table makes foreign keys and domain-specific evidence checks harder. The existing relationship revision and vote-bill link give simpler precedents. PROV-O supplies useful terms for derivation and attribution if we later need interchange. [Relationship reference](../architecture/statements.md#relationship-drafting) and [W3C provenance vocabulary](https://www.w3.org/TR/prov-o/).
+
+## Tool choice
+
+| Option | Use it for | Cost or decision criterion |
+|---|---|---|
+| PostgreSQL joins and bounded recursive queries | Exact paths, version binding, deterministic explanations and release-consistent reads | Start here for fixed paths. Limit depth, predicates and fan-out. Check cycles and query plans against representative reads. [PostgreSQL recursive queries](https://www.postgresql.org/docs/18/queries-with.html). |
+| NetworkX offline | Projections, common neighbors, connected components and degree sensitivity | Easy to inspect and discard. Memory use can grow with the number of member pairs. Sample first and bound the projection. [NetworkX weighted projection](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.bipartite.projection.weighted_projected_graph.html). |
+| Apache AGE or a dedicated Neo4j read model | Variable-length path workloads if measured SQL becomes hard to maintain or too slow | AGE adds an extension and compatibility work. A separate store adds synchronization, recovery and withdrawal checks. Measure import, memory, query latency, freshness and rebuild time using an offline copy. [Apache AGE](https://age.apache.org/) and [Neo4j memory estimates](https://neo4j.com/docs/graph-data-science/current/common-usage/memory-estimation/). |
+| Graph-assisted retrieval and GraphRAG | Entity-centered search or broad questions across many documents | Entity resolution can merge people, programs or bills incorrectly. Generated community summaries add cost and another source of error. Require exact source paths and measure benefit over text retrieval. [GraphRAG research](https://arxiv.org/abs/2404.16130) and [local search design](https://microsoft.github.io/graphrag/query/local_search/). |
+
+## Next experiments
+
+1. Freeze a release and a set of evidence questions from two issues. Include ambiguous names, absent evidence, procedural votes and evidence published after the cutoff. Annotate acceptable sources and sufficient evidence sets. Preserve questions with no gold path.
+2. On the same snapshot compare exact joins plus text search, hybrid lexical and semantic retrieval, and the same retrieval plus typed paths of at most three hops. Use equal candidate and review budgets. Record sufficient evidence in the first five results, wrong-entity and after-cutoff hits, p95 latency, tokens and reviewer minutes. Inspect every case where adding a graph changes the assessment.
+3. For exploratory PCA, use a member-by-roll-call matrix within one chamber and Congress. Define eligibility by term and motion type. Distinguish missing, present, Yes and No. Test alternative handling of missing observations. Compare components with pairwise agreement and established Voteview estimates. Hold out a time period and vary the issue mix. Look for stable sets of votes a reader can inspect. [Voteview cast codes](https://voteview.com/articles/data_help_votes) and [methodology](https://voteview.com/about).
+4. Consider a persistent graph engine only when a named reader query exceeds the agreed latency or maintenance budget. Require identical eligible paths, exact revisions, and withdrawal behavior before comparing speed. Accept graph retrieval only if held-out evidence recall or reviewer effort improves at an acceptable false-support rate.
+
+The present experiment establishes computational agreement on one fixed path. We have no production benchmark for a graph engine, measured GraphRAG lift, or evidence for a public ideology score.

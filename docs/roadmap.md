@@ -10,6 +10,8 @@ R-68 is the active priority. It includes the complete public redesign, its data 
 
 Current capabilities and ownership are in [architecture](architecture.md). Deployment, backups, recovery, and live checks are in [operations](operations.md).
 
+The [post-R-68 plan appendix](post-r68/README.md) connects the next phase of claims, evidence, evaluation, and reader work to its pilot experiments.
+
 ## Work queue
 
 Each item gives its outcome, dependencies, and design reference. Surface new architecture and public wording choices before implementation. Do not reopen settled choices.
