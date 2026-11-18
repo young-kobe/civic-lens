@@ -3,13 +3,14 @@ using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
+using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Http;
 
 namespace CivicLens.PublicApi.Bills;
 
 /// <summary>Maps one page of the bill list to the presentation record of the server page. One snapshot holds the page, the facts of its bills, and the filter choices,
-/// so the page comes from one release, as the statement list reads it. One bounded read gives the sponsor and the latest action of the bills on the page.
+/// so the page comes from one release, as the statement list reads it. One bounded read gives the sponsor, latest action, and key terms of the bills on the page.
 /// The page and its policy area choices cover the newest Congress of the release. It takes the bill as one typed number,
 /// such as "H.R. 5334", the bill type as a choice, and the sponsor as a typed name, so it ignores the JSON Congress, type, and sponsor ID parameters.</summary>
 public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
@@ -50,14 +51,20 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
         await using var __ = transaction;
         if (await bills.ListNewestCongressAsync(transaction, request, cancellationToken) is not { } list) return null;
         var page = list.Page;
-        var facts = await bills.ReadListFactsAsync(transaction, [.. page.Bills.Select(bill => bill.RecordId)], cancellationToken);
+        var facts = await bills.ReadListFactsAsync(transaction, page.Bills, cancellationToken);
         var issueChoices = (await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken)).Select(issue => issue.ToChoice()).ToArray();
         var policyAreas = list.Congress is { } congress ? await bills.ListPolicyAreasAsync(transaction, congress, cancellationToken) : [];
         var rows = page.Bills.Select(bill =>
         {
-            var fact = facts.GetValueOrDefault(bill.RecordId);
+            var fact = facts.GetValueOrDefault((bill.RecordId, bill.RevisionNumber));
             return new BillListRowData(bill.RecordId, bill.Headline, bill.Label, bill.TextOrigin, bill.BillType, fact?.Sponsor, fact?.LatestActionText,
-                fact?.LatestActionDate, fact?.Status);
+                fact?.LatestActionDate, fact?.Status)
+            {
+                HeadlineTerms = fact is { KeyTerms.Length: > 0 }
+                    ? new(bill.RecordId, bill.RevisionNumber, fact.KeyTerms, fact.KeyTermsLabel, CongressGovBillPage.Url(bill.Congress, bill.BillType, bill.BillNumber),
+                        bill.TextVersionName is { } name ? BillTextWords.SourceLine(name, bill.TextVersionDate is { } date ? Moment.Day(date) : null) : null)
+                    : null
+            };
         }).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("type", request.BillType), ("status", request.Status is { } status ? QueryValues.ChoiceText(status) : null),
             ("issue", request.Issue), ("policyArea", request.PolicyArea), ("sponsor", request.SponsorName), ("bill", QueryValues.BillNumberText(request.BillType, request.BillNumber)));

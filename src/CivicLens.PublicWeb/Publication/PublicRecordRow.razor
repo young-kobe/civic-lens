@@ -21,6 +21,10 @@
                 <span class="muted small">@Meta</span>
             }
         </a>
+        @if (HeadlineOrigin == PublishedTextOrigin.Model)
+        {
+            @AiText.RenderControls(Use, Headline, HeadlineTerms is { } terms ? BillTermPopover.Candidates(terms, scopeToBill: true) : null)
+        }
         @* The chip takes focus, so it sits after the link and never inside it. *@
         <AiLabel Text="@Label" Origin="LabelOrigin" Look="AiLabelLook.Chip" />
         @if (Yea is { } yea && Nay is { } nay)
@@ -44,10 +48,14 @@
 </li>
 
 @code {
+    [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
+
     [Parameter, EditorRequired] public IconName Icon { get; set; }
     [Parameter] public string? IconClass { get; set; }
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Headline { get; set; } = string.Empty;
+    [Parameter] public PublishedTextOrigin? HeadlineOrigin { get; set; }
+    [Parameter] public BillTermContext? HeadlineTerms { get; set; }
     [Parameter] public string? Label { get; set; }
     /// <summary>The text origin of the row. <see cref="AiLabel"/> draws the label as a chip from it.</summary>
     [Parameter] public PublishedTextOrigin? LabelOrigin { get; set; }

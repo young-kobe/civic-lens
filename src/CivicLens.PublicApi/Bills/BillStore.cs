@@ -52,6 +52,18 @@ public sealed class BillStore(NpgsqlDataSource views)
               WHERE b.record_id = k.record_id AND b.revision_number = k.revision_number OFFSET 0) b
         """;
 
+    private const string KeyTermsSql = """
+        LEFT JOIN LATERAL (
+             SELECT array_agg(k.term ORDER BY k."position") AS names,
+                    array_agg(k.definition ORDER BY k."position") AS definitions,
+                    array_agg(k.cut ORDER BY k."position") AS cuts,
+                    array_agg(k.quote ORDER BY k."position") AS quotes,
+                    min(k.label) AS label
+               FROM public_api.bill_key_terms k
+              WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number
+                AND b.text_origin = 'Model') terms ON TRUE
+        """;
+
     /// <summary>The FROM clause of the keys <c>b</c> of the bills of the issue <c>@issue</c>. The one owner of that join. The few issue rows drive the read, and OFFSET 0 keeps each key lookup correlated,
     /// because Postgres underestimates the rows of a view on <c>active_records</c> and a plain semi join reads the whole issue view once for each bill.</summary>
     internal static readonly string IssueKeysSql = KeysOf("SELECT i.record_id, i.revision_number FROM public_api.bill_issues i WHERE i.issue_id = @issue");
@@ -69,10 +81,12 @@ public sealed class BillStore(NpgsqlDataSource views)
          WHERE b.record_id = ANY(@ids)
         """;
     private const string ListFactsSql = $"""
-        SELECT b.record_id, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, t.status
-          FROM public_api.bills b
+        SELECT b.record_id, b.revision_number, {SponsorNameSql}, t.latest_action_text, t.latest_action_date, t.status,
+               terms.names, terms.definitions, terms.cuts, terms.quotes, terms.label
+          FROM unnest(@ids, @revisions) k(record_id, revision_number)
+          {BillsOfKeysSql}
           {StatusSql}
-         WHERE b.record_id = ANY(@ids)
+          {KeyTermsSql}
         """;
 
     private const string PolicyAreasSql = """
@@ -130,17 +144,8 @@ public sealed class BillStore(NpgsqlDataSource views)
                    ARRAY(SELECT i.issue_id FROM public_api.bill_issues i
                           WHERE i.record_id = b.record_id AND i.revision_number = b.revision_number ORDER BY i."position"),
                    s.latest_action_text, s.latest_action_date, s.read_at_utc_ticks,
-                   ARRAY(SELECT k.term FROM public_api.bill_key_terms k
-                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
-                   ARRAY(SELECT k.definition FROM public_api.bill_key_terms k
-                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
-                   ARRAY(SELECT k.cut FROM public_api.bill_key_terms k
-                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
-                   (SELECT k.label FROM public_api.bill_key_terms k
-                     WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number LIMIT 1),
+                   terms.names, terms.definitions, terms.cuts, terms.quotes, terms.label,
                    e.approved_at_utc_ticks, f.first_published_at_utc_ticks, b.summary_from_crs,
-                   ARRAY(SELECT k.quote FROM public_api.bill_key_terms k
-                          WHERE k.record_id = b.record_id AND k.revision_number = b.revision_number ORDER BY k."position"),
                    ARRAY(SELECT t.part FROM public_api.bill_text_sentences t
                           WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position"),
                    ARRAY(SELECT t.sentence FROM public_api.bill_text_sentences t
@@ -149,6 +154,7 @@ public sealed class BillStore(NpgsqlDataSource views)
                           WHERE t.record_id = b.record_id AND t.revision_number = b.revision_number ORDER BY t."position"),
                    b.introduced_on
               FROM public_api.bills b
+              {KeyTermsSql}
               LEFT JOIN public_api.bill_status s ON s.record_id = b.record_id AND s.revision_number = b.revision_number
               LEFT JOIN public_api.record_entries e ON e.kind = 'action' AND e.record_id = b.record_id AND e.revision_number = b.revision_number
               LEFT JOIN public_api.record_first_publications f ON f.kind = 'action' AND f.record_id = b.record_id
@@ -158,23 +164,24 @@ public sealed class BillStore(NpgsqlDataSource views)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new(reader.GetInt32(0), ReadRow(reader), reader.GetFieldValue<string[]>(27), ReadLatestAction(reader), ReadHistory(reader, 25, 26),
-            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader), ReadTextSentences(reader))
+            ViewColumns.Text(reader, 23), ViewColumns.Text(reader, 24), ReadKeyTerms(reader, 31), ReadTextSentences(reader))
         {
-            KeyTermsLabel = ViewColumns.Text(reader, 34),
-            CheckedAtUtc = ViewColumns.Utc(reader, 35),
-            FirstPublishedAtUtc = ViewColumns.Utc(reader, 36),
-            SummaryFromCrs = reader.GetBoolean(37),
+            KeyTermsLabel = ViewColumns.Text(reader, 35),
+            CheckedAtUtc = ViewColumns.Utc(reader, 36),
+            FirstPublishedAtUtc = ViewColumns.Utc(reader, 37),
+            SummaryFromCrs = reader.GetBoolean(38),
             IntroducedOn = ViewColumns.Date(reader, 42)
         };
     }
 
     /// <summary>The four arrays come from one view, ordered by the same position, so they pair by index.</summary>
-    private static BillKeyTermData[] ReadKeyTerms(DbDataReader reader)
+    private static BillKeyTermData[] ReadKeyTerms(DbDataReader reader, int ordinal)
     {
-        var terms = reader.GetFieldValue<string[]>(31);
-        var definitions = reader.GetFieldValue<string[]>(32);
-        var cuts = reader.GetFieldValue<bool[]>(33);
-        var quotes = reader.GetFieldValue<string[]>(38);
+        if (reader.IsDBNull(ordinal)) return [];
+        var terms = reader.GetFieldValue<string[]>(ordinal);
+        var definitions = reader.GetFieldValue<string[]>(ordinal + 1);
+        var cuts = reader.GetFieldValue<bool[]>(ordinal + 2);
+        var quotes = reader.GetFieldValue<string[]>(ordinal + 3);
         return [.. terms.Select((term, index) => new BillKeyTermData(term, definitions[index], cuts[index], quotes[index]))];
     }
 
@@ -204,16 +211,19 @@ public sealed class BillStore(NpgsqlDataSource views)
         return facts;
     }
 
-    /// <summary>Reads the sponsor, the latest action, and its stored status of a bounded set of bills in one query. A bill that left the release has no entry.</summary>
-    public async Task<Dictionary<string, BillListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction, string[] recordIds, CancellationToken cancellationToken)
+    /// <summary>Reads the sponsor, status, and key terms of the exact revisions on one bounded bill page in its snapshot.</summary>
+    public async Task<Dictionary<(string RecordId, int RevisionNumber), BillListFacts>> ReadListFactsAsync(NpgsqlTransaction transaction,
+        IReadOnlyList<BillRow> bills, CancellationToken cancellationToken)
     {
+        var facts = new Dictionary<(string, int), BillListFacts>();
+        if (bills.Count == 0) return facts;
         await using var command = new NpgsqlCommand(ListFactsSql, transaction.Connection, transaction);
-        command.Parameters.AddWithValue("ids", recordIds);
-        var facts = new Dictionary<string, BillListFacts>(StringComparer.Ordinal);
+        command.Parameters.AddWithValue("ids", bills.Select(bill => bill.RecordId).ToArray());
+        command.Parameters.AddWithValue("revisions", bills.Select(bill => bill.RevisionNumber).ToArray());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-            facts[reader.GetString(0)] = new(ViewColumns.Text(reader, 1), ViewColumns.Text(reader, 2), ViewColumns.Date(reader, 3),
-                reader.IsDBNull(4) ? null : ViewColumns.Enum<BillStatusStage>(reader, 4));
+            facts[(reader.GetString(0), reader.GetInt32(1))] = new(ViewColumns.Text(reader, 2), ViewColumns.Text(reader, 3), ViewColumns.Date(reader, 4),
+                reader.IsDBNull(5) ? null : ViewColumns.Enum<BillStatusStage>(reader, 5), ReadKeyTerms(reader, 6), ViewColumns.Text(reader, 10));
         return facts;
     }
 

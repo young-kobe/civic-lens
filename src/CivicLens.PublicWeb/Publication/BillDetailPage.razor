@@ -79,7 +79,7 @@
                                             <blockquote class="quote">"@EncodedEvidence.Markup(term.Quote)"</blockquote>
                                             @if (term.Cut)
                                             {
-                                                <p class="bill-term-cut">@KeyTermCut()</p>
+                                                <p class="bill-term-cut">@BillTermPopover.CutNote(Data.CongressGovUrl)</p>
                                             }
                                         </dd>
                                     </div>
@@ -158,7 +158,7 @@
                             <dd><AiLabel Text="@Data.Label" Origin="Data.TextOrigin" /></dd>
                         }
                         <dt>Official bill page</dt>
-                        <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">@CongressGovLinkText</a></dd>
+                        <dd><a href="@Data.CongressGovUrl" rel="noopener noreferrer">@BillTermPopover.SourceLinkLabel</a></dd>
                         <dt>Revision</dt>
                         <dd>@Data.RevisionNumber.ToString(CultureInfo.InvariantCulture)</dd>
                     </dl>
@@ -177,7 +177,6 @@
     [Parameter, EditorRequired] public string RootPath { get; set; } = string.Empty;
 
     private const string CrsFoldId = "crs-source";
-    private const string CongressGovLinkText = "Bill on Congress.gov";
 
     private RenderFragment? CrsCheck => !Data.SummaryFromCrs ? null
         : @<text>The text above summarizes the Congressional Research Service summary. <a href="#@CrsFoldId">@SourceFold.Title</a></text>;
@@ -187,8 +186,8 @@
         record = new ReportedRecord(Data.RecordId, Data.RevisionNumber, PublishedRecordKind.Action, Data.Headline, Data.Number);
         voteRows = new SharedVoteRowsData(Data.Chamber, [], Data.Votes);
         termCandidates = Data.ShowsSummary && Data.TextOrigin == PublishedTextOrigin.Model && Data.KeyTerms.Length > 0
-            ? AiText.WithLocalDefinitions(Data.KeyTerms.Select((term, index) => new AiText.Definition(term.Term,
-                string.Create(CultureInfo.InvariantCulture, $"bill-term-{Data.RecordId}-{Data.RevisionNumber}-{index}"), TermDefinition(term))).ToArray())
+            ? BillTermPopover.Candidates(new(Data.RecordId, Data.RevisionNumber, Data.KeyTerms, Data.KeyTermsLabel, Data.CongressGovUrl,
+                Data.BillText is { } text ? BillTextVersionSource(text) : null), scopeToBill: false)
             : null;
     }
 
@@ -218,25 +217,6 @@
             <blockquote class="quote">@EncodedEvidence.Markup(sentence.Quote)</blockquote>
         }
     </text>;
-
-    private RenderFragment TermDefinition(BillKeyTermData term) => @<text>
-        <span class="quote">"@EncodedEvidence.Markup(term.Quote)"</span>
-        <AiLabel Text="@(Data.KeyTermsLabel ?? BillTextWords.KeyTermsLabel)" Origin="PublishedTextOrigin.Model" Look="AiLabelLook.Line" />
-        @if (term.Cut)
-        {
-            <span class="bill-term-cut">@KeyTermCut()</span>
-        }
-        else
-        {
-            <a href="@Data.CongressGovUrl" rel="noopener noreferrer">@DefinitionSource</a>
-        }
-    </text>;
-
-    private RenderFragment KeyTermCut() => @<text>@BillTextWords.KeyTermCutNote <a href="@Data.CongressGovUrl" rel="noopener noreferrer">@BillTextWords.KeyTermCutLink</a></text>;
-
-    private string DefinitionSource => Data.BillText is { } text
-        ? BillTextVersionSource(text)
-        : CongressGovLinkText;
 
     private static string BillTextVersionSource(BillTextSourceData text) =>
         BillTextWords.SourceLine(text.VersionName, text.VersionDate is { } date ? Moment.Day(date) : null);

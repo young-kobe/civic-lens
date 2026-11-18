@@ -16,4 +16,7 @@ public sealed record BillListPageData(int Release, int? Congress, int Total, IRe
 /// The latest action is the text and day that Congress.gov last listed, or null when Civic Lens has not read them.
 /// <see cref="Status"/> is the stored status of that action, or null when the release has not stored it.</summary>
 public sealed record BillListRowData(string RecordId, string Headline, string? Label, PublishedTextOrigin TextOrigin, string BillType, string? Sponsor,
-    string? LatestActionText, DateOnly? LatestActionDate, BillStatusStage? Status);
+    string? LatestActionText, DateOnly? LatestActionDate, BillStatusStage? Status)
+{
+    public BillTermContext? HeadlineTerms { get; init; }
+}
