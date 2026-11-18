@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Make the district geometry asset of the vote map from the Census cartographic boundary KML.
 
-Run it with a local copy of the zip at SOURCE_URL:
-    python3 tools/render-district-geometry.py --source PATH
+Run it with a local copy of the Census zip for the selected Congress (119 by default):
+    python3 tools/render-district-geometry.py --congress 118 --source PATH
 Check that the committed asset is current:
-    python3 tools/render-district-geometry.py --source PATH --check
+    python3 tools/render-district-geometry.py --congress 118 --source PATH --check
 
 The script needs only the Python standard library. It never downloads. It verifies the size and the
 SHA-256 of the KML member of the zip, so a changed Census file fails loudly and never changes the asset silently.
@@ -17,21 +17,38 @@ import math
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSET = ROOT / 'src/CivicLens.PublicWeb/wwwroot/data/districts-119.json'
+ASSET_DIR = ROOT / 'src/CivicLens.PublicWeb/wwwroot/data'
+DEFAULT_CONGRESS = 119
 
-SOURCE_URL = 'https://www2.census.gov/geo/tiger/GENZ2024/kml/cb_2024_us_cd119_20m.zip'
-SOURCE_MEMBER = 'cb_2024_us_cd119_20m.kml'
-# The pin is on the KML member, not on the zip, so a repacked zip with the same content still passes.
-SOURCE_SIZE = 1551207
-SOURCE_SHA256 = 'c24be3bdb6afd3b82e853fde440046b20b6c8b9988fde5f371f4657148a9c471'
-CONGRESS = 119
+
+@dataclass(frozen=True)
+class CensusSource:
+    congress: int
+    year: int
+    size: int
+    sha256: str
+
+    @property
+    def stem(self):
+        return f'cb_{self.year}_us_cd{self.congress}_20m'
+
+    @property
+    def url(self):
+        return f'https://www2.census.gov/geo/tiger/GENZ{self.year}/kml/{self.stem}.zip'
+
+
+# Pin the KML member so repacking the same content preserves reproducibility.
+SOURCES = {
+    118: CensusSource(118, 2023, 1543497, 'e9f1ab61b22f36e31c6532b8cb89c48c762753ae86bf233acb536250a7ff4419'),
+    119: CensusSource(119, 2024, 1551207, 'c24be3bdb6afd3b82e853fde440046b20b6c8b9988fde5f371f4657148a9c471'),
+}
 
 # Census KML field names, read from ExtendedData/SchemaData/SimpleData. The script fails when one is missing.
 FIELD_STATE = 'STATEFP'
-FIELD_DISTRICT = 'CD119FP'
 
 WIDTH = 800
 KEEP_FRACTION = 0.25
@@ -64,17 +81,19 @@ class GeometryError(Exception):
 
 # ---- Input ----
 
-def read_kml(source):
+def read_kml(source, census):
     """Return the KML bytes of the zip. Fail when the member is missing or its size or hash differ."""
+    member = f'{census.stem}.kml'
     with zipfile.ZipFile(source) as archive:
-        if SOURCE_MEMBER not in archive.namelist():
-            raise GeometryError(f'The zip has no member {SOURCE_MEMBER}.')
-        kml = archive.read(SOURCE_MEMBER)
-    if len(kml) != SOURCE_SIZE:
-        raise GeometryError(f'{SOURCE_MEMBER} has {len(kml)} bytes. The pinned member has {SOURCE_SIZE} bytes.')
+        if member not in archive.namelist():
+            raise GeometryError(f'The zip has no member {member}.')
+        entry = archive.getinfo(member)
+        if entry.file_size != census.size:
+            raise GeometryError(f'{member} has {entry.file_size} bytes. The pinned member has {census.size} bytes.')
+        kml = archive.read(entry)
     digest = hashlib.sha256(kml).hexdigest()
-    if digest != SOURCE_SHA256:
-        raise GeometryError(f'{SOURCE_MEMBER} has sha256 {digest}. The pinned member has sha256 {SOURCE_SHA256}.')
+    if digest != census.sha256:
+        raise GeometryError(f'{member} has sha256 {digest}. The pinned member has sha256 {census.sha256}.')
     return kml
 
 
@@ -111,21 +130,23 @@ def placemark_rings(placemark):
     return rings
 
 
-def parse_districts(kml):
+def parse_districts(kml, congress):
     """Return {(state code, district): rings}. A district of 00 or 98 is 0. Rows with no district are dropped."""
+    district_field = f'CD{congress}FP'
     districts = {}
     for placemark in ET.fromstring(kml).iter():
         if local_name(placemark) != 'Placemark':
             continue
         fields = placemark_fields(placemark)
-        for name in (FIELD_STATE, FIELD_DISTRICT):
+        for name in (FIELD_STATE, district_field):
             if name not in fields:
                 raise GeometryError(f'A Placemark has no SimpleData field {name}.')
-        if fields[FIELD_DISTRICT] == NO_DISTRICT:
+        district = fields[district_field]
+        if district == NO_DISTRICT:
             continue
         if fields[FIELD_STATE] not in STATE_CODES:
             raise GeometryError(f'Unknown state FIPS code {fields[FIELD_STATE]!r}.')
-        key = (STATE_CODES[fields[FIELD_STATE]], 0 if fields[FIELD_DISTRICT] in ('00', '98') else int(fields[FIELD_DISTRICT]))
+        key = (STATE_CODES[fields[FIELD_STATE]], 0 if district in ('00', '98') else int(district))
         rings = placemark_rings(placemark)
         if not rings:
             raise GeometryError(f'District {key} has no polygon.')
@@ -362,7 +383,7 @@ def state_boundary_rings(owned_arcs, topology_arcs):
 
 # ---- Output ----
 
-def build(districts):
+def build(districts, census):
     """Return the asset as a dictionary. Raise GeometryError when the input does not give a valid map."""
     drawn = {key: rings for key, rings in districts.items() if key[0] not in DELEGATE_AREAS}
     transforms = build_transforms(drawn)
@@ -414,9 +435,9 @@ def build(districts):
 
     height = math.ceil(max(y for points in reduced.values() for _, y in points))
     return {
-        'source': SOURCE_URL,
-        'sha256': SOURCE_SHA256,
-        'congress': CONGRESS,
+        'source': census.url,
+        'sha256': census.sha256,
+        'congress': census.congress,
         'viewBox': f'0 0 {WIDTH} {height}',
         'districts': [
             {'state': key[0], 'district': key[1], 'delegate': key[0] in DELEGATE_AREAS, 'path': paths.get(key, '')}
@@ -436,31 +457,33 @@ def render(asset):
             f'  "states": [\n{lines(asset["states"])}\n  ]\n}}\n')
 
 
-def generate(source):
-    return render(build(parse_districts(read_kml(source))))
+def generate(source, census):
+    return render(build(parse_districts(read_kml(source, census), census.congress), census))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--source', required=True, help='local copy of cb_2024_us_cd119_20m.zip')
-    parser.add_argument('--output', type=Path, default=ASSET, help='asset to write or check')
+    parser.add_argument('--congress', type=int, choices=SOURCES, default=DEFAULT_CONGRESS, help='boundary Congress (default: 119)')
+    parser.add_argument('--source', required=True, help='local copy of the selected Census zip')
+    parser.add_argument('--output', type=Path, help='asset to write or check (defaults to districts-<congress>.json)')
     parser.add_argument('--check', action='store_true', help='fail when the asset differs from a fresh run, and write nothing')
     args = parser.parse_args(argv)
+    output = args.output or ASSET_DIR / f'districts-{args.congress}.json'
     try:
-        text = generate(args.source)
+        text = generate(args.source, SOURCES[args.congress])
     except (GeometryError, OSError, zipfile.BadZipFile, ET.ParseError, ValueError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1
     if args.check:
-        current = args.output.read_text(encoding='utf-8') if args.output.exists() else None
+        current = output.read_text(encoding='utf-8') if output.exists() else None
         if current != text:
-            print(f'{args.output} is missing or differs from a fresh run. Run this script without --check.', file=sys.stderr)
+            print(f'{output} is missing or differs from a fresh run. Run this script without --check.', file=sys.stderr)
             return 1
-        print(f'{args.output} is current.')
+        print(f'{output} is current.')
         return 0
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(text, encoding='utf-8')
-    print(f'Wrote {args.output}.')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text, encoding='utf-8')
+    print(f'Wrote {output}.')
     return 0
 
 

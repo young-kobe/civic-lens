@@ -356,7 +356,7 @@ public sealed class HomePageTests
         Assert.Null(withoutDetail.QuerySelector(".home-featured-map-link"));
         Assert.Null(withoutDetail.QuerySelector(".home-featured-parties"));
 
-        var otherCongress = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) with { Congress = 118, PartyTallies = null } });
+        var otherCongress = await RenderAsync(new(7, Featured, [], null) { FeaturedVoteDetail = FeaturedDetail(SeatedMembers) with { Congress = 117, PartyTallies = null } });
         Assert.Null(otherCongress.QuerySelector(".vote-map"));
         Assert.Null(otherCongress.QuerySelector(".home-featured-map-link"));
         Assert.Null(otherCongress.QuerySelector(".home-featured-parties"));
