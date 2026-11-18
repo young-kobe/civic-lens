@@ -7,8 +7,8 @@ using Npgsql;
 
 namespace CivicLens.PublicApi.Issues;
 
-/// <summary>Reads the views <c>public_api.release_issues</c>, <c>active_release</c>, <c>issue_votes</c>, <c>bill_issues</c>, <c>bill_keys</c>, <c>bills</c>, <c>bill_status</c>, and <c>issue_sponsors</c> for one issue.
-/// One snapshot serves both statements, so every count comes from one release, as in <c>ZipDistrictStore</c>.
+/// <summary>Reads the views <c>public_api.release_issues</c>, <c>active_release</c>, <c>issue_votes</c>, <c>bill_issues</c>, <c>bill_keys</c>, <c>bills</c>, and <c>issue_sponsors</c> for one issue.
+/// One snapshot serves the reads of each answer, so every count comes from one release, as in <c>ZipDistrictStore</c>.
 /// The kind rule is <see cref="PublishedVoteKindExtensions.SubstantiveNames"/>. A sponsor is a sponsorship with the role <c>Sponsor</c>, as in <c>bills.sponsor_count</c>.
 /// The current Congress is the Congress of the publication day of the release, from <see cref="CongressCalendar"/>.
 /// The page answer adds the issue name and definition and the newest votes and bills of the issue to the same snapshot. Its counts and lists cover the Congress of the release (<c>release_issues.count_congress</c>), and the votes and bills of each count and its list come from one shared set.
@@ -76,13 +76,13 @@ public sealed class IssueStore(NpgsqlDataSource views)
          ORDER BY {VoteStore.Order} LIMIT @take
         """;
 
-    // The bills of the page in the order of the bill list, BillStore.Order, so the first rows of "See all" are these rows. The latest action line reads the stored status of each row, as the bill list does.
+    // The bills of the page in the order of the bill list, BillStore.Order, so the first rows of "See all" are these rows.
     private static readonly string BillsSql = $"""
-        SELECT b.record_id, b.headline, b.label, b.bill_type, b.bill_line, {BillStore.SponsorNameSql}, b.text_origin, t.latest_action_text, t.latest_action_date
+        SELECT b.record_id, b.revision_number, b.headline, b.label, b.text_origin, b.congress, b.bill_type, b.bill_number, b.bill_line,
+               b.text_version_name, b.text_version_date
           FROM (SELECT b.*, k.latest_action_date FROM (
                     SELECT b.record_id, b.revision_number, b.latest_action_date {PageBillSet} ORDER BY {BillStore.Order} LIMIT @take) k
                 {BillStore.BillsOfKeysSql}) b
-          {BillStore.StatusSql}
          ORDER BY {BillStore.Order}
         """;
 
@@ -130,7 +130,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
     }
 
     /// <summary>Reads the page answer of one issue in one release snapshot: the counts, the line-up, the newest substantive votes, and the newest bills.
-    /// Null means that the active release holds no such issue. The page needs no sponsors.</summary>
+    /// Null means that the active release holds no such issue.</summary>
     public async Task<IssuePageAnswer?> FindPageAsync(string issueId, CancellationToken cancellationToken)
     {
         await using var connection = await views.OpenConnectionAsync(cancellationToken);
@@ -140,7 +140,7 @@ public sealed class IssueStore(NpgsqlDataSource views)
         var totals = await ReadPageTotalsAsync(connection, issueId, header.HomeCongress, cancellationToken);
         var (includes, excludes) = await ReadTermsAsync(connection, issueId, cancellationToken);
         var votes = await ReadVotesAsync(connection, issueId, header.HomeCongress, cancellationToken);
-        var bills = await ReadBillsAsync(connection, issueId, header.HomeCongress, cancellationToken);
+        var bills = await ReadBillsAsync(transaction, issueId, header.HomeCongress, cancellationToken);
         return new(header.Release, issueId, header.Name, header.Definition, includes, excludes, header.HomeCongress, totals.Votes, totals.SplitVotes, totals.Bills, lineUp, votes, bills);
     }
 
@@ -160,18 +160,20 @@ public sealed class IssueStore(NpgsqlDataSource views)
         return [.. votes];
     }
 
-    private static async Task<IssueBill[]> ReadBillsAsync(NpgsqlConnection connection, string issueId, int? congress, CancellationToken cancellationToken)
+    private static async Task<IssueBill[]> ReadBillsAsync(NpgsqlTransaction transaction, string issueId, int? congress, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(BillsSql, connection);
+        await using var command = new NpgsqlCommand(BillsSql, transaction.Connection, transaction);
         command.Parameters.AddWithValue("issue", issueId);
         AddCongress(command, congress);
         command.Parameters.AddWithValue("take", PageBills);
         var bills = new List<IssueBill>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            bills.Add(new(reader.GetString(0), reader.GetString(1), ViewColumns.Text(reader, 2), ViewColumns.Enum<PublishedTextOrigin>(reader, 6), reader.GetString(3),
-                ViewColumns.Text(reader, 4), ViewColumns.Text(reader, 5), ViewColumns.Text(reader, 7), ViewColumns.Date(reader, 8)));
-        return [.. bills];
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            while (await reader.ReadAsync(cancellationToken))
+                bills.Add(new(reader.GetString(0), reader.GetInt32(1), reader.GetString(2), ViewColumns.Text(reader, 3), ViewColumns.Enum<PublishedTextOrigin>(reader, 4),
+                    reader.GetInt32(5), reader.GetString(6), reader.GetInt32(7), ViewColumns.Text(reader, 8), ViewColumns.Text(reader, 9), ViewColumns.Date(reader, 10)));
+
+        var facts = await BillStore.ReadListFactsAsync(transaction, [.. bills.Select(bill => (bill.RecordId, bill.RevisionNumber))], cancellationToken);
+        return [.. bills.Select(bill => bill with { Facts = facts.GetValueOrDefault((bill.RecordId, bill.RevisionNumber)) })];
     }
 
     private static async Task<(string[] Includes, string[] Excludes)> ReadTermsAsync(NpgsqlConnection connection, string issueId, CancellationToken cancellationToken)

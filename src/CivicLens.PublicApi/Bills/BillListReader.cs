@@ -3,7 +3,6 @@ using CivicLens.PublicApi.Http;
 using CivicLens.PublicApi.Issues;
 using CivicLens.PublicApi.Officials;
 using CivicLens.PublicApi.Records;
-using CivicLens.PublicWeb.Components.Ui;
 using CivicLens.PublicWeb.Publication;
 using Microsoft.AspNetCore.Http;
 
@@ -51,7 +50,7 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
         await using var __ = transaction;
         if (await bills.ListNewestCongressAsync(transaction, request, cancellationToken) is not { } list) return null;
         var page = list.Page;
-        var facts = await bills.ReadListFactsAsync(transaction, page.Bills, cancellationToken);
+        var facts = await BillStore.ReadListFactsAsync(transaction, [.. page.Bills.Select(bill => (bill.RecordId, bill.RevisionNumber))], cancellationToken);
         var issueChoices = (await IssueStore.ListOptionsAsync(connection, transaction, cancellationToken)).Select(issue => issue.ToChoice()).ToArray();
         var policyAreas = list.Congress is { } congress ? await bills.ListPolicyAreasAsync(transaction, congress, cancellationToken) : [];
         var rows = page.Bills.Select(bill =>
@@ -60,10 +59,8 @@ public sealed class BillListReader(BillStore bills, RecordSnapshot snapshot)
             return new BillListRowData(bill.RecordId, bill.Headline, bill.Label, bill.TextOrigin, bill.BillType, fact?.Sponsor, fact?.LatestActionText,
                 fact?.LatestActionDate, fact?.Status)
             {
-                HeadlineTerms = fact is { KeyTerms.Length: > 0 }
-                    ? new(bill.RecordId, bill.RevisionNumber, fact.KeyTerms, fact.KeyTermsLabel, CongressGovBillPage.Url(bill.Congress, bill.BillType, bill.BillNumber),
-                        bill.TextVersionName is { } name ? BillTextWords.SourceLine(name, bill.TextVersionDate is { } date ? Moment.Day(date) : null) : null)
-                    : null
+                HeadlineTerms = fact?.HeadlineTerms(bill.RecordId, bill.RevisionNumber, bill.Congress, bill.BillType, bill.BillNumber,
+                    bill.TextVersionName, bill.TextVersionDate)
             };
         }).ToArray();
         var filter = RecordListFilter.Of(request.From, request.To, ("type", request.BillType), ("status", request.Status is { } status ? QueryValues.ChoiceText(status) : null),

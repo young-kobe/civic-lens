@@ -1,8 +1,11 @@
+using CivicLens.PublicApi.Bills;
 using CivicLens.Publication.Contracts;
 
 namespace CivicLens.PublicApi.Issues;
 
-/// <summary>One bill on an issue. <c>TextOrigin</c> says who wrote <c>Label</c>. <c>Sponsor</c> is the name of the first sponsor in stored order, or null when the release names no sponsor.
-/// <c>LatestActionText</c> and <c>LatestActionDate</c> are the stored status of the active release, or null when the release stores none.</summary>
-public sealed record IssueBill(string RecordId, string Headline, string? Label, PublishedTextOrigin TextOrigin, string BillType, string? BillLine, string? Sponsor,
-    string? LatestActionText, DateOnly? LatestActionDate);
+/// <summary>One bill revision on the issue page, with its headline, cited text version, and published list facts.</summary>
+public sealed record IssueBill(string RecordId, int RevisionNumber, string Headline, string? Label, PublishedTextOrigin TextOrigin,
+    int Congress, string BillType, int BillNumber, string? BillLine, string? TextVersionName, DateOnly? TextVersionDate)
+{
+    public BillListFacts? Facts { get; init; }
+}
