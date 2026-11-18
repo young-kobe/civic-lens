@@ -9,7 +9,7 @@
             @foreach (var brief in Data.Briefs)
             {
                 <PublicRecordRow Icon="PublishedRecordLabels.Icon(PublishedRecordKind.Brief)" Href="@(RootPath + PublicationProtocol.RecordPagePath(brief.RecordId))"
-                                 Headline="@brief.Headline" Label="@brief.Label" Meta="@Meta(brief)" />
+                                 Headline="@brief.Headline" HeadlineOrigin="brief.TextOrigin" Label="@brief.Label" LabelOrigin="brief.TextOrigin" Meta="@Meta(brief)" />
             }
         </ul>
         <Pager Label="Pages" Summary="@($"Page {Data.Page} of {PageCount}")" NewerText="Previous" OlderText="Next"

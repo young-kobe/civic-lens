@@ -649,7 +649,7 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task OnlyAModelBriefHasTheBriefLabelAndTheVoteLabelNeverShowsOnABrief()
+    public async Task TheHomePageReadsTheBriefOriginAndTheJsonKeepsItsExistingBriefFields()
     {
         await using var model = await StartAsync([], briefs: [new SeededBrief('a', "2026-05-04")]);
         await using var person = await StartAsync([], briefs: [new SeededBrief('a', "2026-05-04") { TextOrigin = "Person" }]);
@@ -660,6 +660,17 @@ public sealed class HomeEndpointsTests(PostgresCollection postgres)
         Assert.Equal(PublishedWording.ModelBrief, modelBrief.GetProperty("label").GetString());
         Assert.NotEqual(AiLabelWords.ModelWording, modelBrief.GetProperty("label").GetString());
         Assert.Equal(JsonValueKind.Null, personBrief.GetProperty("label").ValueKind);
+        var expectedFields = new[] { "recordId", "weekStart", "headline", "label" };
+        Assert.Equal(expectedFields, modelBrief.EnumerateObject().Select(property => property.Name));
+        Assert.Equal(expectedFields, personBrief.EnumerateObject().Select(property => property.Name));
+
+        await using var modelViews = NpgsqlDataSource.Create(model.Options.PublicViewsDatabase!);
+        await using var personViews = NpgsqlDataSource.Create(person.Options.PublicViewsDatabase!);
+        var modelPage = await HomeReader(modelViews).ReadAsync(CancellationToken.None);
+        var personPage = await HomeReader(personViews).ReadAsync(CancellationToken.None);
+
+        Assert.Equal(PublishedTextOrigin.Model, modelPage!.Brief!.TextOrigin);
+        Assert.Equal(PublishedTextOrigin.Person, personPage!.Brief!.TextOrigin);
     }
 
     [Fact]

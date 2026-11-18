@@ -175,11 +175,12 @@ public sealed class FixedPageTests(PostgresCollection postgres)
     }
 
     [Fact]
-    public async Task TheBriefsListLinksEachBriefPageNewestWeekFirstWithTheLabelOfTheView()
+    public async Task TheBriefsListLinksTheExactHeadlinesNewestWeekFirstAndExplainsOnlyModelText()
     {
         await using var host = await StartAsync();
-        var older = new SeededBrief('a', "2026-01-05");
-        var newer = new SeededBrief('b', "2026-01-12") { TextOrigin = "Person" };
+        const string headline = "Cloture & <i>éRelease</i>";
+        var older = new SeededBrief('a', "2026-01-05") { Headline = headline };
+        var newer = new SeededBrief('b', "2026-01-12") { Headline = headline, TextOrigin = "Person" };
         await HomeSeed.AddBriefsAsync(host.OperationalDatabase, older, newer);
 
         var (_, page) = await GetAsync(host, PublicationProtocol.BriefsPagePath(1));
@@ -191,6 +192,17 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.Contains("Week of 12 Jan 2026", rows[0].TextContent);
         Assert.DoesNotContain("AI model", rows[0].TextContent);
         Assert.Contains("Drafted by an AI model from reviewed records. A person checked it before publication.", rows[1].TextContent);
+        Assert.Equal("model", rows[1].QuerySelector(".ai-label")!.GetAttribute("data-origin"));
+        Assert.All(rows, row =>
+        {
+            var link = row.QuerySelector("a")!;
+            Assert.Equal(headline, link.QuerySelector("span")!.TextContent);
+            Assert.Empty(link.QuerySelectorAll("button, [popover], i"));
+        });
+        Assert.Empty(rows[0].QuerySelectorAll("button.term"));
+        Assert.Equal("Explain Cloture", Assert.Single(rows[1].QuerySelectorAll("a + button.term-control")).TextContent);
+        Assert.Single(page.QuerySelectorAll("#term-cloture"));
+        Assert.Null(page.QuerySelector("#term-release"));
         Assert.Null(page.QuerySelector(".pager"));
     }
 

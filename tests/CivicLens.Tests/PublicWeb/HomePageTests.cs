@@ -56,7 +56,8 @@ public sealed class HomePageTests
     {
         const string text = "A bill changed the bill. <script>private()</script>";
         const string billLine = "The committee considered the proposal.";
-        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Label = wording, Summary = text, BillLine = billLine }, [], null));
+        const string headline = "Cloture vote";
+        var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Headline = headline, Label = wording, Summary = text, BillLine = billLine }, [], null));
         var summary = page.QuerySelector(".home-featured-summary, .home-featured .ai-summary")!;
         var paragraph = summary.QuerySelector("p");
 
@@ -73,7 +74,10 @@ public sealed class HomePageTests
         if (label is not null)
             AiLabelAssert.IsChip(label, origin == PublishedTextOrigin.Code ? AiLabelWords.CodeChip : AiLabelWords.ModelChip, wording!);
         Assert.Equal(origin == PublishedTextOrigin.Model, summary.ClassList.Contains("ai-summary-ai"));
-        var descriptionId = page.QuerySelector(".home-featured h2")!.GetAttribute("aria-describedby");
+        var heading = page.QuerySelector(".home-featured h2")!;
+        Assert.Equal(headline, heading.QuerySelector("a")!.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model ? "Explain Cloture" : null, page.QuerySelector("#home-featured-title + button.term-control")?.TextContent);
+        var descriptionId = heading.GetAttribute("aria-describedby");
         if (wording is null)
             Assert.Null(descriptionId);
         else
@@ -95,6 +99,53 @@ public sealed class HomePageTests
         Assert.Empty(heading.QuerySelectorAll("button.term, [popover]"));
     }
 
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task LinkedHeadlinesKeepTheirExactTextAndShareFirstUseWithTheSummaryAndManualTerms(PublishedTextOrigin briefOrigin)
+    {
+        const string featuredHeadline = "Café & <i>Substantive vote</i>";
+        const string briefHeadline = "Cloture & <i>éRelease</i>";
+        const string recentHeadline = "A bill, cloture & <i>Amendment</i>";
+        var brief = new HomeBriefData(new string('f', 64), briefHeadline, null, briefOrigin);
+        var featured = Featured with { Headline = featuredHeadline, Summary = "A substantive vote changed the bill." };
+        var votes = RecentVotes(PublishedVoteAlignment.Split);
+        votes[0] = votes[0] with { Headline = "Amendment", TextOrigin = PublishedTextOrigin.Code };
+        votes[1] = votes[1] with { Headline = "Amendment", TextOrigin = PublishedTextOrigin.Person };
+        votes[2] = votes[2] with { Headline = recentHeadline, TextOrigin = PublishedTextOrigin.Model };
+
+        var page = await RenderAsync(new(7, featured, votes, brief));
+
+        var heading = page.QuerySelector("#home-featured-title")!;
+        var briefLine = page.QuerySelector(".home-brief-line")!;
+        var rows = page.QuerySelectorAll(".home-votes .record-row");
+        foreach (var (link, text, recordId) in new[]
+        {
+            (heading.QuerySelector("a")!, featuredHeadline, featured.RecordId),
+            (briefLine.QuerySelector("a")!, briefHeadline, brief.RecordId),
+            (rows[2].QuerySelector("a")!, recentHeadline, votes[2].RecordId)
+        })
+        {
+            Assert.Equal(text, link.QuerySelector("span")?.TextContent ?? link.TextContent);
+            Assert.Equal(Root + PublicationProtocol.RecordPagePath(recordId), link.GetAttribute("href"));
+            Assert.Empty(link.QuerySelectorAll("button, [popover], i"));
+        }
+
+        Assert.Equal("Explain Substantive vote", page.QuerySelector("#home-featured-title + button.term-control")!.TextContent);
+        Assert.Single(page.QuerySelectorAll("button[popovertarget=term-substantive-vote]"));
+        Assert.Equal("bill", page.QuerySelector(".home-featured .ai-summary p button[popovertarget=term-bill]")!.TextContent);
+        Assert.Single(page.QuerySelectorAll("button[popovertarget=term-bill]"));
+        Assert.Empty(page.QuerySelectorAll("#home-recent-title button"));
+        Assert.Equal("Four recent substantive votes", page.QuerySelector("#home-recent-title")!.TextContent);
+        Assert.Empty(rows[0].QuerySelectorAll("button.term"));
+        Assert.Empty(rows[1].QuerySelectorAll("button.term"));
+        Assert.Equal("Explain Amendment", rows[2].QuerySelector("button[popovertarget=term-amendment]")!.TextContent);
+        Assert.Single(page.QuerySelectorAll("button[popovertarget=term-cloture]"));
+        Assert.Equal(briefOrigin == PublishedTextOrigin.Model, briefLine.QuerySelector("a + button[popovertarget=term-cloture]") is not null);
+        Assert.Equal(briefOrigin == PublishedTextOrigin.Person, rows[2].QuerySelector("button[popovertarget=term-cloture]") is not null);
+        Assert.Null(page.QuerySelector("button[popovertarget=term-release]"));
+    }
+
     [Fact]
     public async Task EmptyOptionalSectionsAreOmittedAndABriefIsOneLinkedLine()
     {
@@ -104,7 +155,7 @@ public sealed class HomePageTests
         Assert.Null(empty.QuerySelector(".home-brief-line"));
 
         var id = new string('b', 64);
-        var brief = await RenderAsync(new(7, null, [], new(id, "Published brief", null)));
+        var brief = await RenderAsync(new(7, null, [], new(id, "Published brief", null, PublishedTextOrigin.Person)));
         var line = brief.QuerySelector(".home-brief-line")!;
         Assert.Contains("This week:", line.TextContent);
         Assert.Equal(Root + PublicationProtocol.RecordPagePath(id), line.QuerySelector("a")!.GetAttribute("href"));
@@ -177,7 +228,7 @@ public sealed class HomePageTests
     public async Task TheBriefLeadsTheRecentVotesAndASplitCaptionNamesOnlyThoseFourVotes()
     {
         var votes = RecentVotes(PublishedVoteAlignment.Split);
-        var page = await RenderAsync(new(7, Featured, votes, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief)));
+        var page = await RenderAsync(new(7, Featured, votes, new(new string('f', 64), "Published brief", PublishedWording.ModelBrief, PublishedTextOrigin.Model)));
         var recent = page.QuerySelector(".home-preview-section")!;
         var caption = Assert.Single(recent.QuerySelectorAll(".home-vote-caption"));
 
@@ -525,7 +576,7 @@ public sealed class HomePageTests
         const string briefLabel = "Drafted by an AI model from reviewed records.";
         var page = await RenderAsync(new(7, Featured with { TextOrigin = origin, Label = featuredLabel },
             [.. RecentVotes(PublishedVoteAlignment.Split).Select(vote => vote with { Label = AiLabelWords.ModelWording, TextOrigin = PublishedTextOrigin.Model })],
-            new(new string('b', 64), "This week in Congress", briefLabel)));
+            new(new string('b', 64), "This week in Congress", briefLabel, PublishedTextOrigin.Model)));
 
         AiLabelAssert.DrawnByAiLabel(page, featuredLabel);
         AiLabelAssert.DrawnByAiLabel(page, briefLabel);

@@ -20,7 +20,7 @@ public sealed class HomeStore(NpgsqlDataSource views)
                s.is_featured, s.record_id, s.voted_on, s.chamber, s.congress, s.session_number, s.roll_call_number,
                s.headline, s.label, s.result, s.yea, s.nay, s.bill_type, s.bill_number, s.bill_line, s.summary, s.text_origin, s.alignment,
                s.action_kind, s.action_count, s.newest_record_id, s.newest_title, s.newest_signed_on,
-               s.present, s.not_voting, s.oldest_signed_on
+               s.present, s.not_voting, s.oldest_signed_on, b.text_origin
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN LATERAL (
                SELECT v.record_id FROM public_api.votes v
@@ -102,7 +102,10 @@ public sealed class HomeStore(NpgsqlDataSource views)
             while (await reader.ReadAsync(cancellationToken))
             {
                 release = reader.GetInt32(0);
-                brief ??= reader.IsDBNull(1) ? null : new(reader.GetString(1), reader.GetFieldValue<DateOnly>(2), reader.GetString(3), ViewColumns.Text(reader, 4));
+                brief ??= reader.IsDBNull(1) ? null : new(reader.GetString(1), reader.GetFieldValue<DateOnly>(2), reader.GetString(3), ViewColumns.Text(reader, 4))
+                {
+                    TextOrigin = ViewColumns.Enum<PublishedTextOrigin>(reader, 31)
+                };
                 if (!reader.IsDBNull(23))
                 {
                     executiveActions.Add(new(ViewColumns.Enum<PublishedExecutiveActionKind>(reader, 23), reader.GetInt32(24), reader.GetString(25), reader.GetString(26), reader.GetFieldValue<DateOnly>(27),
