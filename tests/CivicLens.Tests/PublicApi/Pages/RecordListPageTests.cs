@@ -6,6 +6,7 @@ using CivicLens.PublicApi;
 using CivicLens.PublicApi.Bills;
 using CivicLens.PublicApi.ExecutiveActions;
 using CivicLens.PublicApi.Pages;
+using CivicLens.PublicApi.Records;
 using CivicLens.PublicApi.Votes;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
@@ -16,6 +17,7 @@ using CivicLens.Tests.PublicApi.Officials;
 using CivicLens.Tests.PublicApi.Statements;
 using CivicLens.Tests.PublicApi.Votes;
 using CivicLens.Tests.PublicWeb;
+using Npgsql;
 
 namespace CivicLens.Tests.PublicApi.Pages;
 
@@ -351,6 +353,89 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
         Assert.Equal("Showing 3 bills and resolutions on this page.", page.QuerySelector(".list-status")!.TextContent);
         Assert.Equal(["In committee", "Passed the House", "Passed the Senate", "Became law", "Other"],
             page.QuerySelectorAll("select[name=status] option").Skip(1).Select(option => option.TextContent));
+    }
+
+    [Fact]
+    public async Task ModelBillHeadlinesExplainExactTermsBesideTheLinkWithTheDefinitionOfEachBill()
+    {
+        const string firstQuote = "“Bill” means a tax filing.\r\n\U00010400 § <img src=x onerror=alert(1)> & tax.";
+        const string secondQuote = "“Bill” means an invoice.";
+        const string firstHeadline = "bIlL and Bill, \U00010400Amendment, amendment\u0301 and AmEndment";
+        await using var host = await StartAsync();
+        await AddBillsAsync(host,
+            new SeededBill('a', "2026-03-02") { Text = new(100, 100, [("Bill", "Plain tax definition", true, firstQuote)]) },
+            new SeededBill('b', "2026-03-03") { BillNumber = 8, Text = new(100, 100, [("Bill", "Plain invoice definition", false, secondQuote)]) },
+            new SeededBill('c', "2026-03-04") { BillNumber = 9, TextOrigin = "Code" },
+            new SeededBill('d', "2026-03-05") { BillNumber = 10, TextOrigin = "Person" });
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE action_revisions SET headline = CASE record_id
+                WHEN '{BillId('a')}' THEN '{firstHeadline}'
+                ELSE 'Bill and Amendment' END;
+            """);
+
+        var page = await GetPageAsync(host, "/bills.html");
+        var (first, second, code, person) = (Rows(page)[0], Rows(page)[1], Rows(page)[2], Rows(page)[3]);
+        var firstLink = first.QuerySelector("div > a")!;
+        var firstButtons = first.QuerySelectorAll("button.term");
+        Assert.Equal(firstHeadline, firstLink.QuerySelector("span")!.TextContent);
+        Assert.Equal(["Explain bIlL", "Explain AmEndment"], firstButtons.Select(button => button.TextContent));
+        Assert.Equal(Glossary.Term("amendment").PopoverId, firstButtons[1].GetAttribute("popovertarget"));
+        Assert.Same(firstButtons[0], firstLink.NextElementSibling);
+        var secondButton = Assert.Single(second.QuerySelectorAll("button.term"));
+        Assert.Equal("Explain Bill", secondButton.TextContent);
+        Assert.Same(secondButton, second.QuerySelector("div > a")!.NextElementSibling);
+        Assert.All(Rows(page), row => Assert.Empty(row.QuerySelectorAll("a button, button a, button button")));
+        Assert.Empty(code.QuerySelectorAll("button.term"));
+        Assert.Empty(person.QuerySelectorAll("button.term"));
+
+        var firstId = firstButtons[0].GetAttribute("popovertarget")!;
+        var secondId = secondButton.GetAttribute("popovertarget")!;
+        Assert.NotEqual(firstId, secondId);
+        var firstDefinition = page.GetElementById(firstId)!;
+        var secondDefinition = page.GetElementById(secondId)!;
+        Assert.Equal($"\"{firstQuote}\"", firstDefinition.QuerySelector(".quote")!.TextContent);
+        Assert.Equal($"\"{secondQuote}\"", secondDefinition.QuerySelector(".quote")!.TextContent);
+        Assert.Empty(firstDefinition.QuerySelectorAll("img"));
+        Assert.Equal(BillTextWords.KeyTermsLabel, firstDefinition.QuerySelector(".ai-label")!.TextContent);
+        var firstSource = Assert.Single(firstDefinition.QuerySelectorAll("a"));
+        Assert.Equal(CongressGovBillPage.Url(119, "hr", 7), firstSource.GetAttribute("href"));
+        Assert.Equal(BillTextWords.KeyTermCutLink, firstSource.TextContent);
+        var secondSource = Assert.Single(secondDefinition.QuerySelectorAll("a"));
+        Assert.Equal(CongressGovBillPage.Url(119, "hr", 8), secondSource.GetAttribute("href"));
+        Assert.Contains("Introduced in House", secondSource.TextContent);
+    }
+
+    [Fact]
+    public async Task BillListFactsKeepTheExactTermsOfThePageWhenPublicationActivatesAnotherRevision()
+    {
+        const string firstQuote = "“Bill” means an invoice.";
+        await using var host = await StartAsync();
+        var bill = new SeededBill('a', "2026-03-02") { Text = new(100, 100, [("Bill", firstQuote, false, firstQuote)]) };
+        await AddBillsAsync(host, bill);
+        await using var views = NpgsqlDataSource.Create(host.Options.PublicViewsReaderDatabase);
+        var snapshot = new RecordSnapshot(views);
+        var store = new BillStore(views);
+        var (connection, transaction) = await snapshot.OpenAsync(CancellationToken.None);
+        await using var _ = connection;
+        await using var __ = transaction;
+        var original = (await store.ListNewestCongressAsync(transaction, new BillRequest(), CancellationToken.None))!.Page;
+        var originalBill = Assert.Single(original.Bills);
+
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            SET session_replication_role = replica;
+            {PublicActionRows.ActionRevision(bill.RecordId, 2, "Person", bill.EventOn, 0)}
+            {PublicActionRows.ActionSponsorship(bill.RecordId, 2, 0, "p1", "Sponsor", original: true, sponsoredOn: bill.EventOn)}
+            UPDATE publication_record_states SET last_release = 1 WHERE kind = 'action' AND record_id = '{bill.RecordId}';
+            {ViewsSeed.ActivateReleaseSql(2, PublishedAt.AddDays(1), 1)}
+            INSERT INTO publication_record_states (kind, record_id, first_release, revision_number) VALUES ('action', '{bill.RecordId}', 2, 2);
+            """);
+
+        var originalFacts = await store.ReadListFactsAsync(transaction, original.Bills, CancellationToken.None);
+        Assert.Equal(firstQuote, Assert.Single(originalFacts[(originalBill.RecordId, originalBill.RevisionNumber)].KeyTerms).Quote);
+        Assert.Empty(await store.ReadListFactsAsync(transaction, [originalBill with { RevisionNumber = 2 }], CancellationToken.None));
+        var current = (await store.FindAsync(bill.RecordId, CancellationToken.None))!;
+        Assert.Equal(2, current.Bill.RevisionNumber);
+        Assert.Empty(current.KeyTerms);
     }
 
     [Fact]
