@@ -60,6 +60,7 @@
                         @foreach (var vote in Data.Votes)
                         {
                             <PublicRecordRow Icon="IconName.Vote" Href="@(RootPath + PublicationProtocol.RecordPagePath(vote.RecordId))" Headline="@vote.Headline" Label="@vote.Label" LabelOrigin="vote.TextOrigin"
+                                             HeadlineOrigin="vote.TextOrigin"
                                              Meta="@($"{vote.Chamber}, {Moment.Day(vote.VotedOn)}")" Yea="vote.Yea" Nay="vote.Nay" ResultWords="@vote.ResultWords" />
                         }
                     </ul>
@@ -82,6 +83,7 @@
                         @foreach (var bill in Data.Bills)
                         {
                             <PublicRecordRow Icon="IconName.Bill" IconClass="record-row-icon-bill" Href="@(RootPath + PublicationProtocol.RecordPagePath(bill.RecordId))" Headline="@bill.Headline" Label="@bill.Label" LabelOrigin="bill.TextOrigin" Sponsor="@bill.Sponsor"
+                                             HeadlineOrigin="bill.TextOrigin" HeadlineTerms="bill.HeadlineTerms"
                                              Meta="@(BillLatestActionWords.Line(bill.LatestActionText, bill.LatestActionDate, bill.BillType) ?? string.Empty)" BillLine="@bill.BillLine" />
                         }
                     </ul>

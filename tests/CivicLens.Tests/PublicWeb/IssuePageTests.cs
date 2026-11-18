@@ -139,6 +139,24 @@ public sealed class IssuePageTests
     }
 
     [Fact]
+    public async Task ModelVoteHeadlinesShareFirstUseWithTheManualSplitVoteTermAndWrittenHeadlinesStayPlain()
+    {
+        var model = Vote with { Headline = "Split vote on an Amendment", TextOrigin = PublishedTextOrigin.Model };
+        var code = Vote with { RecordId = new string('c', 64), Headline = "Cloture", TextOrigin = PublishedTextOrigin.Code };
+        var person = Vote with { RecordId = new string('d', 64), Headline = "Nomination" };
+        var page = await RenderAsync(Data(votes: [model, code, person], bills: [Bill with { Headline = "Amendment" }]));
+
+        var split = Assert.Single(page.QuerySelectorAll("[data-issue-split] button.term"));
+        Assert.Equal(Glossary.Term("split-vote").PopoverId, split.GetAttribute("popovertarget"));
+        var rows = page.QuerySelectorAll("#votes .record-row");
+        var explain = Assert.Single(rows[0].QuerySelectorAll("button.term"));
+        Assert.Equal("Explain Amendment", explain.TextContent);
+        Assert.Same(explain, rows[0].QuerySelector("div > a")!.NextElementSibling);
+        Assert.All(rows.Skip(1), row => Assert.Empty(row.QuerySelectorAll("button.term")));
+        Assert.Empty(page.QuerySelectorAll("#bills .record-row button.term"));
+    }
+
+    [Fact]
     public async Task ABillKeepsItsPublicAiLabelAsAChipAfterTheLinkAndTheSourceOfItsBillLine()
     {
         var page = await RenderAsync(Data());
