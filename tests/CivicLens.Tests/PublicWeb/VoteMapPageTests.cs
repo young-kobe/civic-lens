@@ -143,9 +143,27 @@ public sealed class VoteMapPageTests
     }
 
     [Fact]
+    public async Task AHouseRollCallUsesTheDistrictPathAndSourceForItsCongress()
+    {
+        var vote = House(Member("o1", "Ada Able", "Aye", "Democrat", "AL", 2));
+        var historical = await RenderPageAsync(vote with { Congress = 118, VotedOn = new(2024, 9, 16) });
+        var current = await RenderPageAsync(vote);
+        var geometry = VoteMapGeometry.ForHouseCongress(118)!;
+
+        Assert.Equal(geometry.ViewBox, historical.QuerySelector(".vote-map-shapes")!.GetAttribute("viewBox"));
+        Assert.Equal(geometry.Districts[("AL", 2)], SeatPath(historical));
+        Assert.NotEqual(SeatPath(current), SeatPath(historical));
+        Assert.Contains("Census Bureau 2023 cartographic boundary file for the 118th Congress", historical.QuerySelector(".vote-map-sources dd")!.TextContent);
+        Assert.Contains("Census Bureau 2024 cartographic boundary file for the 119th Congress", current.QuerySelector(".vote-map-sources dd")!.TextContent);
+        Assert.Equal(435, historical.QuerySelectorAll(".vote-map tbody tr").Length);
+
+        static string? SeatPath(IDocument page) => page.QuerySelector(".vote-map-shapes [data-mark=yes]")!.GetAttribute("d");
+    }
+
+    [Fact]
     public async Task AVoteThatCannotBeMappedShowsTheEmptyStateAndNoMap()
     {
-        var page = await RenderPageAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)) with { Congress = 118 });
+        var page = await RenderPageAsync(House(Member("o1", "Ada Able", "Aye", "Democrat", "MA", 7)) with { Congress = 117 });
 
         Assert.Null(page.QuerySelector(".vote-map"));
         Assert.Equal(VoteMapWords.NoMapTitle, page.QuerySelector(".empty h3")!.TextContent);

@@ -101,7 +101,7 @@
             }
         </defs>
     </svg>
-    <MapFrame IdPrefix="vote-map" Seats="frameSeats" SplitStates="Data.SplitStates" ShapesViewBox="@VoteMapGeometry.ViewBox"
+    <MapFrame IdPrefix="vote-map" Seats="frameSeats" SplitStates="Data.SplitStates" ShapesViewBox="@Data.Geometry.ViewBox"
               ShapesLabel="@Description" TileLayout="@(Compact ? null : Data.Tiles)" TilesLabel="@VoteMapWords.Description(Data.Chamber)" />
     @if (!Compact)
     {
