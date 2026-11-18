@@ -758,6 +758,42 @@ public sealed class RecordListPageTests(PostgresCollection postgres)
     }
 
     [Fact]
+    public async Task ModelStatementHeadlinesExplainTheFirstExactGlossaryMatchBesideTheRecordLink()
+    {
+        const string headline = "Amendments and aMendment & <img src=x>";
+        await using var host = await StartAsync();
+        await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, new SeededOfficial("official-a", "Ann Able"));
+        await AddStatementsAsync(host,
+            new('a', "2026-03-03", ["official-a"], [], "Person", "Person"),
+            new('b', "2026-03-02", ["official-a"], [], "Analysis", "Person"),
+            new('c', "2026-03-01", ["official-a"], [], "Analysis", "Code"),
+            new('d', null, ["official-a"], [], "Analysis", "Code"));
+        var modelId = new string('b', 64);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE statement_revisions SET headline = CASE candidate_id
+                WHEN '{new string('a', 64)}' THEN 'Cloture and Amendment'
+                WHEN '{modelId}' THEN '{headline}'
+                WHEN '{new string('c', 64)}' THEN 'Amendment'
+                ELSE 'Amendment and Motion to proceed' END,
+                author_kind = CASE WHEN candidate_id = '{new string('d', 64)}' THEN 'Code' ELSE author_kind END;
+            """);
+
+        var page = await GetPageAsync(host, "/statements.html");
+        var rows = Rows(page);
+        Assert.Equal(["Cloture and Amendment", headline, "Amendment", "Amendment and Motion to proceed"], Titles(page));
+        var link = rows[1].QuerySelector("div > a")!;
+        Assert.Equal(BaseUrl.Join(PublicationProtocol.RecordPagePath(modelId)), link.GetAttribute("href"));
+        Assert.Empty(link.QuerySelectorAll("img"));
+        var button = Assert.Single(page.QuerySelectorAll(".record-row button.term"));
+        Assert.Same(button, link.NextElementSibling);
+        Assert.Equal("Explain aMendment", button.TextContent);
+        var term = Glossary.Term("amendment");
+        Assert.Equal(term.PopoverId, button.GetAttribute("popovertarget"));
+        var definition = Assert.Single(page.QuerySelectorAll($"[id='{term.PopoverId}']"));
+        Assert.Equal(term.Means, definition.QuerySelector(".term-means")!.TextContent);
+    }
+
+    [Fact]
     public async Task TheStatementListFiltersByATypedOfficialNameIssueAndDateAndShowsEachFilterAsAChip()
     {
         await using var host = await StartAsync();

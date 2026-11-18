@@ -18,8 +18,8 @@
     <Rows>
         @foreach (var statement in Data.Statements)
         {
-            <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline" Label="@statement.Label"
-                             LabelOrigin="statement.TextOrigin" Meta="@Meta(statement)">
+            <PublicRecordRow Icon="IconName.Statements" Href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))" Headline="@statement.Headline"
+                             HeadlineOrigin="statement.TextOrigin" Label="@statement.Label" LabelOrigin="statement.TextOrigin" Meta="@Meta(statement)">
                 @if (statement.LinkedToVote)
                 {
                     <p><StatusBadge Text="Linked to a vote" /></p>
