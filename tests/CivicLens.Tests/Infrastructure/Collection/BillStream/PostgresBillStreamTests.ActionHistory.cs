@@ -308,9 +308,12 @@ public sealed partial class PostgresBillStreamTests
         var responses = new ApiResponseReader(PostgresCollectionAttemptStore.FromConnectionString(connectionString), new CaptureBodyReader());
         var backfill = new BackfillBillActions(store, store, extractions, responses, captureRoot);
 
-        var result = await backfill.ExecuteAsync(new ReviewActor("auth0|owner", ReviewRole.Owner), 10);
+        var owner = new ReviewActor("auth0|owner", ReviewRole.Owner);
+        var result = await backfill.ExecuteAsync(owner, 1);
+        var resumed = await backfill.ExecuteAsync(owner, 1, result.NextCursor);
 
-        Assert.Equal(new BillActionsBackfillResult(1, 1, 0, null), result);
+        Assert.Equal(new BillActionsBackfillResult(1, 1, 0, bill.Detail), result);
+        Assert.Equal(new BillActionsBackfillResult(0, 0, 0, null), resumed);
         Assert.Equal([(0, "Recovered from capture.", bill.Actions)], await ActionPositionsAsync());
         Assert.Equal(1, await ScalarAsync($"SELECT imported_count FROM bill_pages WHERE job_id = '{bill.Actions}'"));
     }

@@ -87,7 +87,7 @@ internal sealed class BillBackfillCommand(BackfillBillActions actions, BackfillB
         _ => null
     };
 
-    private static string ParseCursor(string cursor) => BillStreamJobKeys.IsDetailJobId(cursor)
+    private static string ParseCursor(string cursor) => BackfillBillActions.IsValidCursor(cursor)
         ? cursor
         : throw new ArgumentException(Usage);
 }

@@ -48,10 +48,13 @@ public sealed class BackfillBillActions(IBillActionsBackfillStore store, ICollec
         return new(examined, recorded, failed, nextCursor);
     }
 
+    public static bool IsValidCursor(string? cursor) =>
+        cursor is { Length: 32 } && cursor.All(char.IsAsciiHexDigitLower);
+
     private static void RequireCursor(string? cursor)
     {
         if (cursor is null) return;
-        if (!BillStreamJobKeys.IsDetailJobId(cursor))
+        if (!IsValidCursor(cursor))
             throw new ArgumentException("Bill actions backfill cursor is not valid.", nameof(cursor));
     }
 
