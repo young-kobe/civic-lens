@@ -3,6 +3,7 @@ using AngleSharp.Html.Parser;
 using CivicLens.Application.Analysis;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -124,6 +125,28 @@ public sealed class PublicPageReadingGradeTests
     }
 
     [Fact]
+    public async Task FeaturedModelGradeUsesTheExactWordingWithoutItsGlossaryDefinition()
+    {
+        const string headline = "The House votes to pass the bill";
+        const string summary = "A substantive vote moved the bill to the Senate.";
+        var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3),
+            PublishedChamber.House, headline, AiLabelWords.ModelWording, summary,
+            PublishedTextOrigin.Model, "Passed", 216, 214, null, null);
+        var page = await RenderAsync<HomePage>(new Dictionary<string, object?>
+        {
+            [nameof(HomePage.Data)] = new HomePageData(7, featured, [], null),
+            [nameof(HomePage.RootPath)] = Root
+        });
+
+        var paragraph = Assert.Single(page.QuerySelectorAll(".home-featured .ai-summary-ai > p"));
+        var popover = Assert.Single(paragraph.QuerySelectorAll("#term-substantive-vote[popover]"));
+        Assert.Equal(Glossary.Term("substantive-vote").Means, popover.QuerySelector(".term-means")!.TextContent);
+        Assert.Equal(headline, page.QuerySelector("#home-featured-title")!.ShownText());
+        Assert.Equal(summary, paragraph.ShownText());
+        Assert.Equal(AiTextRules.PassageGrade([headline, summary]), FeaturedModelGrade(page));
+    }
+
+    [Fact]
     public async Task EasyCopyOutsideTheFeaturedModelPassageCannotLowerItsGrade()
     {
         var featured = new HomeFeaturedVoteData(new string('a', 64), new(2026, 3, 3),
@@ -145,6 +168,50 @@ public sealed class PublicPageReadingGradeTests
         Assert.Equal(isolatedGrade, gradeAfterUnrelatedCopy);
         Assert.True(ReadingGrade.Rounded(NormalizeText(modelSection)) <= AiTextRules.MaximumGrade,
             "The whole section can hide a difficult model passage behind unrelated easy text.");
+    }
+
+    [Fact]
+    public async Task ExecutiveModelGradeUsesOnlyTheSummarySentencesAndLeavesTheQuotesExact()
+    {
+        (string Sentence, string Quote)[] wording =
+        [
+            ("The order calls for a proclamation to mark the new office.", "A proclamation shall mark the establishment of the new office."),
+            ("The agency must open the office within 30 days.", "The agency shall open the office within 30 days of this order.")
+        ];
+        var source = new PublishedDocumentVersion
+        {
+            ExtractionId = "body",
+            Url = "https://example.gov/executive-order",
+            ObservedAtUtc = new(2026, 10, 30, 15, 4, 0, TimeSpan.Zero),
+            Text = string.Join('\n', wording.Select(part => part.Quote))
+        };
+        var sentences = wording.Select(part => new PublishedExecutiveSentence
+        {
+            Sentence = part.Sentence,
+            Citation = new()
+            {
+                ExtractionId = source.ExtractionId,
+                Start = source.Text.IndexOf(part.Quote, StringComparison.Ordinal),
+                Length = part.Quote.Length,
+                Quote = part.Quote
+            }
+        }).ToArray();
+        var data = DetailPageFixture.Action() with
+        {
+            Headline = "Order on opening a new office",
+            Summary = new(PublishedTextOrigin.Model, ExecutiveSummaryWords.Label, true, sentences, source)
+        };
+        var page = await DetailPageFixture.RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(data);
+
+        var summary = Assert.Single(page.QuerySelectorAll(".ai-summary-ai"));
+        Assert.Single(summary.QuerySelectorAll("#term-proclamation[popover]"));
+        Assert.Contains(ExecutiveSummaryWords.CutNote, summary.TextContent);
+        var passage = page.QuerySelectorAll(".ai-summary-ai > p:not([class])").Select(paragraph => paragraph.ShownText()).ToArray();
+        Assert.Equal(wording.Select(part => part.Sentence), passage);
+        var grade = AiTextRules.PassageGrade(passage);
+        Assert.True(grade <= AiTextRules.MaximumGrade, $"The executive summary reads at grade {ReadingGrade.Format(grade)}.");
+        Assert.Equal(wording.Select(part => part.Quote), page.QuerySelectorAll(".executive-quotes blockquote").Select(quote => quote.TextContent));
+        Assert.Empty(page.QuerySelectorAll(".executive-quotes [popover]"));
     }
 
     private static readonly string[] BlockTags = ["P", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "FIGCAPTION", "CAPTION", "SUMMARY", "DD", "DT", "LABEL", "LEGEND", "TD", "TH"];
@@ -490,7 +557,9 @@ public sealed class PublicPageReadingGradeTests
         var headline = Assert.Single(modelSection.QuerySelectorAll("h2"));
         var summaryContainer = Assert.Single(modelSection.QuerySelectorAll(".ai-summary.ai-summary-ai"));
         var summary = Assert.Single(summaryContainer.QuerySelectorAll("p"));
-        return PassageGrade(headline, summary);
+        var pieces = new[] { headline.ShownText(), summary.ShownText() };
+        Assert.All(pieces, piece => Assert.NotEmpty(piece));
+        return AiTextRules.PassageGrade(pieces);
     }
 
     private static double PassageGrade(IElement heading, IElement body)
