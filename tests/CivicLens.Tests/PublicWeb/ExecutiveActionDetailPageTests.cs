@@ -149,7 +149,9 @@ public sealed class ExecutiveActionDetailPageTests
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithSummary(cut: false));
 
-        var quotes = page.QuerySelector("#source .executive-quotes")!;
+        var fold = page.QuerySelector("details#source")!;
+        var quotes = fold.QuerySelector(".executive-quotes")!;
+        Assert.Same(fold, quotes.Closest("details"));
         Assert.Equal(ExecutiveActionWords.QuotesHeading, quotes.QuerySelector("h3")!.TextContent);
         Assert.Equal(["The order tells agencies to act.", "Each agency reports in 30 days."], quotes.QuerySelectorAll(".choice-label").Select(label => label.TextContent));
         Assert.Equal(["Each agency shall act on this order.", "Each agency shall report within 30 days."], quotes.QuerySelectorAll("blockquote").Select(quote => quote.TextContent));
@@ -171,12 +173,22 @@ public sealed class ExecutiveActionDetailPageTests
     {
         var page = await RenderAsync<ExecutiveActionDetailPage, ExecutiveActionPageData>(WithFacts());
 
-        var fold = page.QuerySelector("#source")!;
+        var fold = Assert.Single(page.QuerySelectorAll("details#source"));
+        Assert.Equal("Check the source", fold.QuerySelector("summary")!.TextContent);
+        Assert.False(fold.HasAttribute("open"));
         Assert.Null(fold.QuerySelector(".executive-quotes"));
         Assert.Contains("91 FR 66627", fold.QuerySelectorAll("dd").First(value => value.PreviousElementSibling!.TextContent == "Federal Register citation").TextContent);
+        var savedFold = Assert.Single(fold.QuerySelectorAll("details.source-fold"));
+        Assert.False(savedFold.HasAttribute("open"));
+        Assert.Equal("Source text 1 of 1", savedFold.QuerySelector("summary")!.TextContent);
+        Assert.Contains(FactsSource.Url, savedFold.QuerySelector("p")!.TextContent);
+        var savedText = Assert.Single(savedFold.QuerySelectorAll(".doc-text"));
+        Assert.Equal("Source text 1 of 1", savedText.GetAttribute("aria-label"));
+        Assert.Equal(FactsText, savedText.TextContent);
         var links = fold.QuerySelectorAll("a.source-line");
         Assert.Equal(3, links.Length);
-        var marked = links.Select(link => fold.QuerySelector(link.GetAttribute("href")!)!.TextContent).ToArray();
+        Assert.All(links, link => Assert.Same(fold, link.Closest("details")));
+        var marked = links.Select(link => savedText.QuerySelector("mark" + link.GetAttribute("href"))!.TextContent).ToArray();
         Assert.Equal(["Federal Register document: 2026-21599", "Signed: 2026-10-16", "Citation: 91 FR 66627"], marked);
         Assert.Equal(["Signed", "2026-10-16"], [links[1].Closest("dd")!.PreviousElementSibling!.TextContent, links[1].Closest("dd")!.FirstChild!.TextContent.Trim()]);
     }

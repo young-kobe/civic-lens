@@ -92,8 +92,9 @@ public sealed class DocumentChangeDetailPageTests
 
         Assert.Contains("The source gives the change date as 15 Oct 2026.", page.QuerySelector("#change-when-title")!.ParentElement!.TextContent);
         Assert.DoesNotContain("We do not know", page.QuerySelector("#change-when-title")!.ParentElement!.TextContent);
-        Assert.NotNull(page.QuerySelector("#later-version ~ .doc-text mark[id=cite-change-date]"));
+        Assert.NotNull(page.QuerySelector("#source details.source-fold #later-version ~ .doc-text mark[id=cite-change-date]"));
         Assert.Contains("Evidence for the actual change date, later version", page.QuerySelector("#source")!.TextContent);
+        Assert.Contains("photo Show in the full version", page.QuerySelector("#source li.small")!.TextContent);
     }
 
     [Fact]
@@ -162,9 +163,22 @@ public sealed class DocumentChangeDetailPageTests
     {
         var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(Change());
 
-        Assert.Equal(["Earlier version text", "Later version text"], page.QuerySelectorAll("#source .doc-text").Select(text => text.GetAttribute("aria-label")));
-        Assert.Equal(BeforeText, page.QuerySelectorAll("#source .doc-text")[0].TextContent);
-        Assert.Equal(["tour", "three"], page.QuerySelectorAll("#source .doc-text mark").Select(mark => mark.TextContent));
+        var fold = Assert.Single(page.QuerySelectorAll("details#source"));
+        Assert.Equal("Check the source", fold.QuerySelector("summary")!.TextContent);
+        Assert.False(fold.HasAttribute("open"));
+        var versions = fold.QuerySelectorAll("details.source-fold");
+        Assert.Equal(["Earlier version text", "Later version text"], versions.Select(version => version.QuerySelector("summary")!.TextContent));
+        var versionLinks = page.QuerySelectorAll(".detail-versions a");
+        Assert.Equal(["#earlier-version", "#later-version"], versionLinks.Select(link => link.GetAttribute("href")));
+        foreach (var (version, link) in versions.Zip(versionLinks))
+        {
+            Assert.False(version.HasAttribute("open"));
+            var target = page.QuerySelector(link.GetAttribute("href")!)!;
+            Assert.Same(version, target.Closest("details"));
+            Assert.Equal(version.QuerySelector("summary")!.TextContent, version.QuerySelector(".doc-text")!.GetAttribute("aria-label"));
+        }
+        Assert.Equal([BeforeText, AfterText], fold.QuerySelectorAll("details.source-fold .doc-text").Select(text => text.TextContent));
+        Assert.Equal(["tour", "three"], fold.QuerySelectorAll("details.source-fold .doc-text mark").Select(mark => mark.TextContent));
         Assert.Equal(["#cite-1", "#cite-2"], page.QuerySelectorAll("#source .choices a").Select(link => link.GetAttribute("href")!).ToArray());
         Assert.Equal("Example Agency changed its visitor policy page", page.QuerySelector(".public-breadcrumbs [aria-current=page]")!.TextContent);
         Assert.NotNull(Assert.Single(page.QuerySelectorAll("a[href*='report']")).Closest(".public-footer"));

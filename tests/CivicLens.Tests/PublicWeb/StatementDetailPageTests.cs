@@ -31,7 +31,9 @@ public sealed class StatementDetailPageTests
         var summary = page.QuerySelector(".ai-summary")!;
         Assert.Null(page.QuerySelector(".ai-summary-ai"));
         Assert.Equal(AiLabelWords.StatementSourceTextWording, summary.QuerySelector(".ai-label")!.TextContent);
-        Assert.Equal(StatementText, summary.QuerySelector(".doc-text")!.TextContent);
+        var savedText = summary.QuerySelector(".doc-text")!;
+        Assert.Equal(StatementText, savedText.TextContent);
+        Assert.Null(savedText.Closest("details"));
         Assert.Equal(["First quote.", "Second quote.", "Third quote.", "Fourth quote."], summary.QuerySelectorAll("mark").Select(mark => mark.TextContent));
         Assert.Equal(1, page.QuerySelectorAll("[id='cite-1']").Length);
         Assert.Null(page.QuerySelector("#source .doc-text"));
@@ -45,7 +47,15 @@ public sealed class StatementDetailPageTests
 
         Assert.Equal("A model wrote this <b>summary</b>.", page.QuerySelector(".ai-summary-ai p")!.TextContent);
         Assert.Null(page.QuerySelector(".ai-summary .doc-text"));
-        Assert.Equal(StatementText, page.QuerySelector("#source .doc-text")!.TextContent);
+        var fold = Assert.Single(page.QuerySelectorAll("details#source"));
+        Assert.Equal("Check the source", fold.QuerySelector("summary")!.TextContent);
+        Assert.False(fold.HasAttribute("open"));
+        var savedFold = Assert.Single(fold.QuerySelectorAll("details.source-fold"));
+        Assert.False(savedFold.HasAttribute("open"));
+        Assert.Equal("Source text", savedFold.QuerySelector("summary")!.TextContent);
+        var savedText = Assert.Single(savedFold.QuerySelectorAll(".doc-text"));
+        Assert.Equal("Source text", savedText.GetAttribute("aria-label"));
+        Assert.Equal(StatementText, savedText.TextContent);
     }
 
     [Fact]
@@ -266,9 +276,9 @@ public sealed class StatementDetailPageTests
         var allQuotes = page.QuerySelector(".detail-section > p a")!;
         Assert.Equal("See all 4 quotes in the source fold", allQuotes.TextContent);
         Assert.Equal("#source", allQuotes.GetAttribute("href"));
-        var marked = page.QuerySelectorAll("#source mark").Select(mark => mark.TextContent).ToArray();
-        Assert.Equal(["First quote.", "Second quote.", "Third quote.", "Fourth quote.", "Friday"], marked);
-        Assert.Equal(["cite-1", "cite-2", "cite-3", "cite-4", StatementPageView.DateEvidenceAnchor], page.QuerySelectorAll("#source mark").Select(mark => mark.Id!).ToArray());
+        var marked = page.QuerySelectorAll("#source details.source-fold .doc-text mark");
+        Assert.Equal(["First quote.", "Second quote.", "Third quote.", "Fourth quote.", "Friday"], marked.Select(mark => mark.TextContent));
+        Assert.Equal(["cite-1", "cite-2", "cite-3", "cite-4", StatementPageView.DateEvidenceAnchor], marked.Select(mark => mark.Id!));
     }
 
     [Theory]

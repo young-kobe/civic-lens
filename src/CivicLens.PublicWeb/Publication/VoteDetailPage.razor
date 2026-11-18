@@ -255,8 +255,11 @@
                     @for (var index = 0; index < Data.Sources.Length; index++)
                     {
                         var source = Data.Sources[index];
-                        <VersionSource Version="source" Linked="false" />
-                        <DocumentText Label="@($"Source text {index + 1} of {Data.Sources.Length}")" Runs="CitedText.Split(source.Text, anchors.RangesIn(source))" />
+                        var sourceLabel = $"Source text {index + 1} of {Data.Sources.Length}";
+                        <SourceFold Summary="@sourceLabel" FoldId="@((string?)null)">
+                            <VersionSource Version="source" Linked="false" />
+                            <DocumentText Label="@sourceLabel" Runs="CitedText.Split(source.Text, anchors.RangesIn(source))" />
+                        </SourceFold>
                     }
                 </SourceFold>
             </aside>
