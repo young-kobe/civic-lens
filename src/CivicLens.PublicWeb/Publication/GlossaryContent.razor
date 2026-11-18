@@ -1,0 +1,8 @@
+@ChildContent(Use)
+
+@code {
+    [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
+
+    /// <summary>Renders glossary terms in content order at the depth of this component.</summary>
+    [Parameter, EditorRequired] public RenderFragment<GlossaryPageUse> ChildContent { get; set; } = default!;
+}

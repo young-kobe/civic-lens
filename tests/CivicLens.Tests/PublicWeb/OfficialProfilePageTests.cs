@@ -184,6 +184,64 @@ public sealed class OfficialProfilePageTests
     }
 
     [Theory]
+    [InlineData(PublishedTextOrigin.Model, PublishedTextOrigin.Code)]
+    [InlineData(PublishedTextOrigin.Person, PublishedTextOrigin.Model)]
+    [InlineData(PublishedTextOrigin.Code, PublishedTextOrigin.Person)]
+    [InlineData(PublishedTextOrigin.Model, null)]
+    [InlineData(null, PublishedTextOrigin.Model)]
+    public async Task EachLinkedHeadlineUsesItsOwnOriginAndKeepsItsExactLink(PublishedTextOrigin? origin, PublishedTextOrigin? voteOrigin)
+    {
+        const string headline = "A bIlL for the subcommittee <img src=x>";
+        const string voteHeadline = "An Amendment & another amendment";
+        var data = Member();
+        var statement = data.Statements[0] with
+        {
+            Headline = headline,
+            TextOrigin = origin,
+            VoteHeadline = voteHeadline,
+            VoteTextOrigin = voteOrigin
+        };
+        var page = await RenderAsync<OfficialProfilePage>(data with { Statements = [statement] });
+        var row = page.QuerySelector("#statements .official-rows > li")!;
+        var title = row.QuerySelector("a.official-row-title")!;
+        var relatedVote = row.QuerySelector(".official-related > a")!;
+
+        Assert.Equal((Root + PublicationProtocol.RecordPagePath(StatementId), headline), (title.GetAttribute("href"), title.TextContent));
+        Assert.Equal((Root + PublicationProtocol.RecordPagePath(VoteId), "House roll call 308, 16 Sep 2026: " + voteHeadline),
+            (relatedVote.GetAttribute("href"), relatedVote.TextContent));
+        Assert.Empty(row.QuerySelectorAll("a button, img"));
+        Assert.Contains(voteHeadline + " ", row.QuerySelector(".official-related")!.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Model ? "Explain bIlL" : null, row.QuerySelector("a.official-row-title + .term-control")?.TextContent);
+        Assert.Equal(voteOrigin == PublishedTextOrigin.Model ? "Explain Amendment" : null, row.QuerySelector(".official-related > a + .term-control")?.TextContent);
+        Assert.Equal(new[] { origin, voteOrigin }.Count(value => value == PublishedTextOrigin.Model), row.QuerySelectorAll(".term-control").Length);
+    }
+
+    [Fact]
+    public async Task ThePartyFigureAndTheEarlierLinkedRowKeepFirstUseOfTheirTerms()
+    {
+        var data = Member();
+        var first = data.Statements[0] with
+        {
+            Headline = "A split vote on an amendment",
+            TextOrigin = PublishedTextOrigin.Model,
+            VoteHeadline = "A plain headline",
+            VoteTextOrigin = PublishedTextOrigin.Model
+        };
+        var second = first with
+        {
+            RecordId = new string('9', 64),
+            Headline = "Nay on an Amendment"
+        };
+        var page = await RenderAsync<OfficialProfilePage>(data with { Statements = [first, second] });
+        var rows = page.QuerySelectorAll("#statements .official-rows > li");
+
+        Assert.NotNull(page.QuerySelector(".official-figs button[popovertarget=term-split-vote]"));
+        Assert.NotNull(rows[0].QuerySelector(".shared-vote-cast-value button[popovertarget=term-nay]"));
+        Assert.Equal("Explain amendment", Assert.Single(rows[0].QuerySelectorAll("button.term-control")).TextContent);
+        Assert.Empty(rows[1].QuerySelectorAll("button.term"));
+    }
+
+    [Theory]
     [InlineData(PublishedApprover.Code, "Code checked this link")]
     [InlineData(PublishedApprover.Person, "A reviewer checked this link")]
     [InlineData(null, null)]

@@ -1,15 +1,14 @@
-@if (PublishedRecordLabels.CastTermKey(Cast) is { } key)
-{
-    <Term Key="@key">@Text</Term>
-}
-else
-{
-    @Text
-}
+@Render(Use, Cast, ChildContent)
 
 @code {
+    [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
+
     [Parameter, EditorRequired] public string Cast { get; set; } = string.Empty;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private RenderFragment Text => ChildContent ?? (builder => builder.AddContent(0, PlainVoteWords.Cast(Cast)));
+    internal static RenderFragment Render(GlossaryPageUse use, string cast, RenderFragment? content = null)
+    {
+        content ??= builder => builder.AddContent(0, PlainVoteWords.Cast(cast));
+        return PublishedRecordLabels.CastTermKey(cast) is { } key ? Term.Render(use, key, content) : content;
+    }
 }

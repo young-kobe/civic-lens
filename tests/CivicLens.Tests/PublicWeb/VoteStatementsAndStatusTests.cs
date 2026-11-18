@@ -19,6 +19,59 @@ public sealed class VoteStatementsAndStatusTests
         AiLabelAssert.DrawnByAiLabel(page, AiLabelWords.StatementModelWording);
     }
 
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model, "Explain aMendment")]
+    [InlineData(PublishedTextOrigin.Code, null)]
+    [InlineData(PublishedTextOrigin.Person, null)]
+    public async Task TheStatementHeadlineKeepsItsExactLinkAndOnlyModelWordingGetsAControl(PublishedTextOrigin origin, string? control)
+    {
+        const string headline = "An aMendment for the subcommittee & <img src=x>";
+        var statement = Statement("a", PublishedApprover.Code, ("o1", "Ada Able")) with
+        {
+            Headline = headline,
+            TextOrigin = origin
+        };
+        var page = await RenderAsync(Vote() with { Statements = [statement], StatementTotal = 1 });
+        var row = page.QuerySelector(".vote-statements .official-rows > li")!;
+        var link = row.QuerySelector("a.official-row-title")!;
+
+        Assert.Equal(Root + PublicationProtocol.RecordPagePath(statement.RecordId), link.GetAttribute("href"));
+        Assert.Equal(headline, link.TextContent);
+        Assert.Empty(row.QuerySelectorAll("a button, img"));
+        Assert.Equal(control, row.QuerySelector("a.official-row-title + .term-control")?.TextContent);
+        Assert.Equal(control is null ? 0 : 1, row.QuerySelectorAll(".term-control").Length);
+    }
+
+    [Fact]
+    public async Task LinkedStatementsShareFirstUseWithTheVoteKindSummaryCastsAndCorrection()
+    {
+        var first = Statement("a", PublishedApprover.Person, ("o2", "Ben Baker"), ("o5", "Ed Eaton")) with
+        {
+            Headline = "Passage of the bill and Correction (by us)",
+            TextOrigin = PublishedTextOrigin.Model
+        };
+        var second = Statement("b", PublishedApprover.Person) with
+        {
+            Headline = "Nay, not voting, and Correction (by us)",
+            TextOrigin = PublishedTextOrigin.Model
+        };
+        var page = await RenderAsync(Vote() with
+        {
+            Statements = [first, second],
+            StatementTotal = 2,
+            Corrections = PublishedCorrectionListTests.History
+        });
+        var rows = page.QuerySelectorAll(".vote-statements .official-rows > li");
+
+        Assert.NotNull(page.QuerySelector(".vote-meta button[popovertarget=term-passage]"));
+        Assert.NotNull(page.QuerySelector(".vote-head .ai-summary button[popovertarget=term-bill]"));
+        Assert.NotNull(rows[0].QuerySelector(".shared-vote-cast-value button[popovertarget=term-nay]"));
+        Assert.NotNull(rows[0].QuerySelector(".shared-vote-cast-value button[popovertarget=term-not-voting]"));
+        Assert.Equal("Explain Correction (by us)", Assert.Single(rows[0].QuerySelectorAll("button.term-control")).TextContent);
+        Assert.Empty(rows[1].QuerySelectorAll("button.term-control"));
+        Assert.Empty(page.QuerySelectorAll(".corrections button.term"));
+    }
+
     [Fact]
     public async Task NoLinkedStatementShowsNoSection()
     {
@@ -71,6 +124,7 @@ public sealed class VoteStatementsAndStatusTests
         var speakers = row.QuerySelectorAll(".official-meta .vote-statement-speaker");
         Assert.Equal(2, speakers.Length);
         Assert.Contains("Cast on this vote", speakers[0].TextContent);
+        Assert.Contains(VotePageView.CastOnThisVote + " Yes", speakers[0].TextContent);
         Assert.StartsWith("Yes", speakers[0].QuerySelector(".shared-vote-cast-value")!.TextContent.Trim());
         Assert.DoesNotContain("Cast on this vote", speakers[1].TextContent);
         Assert.Equal(1, Count(row.TextContent, "Cast on this vote"));
