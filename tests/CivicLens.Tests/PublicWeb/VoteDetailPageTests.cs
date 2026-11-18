@@ -468,6 +468,26 @@ public sealed class VoteDetailPageTests
         Assert.Empty(page.QuerySelectorAll(".corrections button.term"));
     }
 
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model)]
+    [InlineData(PublishedTextOrigin.Code)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task TheHeadlineSharesFirstUseWithTheEarlierVoteKindAndLaterSummary(PublishedTextOrigin origin)
+    {
+        const string headline = "Passage of the bill";
+        const string summary = "The bill passed.";
+        var page = await RenderAsync(Vote() with { TextOrigin = origin, Headline = headline, Summary = summary });
+
+        var heading = page.QuerySelector("h1")!;
+        Assert.Equal(headline, heading.ShownText());
+        Assert.NotNull(page.QuerySelector(".vote-meta button[popovertarget=term-passage]"));
+        Assert.Single(page.QuerySelectorAll("#term-passage"));
+        Assert.Null(heading.QuerySelector("button[popovertarget=term-passage]"));
+        Assert.Equal(origin == PublishedTextOrigin.Model ? "bill" : null, heading.QuerySelector("button[popovertarget=term-bill]")?.TextContent);
+        Assert.Equal(origin == PublishedTextOrigin.Code ? null : summary, page.QuerySelector(".ai-summary p")?.ShownText());
+        Assert.Empty(page.QuerySelectorAll(".ai-summary button[popovertarget=term-bill]"));
+    }
+
     private static int Position(AngleSharp.Dom.IDocument page, string selector) =>
         page.QuerySelector(selector) is { } element ? page.All.ToList().IndexOf(element) : -1;
 

@@ -282,6 +282,8 @@ body.public > main { flex: 1 0 auto; }
 
 .term { padding: 0; border: 0; border-bottom: 1px dotted currentColor; background: none; color: inherit; font: inherit; cursor: help; }
 .term-control { min-height: 44px; max-inline-size: calc(100% - var(--s2)); padding-inline: var(--s2); margin-inline-end: var(--s2); overflow-wrap: anywhere; text-align: start; }
+.detail-headline .term, .vote-headline .term { min-block-size: 44px; min-inline-size: 44px; }
+.detail-headline .term-popover, .vote-headline .term-popover { font: 400 var(--t-sm)/1.55 var(--ui); letter-spacing: normal; text-wrap: wrap; }
 .term-popover { font-weight: 400; width: min(32rem, calc(100vw - 32px)); padding: var(--s4); border: 1px solid var(--line-strong); border-radius: var(--r-panel); background: var(--surface); color: var(--ink); font-size: var(--t-sm); }
 @supports not selector(:popover-open) { .term-popover, .term-control { display: none; } .term { border-bottom: 0; cursor: text; } }
 .term-popover:popover-open { display: grid; gap: var(--s2); }

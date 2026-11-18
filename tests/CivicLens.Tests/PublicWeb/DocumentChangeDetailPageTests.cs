@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using CivicLens.PublicWeb.Components.Evidence;
 using CivicLens.PublicWeb.Publication;
 using CivicLens.Publication.Contracts;
+using CivicLens.Tests.Fixtures;
 using static CivicLens.Tests.PublicWeb.DetailPageFixture;
 
 namespace CivicLens.Tests.PublicWeb;
@@ -19,6 +20,24 @@ public sealed class DocumentChangeDetailPageTests
         Assert.Equal(name, page.QuerySelector(".ai-summary button.term")?.TextContent);
         Assert.Single(page.QuerySelectorAll("[id=term-correction]"));
         Assert.Empty(page.QuerySelectorAll(".corrections button.term"));
+    }
+
+    [Theory]
+    [InlineData(PublishedTextOrigin.Model)]
+    [InlineData(PublishedTextOrigin.Person)]
+    public async Task TheHeadlineCanExplainACorrectionBeforeTheSummaryAndTheCorrectionHistory(PublishedTextOrigin origin)
+    {
+        const string headline = "Correction (by us) to the visitor policy record";
+        const string summary = "Correction (by us) to the account of the change.";
+        var data = Change(origin) with { Headline = headline, Summary = summary, Corrections = PublishedCorrectionListTests.History };
+        var page = await RenderAsync<DocumentChangeDetailPage, DocumentChangePageData>(data);
+
+        Assert.Equal(headline, page.QuerySelector("h1")!.ShownText());
+        Assert.Equal(summary, page.QuerySelector(".ai-summary p")!.ShownText());
+        Assert.Null(page.QuerySelector(".ai-summary button[popovertarget=term-correction]"));
+        Assert.Single(page.QuerySelectorAll("#term-correction"));
+        var firstUse = origin == PublishedTextOrigin.Model ? "h1" : ".corrections";
+        Assert.NotNull(page.QuerySelector($"{firstUse} button[popovertarget=term-correction]"));
     }
 
     [Fact]

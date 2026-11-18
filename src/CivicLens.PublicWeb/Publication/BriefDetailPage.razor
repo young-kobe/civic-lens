@@ -6,7 +6,7 @@
     <article class="detail">
         <header class="detail-head">
             <p class="detail-eyebrow">@PublishedRecordLabels.Kind(PublishedRecordKind.Brief) | @PublishedBriefView.WeekRange(Data.WeekStart)</p>
-            <h1 class="detail-headline">@Data.Headline</h1>
+            <h1 class="detail-headline"><AiText Text="@Data.Headline" Origin="Data.TextOrigin" /></h1>
             <PublishedUpdateLine Corrections="Data.Corrections" />
         </header>
         <PublishedCorrectionBanner Kind="PublishedRecordKind.Brief" Corrections="Data.Corrections" />
