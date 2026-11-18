@@ -85,50 +85,56 @@
                 }
                 @if (Data.Statements.Length > 0)
                 {
-                    <section class="vote-statements" id="statements" aria-labelledby="vote-statements-title">
-                        <h2 id="vote-statements-title">@VotePageView.StatementsHeading</h2>
-                        @if (VotePageView.StatementsIntro(Data) is { } intro)
-                        {
-                            <p>@intro</p>
-                        }
-                        <div class="vote-note">
-                            <p class="vote-note-tag">@VotePageView.StatementsNoteTag</p>
-                            <p>@VotePageView.StatementsNote</p>
-                        </div>
-                        @if (VotePageView.StatementsCount(Data) is { } count)
-                        {
-                            <p class="muted small">@count</p>
-                        }
-                        <ul class="official-rows" role="list">
-                            @foreach (var statement in Data.Statements)
+                    <GlossaryContent Context="use">
+                        <section class="vote-statements" id="statements" aria-labelledby="vote-statements-title">
+                            <h2 id="vote-statements-title">@VotePageView.StatementsHeading</h2>
+                            @if (VotePageView.StatementsIntro(Data) is { } intro)
                             {
-                                <li>
-                                    <div>
-                                        <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
-                                        <AiLabel Text="@statement.Label" Origin="statement.TextOrigin" />
-                                        <p class="official-meta">
-                                            @foreach (var speaker in statement.Speakers)
-                                            {
-                                                <span class="vote-statement-speaker">
-                                                    <a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a>
-                                                    @if (Data.Members.FirstOrDefault(member => member.OfficialId == speaker.OfficialId) is { } member)
-                                                    {
-                                                        <span>@VotePageView.CastOnThisVote</span>
-                                                        <SharedVoteCast Side="@PublishedOfficialVote.SideOf(member.Cast)"><CastWord Cast="@member.Cast" /></SharedVoteCast>
-                                                    }
-                                                </span>
-                                            }
-                                            <span>@StatementPageView.RowDate(statement.StatementDate)</span>
-                                        </p>
-                                        @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
-                                        {
-                                            <p class="official-related"><span class="link-checker">@checker</span></p>
-                                        }
-                                    </div>
-                                </li>
+                                <p>@intro</p>
                             }
-                        </ul>
-                    </section>
+                            <div class="vote-note">
+                                <p class="vote-note-tag">@VotePageView.StatementsNoteTag</p>
+                                <p>@VotePageView.StatementsNote</p>
+                            </div>
+                            @if (VotePageView.StatementsCount(Data) is { } count)
+                            {
+                                <p class="muted small">@count</p>
+                            }
+                            <ul class="official-rows" role="list">
+                                @foreach (var statement in Data.Statements)
+                                {
+                                    <li>
+                                        <div>
+                                            <a class="official-row-title" href="@(RootPath + PublicationProtocol.RecordPagePath(statement.RecordId))">@statement.Headline</a>
+                                            @if (statement.TextOrigin == PublishedTextOrigin.Model)
+                                            {
+                                                @AiText.RenderControls(use, statement.Headline)
+                                            }
+                                            <AiLabel Text="@statement.Label" Origin="statement.TextOrigin" />
+                                            <p class="official-meta">
+                                                @foreach (var speaker in statement.Speakers)
+                                                {
+                                                    <span class="vote-statement-speaker">
+                                                        <a href="@(RootPath + PublicationProtocol.OfficialPagePath(speaker.OfficialId))">@speaker.Name</a>
+                                                        @if (Data.Members.FirstOrDefault(member => member.OfficialId == speaker.OfficialId) is { } member)
+                                                        {
+                                                            <span>@VotePageView.CastOnThisVote</span>@(" ")
+                                                            @SharedVoteCast.Render(PublishedOfficialVote.SideOf(member.Cast), CastWord.Render(use, member.Cast))
+                                                        }
+                                                    </span>
+                                                }
+                                                <span>@StatementPageView.RowDate(statement.StatementDate)</span>
+                                            </p>
+                                            @if (PublishedRecordLabels.LinkChecker(statement.LinkApprover) is { } checker)
+                                            {
+                                                <p class="official-related"><span class="link-checker">@checker</span></p>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+                    </GlossaryContent>
                 }
                 @if (breakers.Count > 0)
                 {
