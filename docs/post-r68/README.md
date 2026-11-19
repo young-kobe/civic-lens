@@ -17,6 +17,7 @@ The owner approved this direction. The phases below propose work after R-68. Exi
 | Run on November 18, 2026 | Result and repeatable materials |
 |---|---|
 | [Published graph on two House bills](experiments/published-graph.md) | In release 1416, 338 sponsorships produced 56,281 member pairs. The same common backer appeared in SQL and NetworkX. [Query](experiments/published-graph.sql) and [analysis](experiments/project-sponsors.py). |
+| [Clustering bill provisions across bills](experiments/section-clusters.md) | Clustered 876 sections in eight editions. Closely worded insulin provisions grouped together in all nine standard runs. A related refueling grant and credit stayed apart. |
 | [Issue mapping across legislative subjects](experiments/issue-mapping.md) | Tested statement-to-provision retrieval and topic candidates on four bill editions. Verified four roll-call questions and seven selected casts. |
 | [Veterans claims backlog at two cutoffs](experiments/va-backlog.md) | VA's inauguration-day count gives a 72.07% decline by Oct 10 and 69.95% by Nov 7. Two weekly baselines also cross the threshold. [Workbook calculation](experiments/va-backlog.py). |
 

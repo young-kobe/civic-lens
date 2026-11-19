@@ -1,0 +1,57 @@
+{
+  "additional_bills": {
+    "117hr6833eh": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-117hr6833eh/xml/BILLS-117hr6833eh.xml",
+      "sha256": "a324fba3b3232df3129c4fae5cbca0544a8b782650614ee60eb32fe70bd4f146"
+    },
+    "117hr3684enr": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-117hr3684enr/xml/BILLS-117hr3684enr.xml",
+      "sha256": "6248d904729c0e4d1a98133fc6c4e56435a94c2b234344e559346864f27a7d82"
+    },
+    "118s3696es": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-118s3696es/xml/BILLS-118s3696es.xml",
+      "sha256": "38e1d0e1d63db1424ed37ac9e3b61e4fa10bc734f17709c252cb17149c584618"
+    },
+    "118hr2eh": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-118hr2eh/xml/BILLS-118hr2eh.xml",
+      "sha256": "86def29e61ba25b9d63891c425276fd7d30fa998158977b2e563796d1e43364e"
+    }
+  },
+  "probes": [
+    {
+      "description": "Medicare Part D insulin cost sharing",
+      "anchor": "117hr5376enr/11406",
+      "comparison": "117hr6833eh/3"
+    },
+    {
+      "description": "Intimate digital images, criminal and civil remedies",
+      "anchor": "119s146enr/2",
+      "comparison": "118s3696es/3"
+    },
+    {
+      "description": "Immigration detention, different populations",
+      "anchor": "119s5enr/2",
+      "comparison": "118hr2eh/401"
+    },
+    {
+      "description": "Refueling infrastructure, credit and grant",
+      "anchor": "117hr5376enr/13404",
+      "comparison": "117hr3684enr/11401"
+    },
+    {
+      "description": "Insulin scope control, Medicare and private insurance",
+      "anchor": "117hr5376enr/11406",
+      "comparison": "117hr6833eh/2"
+    },
+    {
+      "description": "Drafting control, two severability clauses",
+      "anchor": "119s146enr/5",
+      "comparison": "118s3696es/4"
+    },
+    {
+      "description": "Numbering control, Medicare and streets",
+      "anchor": "117hr5376enr/11406",
+      "comparison": "117hr3684enr/11406"
+    }
+  ]
+}

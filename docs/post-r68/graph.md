@@ -22,6 +22,8 @@ Use nodes for identifiable, versioned evidence and edges for a specific predicat
 | Apache AGE or a dedicated Neo4j read model | Variable-length path workloads if measured SQL becomes hard to maintain or too slow | AGE adds an extension and compatibility work. A separate store adds synchronization, recovery and withdrawal checks. Measure import, memory, query latency, freshness and rebuild time using an offline copy. [Apache AGE](https://age.apache.org/) and [Neo4j memory estimates](https://neo4j.com/docs/graph-data-science/current/common-usage/memory-estimation/). |
 | Graph-assisted retrieval and GraphRAG | Entity-centered search or broad questions across many documents | Entity resolution can merge people, programs or bills incorrectly. Generated community summaries add cost and another source of error. Require exact source paths and measure benefit over text retrieval. [GraphRAG research](https://arxiv.org/abs/2404.16130) and [local search design](https://microsoft.github.io/graphrag/query/local_search/). |
 
+The [bill-section clustering pilot](experiments/section-clusters.md) compares K-means groups with direct text neighbors. It found cross-bill matches and groups driven by amendment wording. Keep a reader's path to the source even when a cluster suggests the connection.
+
 ## Next experiments
 
 1. Use the [cross-issue baseline](experiments/issue-mapping.md) to identify failure modes. Freeze a separate release and questions across issue families for the comparison. Include ambiguous names, absent evidence, procedural votes and evidence published after the cutoff. Annotate acceptable sources and sufficient evidence sets. Preserve questions with no gold path.
