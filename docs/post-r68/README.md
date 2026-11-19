@@ -16,6 +16,7 @@ The owner approved this direction. The phases below propose work after R-68. Exi
 
 | Run on November 18, 2026 | Result and repeatable materials |
 |---|---|
+| [Five linked-evidence trials](experiments/evidence-trials/results.md) | Tested quote retrieval, provision continuity, charging delivery and coalition recurrence. Exercised all reader form assignments at two widths. Human comprehension remains unmeasured. |
 | [Published graph on two House bills](experiments/published-graph.md) | In release 1416, 338 sponsorships produced 56,281 member pairs. The same common backer appeared in SQL and NetworkX. [Query](experiments/published-graph.sql) and [analysis](experiments/project-sponsors.py). |
 | [Clustering bill provisions across bills](experiments/section-clusters.md) | Clustered 876 sections in eight editions. Closely worded insulin provisions grouped together in all nine standard runs. A related refueling grant and credit stayed apart. |
 | [Amendment or motion versus final passage](experiments/paired-votes.md) | Of senators casting Yea or Nay on both questions, 7 of 100 cast different votes in the insulin case and 9 of 95 in the immigration case. |

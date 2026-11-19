@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Civic Lens reader study</title>
+<style>
+:root{font:100%/1.55 system-ui,sans-serif;color:#17342d;background:#fafaf4}
+body{max-width:68ch;margin:auto;padding:clamp(1rem,5vw,3.5rem)}
+h1,h2{line-height:1.2} label,textarea,select{display:block} label{margin:1em 0 .3em}
+button,select,textarea{font:inherit} button,select{padding:.45em .85em}
+button{margin-top:1.2rem;background:#20483d;color:white;border:0;border-radius:.4rem}
+textarea{box-sizing:border-box;width:100%;min-height:5em} :focus-visible{outline:3px solid #a65314;outline-offset:3px}
+article{padding:.6em 1em;margin:.8em 0;background:white;border:1px solid #a2b4aa}
+article h3{margin:.2em 0} article p{margin:.4em 0} .timeline{border-left:3px solid #417e66;padding-left:.9em}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
+</style>
+<main>
+<h1>Civic Lens reader study</h1>
+<section id="start">
+<p>You will read two short cases. Use only the records shown. You can answer “unknown.” Responses and time spent stay on this page until you share them with the study organizer.</p>
+<label for="form">Assigned form</label><select id="form"><option>A</option><option>B</option><option>C</option><option>D</option></select>
+<button id="begin">Begin</button></section>
+<section id="task" hidden>
+<h2 id="title" tabindex="-1"></h2><p id="cutoff"></p><h3 id="layout"></h3><div id="records"></div>
+<form id="answers"><label id="prompt" for="reply"></label><textarea id="reply" required></textarea>
+<label for="confidence">How confident are you?</label><select id="confidence" required><option value="">Choose one</option><option>Low</option><option>Medium</option><option>High</option></select>
+<button id="advance" type="submit">Continue</button></form></section>
+<section id="finish" hidden><h2 tabindex="-1">Your responses</h2><p>Copy the text below to share it. Include no identifying information.</p><pre id="summary"></pre></section>
+</main>
+<script>
+const cases = {
+  vote: {
+    title: "Two Senate decisions", date: "Consider events dated through January 20, 2025.",
+    question: "How did Senator Baldwin vote on the amendment and on final passage? What do the records establish about her reasons? Cite the records you used.",
+    records: [
+      ["January 15, 2025", "Senate roll call 3", "The Cornyn amendment expanded the list of offenses subject to mandatory detention in S. 5. The amendment passed. Senator Tammy Baldwin voted Yea."],
+      ["January 20, 2025", "Senate roll call 7", "The Senate passed S. 5 as amended. Senator Tammy Baldwin voted Nay."]
+    ]
+  },
+  grant: {
+    title: "A charging project in Deerfield", date: "Consider events dated through July 9, 2024.",
+    question: "What did the federal government commit, and do these records establish that a charging site had opened by the cutoff? Cite the records you used.",
+    records: [
+      ["November 15, 2021", "Public Law 117-58, section 11401", "Congress established a grant program for charging and fueling infrastructure."],
+      ["July 9, 2024", "Federal award 693JJ32440370, new award transaction", "The Federal Highway Administration obligated $2,462,612.09 for the Town of Deerfield's public-access electric vehicle charging project."]
+    ]
+  }
+};
+const forms = {
+  A: [["vote","records"],["grant","timeline"]],
+  B: [["vote","timeline"],["grant","records"]],
+  C: [["grant","records"],["vote","timeline"]],
+  D: [["grant","timeline"],["vote","records"]]
+};
+const el = id => document.getElementById(id);
+let step = 0, started;
+const responses = [];
+function showTask() {
+  const [key, layout] = forms[el("form").value][step];
+  const item = cases[key];
+  el("title").textContent = item.title;
+  el("cutoff").textContent = item.date;
+  el("prompt").textContent = item.question;
+  el("layout").textContent = layout === "timeline" ? "Timeline" : "Records";
+  const container = el("records");
+  container.replaceChildren();
+  container.className = layout;
+  const entries = layout === "timeline" ? item.records : [...item.records].reverse();
+  for (const [date, label, body] of entries) {
+    const card = document.createElement("article");
+    for (const [tag, value] of [["h3",label],["small",date],["p",body]]) {
+      const node = document.createElement(tag);
+      node.textContent = value;
+      card.append(node);
+    }
+    container.append(card);
+  }
+  el("answers").reset();
+  el("advance").textContent = step === 0 ? "Continue" : "Finish";
+  el("title").focus();
+  started = performance.now();
+}
+el("begin").addEventListener("click", () => {
+  el("start").hidden = true;
+  el("task").hidden = false;
+  showTask();
+});
+el("reply").addEventListener("input", () => el("reply").setCustomValidity(""));
+el("answers").addEventListener("submit", event => {
+  event.preventDefault();
+  const answer = el("reply").value.trim();
+  if (!answer) {
+    el("reply").setCustomValidity("Enter an answer or write unknown.");
+    el("reply").reportValidity();
+    return;
+  }
+  const assignment = el("form").value;
+  responses.push({form:assignment, task:forms[assignment][step], seconds:Math.round((performance.now()-started)/1000),
+    answer, confidence:el("confidence").value});
+  if (++step < 2) return showTask();
+  el("task").hidden = true;
+  el("finish").hidden = false;
+  el("summary").textContent = JSON.stringify(responses, null, 2);
+  el("finish").querySelector("h2").focus();
+});
+</script>
+</html>
