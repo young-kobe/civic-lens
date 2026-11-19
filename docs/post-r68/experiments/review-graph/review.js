@@ -25,12 +25,32 @@ const decisions = new Map();
 const drafts = new Map();
 
 function showCase() {
-    const key = document.querySelector("#case").value;
+    const params = new URLSearchParams(location.hash.slice(1));
+    const requested = params.get("case");
+    const key = Object.hasOwn(cases, requested) ? requested : "deadline";
+    const section = params.get("section");
+    document.querySelector(".skip").hash = "case=" + key + "&section=top";
+    for (const link of rail.querySelectorAll("[data-section]")) {
+        link.hash = "case=" + key + "&section=" + link.dataset.section;
+    }
+    if (key === showCase.active) {
+        markReviewPath(key, section);
+        focusSection(section);
+        return;
+    }
+    showCase.active = key;
+    document.querySelector("h1").textContent =
+        key === "deadline" ? "Platform removal deadline" : "Impact on victims";
+    document.querySelector(".summary").textContent =
+        key === "deadline"
+            ? "Rep. Madeleine Dean described a 48-hour removal deadline after the House passed S. 146."
+            : "Sen. Ted Cruz described an effect on victims after the House passed S. 146.";
+    markReviewPath(key, section);
     const item = cases[key];
     const claim = {
         kind: "Statement",
         title: item.title,
-        meta: item.speaker,
+        meta: item.speaker + " · April 28, 2025",
         excerpt: item.excerpt,
         detail: "The office release attributes this statement to " + item.speaker + ".",
         source: statementSource,
@@ -64,6 +84,20 @@ function showCase() {
         contextLabel: "member cast",
         decisionPanel: () => decisionPanel(binding),
     });
+    focusSection(section);
+}
+function markReviewPath(key, section) {
+    const current = ["sources", "evidence"].includes(section)
+        ? rail.querySelector('li [data-section="' + section + '"]')
+        : rail.querySelector('[data-case="' + key + '"]');
+    for (const link of rail.querySelectorAll("li a")) {
+        if (link === current) link.setAttribute("aria-current", "location");
+        else link.removeAttribute("aria-current");
+    }
+}
+function focusSection(section) {
+    if (["top", "evidence", "sources"].includes(section)) document.getElementById(section).focus();
+    updatePath();
 }
 
 function decisionPanel(binding) {
@@ -110,5 +144,9 @@ function decisionPanel(binding) {
     note.addEventListener("input", () => note.setCustomValidity(""));
     return panel;
 }
-document.querySelector("#case").addEventListener("change", showCase);
+rail.addEventListener("click", (event) => {
+    const link = event.target.closest("[data-section]");
+    if (link && link.hash === location.hash) focusSection(link.dataset.section);
+});
+window.addEventListener("hashchange", showCase);
 showCase();

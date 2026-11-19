@@ -29,6 +29,12 @@ const sourceNodes = {
     vote: {
         kind: "Roll call",
         title: "House roll 104",
+        tally: [
+            { label: "Yea", count: 409 },
+            { label: "Nay", count: 2 },
+            { label: "Present", count: 0 },
+            { label: "Not voting", count: 22 },
+        ],
         meta: "April 28, 2025",
         source: voteSource,
         detail: "On Motion to Suspend the Rules and Pass. The House passed S. 146 with 409 yeas and 2 nays. The roll call covers the whole bill.",
@@ -51,6 +57,7 @@ const sourceEdges = [
     },
     {
         id: "measure",
+        title: "House passage of S. 146",
         from: "vote",
         to: "bill",
         verb: "voted on",

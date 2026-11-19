@@ -1,12 +1,32 @@
 // Presentation only. Each entry point supplies the graph it is allowed to display.
+const compactEvidence = matchMedia("(max-width: 760px)");
+function orderPanes() {
+    const work = document.querySelector(".work");
+    const map = work.querySelector(".map-pane"),
+        sources = work.querySelector(".inspector");
+    const reading = work.querySelector(".reading"),
+        active = document.activeElement;
+    if (compactEvidence.matches) {
+        if (work.firstElementChild !== sources) work.prepend(sources);
+        if (work.lastElementChild !== map) work.append(map);
+    } else {
+        if (reading && work.firstElementChild !== reading) work.prepend(reading);
+        if (sources.previousElementSibling !== map) work.insertBefore(map, sources);
+        const decision = work.querySelector(".decision");
+        if (decision && work.lastElementChild !== decision) work.append(decision);
+    }
+    if (active.isConnected && active !== document.activeElement) active.focus({ preventScroll: true });
+}
+compactEvidence.addEventListener("change", orderPanes);
+
 function mountEvidence(options) {
     const host = document.getElementById("workspace");
     const { nodes, edges, core, slots } = options;
     let selected = options.first,
         expanded = false;
-    let mode = matchMedia("(max-width: 680px)").matches ? "list" : "map";
+    let mode = compactEvidence.matches ? "list" : "map";
     host.innerHTML =
-        '<div class="work"><section class="map-pane"><div class="pane-head"><h2></h2><div class="switch" role="group" aria-label="Evidence display"><button type="button" data-mode="map">Map</button><button type="button" data-mode="list">List</button></div></div><div class="surface"></div><div class="foot"><span class="counts"></span><button class="related" type="button"></button></div></section><aside class="inspector" aria-label="Selected evidence"></aside></div><p class="sr" role="status"></p>';
+        '<div class="work"><section class="map-pane" id="evidence" tabindex="-1"><div class="pane-head"><h2></h2><div class="switch" role="group" aria-label="Evidence display"><button type="button" data-mode="map">Map</button><button type="button" data-mode="list">List</button></div></div><div class="surface"></div><div class="foot"><span class="counts"></span><button class="related" type="button"></button></div></section><aside id="sources" tabindex="-1" class="inspector" aria-label="Selected evidence"></aside></div><p class="sr" role="status"></p>';
     const surface = host.querySelector(".surface"),
         inspector = host.querySelector(".inspector");
     const toggle = host.querySelector(".related");
@@ -19,11 +39,12 @@ function mountEvidence(options) {
         return el;
     }
 
-    function pick(id) {
+    function pick(id, notify = true, focusOnMobile = true) {
         selected = id;
+        if (notify) options.onSelection?.(id);
         highlight();
         showDetails();
-        if (matchMedia("(max-width: 680px)").matches) inspector.querySelector("h2").focus();
+        if (focusOnMobile && compactEvidence.matches) inspector.querySelector("h2").focus();
         host.querySelector(".sr").textContent =
             "Evidence details updated. " + inspector.querySelector("h2").textContent;
     }
@@ -58,7 +79,7 @@ function mountEvidence(options) {
             const n = nodes[id],
                 button = selectButton(id, "node", n.kind + " · " + n.title);
             const kind = element("span", "kind");
-            kind.append(element("i", "mark"), document.createTextNode(n.kind));
+            kind.append(icon(recordIcons[n.kind]), document.createTextNode(n.kind));
             button.dataset.kind = n.kind;
             button.append(kind, element("strong", "", n.title), element("span", "meta", n.meta));
             if (mode === "map") place(button, ...slots[id]);
@@ -83,8 +104,7 @@ function mountEvidence(options) {
         }
         surface.append(map);
         const switches = host.querySelectorAll("[data-mode]");
-        for (const button of switches)
-            button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+        for (const button of switches) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
         toggle.textContent = (expanded ? "Hide " : "Show ") + options.contextLabel;
         toggle.setAttribute("aria-expanded", String(expanded));
         host.querySelector(".counts").textContent = visible.length + " records · " + links.length + " links";
@@ -101,6 +121,25 @@ function mountEvidence(options) {
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.setAttribute("aria-label", n.source.name + ", " + n.title + ", opens in a new tab");
+        if (n.tally) {
+            const total = n.tally.reduce((sum, entry) => sum + entry.count, 0);
+            const chart = element("figure", "tally");
+            chart.append(element("figcaption", "", "House vote on passage · " + total + " members"));
+            const bar = element("div", "vote-bar"),
+                key = element("ul", "vote-key");
+            bar.setAttribute("aria-hidden", "true");
+            for (const { label, count } of n.tally) {
+                const segment = element("span"),
+                    entry = element("li");
+                segment.dataset.vote = entry.dataset.vote = label;
+                segment.style.flexGrow = String(count);
+                entry.append(element("span", "", label), element("strong", "", String(count)));
+                bar.append(segment);
+                key.append(entry);
+            }
+            chart.append(bar, key);
+            box.append(chart);
+        }
         box.append(link);
         return box;
     }
@@ -123,6 +162,7 @@ function mountEvidence(options) {
                 "",
                 edge
                     ? edge.question ||
+                          edge.title ||
                           nodes[edge.from].title + " · " + edge.verb + " · " + nodes[edge.to].title
                     : item.title,
             ),
@@ -148,8 +188,7 @@ function mountEvidence(options) {
         browse.type = "button";
         browse.onclick = () => host.querySelector("[data-mode][aria-pressed=true]").focus();
         inspector.append(browse);
-        if (edge?.proposed && options.decisionPanel)
-            host.querySelector(".work").append(options.decisionPanel());
+        if (edge?.proposed && options.decisionPanel) host.querySelector(".work").append(options.decisionPanel());
         else if (options.decisionPanel) {
             const back = element("button", "back", "Return to proposed link");
             back.type = "button";
@@ -159,6 +198,7 @@ function mountEvidence(options) {
             };
             inspector.append(back);
         }
+        orderPanes();
     }
     for (const b of host.querySelectorAll("[data-mode]"))
         b.onclick = () => {
@@ -168,13 +208,23 @@ function mountEvidence(options) {
     toggle.onclick = () => {
         expanded = !expanded;
         const edge = edges.find((e) => e.id === selected);
-        if (
-            !expanded &&
-            (edge ? !core.includes(edge.from) || !core.includes(edge.to) : !core.includes(selected))
-        )
+        if (!expanded && (edge ? !core.includes(edge.from) || !core.includes(edge.to) : !core.includes(selected)))
             pick(options.first);
         renderGraph();
     };
+    function openSelection(id, notify = true, focus = true) {
+        const edge = edges.find((e) => e.id === id);
+        if (!Object.hasOwn(nodes, id) && !edge) return;
+        const required = edge ? [edge.from, edge.to] : [id];
+        if (!expanded && required.some((key) => !core.includes(key))) {
+            expanded = true;
+            renderGraph();
+        }
+        pick(id, notify, focus);
+        if (focus) inspector.querySelector("h2").focus();
+    }
+    setupFinder(nodes, openSelection);
     renderGraph();
     showDetails();
+    return { openSelection };
 }

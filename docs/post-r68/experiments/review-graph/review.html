@@ -1,13 +1,129 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review a connection · Civic Lens</title><link rel="stylesheet" href="graph.css"></head>
-<body>
-<header class="mast"><b class="brand">Civic Lens</b><span>Review workspace</span><span class="local">Local prototype</span></header>
-<main>
-  <div class="heading"><div><h1>Review a connection</h1><p>TAKE IT DOWN Act <span> / </span> 119th Congress <span> / </span> April 28, 2025</p></div>
-    <label class="case">Review case<select id="case"><option value="deadline">Platform removal deadline</option><option value="impact">Impact on victims</option></select></label></div>
-  <div id="workspace"></div>
-  <noscript>Enable JavaScript to inspect this local prototype. The cited bill text and vote are available from GovInfo and the House Clerk.</noscript>
-</main>
-<script src="facts.js"></script><script src="graph.js"></script><script src="review.js"></script>
-</body></html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Review workspace · Civic Lens</title>
+        <link rel="stylesheet" href="graph.css" />
+        <noscript
+            ><style>
+                #find,
+                #nav-open,
+                .rail nav {
+                    display: none;
+                }
+            </style></noscript
+        >
+    </head>
+    <body>
+        <a class="skip" href="#top">Skip to the evidence</a>
+        <div class="frame">
+            <aside class="rail" id="rail">
+                <div class="rail-head">
+                    <a class="brand" data-section="top" href="#top"
+                        ><svg viewBox="0 0 38 34" fill="none" aria-hidden="true">
+                            <circle cx="15" cy="15" r="12" stroke="currentColor" stroke-width="3" />
+                            <path d="M24 24 34 32M15 7v16M7 15h16" stroke="currentColor" stroke-width="3" /></svg
+                        ><span>Civic Lens</span></a
+                    ><button id="nav-close" class="drawer-close" type="button" aria-label="Close navigation">
+                        <i data-icon="close"></i>
+                    </button>
+                </div>
+                <nav aria-label="Review workspace">
+                    <section class="nav-group">
+                        <div class="nav-parent">
+                            <a data-section="top" href="#top"><i data-icon="review"></i>Review queue</a
+                            ><button
+                                type="button"
+                                class="chevron"
+                                aria-label="Toggle Review queue"
+                                aria-expanded="true"
+                                aria-controls="queue"
+                            ></button>
+                        </div>
+                        <ul id="queue">
+                            <li><a href="#case=deadline" data-case="deadline">Removal deadline</a></li>
+                            <li><a href="#case=impact" data-case="impact">Impact on victims</a></li>
+                        </ul>
+                    </section>
+                    <section class="nav-group">
+                        <div class="nav-parent">
+                            <a data-section="evidence" href="#evidence"><i data-icon="links"></i>Case evidence</a
+                            ><button
+                                type="button"
+                                class="chevron"
+                                aria-label="Toggle Case evidence"
+                                aria-expanded="true"
+                                aria-controls="evidence-nav"
+                            ></button>
+                        </div>
+                        <ul id="evidence-nav">
+                            <li><a data-section="evidence" href="#evidence">Evidence map</a></li>
+                            <li><a data-section="sources" href="#sources">Source detail</a></li>
+                        </ul>
+                    </section>
+                </nav>
+                <div class="rail-foot">Local review prototype</div>
+            </aside>
+            <dialog id="drawer" aria-label="Navigation"></dialog>
+            <div class="content">
+                <header class="topbar">
+                    <button
+                        id="nav-open"
+                        class="tool"
+                        type="button"
+                        aria-label="Open navigation"
+                        aria-haspopup="dialog"
+                    >
+                        <i data-icon="menu"></i>
+                    </button>
+                    <div class="trail">
+                        <strong>Review workspace</strong><span class="crumb-leaf" aria-hidden="true">/</span
+                        ><span class="crumb-leaf">Relationships</span>
+                    </div>
+                    <button id="find" class="finder-open" type="button" aria-haspopup="dialog">
+                        <i data-icon="search"></i>Find a record <kbd>/</kbd>
+                    </button>
+                </header>
+                <main id="top" tabindex="-1">
+                    <div class="heading">
+                        <div>
+                            <h1>Platform removal deadline</h1>
+                            <p class="summary">
+                                Compare the statement, the statutory deadline and the question put to the House.
+                            </p>
+                            <p class="context">
+                                <span>S. 146</span><span>119th Congress</span
+                                ><time datetime="2025-04-28">April 28, 2025</time>
+                            </p>
+                        </div>
+                    </div>
+                    <div id="workspace"></div>
+                    <noscript
+                        ><p>
+                            The House passed S. 146 on April 28, 2025.
+                            <a href="https://clerk.house.gov/Votes/2025104">Read the roll call</a>. Enable
+                            JavaScript for the interactive evidence.
+                        </p></noscript
+                    >
+                </main>
+            </div>
+        </div>
+        <dialog id="finder" aria-labelledby="find-heading">
+            <div class="find-head">
+                <h2 id="find-heading">Find a record</h2>
+                <button type="button" class="tool" data-close>Close</button>
+            </div>
+            <label class="query"
+                ><i data-icon="search"></i><span class="sr">Search this evidence</span
+                ><input type="search" placeholder="Search by title, person or record type" autocomplete="off"
+            /></label>
+            <p class="result-count" role="status"></p>
+            <div class="hits"></div>
+        </dialog>
+        <script src="facts.js"></script>
+        <script src="shell.js"></script>
+        <script src="graph.js"></script>
+        <script src="review.js"></script>
+    </body>
+</html>
