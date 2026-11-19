@@ -2,7 +2,7 @@
 
 Civic Lens should let a citizen follow a public claim through a decision to a measured outcome. Start with a question that matters to the reader. Give each answer a date, an accountable actor, and a short path to the original evidence.
 
-The owner approved this direction and the [R-68 closure scope](../roadmap.md#active-r-68-redesign). An isolated private reviewer pilot can proceed independently of production recovery. R-68 resumes on the owner’s explicit instruction. The remaining phases are proposed build-out. Existing [roadmap items](../roadmap.md#accepted-plans) retain their dependencies. The [architecture reference](../architecture.md) describes shipped behavior. Move accepted behavior into its feature reference as each phase ships.
+The R-68 agent owns [closeout of the deployed redesign](../roadmap.md#active-r-68-redesign), including recovery, rollout and verification. The fresh agent can run the private evidence pilot independently on frozen data. The remaining phases are proposed build-out. Existing [roadmap items](../roadmap.md#accepted-plans) retain their dependencies. The [architecture reference](../architecture.md) describes shipped behavior. Move accepted behavior into its feature reference as each phase ships.
 
 | Phase | Deliverable | Evidence for moving forward |
 |---|---|---|
@@ -12,11 +12,11 @@ The owner approved this direction and the [R-68 closure scope](../roadmap.md#act
 | 3. [Reader experience](reader.md) | Issue timelines, a changing homepage and a collapsible left navigation | New readers can explain what happened, find their member's part, and distinguish a verified fact from an open question. |
 | 4. [Frontend delivery](delivery.md) | One independently deployable issue route using the published API | A shell survives an unavailable API. Deep links, withdrawals, privacy and release consistency pass the route trial. |
 
-The [evidence interface proposal](evidence-interface.md) explains which new reader features can share existing joins and which need additional classified evidence. Its offline example exercises two reader views and a poll question on the same issue IDs.
+The [evidence interface](evidence-interface.md) shows which reader questions can use existing joins and which need additional classified evidence. The next phase will keep JSON authoring, store each public issue definition once per version and bind each release to its membership, definition versions and counts. The private pilot can use the current published views before that migration.
 
 ## First assignment for the next phase
 
-Start a fresh branch from current main. Read the [claims workflow](claims.md#proposed-workflow-and-ownership), [relationship review](../architecture/statements.md#relationship-drafting), [evaluation plan](evaluation.md) and [trial results](experiments/evidence-trials/results.md). Use a frozen published release and pinned source documents in development. The R-68 owner retains the production recovery and rollout.
+Start a fresh branch from current main. Read the [claims workflow](claims.md#proposed-workflow-and-ownership), [relationship review](../architecture/statements.md#relationship-drafting), [evaluation plan](evaluation.md) and [trial results](experiments/evidence-trials/results.md). Use a frozen published release and pinned source documents in development.
 
 Build one private review flow. Put the attributed quotation and its date beside the exact bill edition and passage, the roll-call question, and the member's recorded cast when one exists. Let the reviewer accept or reject the proposed link or record insufficient evidence. Bind that decision to the evidence revisions so a second reviewer can reproduce it. Start with the existing relationship-drafting and review handlers. Bring any required schema or public-contract choice to the owner using those handlers as the precedent.
 
