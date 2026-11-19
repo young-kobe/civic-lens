@@ -18,6 +18,8 @@ This page holds the design rules and the plan for the reader flows. [Publication
 
 Status note: the owner accepted Mosaic v2 on 2026-11-06 and reaffirmed it on 2026-11-15. The palette, type foundation, focus colors, and reduced-motion behavior are implemented. PublicApi serves every reader page at its public path since cutover. Home shows the featured vote, recent votes, optional brief, issue counts, executive actions, and chamber freshness. Its data bento includes the vote map, party bars, and break board. The publisher writes data only. Each row below says what is implemented and what is planned. Final reader-flow and live verification remain open.
 
+Three outstanding visual acceptance items move to the next UI phase under the [R-68 closure scope](../roadmap.md#active-r-68-redesign). They cover the flat header and native Menu, Bills and Votes placement in primary navigation, and the featured-vote presentation on Home. The descriptions of these surfaces record the deployed behavior. Functional, accessibility, privacy, evidence, and release verification still apply.
+
 ## Decisions
 
 ### Theme
@@ -430,7 +432,7 @@ Shared primitives have one owner each, in `src/CivicLens.PublicWeb/Components/Ui
 
 | Component | Pages | Reader question | Data source | Status |
 |---|---|---|---|---|
-| Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Partial. `PublicPage` shows site navigation at 1280 px and wider, and a native Menu sheet below that width. The same current links appear in both forms. Header search stays visible at every width. The header links to Officials, Issues, Votes, Bills, Statements, Executive actions, Compare parties, and Search. The Search link shows only below 1280 px, in the Menu sheet. The kind links go to the list pages on every page. The old all records list is outside the header. Every page names its section once through the required `Section` parameter of `PublicPage`; the same value marks the header and starts the breadcrumb trail |
+| Site header, split nav, header search | All | Where can I go? | Fixed links, search service | Deployed. Functional and accessibility verification remains in R-68. `PublicPage` shows site navigation at 1280 px and wider, and a native Menu sheet below that width. The same current links appear in both forms. Header search stays visible at every width. The header links to Officials, Issues, Votes, Bills, Statements, Executive actions, Compare parties, and Search. The Search link shows only below 1280 px, in the Menu sheet. The kind links go to the list pages on every page. The old all records list is outside the header. Every page names its section once through the required `Section` parameter of `PublicPage`; the same value marks the header and starts the breadcrumb trail |
 | Freshness line | All | How current is this? | `active_release`, newest `votes.voted_on` per chamber | Implemented. The `PublicPage` shell shows the newest published roll call date of each chamber on every server page |
 | ZIP form and notices | Home | Who represents me? | `zip_districts`, `officials` | Implemented: visible busy state, answer scroll and focus, and error recovery |
 | Featured vote tile | Home | What did Congress just decide? | `votes` | Implemented in the preview: published summary, wording label, result, counts, a compact map with a link to the full map, and party bars |

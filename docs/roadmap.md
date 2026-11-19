@@ -6,7 +6,7 @@ This page holds the active plan and remaining backlog. Merged code, deployed beh
 
 Civic Lens is deployed and past its MVP and first deployment. Work now improves the running product through reviewed, tested iterations.
 
-R-68 is the active priority. It includes the complete public redesign, its data dependencies, and verification. `PublicApi` serves every public page, and the publisher writes data only. The other items below remain the product backlog, not first-deploy gates.
+R-68 is the active priority. It closes the evidence, production, and reader obligations for the deployed redesign under the scope below. `PublicApi` serves every public page, and the publisher writes data only. The other items below remain the product backlog.
 
 Current capabilities and ownership are in [architecture](architecture.md). Deployment, backups, recovery, and live checks are in [operations](operations.md).
 
@@ -16,11 +16,13 @@ Each item gives its outcome, dependencies, and design reference. Surface new arc
 
 ### Active R-68 redesign
 
-R-68 serves every public page from `PublicApi`, rendered from restricted `public_api` views. Typed tables own each fact. JSON files stop carrying data into the public serving path. Cloudflare caches public HTML for each release; ZIP results remain private fragments. The plan includes every approved component-audit change and DR1 through DR10 in [public site](architecture/public-site.md#decisions).
+R-68 serves every public page from `PublicApi`, rendered from restricted `public_api` views. Typed tables own each fact. JSON files stop carrying data into the public serving path. Cloudflare caches public HTML for each release. ZIP results remain private fragments. The [public site reference](architecture/public-site.md#decisions) describes the deployed design and the accepted reader flows.
 
 The restricted views, typed read APIs, shared Razor library, page cache, Home preview, and private ZIP cards and shared votes are merged. APIs also serve CRS bodies, bill histories, statement and document-change evidence, briefs, withdrawals, official figures, and party agreement. Their exact contracts are in [search](architecture/search.md#api) and [publication](architecture/publication.md#public-api-views). A merged API does not complete its reader page or live rollout.
 
 PublicApi serves every public page at its public path since cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Production correction history, tally, line-up, vote-bill, and official record-count checks have passed. Repeated aggregation and late filtering account for part of the measured ZIP query cost. Cold reads and larger selections still need measurement after the query changes reach production.
+
+The owner approved the R-68 closure scope on November 19, 2026. The next UI phase owns the outstanding visual decisions for the flat header and native Menu, the placement of Bills and Votes in primary navigation, and the featured-vote presentation on Home. Only outstanding visual acceptance for those three choices is superseded. R-68 retains public routes and permalinks, the serving stack, navigation and Home functionality, keyboard and mobile use, accessibility, private ZIP handling, evidence accuracy, and release consistency on those surfaces.
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
@@ -42,10 +44,10 @@ Return-visit features are parked and are not part of R-68.
 
 Complete these gates before closing R-68.
 
-- [ ] Close the full public-site audit in [public site](architecture/public-site.md): reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria. The source audit and decisions are available in the local audit evidence; keep the remaining evidence gates open until verified. Check the executive body experience against the accepted design, source flow, approved glossary text, "Get this data" links on published-data tables, grade, accessibility, keyboard and mobile use, privacy, and the paged source APIs. Unit tests alone do not complete owner criteria.
+- [ ] Reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria against the approved scope. Split mixed audit items so each retained requirement has evidence and each transferred visual choice has an explicit disposition. Use the [public site reference](architecture/public-site.md) and the existing local audit evidence. Check the executive body experience against the accepted design, source flow, approved glossary text, "Get this data" links on published-data tables, grade, accessibility, keyboard and mobile use, privacy, and the paged source APIs. Owner criteria also require evidence beyond unit tests.
 - [ ] Measure cold reads, traffic, query work, and worker effects on the shared database. Close the open Home cold-read timeout and verify larger ZIP selections. Warm generated-data probes do not establish cold production performance.
 - [ ] Complete remaining R-68 deployments under the [runbook](operations.md#production-runbook). Require matching artifacts and images, fresh backups, functional and privacy checks, and worker health. After the final rollout and conversions, verify corrections, tallies, and line-ups for the selected release and retained rollback releases. Verify Cloudflare compression and caching, with private fragments excluded from shared caches. Run the final live check last.
-- [ ] Run the final source, data, privacy, reader-flow, and design audit. Remove unused code and temporary migration rules. Reconcile the roadmap.
+- [ ] Run the final source, data, privacy, reader-flow, and design audit for the retained scope. Remove unused code and temporary migration rules. Record the deployed commit, verified release and retained rollback releases, recovery endpoint, and evidence for the retained gates. Keep R-68 open until the retained gates pass, then reconcile the roadmap and affected architecture references.
 
 ### Accepted plans
 
