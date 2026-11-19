@@ -12,6 +12,8 @@ The owner approved this direction and the [R-68 closure scope](../roadmap.md#act
 | 3. [Reader experience](reader.md) | Issue timelines, a changing homepage and a collapsible left navigation | New readers can explain what happened, find their member's part, and distinguish a verified fact from an open question. |
 | 4. [Frontend delivery](delivery.md) | One independently deployable issue route using the published API | A shell survives an unavailable API. Deep links, withdrawals, privacy and release consistency pass the route trial. |
 
+The [evidence interface proposal](evidence-interface.md) explains which new reader features can share existing joins and which need additional classified evidence. Its offline example exercises two reader views and a poll question on the same issue IDs.
+
 ## First assignment for the next phase
 
 Start a fresh branch from current main. Read the [claims workflow](claims.md#proposed-workflow-and-ownership), [relationship review](../architecture/statements.md#relationship-drafting), [evaluation plan](evaluation.md) and [trial results](experiments/evidence-trials/results.md). Use a frozen published release and pinned source documents in development. The R-68 owner retains the production recovery and rollout.
@@ -24,8 +26,10 @@ Hand back the private workflow, its evaluation results and any unresolved eviden
 
 ## Experiments
 
-| Run on November 18, 2026 | Result and repeatable materials |
+| Experiment | Result and repeatable materials |
 |---|---|
+| [Versioned issue definitions](evidence-interface.md#can-a-versioned-table-replace-the-repeated-definitions) | Twelve retained releases contained 192 issue rows and 16 distinct public definitions. A separate synthetic rollback check preserved historical wording, counts and membership. |
+| [Reuse of issue assignments across features](evidence-interface.md#offline-interface-check) | Three House votes supported two reader views. Adding a poll supplied two contextual matches and zero eligible directional comparisons. [Runnable SQL](experiments/reuse-issue-facts.sql). |
 | [Five linked-evidence trials](experiments/evidence-trials/results.md) | Tested quote retrieval, provision continuity, charging delivery and coalition recurrence. Exercised all reader form assignments at two widths. Human comprehension remains unmeasured. |
 | [Published graph on two House bills](experiments/published-graph.md) | In release 1416, 338 sponsorships produced 56,281 member pairs. The same common backer appeared in SQL and NetworkX. [Query](experiments/published-graph.sql) and [analysis](experiments/project-sponsors.py). |
 | [Clustering bill provisions across bills](experiments/section-clusters.md) | Clustered 876 sections in eight editions. Closely worded insulin provisions grouped together in all nine standard runs. A related refueling grant and credit stayed apart. |
