@@ -28,6 +28,7 @@ Hand back the private workflow in its PR with a replay command, pinned inputs, b
 
 | Experiment | Result and repeatable materials |
 |---|---|
+| [AI and statistics on existing evidence](experiments/applied-methods.md) | Tested agreement between two retrievers, hierarchical clustering of 876 bill sections, and time to a committee report for 64 bills. The [research priorities](graph.md#which-ai-or-statistical-study-comes-next) tie each next comparison to a product decision. |
 | [Versioned issue definitions](evidence-interface.md#can-a-versioned-table-replace-the-repeated-definitions) | Twelve retained releases contained 192 issue rows and 16 distinct public definitions. A separate synthetic rollback check preserved historical wording, counts and membership. |
 | [Reuse of issue assignments across features](evidence-interface.md#offline-interface-check) | Three House votes supported two reader views. Adding a poll supplied two contextual matches and zero eligible directional comparisons. [Runnable SQL](experiments/reuse-issue-facts.sql). |
 | [Five linked-evidence trials](experiments/evidence-trials/results.md) | Tested quote retrieval, provision continuity, charging delivery and coalition recurrence. Exercised all reader form assignments at two widths. Human comprehension remains unmeasured. |

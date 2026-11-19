@@ -105,7 +105,7 @@ def lexical(texts, query):
         db.close()
 
 
-def retrieval(directory):
+def retrieval(directory, compare_agreement=False):
     check_quotes(directory)
     dates, bills, texts = {}, {}, []
     for edition, date in CASES["editions"].items():
@@ -136,6 +136,15 @@ def retrieval(directory):
             votes = [v for v in CASES["votes"] if dates[v] <= cutoff and bills[v] == bills[anchor]]
             linked = sorted(votes, key=lambda v: (ranked.index(v) if v in ranked else len(ranked), v))
         paths = list(dict.fromkeys(sections_first + linked + ranked))
+        if compare_agreement:
+            lexical_first = next((key for key in ranked if "/" in key), None)
+            dense_first = next((key for key in dense if "/" in key), None)
+            same_section = lexical_first is not None and lexical_first == dense_first
+            same_bill = lexical_first is not None and dense_first is not None and bills[lexical_first] == bills[dense_first]
+            print(name, "answerable" if gold else "insufficient", lexical_first, dense_first,
+                  f"same bill={same_bill}", f"same edition and section={same_section}",
+                  f"complete set in five={bool(gold) and set(gold) <= set(paths[:5])}", sep=" | ")
+            continue
         for method, hits in [("BM25", ranked), ("MiniLM", dense), ("BM25+vote", paths)]:
             print(name, method, "complete" if gold and set(gold) <= set(hits[:5]) else
                   ("incomplete" if gold else "no sufficient set"), hits[:5], sep=" | ")
@@ -162,9 +171,9 @@ def lineage(directory):
 
 if __name__ == "__main__":
     folder = Path(sys.argv[1])
-    if sys.argv[2] == "retrieval":
-        retrieval(folder)
+    if sys.argv[2] in ("retrieval", "agreement"):
+        retrieval(folder, compare_agreement=sys.argv[2] == "agreement")
     elif sys.argv[2] == "lineage":
         lineage(folder)
     else:
-        raise SystemExit("Choose retrieval or lineage.")
+        raise SystemExit("Choose retrieval, agreement or lineage.")

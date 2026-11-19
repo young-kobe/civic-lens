@@ -1,6 +1,6 @@
 """Cluster bill provisions without using issue, bill or probe labels as features."""
+import argparse
 import json
-import sys
 from collections import Counter, defaultdict
 from itertools import combinations
 from math import comb
@@ -8,9 +8,11 @@ from pathlib import Path
 from statistics import mean
 
 import numpy as np
+from scipy.cluster.hierarchy import cut_tree, linkage
+from scipy.spatial.distance import squareform
 from sklearn.cluster import KMeans
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import adjusted_rand_score, silhouette_score
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
+from sklearn.metrics import adjusted_rand_score, pairwise_distances, silhouette_score
 from threadpoolctl import threadpool_limits
 
 from bill_xml import read_xml, sections
@@ -44,18 +46,67 @@ def cross_bill_pair_counts(labels, bills):
     return same_cluster - both, comb(len(labels), 2) - same_bill
 
 
-def main(directory):
+def vectorize(bodies, stop_words="english"):
+    vectorizer = TfidfVectorizer(stop_words=stop_words, min_df=2, max_df=0.95,
+                                 sublinear_tf=True, token_pattern=r"(?u)\b[a-zA-Z]{3,}\b")
+    features = vectorizer.fit_transform(bodies)
+    if np.any(features.getnnz(axis=1) == 0):
+        raise ValueError("A section has no usable terms under this vectorizer")
+    return vectorizer, features
+
+
+def hierarchy_trial(bodies, bills, references, probes):
+    # The full cosine distance matrix grows quadratically. Keep this a bounded replay.
+    if len(bodies) > 2000:
+        raise ValueError("The hierarchy trial supports at most 2000 sections")
+    drafting = {"amended", "amendment", "clause", "inserting", "paragraph",
+                "section", "striking", "subparagraph", "subsection"}
+    largest = Counter(bills).most_common(1)[0][0]
+    groups = (("full", list(range(len(bills))), "english"),
+              ("omit drafting terms", list(range(len(bills))), sorted(ENGLISH_STOP_WORDS | drafting)),
+              ("omit largest bill", [i for i, bill in enumerate(bills) if bill != largest], "english"))
+    base_labels = None
+    for name, rows, stops in groups:
+        _, features = vectorize([bodies[i] for i in rows], stops)
+        dist = pairwise_distances(features, metric="cosine")
+        np.fill_diagonal(dist, 0.0)
+        tree = linkage(squareform(dist, checks=True), method="average")
+        k_values = [8, 12, 16]
+        labels = cut_tree(tree, n_clusters=k_values)
+        local_bills = np.array([bills[i] for i in rows])
+        local_index = {original: i for i, original in enumerate(rows)}
+        print(name, "sections", len(rows), "bills", len(set(local_bills)))
+        for k, partition in zip(k_values, labels.T):
+            print("groups", k, "largest", max(Counter(partition).values()),
+                  "cross-bill pairs", cross_bill_pair_counts(partition, local_bills))
+        if base_labels is None:
+            base_labels = labels[:, 1]
+        else:
+            print("ARI versus full on shared rows at 12 groups",
+                  round(adjusted_rand_score(base_labels[rows], labels[:, 1]), 3))
+        for probe in probes:
+            a = local_index.get(probe_index(references, probe["anchor"]))
+            b = local_index.get(probe_index(references, probe["comparison"]))
+            if a is None or b is None:
+                print(probe["description"], "absent")
+                continue
+            others = local_bills != local_bills[a]
+            rank = 1 + np.count_nonzero(others & (dist[a] < dist[a, b]))
+            print(probe["description"], "together", (labels[a] == labels[b]).tolist(),
+                  "cross-bill rank", rank)
+
+
+def main(directory, hierarchy=False):
     folder = Path(__file__).parent
     previous = json.loads((folder / "issue-cases.json").read_text())
     study = json.loads((folder / "cluster-cases.json").read_text())
     sources = {key: previous["inputs"][key] for key in previous["bills"]}
     sources.update(study["additional_bills"])
     bodies, bills, references = corpus(directory, sources)
-    vectorizer = TfidfVectorizer(stop_words="english", min_df=2, max_df=0.95,
-                                 sublinear_tf=True, token_pattern=r"(?u)\b[a-zA-Z]{3,}\b")
-    features = vectorizer.fit_transform(bodies)
-    if np.any(features.getnnz(axis=1) == 0):
-        raise ValueError("A section has no usable terms under this vectorizer")
+    if hierarchy:
+        hierarchy_trial(bodies, bills, references, study["probes"])
+        return
+    vectorizer, features = vectorize(bodies)
     print("Sections per bill:", dict(Counter(bills)))
     print("Sections and vocabulary:", features.shape)
     runs = {}
@@ -96,5 +147,9 @@ def main(directory):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("directory", type=Path)
+    parser.add_argument("--hierarchy", action="store_true")
+    args = parser.parse_args()
     with threadpool_limits(limits=1):
-        main(Path(sys.argv[1]))
+        main(args.directory, args.hierarchy)
