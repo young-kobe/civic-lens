@@ -4,7 +4,7 @@ R-68 already separates release publication from HTML generation. PublicApi serve
 
 ## One route before a stack decision
 
-Try the veterans issue page first. Serve its navigation, layout and loading states independently of content reads. Populate findings from the public API, with meaningful first HTML for shared URLs when published content is available. An interactive panel can load the timeline, compare two cutoffs or expand evidence without a full-page refresh. Never put database access in the browser.
+Choose one issue with a finding eligible for publication and use that same finding for every delivery option. Veterans' benefits is a candidate when a reviewed finding is available. Serve its navigation, layout and loading states independently of content reads. Populate findings from the public API, with meaningful first HTML for shared URLs when published content is available. An interactive panel can load the timeline, compare two cutoffs or expand evidence without a full-page refresh. Never put database access in the browser.
 
 | Approach | What the trial can test | Cost |
 |---|---|---|
@@ -22,4 +22,4 @@ Use the published view and release contracts as precedents. Decide the route res
 - Test deployment of a new UI against the old API and the old UI against a compatible new API. Exercise an incompatible contract in staging and recover by rolling back the route alone.
 - Verify that public HTML and shared caches contain only published material. Keep ZIP and personalized fragments private. Compare keyboard, screen-reader and narrow-screen results with the [reader trial](reader.md#decision-test).
 
-Decide after measuring whether the separate deployment adds enough value to justify its maintenance. A new graph engine, ML pipeline, or frontend framework is a separate architecture choice. None is required to run this trial.
+Before the comparison, agree with the owner on acceptable mobile load time, API latency and the withdrawal purge bound. Keep the existing serving route if the candidate fails privacy, withdrawal or compatibility checks, or if the measured benefit does not justify the extra deployment. Repair and repeat the affected check before expanding the rollout. A new graph engine, ML pipeline, or frontend framework is a separate architecture choice. None is required to run this trial.

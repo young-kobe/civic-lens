@@ -41,3 +41,5 @@ Pilot a **What changed** feed. Eligible events include a bill advancing a stage,
 ## Decision test
 
 Give first-time readers the same three tasks with the branch-first and hybrid prototypes. Alternate their order. Ask them to explain what roll call 325 decided, locate their own member's action, and name what the backlog figures establish. Record correct answers, first click, time, evidence opened and points of confusion. Repeat keyboard-only and narrow-screen tasks. Check names and tallies with a screen reader. Choose the navigation after seeing where people succeed. Capture the resulting requirements in the [public site reference](../architecture/public-site.md) when the design is accepted.
+
+The prepared [record-versus-timeline study](experiments/evidence-trials/reader-study.html) measures comprehension. Its layouts do not vary the navigation. Run the navigation tasks with the competing menus. Until first-time readers are available, keep the navigation choice open. The agent can still check keyboard behavior and replay the featured feed on frozen releases. Report those results separately.
