@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Explore the evidence · Civic Lens</title><link rel="stylesheet" href="graph.css"></head>
+<body>
+<header class="mast"><b class="brand">Civic Lens</b><span>Evidence library</span><span class="local">Reader prototype</span></header>
+<main><div class="heading"><div><h1>What did the House pass?</h1><p>TAKE IT DOWN Act <span> / </span> House roll 104 <span> / </span> April 28, 2025</p></div></div>
+<div id="workspace"></div><noscript><p>The House passed S. 146 on April 28, 2025. <a href="https://clerk.house.gov/Votes/2025104">Read the roll call</a>.</p></noscript></main>
+<script src="facts.js"></script><script src="graph.js"></script>
+<script>
+mountEvidence({
+  nodes: sourceNodes, edges: sourceEdges, first: "measure",
+  slots: {vote: [1,1], bill: [3,1], provision: [3,3], cast: [1,3]},
+  core: ["vote","bill","provision"], heading: "Follow the evidence",
+  contextLabel: "member cast"
+});
+</script></body></html>
