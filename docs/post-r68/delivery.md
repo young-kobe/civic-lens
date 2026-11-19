@@ -14,6 +14,8 @@ Choose one issue with a finding eligible for publication and use that same findi
 
 Use the published view and release contracts as precedents. Decide the route response and compatible API version before adding dependencies. Include release ID, record revisions, evidence cutoff, dated finding, source links, review state and correction or withdrawal status. Keep selection and eligibility in a single server-side owner. Request one bounded page payload where possible. If separate panels observe different releases, retry coherently or mark the panel temporarily unavailable. No component should turn a failed read into a zero count.
 
+The [reader mockup](reader.md#what-the-mockups-demonstrate) supplies a dated headline and a direct roll-call citation with scripting disabled. Its source data are local fixtures. Run the following checks with an eligible finding served through the published API before choosing a stack.
+
 ## Acceptance trial
 
 - Load a cold deep link, a warm cached route, the no-script page and an empty issue. Record time to meaningful content on mobile, transferred bytes, API request count and server p95 next to the equivalent Razor route.
