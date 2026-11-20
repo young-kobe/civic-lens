@@ -27,7 +27,8 @@ if [[ $checkout != "$tag" ]]; then
   echo "The checkout is at $checkout. Check out $tag first, because the compose file and the Caddyfile come from the checkout." >&2
   exit 1
 fi
-if [[ -n $(git -c safe.directory="$repository" -C "$repository" status --porcelain -- deploy) ]]; then
+deploy_changes=$(git -c safe.directory="$repository" -C "$repository" status --porcelain -- deploy) || exit 1
+if [[ -n $deploy_changes ]]; then
   echo "The deploy folder has changes that no commit holds. Remove them first." >&2
   exit 1
 fi

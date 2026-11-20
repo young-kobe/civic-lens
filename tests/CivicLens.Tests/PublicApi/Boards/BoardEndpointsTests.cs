@@ -48,6 +48,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
         Assert.Equal("Delegate", Member(houseDemocrats, "p7").GetProperty("terms")[0].GetProperty("houseOffice").GetString());
         var p2Terms = Member(houseDemocrats, "p2").GetProperty("terms").EnumerateArray().ToArray();
         Assert.Equal(2, p2Terms.Length);
+        Assert.All(p2Terms, term => Assert.Equal("rep", term.GetProperty("office").GetString()));
         Assert.Equal(("DC", "2023-01-03", "2024-01-02"),
             (p2Terms[0].GetProperty("state").GetString(), p2Terms[0].GetProperty("startsOn").GetString(), p2Terms[0].GetProperty("endsOn").GetString()));
         Assert.Equal(("NY", "2024-01-03", "2025-01-02"),
@@ -61,7 +62,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
         Assert.Equal(JsonValueKind.Null, senateDemocrats.GetProperty("newerCongress").ValueKind);
         Assert.Equal(2, senateDemocrats.GetProperty("notInCongress").GetInt32());
         Assert.Equal(["p2"], Ids(senateDemocrats, "loyalists"));
-        Assert.Equal(("Senate", "CA"), (Member(senateDemocrats, "p2").GetProperty("terms")[0].GetProperty("office").GetString(),
+        Assert.Equal(("sen", "CA"), (Member(senateDemocrats, "p2").GetProperty("terms")[0].GetProperty("office").GetString(),
             Member(senateDemocrats, "p2").GetProperty("terms")[0].GetProperty("state").GetString()));
 
         var agreements = root.GetProperty("agreements").EnumerateArray().ToArray();
@@ -117,7 +118,7 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
             .Concat(Enumerable.Range(0, 25).Select(index => Vote((char)('A' + index), "Senate", 119, index + 1, senate, [.. senate.Select(person => SenateCast(person, index))], "Split") with
             { RecordId = (index + 200).ToString("x64") })).ToArray();
         await using var host = await StartAsync(votes, serverPages: true, extraOfficials: [.. houseDemocrats.Select(id =>
-            new SeededOfficial(id, $"House Dem {id[2..]}", new SeededTerm("House", "Representative", "2021-01-03") { State = "NY", District = 2 + int.Parse(id[2..], System.Globalization.CultureInfo.InvariantCulture), Party = "Democrat" }))]);
+            new SeededOfficial(id, $"House Dem {id[2..]}", new SeededTerm("rep", "Representative", "2021-01-03") { State = "NY", District = 2 + int.Parse(id[2..], System.Globalization.CultureInfo.InvariantCulture), Party = "Democrat" }))]);
         await ViewsSeed.ExecuteAsync(host.OperationalDatabase, "UPDATE vote_member_list_entries SET party = 'Democrat' WHERE person_id LIKE 'hd%'");
 
         async Task<AngleSharp.Dom.IDocument> PageAsync(string path)
@@ -274,19 +275,19 @@ public sealed class BoardEndpointsTests(PostgresCollection postgres)
             : options);
         await ViewsSeed.ActivateReleaseAsync(host.OperationalDatabase, 1, new DateTimeOffset(2026, 6, 2, 0, 0, 0, TimeSpan.Zero));
         await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase,
-            new("p0", "Ada Able", new SeededTerm("House", "Representative", "2021-01-03") { State = "NY", District = 1, Party = "Democrat" }),
-            new("p1", "Ben Baker", new SeededTerm("House", "Representative", "2021-01-03") { State = "CA", District = 1, Party = "Republican" }),
+            new("p0", "Ada Able", new SeededTerm("rep", "Representative", "2021-01-03") { State = "NY", District = 1, Party = "Democrat" }),
+            new("p1", "Ben Baker", new SeededTerm("rep", "Representative", "2021-01-03") { State = "CA", District = 1, Party = "Republican" }),
             new("p2", "Cal Cruz",
-                new SeededTerm("House", "Representative", "2021-01-03") { State = "DC", District = 0, Party = "Democrat", EndsOn = "2023-01-02" },
-                new SeededTerm("House", "Representative", "2023-01-03") { State = "DC", District = 0, Party = "Democrat", EndsOn = "2024-01-02" },
-                new SeededTerm("House", "Representative", "2024-01-03") { State = "NY", District = 1, Party = "Democrat", EndsOn = "2025-01-02" },
-                new SeededTerm("House", "Representative", "2025-01-03") { State = "TX", District = 1, Party = "Republican" },
-                new SeededTerm("Senate", "Senator", "2025-01-03") { State = "CA", Party = "Democrat" }),
-            new("p3", "Dee Dole", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "NY", Party = "Democrat" }),
-            new("p4", "Eli Ellis", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "TX", Party = "Republican" }),
-            new("p5", "Fox Finn", new SeededTerm("Senate", "Senator", "2021-01-03") { State = "FL", Party = "Republican" }),
-            new("p6", "Gia Gray", new SeededTerm("House", "Representative", "2021-01-03") { State = "IL", District = 1, Party = "Democrat" }),
-            new("p7", "Hal Hale", new SeededTerm("House", "Representative", "2021-01-03") { State = "DC", District = 0, Party = "Democrat" }));
+                new SeededTerm("rep", "Representative", "2021-01-03") { State = "DC", District = 0, Party = "Democrat", EndsOn = "2023-01-02" },
+                new SeededTerm("rep", "Representative", "2023-01-03") { State = "DC", District = 0, Party = "Democrat", EndsOn = "2024-01-02" },
+                new SeededTerm("rep", "Representative", "2024-01-03") { State = "NY", District = 1, Party = "Democrat", EndsOn = "2025-01-02" },
+                new SeededTerm("rep", "Representative", "2025-01-03") { State = "TX", District = 1, Party = "Republican" },
+                new SeededTerm("sen", "Senator", "2025-01-03") { State = "CA", Party = "Democrat" }),
+            new("p3", "Dee Dole", new SeededTerm("sen", "Senator", "2021-01-03") { State = "NY", Party = "Democrat" }),
+            new("p4", "Eli Ellis", new SeededTerm("sen", "Senator", "2021-01-03") { State = "TX", Party = "Republican" }),
+            new("p5", "Fox Finn", new SeededTerm("sen", "Senator", "2021-01-03") { State = "FL", Party = "Republican" }),
+            new("p6", "Gia Gray", new SeededTerm("rep", "Representative", "2021-01-03") { State = "IL", District = 1, Party = "Democrat" }),
+            new("p7", "Hal Hale", new SeededTerm("rep", "Representative", "2021-01-03") { State = "DC", District = 0, Party = "Democrat" }));
         if (extraOfficials is not null) await OfficialsSeed.AddOfficialsAsync(host.OperationalDatabase, extraOfficials);
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, [.. votes.Select(vote => vote.ToViewVote())]);
         if (pinParties)

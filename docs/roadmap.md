@@ -6,11 +6,9 @@ This page holds the active plan and remaining backlog. Merged code, deployed beh
 
 Civic Lens is deployed and past its MVP and first deployment. Work now improves the running product through reviewed, tested iterations.
 
-R-68 is the active priority. It closes the evidence, production and reader obligations for the deployed redesign under the scope below. `PublicApi` serves every public page, and the publisher writes data only. The other items below remain the product backlog, not first-deploy gates.
+R-68 is the active priority. It closes the evidence, production, and reader obligations for the deployed redesign under the scope below. `PublicApi` serves every public page, and the publisher writes data only. The other items below remain the product backlog.
 
 Current capabilities and ownership are in [architecture](architecture.md). Deployment, backups, recovery, and live checks are in [operations](operations.md).
-
-The [post-R-68 plan appendix](post-r68/README.md) connects the next phase of claims, evidence, evaluation, and reader work to its pilot experiments.
 
 ## Work queue
 
@@ -24,17 +22,18 @@ The restricted views, typed read APIs, shared Razor library, page cache, Home pr
 
 PublicApi serves every public page at its public path since cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Production correction history, tally, line-up, vote-bill, and official record-count checks have passed. Repeated aggregation and late filtering account for part of the measured ZIP query cost. Cold reads and larger selections still need measurement after the query changes reach production.
 
-**Scope approved November 19, 2026.** The next phase owns the replacement for the flat header and Menu sheet, the placement of Bills and Votes in primary navigation, and the featured-vote presentation on Home. Mark outstanding visual acceptance specific to those three choices as superseded. Keep bill and vote permalinks, the existing serving stack, and functional checks on all deployed routes, including Home and navigation. Accessibility, private ZIP handling, evidence accuracy and release consistency still apply wherever those surfaces appear. The [next-phase handoff](post-r68/README.md#first-assignment-for-the-next-phase) starts with a private reviewer workflow.
+Historical bill-action recovery is complete in production. Final checks of release files and retained rollback releases remain open.
+
+The owner approved the R-68 closure scope on November 19, 2026. The next UI phase owns the outstanding visual decisions for the flat header and native Menu, the placement of Bills and Votes in primary navigation, and the featured-vote presentation on Home. Only outstanding visual acceptance for those three choices is superseded. R-68 retains public routes and permalinks, the serving stack, navigation and Home functionality, keyboard and mobile use, accessibility, private ZIP handling, evidence accuracy, and release consistency on those surfaces.
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
 
-- [ ] Complete the Maps reader-flow, keyboard, touch and production checks under the closure audit below. The interactive Maps page and shared renderer cover term ends, issue activity and attendance. Matching House shapes cover the 118th and 119th Congresses; other Congresses retain tiles and tables. Accepted dates, holders, bases and unavailable states are in [public site](architecture/public-site.md#interactive-maps).
+- [ ] Complete the Maps reader-flow, keyboard, touch and production checks under the full audit below. The interactive Maps page and shared renderer cover term ends, issue activity and attendance. Matching House shapes cover the 118th and 119th Congresses; other Congresses retain tiles and tables. Accepted dates, holders, bases and unavailable states are in [public site](architecture/public-site.md#interactive-maps).
 - [ ] Add the document changes list once document changes are published.
 
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
 
 - [ ] Finish the executive document summary work. The step, publication, label, and page slot are built and off by default. A budgeted sample was measured. Check its results against the current prompt, the recorded owner decision, and actual activation before closing this work.
-- [ ] Run and verify historical bill-action recovery from hash-verified saved captures with bounded owner commands. Preserve completed immutable snapshots, original as-of dates, and old releases.
 
 AI text and vocabulary remain required work, not optional follow-ups.
 
@@ -44,12 +43,12 @@ AI text and vocabulary remain required work, not optional follow-ups.
 
 Return-visit features are parked and are not part of R-68.
 
-The R-68 agent is closing the redesign under the approved scope. Continue recovery and verification from the operator's latest verified checkpoint. Independent route checks can proceed alongside recovery. Run release-dependent checks against the final deployment and relevant releases. Reuse prior results for the source, release and behavior they actually cover. Carry unresolved decisions that affect a retained requirement back to the owner.
+Complete these gates before closing R-68.
 
-- [ ] Reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows and the seven owner criteria against the approved scope. Preserve parked work. Split mixed items so the retained checks have evidence and the three superseded presentation decisions have an explicit disposition. Use the [public site reference](architecture/public-site.md) and the existing local audit evidence. Check the executive body experience against the accepted design, source flow, approved glossary text, "Get this data" links on published-data tables, grade, accessibility, keyboard and mobile use, privacy, and the paged source APIs. Unit tests alone do not complete owner criteria.
+- [ ] Reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria against the approved scope. Split mixed audit items so each retained requirement has evidence and each transferred visual choice has an explicit disposition. Use the [public site reference](architecture/public-site.md) and the existing local audit evidence. Check the executive body experience against the accepted design, source flow, approved glossary text, "Get this data" links on published-data tables, grade, accessibility, keyboard and mobile use, privacy, and the paged source APIs. Owner criteria also require evidence beyond unit tests.
 - [ ] Measure cold reads, traffic, query work, and worker effects on the shared database. Close the open Home cold-read timeout and verify larger ZIP selections. Warm generated-data probes do not establish cold production performance.
 - [ ] Complete remaining R-68 deployments under the [runbook](operations.md#production-runbook). Require matching artifacts and images, fresh backups, functional and privacy checks, and worker health. After the final rollout and conversions, verify corrections, tallies, and line-ups for the selected release and retained rollback releases. Verify Cloudflare compression and caching, with private fragments excluded from shared caches. Run the final live check last.
-- [ ] Finish the source, data, privacy, reader-flow and design audit for the retained scope. Remove unused code and temporary migration rules. At closure, identify the deployed commit, verified release and retained rollback releases, recovery endpoint, evidence for the remaining gates, and work handed forward. Keep R-68 open while a retained gate lacks evidence. Once the gates pass, update the affected architecture references and remove the completed roadmap work.
+- [ ] Run the final source, data, privacy, reader-flow, and design audit for the retained scope. Remove unused code and temporary migration rules. Record the deployed commit, verified release and retained rollback releases, recovery endpoint, and evidence for the retained gates. Keep R-68 open until the retained gates pass, then reconcile the roadmap and affected architecture references.
 
 ### Accepted plans
 
