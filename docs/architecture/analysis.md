@@ -316,7 +316,7 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 
 ## Limits and planned work
 
-The [roadmap](../roadmap.md) holds the delivery order. These design rules apply to the planned work:
+The [plan](../evidence-paths.md) holds the delivery order. These design rules apply to the planned work:
 
 - The empty phrase check finds only the text itself as the subject of the four verbs. A vague sentence with another subject passes. A statement that reports a speaker who says that the bill helps is refused too.
 - A concurrent statement registration and action enqueue can miss a raise. The row then waits until a statement draft saves.
@@ -359,7 +359,7 @@ Classification acceptance:
 - [x] Budget exhaustion leaves a visible, resumable backlog.
 - [ ] A change of one task version reruns only the affected work.
 
-Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
+Pending decisions for the ladder are [D-05](../evidence-paths.md#pending-decisions).
 
 - Model extraction is planned. Extraction returns validated source evidence.
 - The worker drafts action records, vote records, and weekly briefs as proposed revisions. Code approves an action or vote revision after it checks the citations. It approves a statement revision only after the statement checks pass. A model statement date goes to a person. The exception is a date that the quote states and that lies up to 7 days before the capture day. See [review](review.md#code-approval). A brief still needs a human approval. Each published record is bound to its exact approved revision.
@@ -371,7 +371,7 @@ Pending decisions for the ladder are [D-05](../roadmap.md#pending-decisions).
 - Cache keys include input hashes, task, model, and schema versions, and the relevant configuration and context.
 - Store model responses and provider metadata, because hosted aliases can change. Enforce limits for each task and each run. Budget exhaustion leaves visible pending work.
 - Measure false negatives, precision, calibration, latency, downstream savings, and review workload on held-out examples. Group examples so that document versions do not leak across splits.
-- Planned ([D-13](../roadmap.md#pending-decisions)): a benchmark of classifiers for the statement issue gate, with a Clef model fine-tuned on our labels. The gate is the costliest stage for each item, about 7,800 charged tokens for each call on 2026-10-16.
+- Planned ([D-13](../evidence-paths.md#pending-decisions)): a benchmark of classifiers for the statement issue gate, with a Clef model fine-tuned on our labels. The gate is the costliest stage for each item, about 7,800 charged tokens for each call on 2026-10-16.
 - Planned dataset work will curate validation sets, golden sets, and training or fine-tuning datasets from retained evidence and attributed editorial history. Clef has open weights, so fine-tuning on our labels is possible.
 - Publication approval and dataset acceptance are separate judgments.
 - Dataset exports, task labels, eligibility rules, source-use permissions, provenance manifests, correction handling, and leakage-resistant splits are not designed yet. No dataset export or training workflow exists. Agree on them before any dataset export.

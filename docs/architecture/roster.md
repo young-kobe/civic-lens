@@ -148,7 +148,7 @@ The website and the photo takedown of a person are owner settings. The configura
 
 A command prints the new revision as JSON. It exits with 2 for an unknown person, an invalid URL, a bad call, or a subject that is not the owner. Publish reads the newest setting of each configured person with one query; see [publication](publication.md#invariants). A person with no revision has no withheld photo and no website setting. An unknown person is one that no row holds yet.
 
-Later steps add the bindings and the readers; see [the plan](../roadmap.md).
+Later steps add the bindings and the readers; see [the plan](../evidence-paths.md).
 
 ## Storage and contracts
 

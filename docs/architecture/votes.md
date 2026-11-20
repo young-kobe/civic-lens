@@ -501,7 +501,7 @@ A reader asks `VoteRevisionRows` for the rows of a query with their facts, issue
 - Measured on 2026-10-17 over 676 roll calls in the development data: 266 passage, 157 suspension, 90 amendment, 70 motion to recommit, and 61 previous question. Also 2 veto override and 30 other.
 - No rule and no conference report occur in that data yet. The 79 roll calls on a House resolution still wait for their bill title, so they count as passage until the title arrives.
 - The other kind holds motions to table, discharge, adjourn, refer, instruct, and reconsider. It also holds the consideration of a resolution and the division votes. It also holds the Speaker election and the quorum calls.
-- The tracked members of a candidate come from its configuration revision. A member added to tracking later gets no past votes. This is pending as [D-11](../roadmap.md#pending-decisions).
+- The tracked members of a candidate come from its configuration revision. A member added to tracking later gets no past votes. This is pending as [D-11](../evidence-paths.md#pending-decisions).
 - Planned: measure the noise of drafting every roll call before adding a gate. The 119th Congress had 362 roll calls in session 1 and 314 so far in session 2 on 2026-10-16.
 - A roll call with no tracked member has no record. The record needs at least one member vote.
 - When a newer version of a roll call has no tracked member, the earlier revision stays current with its earlier votes. Actions behave the same way with `noTrackedOfficial`.

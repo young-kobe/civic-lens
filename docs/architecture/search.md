@@ -457,16 +457,16 @@ The shared corrections reader must stay undeployed until the production correcti
 - The ingest snapshot stays open while the index transaction waits for its advisory lock. The role ends a session idle in a transaction after 10 seconds. A longer wait fails that run, and the next run reads again.
 - The vote list filters the bill by type and number without an index on those columns. A plan reads every vote revision of the active release. This is fast at 1,600 votes. Add an index when the vote count grows.
 - One worker pulls. Two workers would pull the same pages. The unique report ID keeps the queue correct.
-- The pull address and token are set by hand in the worker environment. [R-24](../roadmap.md#later) sets them in the container configuration.
+- The pull address and token are set by hand in the worker environment. [R-24](../evidence-paths.md#later) sets them in the container configuration.
 - The rail and the Review home page link the queue. The operational application sends no notice when a report arrives.
 - The per-client report limit lives in memory and resets when the service restarts.
 - There is no reporter identity. Abuse handling relies on Turnstile and the caps. A flood can fill the daily cap and close reports for the day.
 - A duplicate sent at the daily cap gets 503 like any other report.
 - The pull trusts the cursor of the token holder. A cursor above the highest sequence acknowledges reports that the puller never saw.
 - A search database restored from a backup keeps its epoch. Reports made after the backup are lost, and the puller can skip new reports that reuse the lost sequences.
-- The request log filter in `PublicApiApp` has no provider. A provider-specific `Logging` level, such as `Logging__Console__LogLevel__Default`, overrides it and logs the search text again. The [R-24](../roadmap.md#later) deploy must set none.
+- The request log filter in `PublicApiApp` has no provider. A provider-specific `Logging` level, such as `Logging__Console__LogLevel__Default`, overrides it and logs the search text again. The [R-24](../evidence-paths.md#later) deploy must set none.
 - The About page says a search keeps nothing. That stays true only while the Caddy deploy keeps no access logs for search requests. The Caddyfile sets that; see [Web server](../operations.md#web-server).
-- The search API answers 200 for a withdrawn record in the pinned releases that hold it. A status 410 needs the ingest to read withdrawals and the API to change its status. This waits until after [R-24](../roadmap.md#later).
+- The search API answers 200 for a withdrawn record in the pinned releases that hold it. A status 410 needs the ingest to read withdrawals and the API to change its status. This waits until after [R-24](../evidence-paths.md#later).
 - Only the first full ingest is long, because it reads every record inside one transaction. Later ingests read only new revisions. Readers are not blocked, because they read committed rows.
 - A release that was never stored and is older than the newest stored release is refused and logged. The service keeps serving the active release. This happens only if the service missed a release and the site rolls back to it.
 - One service runs per search database. Two replicas could move the active release back and forth when they read the views at different times.
@@ -477,8 +477,8 @@ The shared corrections reader must stay undeployed until the production correcti
 - A search without text returns no snippet.
 - A snippet shows the start of the snippet text. A match later in that text still finds the record, but the snippet may not show it.
 - A row that was indexed before `005_record_summary.sql` holds no snippet text, so it shows no snippet. An executive action or a brief indexed before this change also holds none. The ingest never reads a stored revision again. So these rows get their snippet text only after the operator [resets the search index](../operations.md#reset-the-search-index). A reset also drops the earlier releases, so a pinned search of an older release is not possible until the ingest stores that release again.
-- The `Dockerfile` target `search` builds the service image. [Container images](../operations.md#container-images) describes it. [R-24](../roadmap.md#later) adds the cloud deployment.
+- The `Dockerfile` target `search` builds the service image. [Container images](../operations.md#container-images) describes it. [R-24](../evidence-paths.md#later) adds the cloud deployment.
 - The publisher still writes `release.json` as a private snapshot, because its own readers need it. Caddy does not serve it. Private snapshots remain while verification or recovery use them.
-- Planned public MCP ([R-25](../roadmap.md#later)) uses the public API and the same release pinning from a separate deployment.
+- Planned public MCP ([R-25](../evidence-paths.md#later)) uses the public API and the same release pinning from a separate deployment.
 - A row that was indexed before `008_record_label.sql` holds no label, so its search row shows no chip and its API hit holds a null label. The ingest never reads a stored revision again. These rows get their label only after the operator [resets the search index](../operations.md#reset-the-search-index).
 - A row that was indexed before `004_record_bill_line.sql` holds no bill line, and no code fills it. A new revision gets its line when the ingest stores it. A vote hit holds no line, because the line of a vote comes from the action of its bill in the release build.

@@ -1,0 +1,110 @@
+{
+  "observed": "2026-11-18",
+  "fain": "693JJ32440370",
+  "recipient": "TOWN OF DEERFIELD",
+  "project": "TOWN OF DEERFIELD: PUBLIC ACCESS EV CHARGING",
+  "place": "TOWN OF DEERFIELD",
+  "obligation": "2462612.09",
+  "nonfederal": "615653.0",
+  "total_funding": "3078265.09",
+  "outlay": "1578890.45",
+  "transactions": [
+    [
+      "ASST_TX_6925_693JJ32440370_-NONE-_20.205_-NONE-",
+      "2024-07-09",
+      "2462612.09"
+    ]
+  ],
+  "stations": [
+    {
+      "id": 205129,
+      "station_name": "TOWN DEERFIELD LEARY LOT #1",
+      "street_address": "55c N Main St",
+      "status_code": "E",
+      "open_date": "2022-01-21",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 367916,
+      "station_name": "TOWN DEERFIELD LEARYLOT 2",
+      "street_address": "59 North Main Street",
+      "status_code": "E",
+      "open_date": "2024-11-14",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 371494,
+      "station_name": "Leary Parking Lot",
+      "street_address": "59 N Main St",
+      "status_code": "E",
+      "open_date": "2024-11-15",
+      "ev_dc_fast_num": 4,
+      "ev_level2_evse_num": null
+    },
+    {
+      "id": 367915,
+      "station_name": "TOWN DEERFIELD LEARLOT 3",
+      "street_address": "59 North Main Street",
+      "status_code": "E",
+      "open_date": "2024-11-14",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 331559,
+      "station_name": "TOWN DEERFIELD TOWN HALL #1",
+      "street_address": "8 Conway Street",
+      "status_code": "E",
+      "open_date": "2024-04-03",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 331560,
+      "station_name": "TOWN DEERFIELD TOWN HALL #2",
+      "street_address": "8 Conway Street",
+      "status_code": "E",
+      "open_date": "2024-04-03",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 189271,
+      "station_name": "Yankee Candle Flagship Store",
+      "street_address": "25 Greenfield Rd",
+      "status_code": "E",
+      "open_date": "2021-04-06",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 193204,
+      "station_name": "MASSDOT WHATELY 1",
+      "street_address": "424 State Rd",
+      "status_code": "E",
+      "open_date": "2021-07-27",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 204403,
+      "station_name": "MASSDOT WHATELY 2",
+      "street_address": "424 State Rd",
+      "status_code": "E",
+      "open_date": "2022-01-07",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    },
+    {
+      "id": 205743,
+      "station_name": "DEERFIELD STATION2",
+      "street_address": "1 Community Pl",
+      "status_code": "E",
+      "open_date": "2022-02-03",
+      "ev_dc_fast_num": null,
+      "ev_level2_evse_num": 2
+    }
+  ]
+}
