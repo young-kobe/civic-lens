@@ -22,6 +22,8 @@ The restricted views, typed read APIs, shared Razor library, page cache, Home pr
 
 PublicApi serves every public page at its public path since cutover. Caddy serves only the photos from the release. The member strip and both private ZIP layouts are deployed. Production correction history, tally, line-up, vote-bill, and official record-count checks have passed. Repeated aggregation and late filtering account for part of the measured ZIP query cost. Cold reads and larger selections still need measurement after the query changes reach production.
 
+Historical bill-action recovery is complete in production. Final checks of release files and retained rollback releases remain open.
+
 The owner approved the R-68 closure scope on November 19, 2026. The next UI phase owns the outstanding visual decisions for the flat header and native Menu, the placement of Bills and Votes in primary navigation, and the featured-vote presentation on Home. Only outstanding visual acceptance for those three choices is superseded. R-68 retains public routes and permalinks, the serving stack, navigation and Home functionality, keyboard and mobile use, accessibility, private ZIP handling, evidence accuracy, and release consistency on those surfaces.
 
 Remaining route work. Each slice includes the data, source evidence, labels, and checks its reader flow needs.
@@ -32,7 +34,6 @@ Remaining route work. Each slice includes the data, source evidence, labels, and
 Data work below remains part of R-68. Follow the production commands and verification rules in [operations](operations.md#production-runbook).
 
 - [ ] Finish the executive document summary work. The step, publication, label, and page slot are built and off by default. A budgeted sample was measured. Check its results against the current prompt, the recorded owner decision, and actual activation before closing this work.
-- [ ] Run and verify historical bill-action recovery from hash-verified saved captures with bounded owner commands. Preserve completed immutable snapshots, original as-of dates, and old releases.
 
 AI text and vocabulary remain required work, not optional follow-ups.
 
