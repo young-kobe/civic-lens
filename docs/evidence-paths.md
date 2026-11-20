@@ -1,14 +1,84 @@
-# Roadmap
+# Evidence Paths
 
-This page holds the active plan and remaining backlog. Merged code, deployed behavior, and accepted reader flows are separate states. Remove completed work here and document implemented behavior in the feature references. Start at the [architecture lookup table](architecture.md#lookup-table).
+Evidence Paths is the Civic Lens plan. It holds the direction, the phases, the active work, the accepted backlog, and the pending decisions. Merged code, deployed behavior, and accepted reader flows are separate states. Remove completed work here and document implemented behavior in the feature references. Start at the [architecture lookup table](architecture.md#lookup-table).
+
+## Direction
+
+Civic Lens should let a citizen follow a public claim through a decision to a measured outcome. Start with a question that matters to the reader. Give each answer a date, an accountable actor, and a short path to the original evidence.
+
+One [relationship pipeline](evidence-paths/pipeline.md) finds connections across many dimensions of the data. It aggregates them and shows them in an informative, interactive way. The aim is to make records that are hard to find or hard to connect visible to a regular reader. The site shows what the records say and how they connect. It never states a conclusion. The reader draws the conclusion. The same rules apply to every official, issue and dimension, so no single case or topic shapes the output. Single cases, such as the VA claims backlog, test the pipeline. They are not the product.
+
+The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed.
+
+Data is the product. The product is only as good as its data, so data and database schemas are a first class feature. Design them as deliberately as any public page. The goal is rich links between people, records, bills, votes, issues and outcomes, so that we can derive insights no single source shows.
+
+Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
+
+Each page answers more questions than it opens (owner, 2026-11-06). Where a bill, a vote, an action, or a term is ambiguous or technical, the page gives an AI summary in plain words. The reader flow decides where a summary goes. Each summary carries its AI label, and code checks it against its source. Its prompt aims for grade 12; code rejects above 14. It explains the exact terms.
+
+Derived insights are product goals. They make Civic Lens more than a connector to source APIs. Code computes each metric and publishes a method note. A person reviews any judgment before publication, and each insight shows its coverage limits. [Candidate features](evidence-paths/features.md) lists the insights and features to investigate. Investigation can remove any of them.
 
 ## Current stage
 
-Civic Lens is deployed and past its MVP and first deployment. Work now improves the running product through reviewed, tested iterations.
+Civic Lens is deployed and past its MVP and first deployment. Work now improves the running product through reviewed, tested iterations. Current capabilities and ownership are in [architecture](architecture.md). Deployment, backups, recovery, and live checks are in [operations](operations.md).
 
-R-68 is the active priority. It closes the evidence, production, and reader obligations for the deployed redesign under the scope below. `PublicApi` serves every public page, and the publisher writes data only. The other items below remain the product backlog.
+R-68 is the active priority. It closes the evidence, production, and reader obligations for the deployed redesign under the [approved scope](#active-r-68-redesign). `PublicApi` serves every public page, and the publisher writes data only. The private evidence pilot can run independently on frozen data. The other phases are the proposed build-out. Items in the [work queue](#work-queue) keep their dependencies. Move accepted behavior into its feature reference as each phase ships.
 
-Current capabilities and ownership are in [architecture](architecture.md). Deployment, backups, recovery, and live checks are in [operations](operations.md).
+## Phases
+
+| Phase | Deliverable | Evidence for moving forward |
+|---|---|---|
+| 0, across all phases. [Relationship pipeline](evidence-paths/pipeline.md) | One connection model, ordered candidate sources, review and statistical gates, and display rules | Each displayed connection states its type, role and basis, binds exact evidence, and survives withdrawal on every surface. |
+| 1. [Claims and evidence](evidence-paths/claims.md) | A reproducible outcome audit and a multi-issue test of statement, provision and vote links | A reviewer can reconstruct each finding from exact source versions and explain the remaining gaps. |
+| 1, from the first case. [Evaluation and observability](evidence-paths/evaluation.md) | A private run comparison, a labeled holdout and a public methods summary | Show which stage improved, the effect on critical errors and coverage, and the cost per accepted finding. |
+| 2. [Graph and statistical research](evidence-paths/graph.md) | Typed paths across records and a bounded comparison of retrieval methods | Each additional correct link survives review and leads to cited evidence. Measure the cost of maintaining the projection. |
+| 3. [Reader experience](evidence-paths/reader.md) | Issue timelines, a changing homepage and a collapsible left navigation | New readers can explain what happened, find their member's part, and distinguish a verified fact from an open question. |
+| 4. [Frontend delivery](evidence-paths/delivery.md) | One independently deployable issue route using the published API | A shell survives an unavailable API. Deep links, withdrawals, privacy and release consistency pass the route trial. |
+
+The [evidence interface](evidence-paths/evidence-interface.md) shows which reader questions can use existing joins and which need additional classified evidence. The next phase will keep JSON authoring, store each public issue definition once per version and bind each release to its membership, definition versions and counts. The private pilot can use the current published views before that migration.
+
+## First assignment
+
+First run the [setup experiments](evidence-paths/pipeline.md#before-the-pilot-opens-its-holdout), so that the pilot has frozen inputs and fixed scoring. Then start a fresh branch from current main. Read the [claims workflow](evidence-paths/claims.md#proposed-workflow-and-ownership), [relationship review](architecture/statements.md#relationship-drafting), [evaluation plan](evidence-paths/evaluation.md) and [trial results](evidence-paths/experiments/evidence-trials/results.md). Use a frozen published release and pinned source documents in development.
+
+Build one private review flow. The [local graph prototype and reader counterpart](evidence-paths/graph.md#a-local-graph-in-relationship-review) demonstrate the same sources in map and list views. Put the attributed quotation and its date beside the exact bill edition and passage, the roll-call question, and the member's recorded cast when one exists. Let the reviewer accept or reject the proposed link or record insufficient evidence. Bind that decision to the evidence revisions so a second reviewer can reproduce it. Start with the existing relationship-drafting and review handlers. Bring any required schema or public-contract choice to the owner using those handlers as the precedent.
+
+Demonstrate the flow on a supported link and a tempting wrong link, then test on unseen bill families sized under the [pipeline evaluation](evidence-paths/pipeline.md#evaluation). Capture complete evidence sets in the first five candidates, unsupported attributions and review time when a reviewer is available. Keep cases without a sufficient vote in the denominator for evaluating abstention. The two food-assistance positives in the trial share a bill and provision. They are now development examples. Reserve fresh cases for the next transfer test. The pipeline evaluation lists the other development families.
+
+Hand back the private workflow in its PR with a replay command, pinned inputs, baseline and candidate counts, and one decision a reviewer can reconstruct. List unresolved cases and the missing evidence for each. The pilot can finish with an inconclusive result. The product owner uses the [evaluation criteria](evidence-paths/evaluation.md#pilot-decision-and-feedback) to choose whether to retain the baseline, fund a specific follow-up or scope a public trial. A later, separately scoped [public issue-route trial](evidence-paths/delivery.md#one-route-before-a-stack-decision) can use a reviewed finding to test a direct link, API unavailability and evidence withdrawal before choosing a frontend delivery approach. The reader phase owns [navigation and homepage selection](evidence-paths/reader.md). The [mockup coverage table](evidence-paths/reader.md#what-the-mockups-demonstrate) identifies the interactions a person can replay and the design decisions that need readers or a release-backed route.
+
+## Experiments
+
+| Experiment | Result and repeatable materials |
+|---|---|
+| [AI and statistics on existing evidence](evidence-paths/experiments/applied-methods.md) | Tested agreement between two retrievers, hierarchical clustering of 876 bill sections, and time to a committee report for 64 bills. The [research priorities](evidence-paths/graph.md#which-ai-or-statistical-study-comes-next) tie each next comparison to a product decision. |
+| [Versioned issue definitions](evidence-paths/evidence-interface.md#can-a-versioned-table-replace-the-repeated-definitions) | Twelve retained releases contained 192 issue rows and 16 distinct public definitions. A separate synthetic rollback check preserved historical wording, counts and membership. |
+| [Reuse of issue assignments across features](evidence-paths/evidence-interface.md#offline-interface-check) | Three House votes supported two reader views. Adding a poll supplied two contextual matches and zero eligible directional comparisons. [Runnable SQL](evidence-paths/experiments/reuse-issue-facts.sql). |
+| [Five linked-evidence trials](evidence-paths/experiments/evidence-trials/results.md) | Tested quote retrieval, provision continuity, charging delivery and coalition recurrence. Exercised all reader form assignments at two widths. Human comprehension remains unmeasured. |
+| [Published graph on two House bills](evidence-paths/experiments/published-graph.md) | In release 1416, 338 sponsorships produced 56,281 member pairs. The same common backer appeared in SQL and NetworkX. [Query](evidence-paths/experiments/published-graph.sql) and [analysis](evidence-paths/experiments/project-sponsors.py). |
+| [Clustering bill provisions across bills](evidence-paths/experiments/section-clusters.md) | Clustered 876 sections in eight editions. Closely worded insulin provisions grouped together in all nine standard runs. A related refueling grant and credit stayed apart. |
+| [Amendment or motion versus final passage](evidence-paths/experiments/paired-votes.md) | Of senators casting Yea or Nay on both questions, 7 of 100 cast different votes in the insulin case and 9 of 95 in the immigration case. |
+| [Issue mapping across legislative subjects](evidence-paths/experiments/issue-mapping.md) | Tested statement-to-provision retrieval and topic candidates on four bill editions. Verified four roll-call questions and seven selected casts. |
+| [Veterans claims backlog at two cutoffs](evidence-paths/experiments/va-backlog.md) | VA's inauguration-day count gives a 72.07% decline by Oct 10 and 69.95% by Nov 7. Both weekly baselines exceed 70% by Oct 10 and fall short of it by Nov 7. [Workbook calculation](evidence-paths/experiments/va-backlog.py). |
+
+## Which research would change the next build?
+
+The [five completed trials](evidence-paths/experiments/evidence-trials/results.md) establish the starting point. Only the first row belongs to the private pilot. Reopen the other questions when the named input is available and the result would change a product decision.
+
+| Question | What the completed trial established | Next decision and evidence needed |
+|---|---|---|
+| Can a reviewer connect a quote to the right decision? | Explicit links recovered 4 of 4 selected provision-and-vote pairs in the first five. Every method returned candidates for all 3 cases with insufficient evidence. | Compare against lexical search on an untouched bill family, with the same five slots and cutoff. Score candidate coverage and unjustified attributions separately. The owner chooses a method after seeing both. |
+| Did a provision survive into the next edition? | Text matching got 9 of 10 selected transitions right. One false match changed the legal effect. | Before offering a change timeline, test fresh editions with a changed mechanism or a dropped provision. Keep uncertain transitions open for review. |
+| Did a funded project reach delivery? | The Deerfield case linked an obligation and a reported opening. The opening report omitted the award ID. | Test a second recipient with a dated site-level completion or expenditure record. Until then, show each verified stage and its source. |
+| Do shared sponsors form a recurring coalition? | Removing the most widely backed early bill reduced later overlap from 22 of 58 repeated pairs to 1 of 15. | Revisit a coalition feature with wider time windows and a comparison accounting for party or committee. Keep the underlying bill links available. |
+| Do readers understand the evidence? | The two-layout instrument ran at both widths. No first-time readers took part. | When readers are available, score their explanations and source use. Test the navigation structure separately by asking readers to find a destination. [Reader trial](evidence-paths/reader.md#decision-test). |
+
+## Decisions to take in order
+
+1. Start the private quote-to-vote review. Use the existing revision and review owners. First answer [D-18 to D-23](#pending-decisions). Before tuning, the product owner sets error tolerance and minimum coverage, and the pilot agent freezes the comparison. The catalog migration can proceed separately after its release-equivalence checks are ready. [Pilot evaluation](evidence-paths/evaluation.md#pilot-decision-and-feedback) and [catalog migration](evidence-paths/evidence-interface.md#can-a-versioned-table-replace-the-repeated-definitions).
+2. Use PostgreSQL joins for known paths. Commission a graph or model comparison when a named reader question and a measured weakness justify it. Keep the simpler method if results are inconclusive. [Graph research](evidence-paths/graph.md).
+3. Use first-time readers to choose the navigation and test comprehension. Use published releases to replay featured-item selection. Each study answers a different question. [Reader decisions](evidence-paths/reader.md#decision-test).
+4. Scope one public issue route around an eligible reviewed finding. Choose its runtime after testing API outages, revision consistency, withdrawals, accessibility and rollback. The owner decides wider rollout after seeing the comparison with the deployed route. [Delivery trial](evidence-paths/delivery.md#acceptance-trial).
 
 ## Work queue
 
@@ -48,7 +118,7 @@ Complete these gates before closing R-68.
 - [ ] Reconcile the component audit, M1 through M10, DR1 through DR10, all 18 reader flows, and all seven owner criteria against the approved scope. Split mixed audit items so each retained requirement has evidence and each transferred visual choice has an explicit disposition. Use the [public site reference](architecture/public-site.md) and the existing local audit evidence. Check the executive body experience against the accepted design, source flow, approved glossary text, "Get this data" links on published-data tables, grade, accessibility, keyboard and mobile use, privacy, and the paged source APIs. Owner criteria also require evidence beyond unit tests.
 - [ ] Measure cold reads, traffic, query work, and worker effects on the shared database. Close the open Home cold-read timeout and verify larger ZIP selections. Warm generated-data probes do not establish cold production performance.
 - [ ] Complete remaining R-68 deployments under the [runbook](operations.md#production-runbook). Require matching artifacts and images, fresh backups, functional and privacy checks, and worker health. After the final rollout and conversions, verify corrections, tallies, and line-ups for the selected release and retained rollback releases. Verify Cloudflare compression and caching, with private fragments excluded from shared caches. Run the final live check last.
-- [ ] Run the final source, data, privacy, reader-flow, and design audit for the retained scope. Remove unused code and temporary migration rules. Record the deployed commit, verified release and retained rollback releases, recovery endpoint, and evidence for the retained gates. Keep R-68 open until the retained gates pass, then reconcile the roadmap and affected architecture references.
+- [ ] Run the final source, data, privacy, reader-flow, and design audit for the retained scope. Remove unused code and temporary migration rules. Record the deployed commit, verified release and retained rollback releases, recovery endpoint, and evidence for the retained gates. Keep R-68 open until the retained gates pass, then reconcile this plan and the affected architecture references.
 
 ### Accepted plans
 
@@ -57,9 +127,9 @@ The owner accepted these designs. Each item holds its choices until the code and
 **Public site**
 
 - R-47: Finish the remaining bill insights: sponsored bills that moved and bipartisan cosponsorship, with clear bases and method notes. Existing boards, badges, bill-status lines, and prior-Congress fallback are implemented. Their public API and server-rendered replacements belong to R-68. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
-- R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-48: What an official said and how they voted. The profile lists pairs, not totals: the quote with its date, then the cast with its question, date, and result. It shows no Yea or Nay totals and no talk against action quadrant, because a bare total lacks context. The [Phase 1 pilot](#first-assignment) decides the evidence roles of each pair. Depends on: R-47. [Publication](architecture/publication.md#limits-and-planned-work)
   - [ ] Said and voted pairs on the profile
-- R-64: What officials did on an issue. Today a bill or vote links to an issue with no direction, so no official position can be derived. Add a row for what a bill does on an issue, with citations, and a row for what a Yea does on each vote, such as pass, amend, table, or proceed. Code then lists each official's casts with that evidence. The page shows no score and no "pro" or "anti" label. Effect on an issue starts with facts only: bill status, vote result, and whether the bill became law. Start with one tracked issue and measure accuracy and review load. The schema design goes to the owner first. Depends on: R-48, and the action redraft. [Publication](architecture/publication.md#limits-and-planned-work)
+- R-64: What officials did on an issue. Today a bill or vote links to an issue with no direction, so no official position can be derived. Add a row for what a bill does on an issue, with citations, and a row for what a Yea does on each vote, such as pass, amend, table, or proceed. Code then lists each official's casts with that evidence. The page shows no score and no "pro" or "anti" label. Effect on an issue starts with facts only: bill status, vote result, and whether the bill became law. Start with one tracked issue and measure accuracy and review load. The schema design goes to the owner first, using the [connection model](evidence-paths/pipeline.md#connection-model). Depends on: R-48, and the action redraft. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-69: Representation audit. Show how an official acts for their constituents, with the evidence side by side and its error named. Civic Lens never publishes a composite representation score or grade, its own or a scorecard's. Each feature has a method note. The research is on branch `survey-representation-data`. Depends on: none stated. [Publication](architecture/publication.md#limits-and-planned-work)
   - [ ] How it passed: each bill and nomination shows roll call, voice vote, or unanimous consent, so readers see when no member's position is on record
   - [ ] Bill fate: the profile shows how far each sponsored or cosponsored bill got and when the official joined it, beside the chamber base rate, with no rank
@@ -90,7 +160,7 @@ The owner accepted these designs. Each item holds its choices until the code and
   - [ ] Survey and build a drain of deferred candidates
 - R-56: Publish source coverage. Add a coverage field for each official and a "sources we could read" panel, so uneven coverage is visible. Depends on: none. [Publication](architecture/publication.md#limits-and-planned-work)
 - R-57: Finish the executive and judicial sources, after a check of what shipped. The plan is Cabinet officials from agency pages where the official speaks, then the 9 justices, speeches and remarks only. Opinions wait for a case record kind and a PDF reader. Executive orders as a record kind shipped with the Federal Register work. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
-- R-58: More data sources, each from an official API or bulk file, with a terms and robots check as the first step of its PR. The order is value for effort: Congress.gov amendments, House NOMINATE scores, Census ACS district profiles, presidential vote share by district, FEC, LDA, and committees. Financial disclosures come last. FEC money shows only as totals, with no donor names, because federal law limits reuse of donor names. Depends on: R-47. [Roster](architecture/roster.md#limits-and-planned-work)
+- R-58: More data sources, each from an official API or bulk file, with a terms and robots check as the first step of its PR. The order is value for effort: Congress.gov amendments, House NOMINATE scores, Census ACS district profiles, presidential vote share by district, FEC, LDA, and committees. Financial disclosures come last. [Candidate features](evidence-paths/features.md#new-evidence-sources) lists further sources to investigate. FEC money shows only as totals, with no donor names, because federal law limits reuse of donor names. Depends on: R-47. [Roster](architecture/roster.md#limits-and-planned-work)
 
 - R-61: Finish executive action records with issue tags. The body text and the AI summary moved to R-68. The summary step and its publication are in code. The step is off by default. Issue tags need a design first, because these documents have no policy area. Depends on: none. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 - R-62: Statements from official social accounts, such as Bluesky and YouTube. This needs a list of verified accounts and a new design. X and Meta stay out, because of cost and access limits. Depends on: R-17. [Collection](architecture/collection.md#limits-and-planned-work)
@@ -142,20 +212,14 @@ The owner accepted these designs. Each item holds its choices until the code and
 - D-16: Historical caucus for an independent first published after their roster term is unavailable. Published casts preserve a party known at publication. A later first publication may have only the source letter `I`, which cannot recover a former major-party caucus. Decide whether to collect historical terms or retain that limit. [Roster](architecture/roster.md#limits-and-planned-work)
 - D-17: Whether the talk and action counts of a President include executive actions. Today they do not. [Executive actions](architecture/executive-actions.md#limits-and-planned-work)
 
-## Product direction
 
-The audience is regular citizens who want transparency in U.S. national politics. State and local coverage are possible future extensions. Readers start with reviewed accounts and can inspect the evidence behind them. The editorial flow and the restrained monochrome identity are agreed.
-
-Data is the product. The product is only as good as its data, so data and database schemas are a first class feature. Design them as deliberately as any public page. The goal is rich links between people, records, bills, votes, and issues, so that we can derive insights no single source shows. This may become a graph.
-
-Design for scale. Each record carries rich detail, and coverage of officials, sources, and issues is broad. Automate every step that does not need human judgment.
-
-Each page answers more questions than it opens (owner, 2026-11-06). Where a bill, a vote, an action, or a term is ambiguous or technical, the page gives an AI summary in plain words. The reader flow decides where a summary goes. Each summary carries its AI label, and code checks it against its source. Its prompt aims for grade 12; code rejects above 14. It explains the exact terms.
-
-Derived insights are product goals. They make Civic Lens more than a connector to source APIs. Code computes each metric and publishes a method note. A person reviews any judgment before publication, and each insight shows its coverage limits.
-
-1. Changed record: detect deleted press releases, rewritten quotations, and positions removed from issue pages. Show both versions and their timing next to votes and events. This needs deletion detection and the document-change gate.
-2. Shared language: find the same or nearly the same sentences in releases from different offices. Show coordinated messaging, how it spreads, and who uses it first.
+- D-18: Error targets for the Phase 1 pilot and a public trial, set before tuning. The review proposes an upper bound of 5% for reviewer-accepted unsupported attributions in the private pilot and 2% in a public trial. [Pipeline evaluation](evidence-paths/pipeline.md#evaluation)
+- D-19: Where "insufficient evidence" lives: a new relationship reject reason that reopens when the evidence fingerprint changes, or a request for changes. [Connection model](evidence-paths/pipeline.md#connection-model)
+- D-20: How a relationship cites a bill passage: an optional target span on the relationship revision, after the action text citation precedent, a choice of existing action sentences, or a new assessment kind. [Connection model](evidence-paths/pipeline.md#connection-model)
+- D-21: Whether R-52 code approval of "statement about a vote" waits for the Phase 1 pilot result, or the pilot excludes that type. [Review](architecture/review.md#limits-and-planned-work)
+- D-22: Frozen pilot inputs: whether the release export reads the public views in one snapshot or the operational tables, and where the input bundle lives outside Git. [Setup experiments](evidence-paths/pipeline.md#before-the-pilot-opens-its-holdout)
+- D-23: Who draws the holdout cases: a person who did not build the method, or a seeded rule recorded in the pilot PR. [Pipeline evaluation](evidence-paths/pipeline.md#evaluation)
+- D-24: Whether the delivery phase keeps an independently deployed shell as its proposed destination, or first proves a reader need that the server-rendered pages cannot meet. [Delivery](evidence-paths/delivery.md#one-route-before-a-stack-decision)
 
 ## Deferred
 

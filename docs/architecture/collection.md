@@ -554,11 +554,11 @@ The shared wakeup and lease mechanics are in [Shared worker mechanics](../archit
 - Browser rendering and OCR are deferred until a selected source needs them.
 - An article whose path equals the configured page path or the prefix, and which only its query names, is also skipped. An example is `/?p=123`. No admitted URL in the dev data has this form.
 - Planned engine policies: a documented spending total comes with R-24. An engine-health view follows in R-18. A higher size limit for the shared configuration loader is needed only if the coverage file would pass 1 MB before the deploy.
-- Agreed upgrade ([R-22](../roadmap.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
-- Fix the remaining format and parser limits that the federal coverage found ([R-30](../roadmap.md#next)).
+- Agreed upgrade ([R-22](../evidence-paths.md#later)): ordered row locks in place of the single global lock of the job store. Measure lock waits on a bills-only collection run before the design.
+- Fix the remaining format and parser limits that the federal coverage found ([R-30](../evidence-paths.md#next)).
 - Planned: automatic discovery of official sources for a configured official, so that a new official needs no source entered by hand. Use the `fromDateTime` change check of the Congress.gov member list for it.
 - Planned: estimate the change rate of each page from check history with a Poisson model, after Cho and Garcia-Molina. Set the check cadence from it within the collection budget. Read the original work before choosing the refresh policy.
-- Storage must stay bounded at scale. The storage design is pending decision [D-04](../roadmap.md#pending-decisions).
+- Storage must stay bounded at scale. The storage design is pending decision [D-04](../evidence-paths.md#pending-decisions).
 
 Collection acceptance:
 

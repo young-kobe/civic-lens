@@ -20,7 +20,7 @@ For migration, derive public versions from the values of each retained release, 
 
 A [read-only PostgreSQL measurement](experiments/measure-issue-definition-reuse.sql) on November 19, 2026 found 192 release-issue rows across retained releases 1424 through 1435. All 12 contained the same 16 public definitions, including their display names and ordered examples. The counts were also unchanged for each issue across this window. References could represent these 192 copies of the wording with 16 definition versions. This measures repetition. It does not measure a latency or storage bottleneck.
 
-The [versioned-table experiment](experiments/versioned-issue-definitions.sql) uses three synthetic releases. The first two share one wording with bill counts of three and five. The third uses edited wording. Reading the first again restores the original wording and count, keeps an unknown count and missing definition on a legacy ID, and omits a configured issue with no member record. This checks join semantics only. Run it with `sqlite3 -bail -header -column :memory: < docs/post-r68/experiments/versioned-issue-definitions.sql`.
+The [versioned-table experiment](experiments/versioned-issue-definitions.sql) uses three synthetic releases. The first two share one wording with bill counts of three and five. The third uses edited wording. Reading the first again restores the original wording and count, keeps an unknown count and missing definition on a legacy ID, and omits a configured issue with no member record. This checks join semantics only. Run it with `sqlite3 -bail -header -column :memory: < docs/evidence-paths/experiments/versioned-issue-definitions.sql`.
 
 ## Proposed interface between producers and readers
 
@@ -64,7 +64,7 @@ The [SQLite example](experiments/reuse-issue-facts.sql) builds one activity view
 In the profile query, two followed topics returned two distinct votes for Massie. In the issue query, the same view returned both members' casts on S. 146. A third query added one CBS/YouGov poll question and two comparison judgments without modifying either existing view. The authorization question supplied context for the withdrawal resolution. The terrorism resolution shared the topic only. Neither motion was a sufficient match for a directional comparison. A share of actions aligned with the public is therefore undefined. [Survey, question 7](https://d3nkl3psvxxpe9.cloudfront.net/documents/cbsnews_20260303.pdf) and [withdrawal resolution text](https://www.govinfo.gov/content/pkg/BILLS-119hconres38ih/html/BILLS-119hconres38ih.htm).
 
 ```sh
-sqlite3 -bail -header -column :memory: < docs/post-r68/experiments/reuse-issue-facts.sql
+sqlite3 -bail -header -column :memory: < docs/evidence-paths/experiments/reuse-issue-facts.sql
 ```
 
 Switching the request to Adams and artificial intelligence returned the same cast and source digest through both readers. This small check establishes query reuse on fixed inputs. Classifier accuracy, production query costs and release lifecycle behavior remain unmeasured. In the private pilot, add another bill family without editing the queries. Exercise a multi-issue duplicate, an unsupported link and a stale review in the private workflow. The later poll and public-route trials own unassessed poll comparisons and the propagation of withdrawals. Track which extension needed new producer code, any changes to existing consumers, per-issue precision and recall, and unsupported attributions among interpreted links.

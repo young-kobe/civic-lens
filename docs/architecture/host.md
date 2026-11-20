@@ -135,7 +135,7 @@ A systemd timer runs `deploy/scripts/check-health.sh` every 10 minutes on the ho
 
 ## Limits and planned work
 
-The Jetson runs temporary production; see the [production runbook](../operations.md#production-runbook). The long-term cloud move is agreed but not implemented. The [roadmap](../roadmap.md) holds the order. The agreed design:
+The Jetson runs temporary production; see the [production runbook](../operations.md#production-runbook). The long-term cloud move is agreed but not implemented. The [plan](../evidence-paths.md) holds the order. The agreed design:
 
 - Containers host the application, the collection and background jobs, and PostgreSQL with persistent storage.
 - For the cloud move, Terraform defines all infrastructure at every vendor, and CI automates deployment. Terraform state never goes to R2. Services can use more than one vendor, such as Hetzner, Cloudflare, or AWS, when cost or resilience favors it.

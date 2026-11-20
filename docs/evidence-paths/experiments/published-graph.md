@@ -27,16 +27,16 @@ To replay release 1416 offline, use the [frozen input](published-1416.json). Thi
 
 ```sh
 uv run --no-project --with networkx==3.4.2 python \
-  docs/post-r68/experiments/project-sponsors.py < docs/post-r68/experiments/published-1416.json
+  docs/evidence-paths/experiments/project-sponsors.py < docs/evidence-paths/experiments/published-1416.json
 ```
 
 To sample the current release, use PostgreSQL 18 and a connection that can read the published views. Run from the repository root. The query reads one repeatable-read snapshot with a five-second statement timeout and a 500 ms lock timeout. The analysis reads the export locally. The measured environment used Python 3.10.12 and NetworkX 3.4.2.
 
 ```sh
 psql -X -qAt -v ON_ERROR_STOP=1 --dbname=service=civic_published \
-  -f docs/post-r68/experiments/published-graph.sql > /tmp/civic-published-graph.json
+  -f docs/evidence-paths/experiments/published-graph.sql > /tmp/civic-published-graph.json
 uv run --no-project --with networkx==3.4.2 python \
-  docs/post-r68/experiments/project-sponsors.py < /tmp/civic-published-graph.json
+  docs/evidence-paths/experiments/project-sponsors.py < /tmp/civic-published-graph.json
 ```
 
 Substitute a configured published-view connection for the example service. On the Orin we used a local database socket and the `civic_lens_public` role. Keep subsequent exports outside Git. The scripts reject a missing pilot bill, a repeated sponsorship edge, an unidentified official or an overlap mismatch. The local projection caps the number of officials at 600.

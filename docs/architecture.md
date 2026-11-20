@@ -55,7 +55,7 @@ Implemented:
 - record withdrawals, the member roster, and member photos
 - the public search service with its own Postgres database, fed from published releases
 
-Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The [roadmap](roadmap.md) holds the order.
+Pending: live Auth0 tenant verification, migration of the remaining public routes, the long-term cloud hosting move, AI classification, and MCP. A Jetson with Docker Compose runs temporary production. The [plan](evidence-paths.md) holds the order.
 
 ## Layers and dependency rules
 
@@ -465,5 +465,6 @@ This is the only navigation index.
 | Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
 | Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Server sitemap and robots file from the views | [Public site](architecture/public-site.md#invariants) | `src/CivicLens.PublicApi/Sitemap/SitemapEndpoints.cs` |
-| Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
+| Plan: direction, pending work, decisions | [Evidence Paths](evidence-paths.md) | none |
+| Relationship pipeline and candidate features (planned) | [Pipeline](evidence-paths/pipeline.md), [features](evidence-paths/features.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

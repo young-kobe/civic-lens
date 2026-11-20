@@ -23,7 +23,7 @@ Retain the Mosaic palette and typography for the trial. Use a persistent left ra
 
 ## What the mockups demonstrate
 
-Open the [public reader](experiments/review-graph/reader.html) and [private review workspace](experiments/review-graph/review.html) on the same House vote. The reader starts with a dated decision, its consequence and the legislative stage reached by that date. The reviewer starts with a quoted claim, the proposed relationship and the exact passage that might support it. Both use the [Mosaic v2 visual reference](../architecture/public-site.md#theme) for the brand, Archivo page titles, Gabarito section titles, Figtree body text, record icons and colors. The rail and the order of the evidence on a phone are proposed post-R-68 changes.
+Open the [public reader](experiments/review-graph/reader.html) and [private review workspace](experiments/review-graph/review.html) on the same House vote. The reader starts with a dated decision, its consequence and the legislative stage reached by that date. The reviewer starts with a quoted claim, the proposed relationship and the exact passage that might support it. Both use the [Mosaic v2 visual reference](../architecture/public-site.md#theme) for the brand, Archivo page titles, Gabarito section titles, Figtree body text, record icons and colors. The rail and the order of the evidence on a phone are proposed Evidence Paths changes.
 
 | Design choice | Where to inspect it | What still needs a trial |
 |---|---|---|

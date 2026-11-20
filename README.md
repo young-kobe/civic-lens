@@ -32,7 +32,7 @@ The workspace uses Blazor static server-side rendering with a shared Razor compo
 
 A Jetson runs temporary production with Docker Compose; see the [production runbook](docs/operations.md#production-runbook). The long-term cloud move, with Terraform, stays planned; see [production hosting](docs/architecture/host.md#limits-and-planned-work).
 
-The product is deployed and in iterative development. The active plan is the [R-68 public redesign](docs/roadmap.md#active-r-68-redesign).
+The product is deployed and in iterative development. The plan is [Evidence Paths](docs/evidence-paths.md): a relationship pipeline that connects records across many dimensions and shows each connection with its evidence. Its active work is the [R-68 public redesign](docs/evidence-paths.md#active-r-68-redesign).
 
 ## Start here
 
@@ -68,7 +68,7 @@ Projects define architectural layers; feature folders group related code within 
 
 - [Architecture and visual system map](docs/architecture.md)
 - [Operations and verification](docs/operations.md)
-- [Remaining implementation phases](docs/roadmap.md)
+- [Evidence Paths plan: direction, phases, work queue and pending decisions](docs/evidence-paths.md)
 - [Contributor and agent rules](AGENTS.md)
 
 The code uses AGPL-3.0; see [LICENSE](LICENSE). Published record text and data files use CC BY 4.0. Documentation describes the current implementation and clearly marks planned behavior. Git holds history.
