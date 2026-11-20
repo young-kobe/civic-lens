@@ -237,10 +237,10 @@ public sealed class BoardStore(NpgsqlDataSource views, PartyAgreementStore agree
     private static BoardTermAnswer[] TermsFor(List<OfficialTerm> terms, PublishedChamber chamber, int congress)
     {
         var (start, end) = CongressRange(congress);
-        var expectedOffice = chamber == PublishedChamber.House ? "House" : "Senate";
-        return [.. terms.Where(term => term.Office == expectedOffice && term.StartsOn < end && (term.EndsOn is null || term.EndsOn >= start))
+        var expectedKind = chamber == PublishedChamber.House ? PublishedOfficeKind.Representative : PublishedOfficeKind.Senator;
+        return [.. terms.Where(term => term.Kind == expectedKind && term.StartsOn < end && (term.EndsOn is null || term.EndsOn >= start))
             .Select(term => new BoardTermAnswer(term.Office, term.Kind, term.State, term.District, term.Party, term.Caucus,
-                term.StartsOn, term.EndsOn, term.Office == "House"
+                term.StartsOn, term.EndsOn, chamber == PublishedChamber.House
                     ? NonStateSeats.All.SingleOrDefault(seat => seat.Code == term.State)?.HouseOffice
                     : null))];
     }
