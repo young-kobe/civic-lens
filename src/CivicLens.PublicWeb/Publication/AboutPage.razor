@@ -51,7 +51,7 @@
             <Head><TableCell Header>What</TableCell><TableCell Header>Terms</TableCell><TableCell Header>Credit</TableCell></Head>
             <Row Context="row">
                 <TableCell Main>@row.What</TableCell>
-                <TableCell Label="Terms">@row.Terms@if (row.LicenseName is not null) {<text> <a href="@row.LicenseUrl" rel="noopener noreferrer">@row.LicenseName</a>.</text>}</TableCell>
+                <TableCell Label="Terms">@row.Terms@if (row.LicenseName is not null) {<text>@(" ")<a href="@row.LicenseUrl" rel="noopener noreferrer">@row.LicenseName</a>.</text>}</TableCell>
                 <TableCell Label="Credit">@row.Credit</TableCell>
             </Row>
         </DataTable>
