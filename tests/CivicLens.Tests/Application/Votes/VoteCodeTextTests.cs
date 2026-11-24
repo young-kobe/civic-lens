@@ -16,6 +16,8 @@ public sealed class VoteCodeTextTests
     [InlineData(VoteKind.Suspension, "Failed", "The House voted on passing H.R. 1013, Retirement Fairness Act of 2025 with limited debate. The motion failed.")]
     [InlineData(VoteKind.Amendment, "Failed", "The House voted on an amendment to H.R. 1013, Retirement Fairness Act of 2025. The amendment failed.")]
     [InlineData(VoteKind.MotionToRecommit, "Failed", "The House voted on sending H.R. 1013, Retirement Fairness Act of 2025 back to committee. The motion failed.")]
+    [InlineData(VoteKind.MotionToTable, "Motion to Table Agreed to", "The House voted on setting aside H.R. 1013, Retirement Fairness Act of 2025. The motion passed.")]
+    [InlineData(VoteKind.MotionToDischarge, "Motion Rejected", "The House voted on pulling H.R. 1013, Retirement Fairness Act of 2025 from committee. The motion failed.")]
     [InlineData(VoteKind.Rule, "Passed", "The House voted on the rules for debate set by H.R. 1013, Retirement Fairness Act of 2025. The rule passed.")]
     [InlineData(VoteKind.PreviousQuestion, "Passed", "The House voted on moving H.R. 1013, Retirement Fairness Act of 2025 toward a decision. The motion passed.")]
     [InlineData(VoteKind.VetoOverride, "Failed", "The House voted on overriding the veto of H.R. 1013, Retirement Fairness Act of 2025. The override failed.")]

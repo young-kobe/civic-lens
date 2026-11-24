@@ -10,6 +10,8 @@ public static class PublishedVoteKinds
         VoteKind.Rule => PublishedVoteKind.Rule,
         VoteKind.PreviousQuestion => PublishedVoteKind.PreviousQuestion,
         VoteKind.MotionToRecommit => PublishedVoteKind.MotionToRecommit,
+        VoteKind.MotionToTable => PublishedVoteKind.MotionToTable,
+        VoteKind.MotionToDischarge => PublishedVoteKind.MotionToDischarge,
         VoteKind.Amendment => PublishedVoteKind.Amendment,
         VoteKind.Suspension => PublishedVoteKind.Suspension,
         VoteKind.Passage => PublishedVoteKind.Passage,

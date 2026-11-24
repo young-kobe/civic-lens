@@ -17,6 +17,8 @@ public static class VoteMeaning
         new(PublishedVoteKind.Rule, "A Yes vote supported the rules for considering the measure.", "A No vote opposed the rules for considering the measure."),
         new(PublishedVoteKind.PreviousQuestion, "A Yes vote supported moving the matter toward a vote, with limits on further debate and changes.", "A No vote opposed moving the matter toward a vote this way."),
         new(PublishedVoteKind.MotionToRecommit, "A Yes vote supported sending the measure to a committee.", "A No vote opposed sending the measure to a committee."),
+        new(PublishedVoteKind.MotionToTable, "A Yes vote supported setting aside and rejecting the pending question without a direct vote on it.", "A No vote opposed setting aside the pending question, keeping it alive for further action."),
+        new(PublishedVoteKind.MotionToDischarge, "A Yes vote supported removing the matter from a committee so the full chamber can consider it.", "A No vote opposed removing the matter from the committee."),
         new(PublishedVoteKind.Amendment, "A Yes vote supported the proposed change.", "A No vote opposed the proposed change."),
         new(PublishedVoteKind.Suspension, "A Yes vote supported the action named in the question under a procedure with limited debate.", "A No vote opposed the action named in the question under a procedure with limited debate.",
             "A Yes vote supported the action under a procedure with limited debate."),

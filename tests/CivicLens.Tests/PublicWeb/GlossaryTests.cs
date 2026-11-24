@@ -16,8 +16,8 @@ public sealed class GlossaryTests
         Assert.Equal("Confirmation gives the President Senate consent to make the appointment. It does not show whether or when the nominee takes office. A cloture vote on the same nomination is a different vote, so check which one you are reading.", Glossary.Term("confirmation-vote").WhyItMatters);
     }
 
-    private const string ApprovedWordingHash = "4878B87E5B49DD8AE4E38EC9BFB112B5F58F87398438F2B50634B898D316CA87";
-    private const int ApprovedTermCount = 44;
+    private const string ApprovedWordingHash = "9B98D8EEA3C890757B7D067BCE5372ADDA80B4B0F3800D0660B3B6121B2AA2DF";
+    private const int ApprovedTermCount = 45;
 
     private static Task<AngleSharp.Dom.IDocument> RenderAsync<TPage>() where TPage : Microsoft.AspNetCore.Components.IComponent =>
         ListPageRender.RenderPageAsync<TPage>(new Dictionary<string, object?> { ["RootPath"] = ListPageRender.Root });

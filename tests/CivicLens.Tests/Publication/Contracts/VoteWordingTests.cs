@@ -12,6 +12,8 @@ public sealed class VoteWordingTests
     [InlineData(PublishedVoteKind.Rule, "A Yes vote supported the rules for considering the measure.", "A No vote opposed the rules for considering the measure.")]
     [InlineData(PublishedVoteKind.PreviousQuestion, "A Yes vote supported moving the matter toward a vote, with limits on further debate and changes.", "A No vote opposed moving the matter toward a vote this way.")]
     [InlineData(PublishedVoteKind.MotionToRecommit, "A Yes vote supported sending the measure to a committee.", "A No vote opposed sending the measure to a committee.")]
+    [InlineData(PublishedVoteKind.MotionToTable, "A Yes vote supported setting aside and rejecting the pending question without a direct vote on it.", "A No vote opposed setting aside the pending question, keeping it alive for further action.")]
+    [InlineData(PublishedVoteKind.MotionToDischarge, "A Yes vote supported removing the matter from a committee so the full chamber can consider it.", "A No vote opposed removing the matter from the committee.")]
     [InlineData(PublishedVoteKind.Amendment, "A Yes vote supported the proposed change.", "A No vote opposed the proposed change.")]
     [InlineData(PublishedVoteKind.Suspension, "A Yes vote supported the action named in the question under a procedure with limited debate.", "A No vote opposed the action named in the question under a procedure with limited debate.")]
     [InlineData(PublishedVoteKind.Passage, "A Yes vote supported passing or agreeing to the matter named in the question.", "A No vote opposed passing or agreeing to the matter named in the question.")]
@@ -104,6 +106,11 @@ public sealed class VoteWordingTests
     [InlineData(PublishedVoteKind.PreviousQuestion, "On Ordering the Previous Question", "Failed", PublishedChamber.House, "This motion does not close debate or changes. Further proceedings follow the House rules.")]
     [InlineData(PublishedVoteKind.MotionToRecommit, "On Motion to Commit with Instructions", "Passed", PublishedChamber.House, "The measure is sent to committee under the terms of the motion. This record does not show the committee's next action.")]
     [InlineData(PublishedVoteKind.MotionToRecommit, "On Motion to Recommit", "Failed", PublishedChamber.House, "This motion did not send the measure to committee. The House can continue proceedings on the matter.")]
+    [InlineData(PublishedVoteKind.MotionToRecommit, "On the Motion to Recommit", "Failed", PublishedChamber.Senate, "This motion did not send the measure to committee. The Senate can continue proceedings on the matter.")]
+    [InlineData(PublishedVoteKind.MotionToTable, "On the Motion to Table", "Passed", PublishedChamber.Senate, "The pending question is set aside and rejected. This record does not show a later attempt.")]
+    [InlineData(PublishedVoteKind.MotionToTable, "On Motion to Table", "Failed", PublishedChamber.House, "The pending question stays before the chamber. This record does not show which vote comes next.")]
+    [InlineData(PublishedVoteKind.MotionToDischarge, "On the Motion to Discharge", "Passed", PublishedChamber.Senate, "The committee is discharged from the matter so the full chamber can take it up. This vote does not decide the matter itself.")]
+    [InlineData(PublishedVoteKind.MotionToDischarge, "On Motion to Discharge", "Failed", PublishedChamber.House, "The matter stays in committee. This record does not show a later committee action.")]
     [InlineData(PublishedVoteKind.Amendment, "On Agreeing to the Amendment", "Passed", PublishedChamber.House, "The approved change becomes part of the pending text. This vote does not by itself pass the underlying measure.")]
     [InlineData(PublishedVoteKind.Amendment, "On Agreeing to the Amendment, as Modified", "Failed", PublishedChamber.House, "The pending text does not get this proposed change. The chamber can continue work on the underlying matter.")]
     [InlineData(PublishedVoteKind.Suspension, "On Motion to Suspend the Rules and Pass", "Failed", PublishedChamber.House, "The House can take up the matter by another allowed procedure. This record does not schedule a new vote.")]
@@ -252,6 +259,8 @@ public sealed class VoteWordingTests
         PublishedVoteKind.Passage => "On Passage",
         PublishedVoteKind.PreviousQuestion => "On Ordering the Previous Question",
         PublishedVoteKind.MotionToRecommit => "On Motion to Commit with Instructions",
+        PublishedVoteKind.MotionToTable => "On Motion to Table",
+        PublishedVoteKind.MotionToDischarge => "On Motion to Discharge",
         PublishedVoteKind.Amendment => "On Agreeing to the Amendment",
         PublishedVoteKind.Suspension => "On Motion to Suspend the Rules and Pass",
         PublishedVoteKind.ConferenceReport => "On Agreeing to the Conference Report",

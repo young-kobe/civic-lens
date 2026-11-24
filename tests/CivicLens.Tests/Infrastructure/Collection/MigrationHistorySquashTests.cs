@@ -18,7 +18,8 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
         Current,
         "20261117225018_PublishedSenateClass",
         "20261124120000_WholeVoteTotals",
-        "20261124121000_BriefCitationOrigins"
+        "20261124121000_BriefCitationOrigins",
+        "20261124153000_VoteProceduralKinds"
     ];
     private string? connectionString;
 

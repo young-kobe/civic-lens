@@ -150,6 +150,8 @@ public static class PublishedRecordLabels
         PublishedVoteKind.Rule => "house-rule",
         PublishedVoteKind.PreviousQuestion => "previous-question",
         PublishedVoteKind.MotionToRecommit => "motion-to-recommit",
+        PublishedVoteKind.MotionToTable => "motion-to-table",
+        PublishedVoteKind.MotionToDischarge => "motion-to-discharge",
         PublishedVoteKind.Amendment => "amendment",
         PublishedVoteKind.Suspension => "suspension-of-the-rules",
         PublishedVoteKind.Passage => "passage",
