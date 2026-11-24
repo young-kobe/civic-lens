@@ -9,6 +9,19 @@ namespace CivicLens.Tests.PublicWeb;
 public sealed class VoteDetailPageTests
 {
     [Fact]
+    public void SenateIdentityLinksOnlyTheOfficialSenateRollCallWithTheApprovedCaption()
+    {
+        var senate = VoteFacts.Identity(PublishedChamber.Senate, 5, 119, 1, PublishedVoteSource.Voteview);
+        var house = VoteFacts.Identity(PublishedChamber.House, 5, 119, 1, PublishedVoteSource.CongressGov);
+        var senateRollCall = senate[1];
+
+        var link = Assert.Single(senateRollCall.Links!);
+        Assert.Equal("Senate roll call 5", link.Text);
+        Assert.Equal(OfficialRollCallPage.Url(PublishedChamber.Senate, 119, 1, 5), link.Href);
+        Assert.Null(house[1].Links);
+    }
+
+    [Fact]
     public async Task TheMemberTableLinksToTheConfiguredPagedSourceAndKeepsEmptyFilteredResultsLinkFree()
     {
         const string apiRoot = "https://api.civic-lens.test";

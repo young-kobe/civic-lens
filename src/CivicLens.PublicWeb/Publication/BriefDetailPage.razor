@@ -28,7 +28,9 @@
             </AiSummary>
             <section class="detail-section" id="cited" aria-labelledby="brief-cited-title">
                 <h2 id="brief-cited-title">@PublishedBriefView.CitedRecordsTitle</h2>
-                <PublishedBriefCitations Citations="Data.Citations" RootPath="@RootPath" />
+                <GlossaryContent Context="use">
+                    <PublishedBriefCitations Citations="Data.Citations" CitationTextOrigins="Data.CitationTextOrigins" RootPath="@RootPath" />
+                </GlossaryContent>
             </section>
             <section class="detail-section" id="coverage" aria-labelledby="brief-coverage-title">
                 <h2 id="brief-coverage-title">How this brief was made</h2>

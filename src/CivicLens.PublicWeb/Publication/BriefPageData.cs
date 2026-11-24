@@ -21,5 +21,8 @@ public sealed record BriefPageData(
     /// <summary>The correction history of the shown revision in the active release, newest first. The correction banner shows the newest.</summary>
     public PublishedCorrection[] Corrections { get; init; } = [];
 
+    /// <summary>The origin of each exact cited revision in citation order. Null means the cited record has no declared text origin.</summary>
+    public PublishedTextOrigin?[] CitationTextOrigins { get; init; } = [];
+
     public string ShortName => PublishedBriefView.ShortName(WeekStart);
 }
