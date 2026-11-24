@@ -38,7 +38,10 @@ public static class VoteFacts
     public static IReadOnlyList<Fact> Identity(PublishedChamber chamber, int rollCall, int congress, int session, PublishedVoteSource source) =>
     [
         new("Chamber", chamber.ToString()),
-        new("Roll call", $"{rollCall}, Congress {congress}, session {session}"),
+        chamber == PublishedChamber.Senate
+            ? new Fact("Roll call", $"{rollCall}, Congress {congress}, session {session}",
+                [new FactLink($"Senate roll call {rollCall}", OfficialRollCallPage.Url(chamber, congress, session, rollCall))])
+            : new Fact("Roll call", $"{rollCall}, Congress {congress}, session {session}"),
         new("Data source", PublishedRecordLabels.VoteSource(source))
     ];
 

@@ -9980,6 +9980,28 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("text_origin");
 
+                    b.Property<int?>("TotalNay")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_nay");
+
+                    b.Property<int?>("TotalNotVoting")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_not_voting");
+
+                    b.Property<int?>("TotalPresent")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_present");
+
+                    b.Property<int?>("TotalYea")
+                        .HasColumnType("integer")
+                        .HasColumnName("total_yea");
+
+                    b.Property<bool>("TotalsWritten")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("totals_written");
+
                     b.Property<string>("VoteSource")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -10068,6 +10090,8 @@ namespace CivicLens.Infrastructure.Collection.Migrations
                             t.HasCheckConstraint("ck_vote_revisions_summary", "length(summary) BETWEEN 1 AND 4000");
 
                             t.HasCheckConstraint("ck_vote_revisions_text_origin", "text_origin IN ('Model', 'Person', 'Code')");
+
+                            t.HasCheckConstraint("ck_vote_revisions_whole_totals", "(total_yea IS NULL AND total_nay IS NULL AND total_present IS NULL AND total_not_voting IS NULL) OR (totals_written AND total_yea IS NOT NULL AND total_nay IS NOT NULL AND total_present IS NOT NULL AND total_not_voting IS NOT NULL AND total_yea >= 0 AND total_nay >= 0 AND total_present >= 0 AND total_not_voting >= 0 AND total_yea::bigint + total_nay + total_present + total_not_voting <= 600)");
 
                             t.HasCheckConstraint("ck_vote_revisions_vote_source", "vote_source IN ('CongressGov', 'Voteview')");
 

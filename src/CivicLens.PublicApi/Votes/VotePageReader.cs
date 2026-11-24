@@ -150,7 +150,7 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
         { BreaksParty = names.BreaksParty.TryGetValue(member.OfficialId, out var breaks) ? breaks : null }).ToArray();
         return new(detail.Release, vote.RecordId, vote.RevisionNumber, vote.Chamber, vote.Congress, vote.Session, vote.RollCall, vote.VotedOn,
             vote.Kind, detail.Source, vote.Headline, vote.Summary, vote.TextOrigin, vote.Label, vote.Result, vote.Alignment, totals,
-            vote.Chamber == PublishedChamber.Senate ? SenatePartyTallies(memberData, totals) : detail.PartyTallies, detail.VotedOnCitation, detail.KindCitation, detail.Facts, detail.Sources, memberData,
+            detail.PartyTallies ?? (vote.Chamber == PublishedChamber.Senate ? SenatePartyTallies(memberData, totals) : null), detail.VotedOnCitation, detail.KindCitation, detail.Facts, detail.Sources, memberData,
             names.Bill, names.Issues, vote.BillType, vote.BillNumber)
         {
             Statements = names.Statements,
@@ -158,15 +158,12 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
         };
     }
 
-    /// <summary>
-    /// The party counts of a Senate vote, from its member list, which holds the party of each senator on the vote day. The Voteview source gives no party tally line,
-    /// and a Senate revision published before the stored tallies keeps a zero tally marker that no later revision replaces. The vote totals of the view count the
-    /// same list, so the party counts add up to them. A list with a member of no stored party, or with a cast outside Yes, No, Present, and Not voting, has no totals
-    /// and shows no party counts.
-    /// </summary>
-    private static PublishedPartyTally[]? SenatePartyTallies(VoteMemberData[] members, PublishedVoteTotals? totals) =>
-        totals is null || members.Any(member => member.Party is null) ? null
-        : [.. members.GroupBy(member => member.Party!, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => new PublishedPartyTally
+    // Older Senate revisions may have no frozen tallies. Their tracked members are a fallback only when they cover every whole-source count.
+    private static PublishedPartyTally[]? SenatePartyTallies(VoteMemberData[] members, PublishedVoteTotals? totals)
+    {
+        if (totals is null || members.Any(member => member.Party is null ||
+            (PublishedOfficialVote.SideOf(member.Cast) is null && member.Cast is not PublishedOfficialVote.Present and not PublishedOfficialVote.NotVoting))) return null;
+        var tallies = members.GroupBy(member => member.Party!, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => new PublishedPartyTally
         {
             Party = group.Key,
             Yea = group.Count(member => PublishedOfficialVote.SideOf(member.Cast) == PublishedPartyMajority.Yea),
@@ -174,7 +171,10 @@ public sealed class VotePageReader(VoteStore votes, CorrectionHistoryStore corre
             Present = group.Count(member => member.Cast == PublishedOfficialVote.Present),
             NotVoting = group.Count(member => member.Cast == PublishedOfficialVote.NotVoting),
             Other = 0
-        })];
+        }).ToArray();
+        return tallies.Sum(tally => tally.Yea) == totals.Yea && tallies.Sum(tally => tally.Nay) == totals.Nay &&
+            tallies.Sum(tally => tally.Present) == totals.Present && tallies.Sum(tally => tally.NotVoting) == totals.NotVoting ? tallies : null;
+    }
 
     private sealed record PageNames(Dictionary<string, string> Officials, VoteBillData? Bill, VoteIssueData[] Issues, VoteStatementData[] Statements, int StatementTotal,
         Dictionary<string, bool> BreaksParty);

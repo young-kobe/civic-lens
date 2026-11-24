@@ -98,6 +98,7 @@ internal static class ViewsSeed
                 {Offset(evidence.DetailText, $"Started: {vote.VotedOn}T12:00:00Z")}, {DateQuote(vote).Length}, '{vote.Kind}',
                 {(vote.Kind == "Other" ? "NULL, NULL, NULL" : $"'{evidence.DetailId}', {Offset(evidence.DetailText, question)}, {question.Length}")},
                 '{list}', '{new string('a', 64)}', true, {bill}, 'On {vote.Id}', '{Escape(vote.Result)}');
+            {VoteMemberListSeed.WholeTotalsUpdate(vote.RecordId, revision, vote.Casts)}
             INSERT INTO vote_revision_facts (record_id, revision_number, "position", fact_text, citation_extraction_id, citation_start, citation_length)
               VALUES ('{vote.RecordId}', {revision}, 0, '{Escape(question)}', '{evidence.DetailId}', {Offset(evidence.DetailText, question)}, {question.Length}),
                      ('{vote.RecordId}', {revision}, 1, '{Escape(result)}', '{evidence.DetailId}', {Offset(evidence.DetailText, result)}, {result.Length});

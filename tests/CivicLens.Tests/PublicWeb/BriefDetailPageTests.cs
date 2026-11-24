@@ -82,6 +82,33 @@ public sealed class BriefDetailPageTests
     }
 
     [Fact]
+    public async Task CitedHeadlinesUseOnlyTheirOwnModelOriginForGlossaryControls()
+    {
+        var citations = new[]
+        {
+            new PublishedBriefCitation { Id = "R1", Kind = PublishedRecordKind.Statement, RecordId = StatementCited, RevisionNumber = 1, Headline = "Bill headline" },
+            new PublishedBriefCitation { Id = "R2", Kind = PublishedRecordKind.DocumentChange, RecordId = ActionId, RevisionNumber = 2, Headline = "Confirmation vote headline" },
+            new PublishedBriefCitation { Id = "R3", Kind = PublishedRecordKind.Action, RecordId = ActionId, RevisionNumber = 3, Headline = "Bill code headline" },
+            new PublishedBriefCitation { Id = "R4", Kind = PublishedRecordKind.Statement, RecordId = StatementCited, RevisionNumber = 4, Headline = "Confirmation vote person headline" },
+            new PublishedBriefCitation { Id = "R5", Kind = PublishedRecordKind.Statement, RecordId = StatementCited, RevisionNumber = 5, Headline = "Bill unknown headline" }
+        };
+        var data = Brief() with
+        {
+            Citations = citations,
+            CitationTextOrigins = [PublishedTextOrigin.Model, PublishedTextOrigin.Model, PublishedTextOrigin.Code, PublishedTextOrigin.Person, null]
+        };
+
+        var page = await RenderAsync<BriefDetailPage, BriefPageData>(data);
+        var rows = page.QuerySelectorAll(".detail-cited li");
+
+        Assert.NotNull(rows[0].QuerySelector("button.term"));
+        Assert.NotNull(rows[1].QuerySelector("button.term"));
+        Assert.Null(rows[2].QuerySelector("button.term"));
+        Assert.Null(rows[3].QuerySelector("button.term"));
+        Assert.Null(rows[4].QuerySelector("button.term"));
+    }
+
+    [Fact]
     public async Task ATimeThatTheDataDoesNotHoldGetsNoRow()
     {
         var page = await RenderAsync<BriefDetailPage, BriefPageData>(Brief() with { ApprovedAtUtc = null, FirstPublishedAtUtc = null });

@@ -86,6 +86,7 @@ brief_citations citation_id
 brief_citations kind
 brief_citations target_record_id
 brief_citations target_revision_number
+brief_citations target_text_origin
 brief_citations headline
 briefs approved_at_utc_ticks
 briefs coverage_considered

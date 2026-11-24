@@ -12,7 +12,7 @@
         <p>Each count is a number of records. It is not a share, a rank, or a measure of how much the official cares about the issue. A record on several issues counts once for each issue. A record with no tracked issue is in no row.</p>
     </Panel>
     <Panel Title="Missed votes" Padded="true">
-        <p>@VoteWords.MissedVoteMeaning The count covers the roll calls of the current Congress on this site, in each chamber where the official has votes.</p>
+        <p>@VoteWords.MissedVoteMeaning The count covers the newest Congress with attendance figures for that member, in each chamber where the official has votes.</p>
         <p>The total is the number of roll calls on this site that the chamber held while the official served. A roll call that is not on this site is in neither number.</p>
         <p>The page shows a share only when the total is at least @PublishedCountRules.MinimumRecordsForShare roll calls.</p>
     </Panel>
@@ -25,10 +25,9 @@
         <p>An independent who caucuses with the @(PublishedPartyMajority.Democrat)s or the @(PublishedPartyMajority.Republican)s, which means they work with that party in Congress, counts with that party. The page leaves out votes that the official cast while in another party and not caucusing with either. For a member who has left Congress, the page uses the party letter in the vote record, so the page does not count the votes of an independent who left.</p>
     </Panel>
     <Panel Title="The voting boards" Padded="true">
-        <p>Each voting board page lists the members of one party in one chamber. It has three lists: the share of split votes where the member voted against most of the party, the share where the member voted with most of the party, and the number of missed votes. The lists use the figures that the official pages show, for one Congress in each chamber. That is the newest Congress with vote figures in this release, once any member of the chamber has at least @OfficialBoardPage.MinimumSplitVotes split votes cast in it. Until then the page keeps the next older Congress and says so. The House and the Senate can show different Congresses.</p>
-        <p>The two lists of split votes rank only members with at least @OfficialBoardPage.MinimumSplitVotes split votes cast as Yes or No. Each row shows the count and the total. A smaller total can come from a late start. It can also come from split votes that the member skipped. The page names the members with fewer split votes and does not rank them. The list of missed votes ranks by the number of missed votes. Each row shows the roll calls held while the member served and the dates.</p>
-        <p>The missed vote count has no party. A member who changed party shows the same missed count on the board of each party.</p>
-        <p>A board never mixes parties or chambers. The page names the officials that it leaves out, such as officials with no vote figures in this release.</p>
+        <p>Each voting board lists members of one party in one chamber who voted against most of their party at least once. Members rank by their share of split votes cast against most of the party. The list uses one Congress in each chamber. That is the newest Congress with vote figures in this release, once any member of the chamber has at least @OfficialBoardPage.MinimumSplitVotes split votes cast in it. Until then, it uses the next older Congress with vote figures when there is one. If there is none, it keeps the newest Congress. The page says which Congress it uses. The House and the Senate can show different Congresses.</p>
+        <p>Only members with at least @OfficialBoardPage.MinimumSplitVotes split votes cast as Yes or No are ranked. Each row shows the count, the total and the share. A smaller total can come from a late start or from split votes the member skipped. Members with fewer split votes, no vote figures or no votes against their party are not listed.</p>
+        <p>Delegates and the Resident Commissioner rank in their own list. Delegates may not vote on final passage in the full House, so they cast fewer split votes. They rank apart from voting members.</p>
         <p><a href="@(RootPath + PublicationProtocol.OfficialsPagePath)">Open the boards from the officials page.</a></p>
     </Panel>
     <Panel Title="What a link is" Padded="true">

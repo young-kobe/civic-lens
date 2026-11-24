@@ -13,7 +13,7 @@ public sealed class BriefStore(NpgsqlDataSource views)
                (SELECT json_agg(json_build_object('text', p.paragraph_text, 'citationIds', p.citation_ids) ORDER BY p.position)
                   FROM public_api.brief_paragraphs p WHERE p.release_number = b.release_number AND p.record_id = b.record_id AND p.revision_number = b.revision_number),
                (SELECT json_agg(json_build_object('id', c.citation_id, 'kind', c.kind, 'recordId', c.target_record_id,
-                    'revisionNumber', c.target_revision_number, 'headline', c.headline) ORDER BY c.position)
+                    'revisionNumber', c.target_revision_number, 'headline', c.headline, 'textOrigin', c.target_text_origin) ORDER BY c.position)
                   FROM public_api.brief_citations c WHERE c.release_number = b.release_number AND c.record_id = b.record_id AND c.revision_number = b.revision_number)
           FROM (SELECT release_number FROM public_api.active_release LIMIT 1) a
           LEFT JOIN public_api.briefs b ON b.record_id = @id
@@ -50,9 +50,30 @@ public sealed class BriefStore(NpgsqlDataSource views)
             throw new InvalidDataException("The active brief has no published content.");
         var paragraphs = System.Text.Json.JsonSerializer.Deserialize<PublishedBriefParagraph[]>(reader.GetString(12), PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("The brief paragraphs view returned invalid content.");
-        var citations = System.Text.Json.JsonSerializer.Deserialize<PublishedBriefCitation[]>(reader.GetString(13), PublicationProtocol.JsonOptions)
+        var citationRows = System.Text.Json.JsonSerializer.Deserialize<BriefCitationRead[]>(reader.GetString(13), PublicationProtocol.JsonOptions)
             ?? throw new InvalidDataException("The brief citations view returned invalid content.");
+        var citations = citationRows.Select(citation => new PublishedBriefCitation
+        {
+            Id = citation.Id,
+            Kind = citation.Kind,
+            RecordId = citation.RecordId,
+            RevisionNumber = citation.RevisionNumber,
+            Headline = citation.Headline
+        }).ToArray();
         PublishedBrief.ValidateContent(paragraphs, citations);
-        return new(reader.GetInt32(0), brief, paragraphs, citations);
+        return new(reader.GetInt32(0), brief, paragraphs, citations)
+        {
+            CitationTextOrigins = [.. citationRows.Select(citation => citation.TextOrigin)]
+        };
+    }
+
+    private sealed record BriefCitationRead
+    {
+        public required string Id { get; init; }
+        public required PublishedRecordKind Kind { get; init; }
+        public required string RecordId { get; init; }
+        public required int RevisionNumber { get; init; }
+        public required string Headline { get; init; }
+        public PublishedTextOrigin? TextOrigin { get; init; }
     }
 }

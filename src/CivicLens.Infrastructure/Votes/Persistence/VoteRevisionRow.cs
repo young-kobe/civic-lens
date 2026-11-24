@@ -47,6 +47,11 @@ internal sealed class VoteRevisionRow : IReviewRevisionRow, IReviewTextRow
     public string Result { get; set; } = string.Empty;
     public bool ColumnsWritten { get; set; }
     public short? PartyTallyCount { get; set; }
+    public bool TotalsWritten { get; set; }
+    public int? TotalYea { get; set; }
+    public int? TotalNay { get; set; }
+    public int? TotalPresent { get; set; }
+    public int? TotalNotVoting { get; set; }
     public PublishedVoteAlignment? Alignment { get; set; }
     public string? DemocratMajority { get; set; }
     public string? RepublicanMajority { get; set; }

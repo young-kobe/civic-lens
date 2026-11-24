@@ -6,7 +6,17 @@ namespace CivicLens.Tests.PublicWeb;
 
 public sealed class GlossaryTests
 {
-    private const string ApprovedWordingHash = "9CBD8DC8A299CEA5D6B467579FC13FCD5589875DB7776A369BE1215C14F143FE";
+    [Fact]
+    public void ApprovedArticleISection7AndNominationCopyIsExact()
+    {
+        Assert.Equal("Both chambers must pass the same text. A bill can then become law with the President's signature, through a veto override, or without a signature under the Constitution's rules.", Glossary.Term("bill").WhyItMatters);
+        Assert.Equal("Constitution, Article I, Section 7", Glossary.Term("bill").Source);
+        Assert.Equal("https://www.archives.gov/founding-docs/constitution-transcript", Glossary.Term("bill").SourceHref);
+        Assert.Equal("A nomination asks for Senate approval. It does not by itself show that the person holds the post.", Glossary.Term("nomination").WhyItMatters);
+        Assert.Equal("Confirmation gives the President Senate consent to make the appointment. It does not show whether or when the nominee takes office. A cloture vote on the same nomination is a different vote, so check which one you are reading.", Glossary.Term("confirmation-vote").WhyItMatters);
+    }
+
+    private const string ApprovedWordingHash = "4878B87E5B49DD8AE4E38EC9BFB112B5F58F87398438F2B50634B898D316CA87";
     private const int ApprovedTermCount = 44;
 
     private static Task<AngleSharp.Dom.IDocument> RenderAsync<TPage>() where TPage : Microsoft.AspNetCore.Components.IComponent =>
@@ -27,7 +37,9 @@ public sealed class GlossaryTests
         text.Append(Glossary.PartyCountHeading).Append('\n').AppendJoin('\n', Glossary.PartyCountRules);
 
         Assert.Equal(ApprovedTermCount, AllTerms.Count());
-        Assert.Equal(ApprovedWordingHash, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))));
+        var actualHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
+        if (!string.Equals(ApprovedWordingHash, actualHash, StringComparison.Ordinal))
+            Assert.Fail($"Glossary wording differs from its approved hash. Actual: {actualHash}");
     }
 
     [Fact]
