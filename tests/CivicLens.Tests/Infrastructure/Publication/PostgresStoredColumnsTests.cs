@@ -45,6 +45,59 @@ public sealed class PostgresStoredColumnsTests(PostgresCollection postgres) : IA
     public Task DisposeAsync() => postgres.DropDatabaseAsync(connectionString);
 
     [Fact]
+    public async Task WholeTotalsStaySeparateFromTrackedMembersAndRejectConflictingReplay()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, inRelease: true);
+        var columns = VoteStoredColumns.From(published.Vote) with
+        {
+            Totals = new PublishedVoteTotals { Yea = 52, Nay = 47, Present = 0, NotVoting = 1 }
+        };
+
+        await publications.WriteVoteColumnsAsync([columns], default);
+        await publications.WriteVoteColumnsAsync([columns], default);
+
+        Assert.Single(published.Vote.Members);
+        Assert.Equal(["52|47|0|1|100"], await ReadAsync("SELECT yea || '|' || nay || '|' || present || '|' || not_voting || '|' || (yea + nay + present + not_voting) FROM public_api.votes"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync(
+            [columns with { Totals = columns.Totals! with { Yea = 50 } }], default));
+        Assert.Equal(["52"], await ReadAsync("SELECT total_yea::text FROM vote_revisions"));
+    }
+
+    [Fact]
+    public async Task BackfillFindsMissingWholeTotalsAfterOtherStoredColumnsAndTalliesAreComplete()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, inRelease: true);
+        await publications.WriteVoteColumnsAsync([VoteStoredColumns.From(published.Vote)], default);
+        await ExecuteAsync("UPDATE vote_revisions SET totals_written = false, total_yea = NULL, total_nay = NULL, total_present = NULL, total_not_voting = NULL");
+        Assert.Equal(["true"], await ReadAsync("SELECT (yea IS NULL AND nay IS NULL AND present IS NULL AND not_voting IS NULL)::text FROM public_api.votes"));
+
+        var result = await StoredColumnsBackfills.WithoutRosters(publications, published.Scenario.Releases, published.Scenario.Votes).ExecuteAsync(PublicationScenario.Owner);
+
+        Assert.Equal((1, 1), (result.VoteRevisionsExamined, result.VoteRevisionsWritten));
+        Assert.Equal([published.Vote.Totals!.Yea.ToString()], await ReadAsync("SELECT total_yea::text FROM vote_revisions"));
+        Assert.Empty(await publications.ReadVoteColumnGapsAsync(default));
+    }
+
+    [Fact]
+    public async Task KnownAbsentWholeTotalsAreImmutableAndMalformedTotalsRollBackTheWrite()
+    {
+        var published = await PublishVoteAsync([]);
+        await SeedAsync(published, 1, throughRevision: 2);
+        var absent = VoteStoredColumns.From(published.Vote) with { Totals = null };
+        await publications.WriteVoteColumnsAsync([absent], default);
+        await publications.WriteVoteColumnsAsync([absent], default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publications.WriteVoteColumnsAsync([VoteStoredColumns.From(published.Vote)], default));
+        var invalid = VoteStoredColumns.From(published.Vote) with { RevisionNumber = 2, Totals = published.Vote.Totals! with { Yea = -1 } };
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.WriteVoteColumnsAsync([invalid], default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => publications.WriteVoteColumnsAsync([invalid with { TotalsKnown = false }], default));
+
+        Assert.Equal(["true|true", "false|false"], await ReadAsync("SELECT totals_written::text || '|' || columns_written::text FROM vote_revisions ORDER BY revision_number"));
+        Assert.Equal(["true", "true"], await ReadAsync("SELECT (total_yea IS NULL AND total_nay IS NULL AND total_present IS NULL AND total_not_voting IS NULL)::text FROM vote_revisions ORDER BY revision_number"));
+    }
+
+    [Fact]
     public async Task PartyTallyMigrationUsesTheConfiguredPrimaryAndForeignKeyNames()
     {
         await using var db = new CollectionAttemptDbContext(

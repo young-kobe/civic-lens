@@ -42,7 +42,7 @@ internal static class VoteStoredColumnRows
         """ + ReleaseRange + """
         FROM vote_revisions r
         JOIN publication_record_states s ON s.kind = 'vote' AND s.record_id = r.record_id AND s.revision_number = r.revision_number
-        WHERE r.member_list_id IS NOT NULL AND (NOT r.columns_written OR r.party_tally_count IS NULL)
+        WHERE r.member_list_id IS NOT NULL AND (NOT r.columns_written OR r.party_tally_count IS NULL OR NOT r.totals_written)
         GROUP BY r.record_id, r.revision_number, r.member_list_id
         ORDER BY r.member_list_id, r.record_id, r.revision_number
         """;
@@ -60,6 +60,7 @@ internal static class VoteStoredColumnRows
         await db.Database.ExecuteSqlRawAsync(FillRevisions, [columns.Select(column => column.RecordId).ToArray(), columns.Select(column => column.RevisionNumber).ToArray(),
             columns.Select(column => column.Alignment?.ToString()).ToArray(), columns.Select(column => column.DemocratMajority).ToArray(),
             columns.Select(column => column.RepublicanMajority).ToArray()], cancellationToken);
+        await VoteTotalRows.WriteAsync(db, columns, cancellationToken);
         await VotePartyTallyRows.WriteAsync(db, columns, cancellationToken);
     }
 
