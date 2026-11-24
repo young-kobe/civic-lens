@@ -70,7 +70,30 @@ public sealed class BillStepsTests
         Assert.Equal(["Introduced in the House", "Passed the House", "Passed the Senate"], steps.Select(step => step.Title));
         Assert.Equal([PublishedChamber.House, PublishedChamber.House, PublishedChamber.Senate], steps.Select(step => step.Chamber));
         Assert.Equal("12 Sep 2025, vote of 262 to 159", steps[1].Detail);
-        Assert.Equal("7 Aug 2026", steps[2].Detail);
+        Assert.Equal("7 Aug 2026, unanimous consent (no recorded member votes)", steps[2].Detail);
+    }
+
+    [Theory]
+    [InlineData("Passed/agreed to in House: On motion to suspend the rules and pass the bill Agreed to by voice vote.", "13 Sep 2025, voice vote (no recorded member votes)")]
+    [InlineData("Passed Senate with amendments by Voice Vote. (consideration: CR S2723)", "13 Sep 2025, voice vote (no recorded member votes)")]
+    [InlineData("Passed Senate with an amendment by Unanimous Consent.", "13 Sep 2025, unanimous consent (no recorded member votes)")]
+    [InlineData("Passed/agreed to in House: On passage Passed without objection. (text: CR H4758-4759)", "13 Sep 2025, without objection (no recorded member votes)")]
+    [InlineData("Passed/agreed to in House: On passage Passed by the Yeas and Nays: 215 - 214, 1 Present (Roll no. 145).", "13 Sep 2025, vote of 215 to 214")]
+    public void PassageStepsShowRecordedTalliesIncludingPresentVotesAndNameNonRecordedPassageMethods(string actionText, string expectedDetail)
+    {
+        var steps = BillSteps.Of(HouseBill, Introduced, null, [Action(0, "2025-09-13", actionText)]);
+
+        Assert.Equal(expectedDetail, steps[1].Detail);
+    }
+
+    [Fact]
+    public void ChamberAgreementByVoiceVoteShowsThatNoMemberVotesWereRecorded()
+    {
+        var steps = BillSteps.Of(HouseBill, Introduced, null,
+            [Action(0, "2026-09-16", "Resolving differences -- House actions: On motion that the House agree to the Senate amendments Agreed to by voice vote.", "ResolvingDifferences")]);
+
+        var step = Assert.Single(steps.Skip(1));
+        Assert.Equal(new("House agreed to the Senate changes", "16 Sep 2026, voice vote (no recorded member votes)") { Chamber = PublishedChamber.House }, step);
     }
 
     [Fact]
