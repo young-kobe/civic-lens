@@ -37,6 +37,7 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, first_release, revision_number, last_release) ON publication_record_states TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, chamber, congress, session_number, roll_call_number, voted_on, kind,
             bill_type, bill_number, headline, summary, text_origin, member_list_id, question, result, alignment, democrat_majority, republican_majority, columns_written, party_tally_count,
+            total_yea, total_nay, total_present, total_not_voting,
             vote_source, voted_on_citation_extraction_id, voted_on_citation_start, voted_on_citation_length,
             kind_citation_extraction_id, kind_citation_start, kind_citation_length) ON vote_revisions TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, party, yea, nay, present, not_voting, other)
@@ -52,8 +53,8 @@ internal static class PublicApiGrants
         GRANT SELECT (kind, record_id, revision_number, "position", policy_area_id) ON published_entry_policy_areas TO civic_lens_public_owner;
         GRANT SELECT (list_id, "position", person_id, vote_cast, party, citation_extraction_id, citation_start, citation_length)
             ON vote_member_list_entries TO civic_lens_public_owner;
-        GRANT SELECT (list_id, yea_count, nay_count, present_count, not_voting_count, other_count)
-            ON vote_member_lists TO civic_lens_public_owner;
+        REVOKE SELECT (list_id, yea_count, nay_count, present_count, not_voting_count, other_count)
+            ON vote_member_lists FROM civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, issue_id, is_tracked) ON vote_revision_issues TO civic_lens_public_owner;
         GRANT SELECT (record_id, revision_number, congress, bill_type, bill_number, bill_title, headline, summary, text_origin,
             policy_area, policy_area_id, event_on, cosponsor_count, text_package_id, why_it_matters, introduced_on) ON action_revisions TO civic_lens_public_owner;

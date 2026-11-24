@@ -29,6 +29,8 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
             table.HasCheckConstraint("ck_vote_revisions_subjects_hash", "subjects_hash ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_vote_revisions_columns_written",
                 "columns_written OR (alignment IS NULL AND democrat_majority IS NULL AND republican_majority IS NULL)");
+            table.HasCheckConstraint("ck_vote_revisions_whole_totals",
+                $"(total_yea IS NULL AND total_nay IS NULL AND total_present IS NULL AND total_not_voting IS NULL) OR (totals_written AND total_yea IS NOT NULL AND total_nay IS NOT NULL AND total_present IS NOT NULL AND total_not_voting IS NOT NULL AND total_yea >= 0 AND total_nay >= 0 AND total_present >= 0 AND total_not_voting >= 0 AND total_yea::bigint + total_nay + total_present + total_not_voting <= {PublishedVote.MaximumMembers})");
             table.HasCheckConstraint("ck_vote_revisions_party_tally_count", $"party_tally_count IS NULL OR party_tally_count BETWEEN 0 AND {PublishedVote.MaximumParties}");
             table.HasCheckConstraint("ck_vote_revisions_alignment", $"alignment IS NULL OR {EnumChecks.InList("alignment", Enum.GetNames<PublishedVoteAlignment>())}");
             table.HasCheckConstraint("ck_vote_revisions_majorities",
@@ -63,6 +65,11 @@ internal sealed class VoteRevisionRowConfiguration : IEntityTypeConfiguration<Vo
         builder.Property(row => row.Result).HasColumnName("result").HasMaxLength(VoteDraftRevision.MaximumFactLength).IsRequired();
         builder.Property(row => row.ColumnsWritten).HasColumnName("columns_written").HasDefaultValue(false);
         builder.Property(row => row.PartyTallyCount).HasColumnName("party_tally_count");
+        builder.Property(row => row.TotalsWritten).HasColumnName("totals_written").HasDefaultValue(false);
+        builder.Property(row => row.TotalYea).HasColumnName("total_yea");
+        builder.Property(row => row.TotalNay).HasColumnName("total_nay");
+        builder.Property(row => row.TotalPresent).HasColumnName("total_present");
+        builder.Property(row => row.TotalNotVoting).HasColumnName("total_not_voting");
         builder.Property(row => row.Alignment).HasColumnName("alignment").HasConversion<string>().HasMaxLength(16);
         builder.Property(row => row.DemocratMajority).HasColumnName("democrat_majority").HasMaxLength(8);
         builder.Property(row => row.RepublicanMajority).HasColumnName("republican_majority").HasMaxLength(8);

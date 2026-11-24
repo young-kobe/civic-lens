@@ -23,4 +23,13 @@ internal static class VoteMemberListSeed
         var counts = Counts(casts);
         return FormattableString.Invariant($"{counts.Total}, {counts.Yea}, {counts.Nay}, {counts.Present}, {counts.NotVoting}, {counts.Other}");
     }
+    // These fixture casts represent the whole source, unless a test overrides the frozen totals explicitly.
+    public static string WholeTotalsUpdate(string record, int revision, IEnumerable<string> casts)
+    {
+        var counts = Counts(casts);
+        var totals = counts.Other == 0
+            ? FormattableString.Invariant($"{counts.Yea}, total_nay = {counts.Nay}, total_present = {counts.Present}, total_not_voting = {counts.NotVoting}")
+            : "NULL, total_nay = NULL, total_present = NULL, total_not_voting = NULL";
+        return FormattableString.Invariant($"UPDATE vote_revisions SET totals_written = true, total_yea = {totals} WHERE record_id = '{record}' AND revision_number = {revision};");
+    }
 }

@@ -458,14 +458,10 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task VoteCountsEqualTheMemberRowsAndEveryAiOrCodeRowHasItsLabel()
+    public async Task VoteHeadersRetainSourceTotalsAndEveryAiOrCodeRowHasItsLabel()
     {
         await SeedAsync();
         Assert.Equal(["a 2 2 1 2 7"], await PublicAsync("SELECT record_id || ' ' || yea || ' ' || nay || ' ' || present || ' ' || not_voting || ' ' || (yea + nay + present + not_voting) FROM public_api.votes WHERE record_id = 'a'"));
-        Assert.Empty(await PublicAsync("""
-            SELECT v.record_id FROM public_api.votes v
-             WHERE v.yea + v.nay + v.present + v.not_voting <> (SELECT count(*) FROM public_api.vote_members m WHERE m.record_id = v.record_id AND m.revision_number = v.revision_number)
-            """));
         Assert.Empty(await PublicAsync("SELECT record_id FROM public_api.votes WHERE text_origin IN ('Model', 'Code') AND label IS NULL"));
         Assert.Equal(
         [
@@ -1400,6 +1396,9 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             Entry("2222222222222222222222222222222222222222222222222222222222222222", 5, "Not Voting"), Entry("2222222222222222222222222222222222222222222222222222222222222222", 6, "Not Voting"),
             Entry("5555555555555555555555555555555555555555555555555555555555555555", 0, "Not Voting")
         }) + """
+            UPDATE vote_revisions r SET totals_written = true, total_yea = t.yea_count, total_nay = t.nay_count,
+                total_present = t.present_count, total_not_voting = t.not_voting_count
+            FROM vote_member_lists t WHERE t.list_id = r.member_list_id;
             INSERT INTO vote_revision_issues (record_id, revision_number, issue_id, position, is_tracked) VALUES ('d', 1, 'health', 0, true), ('b', 1, 'tax', 0, false);
             """);
     }
@@ -1437,6 +1436,7 @@ public sealed class PublicApiViewsTests(PostgresCollection postgres) : IAsyncLif
             INSERT INTO publication_record_states (kind, record_id, first_release, revision_number, last_release) VALUES ('vote', '{record}', 1, 1, NULL);
             INSERT INTO vote_member_lists (list_id, {VoteMemberListSeed.Columns}, created_at_utc_ticks) VALUES ('{list}', {VoteMemberListSeed.Values(casts)}, 1);
             {Revision(record, 1, "Person", list, question, result)}
+            {VoteMemberListSeed.WholeTotalsUpdate(record, 1, casts)}
             {string.Join('\n', casts.Select((cast, index) => Entry(list, index, cast)))}
             {string.Join('\n', (facts ?? []).Select((text, position) => Fact(record, position, text)).Reverse())}
             """);

@@ -155,6 +155,39 @@ public sealed class VotePageEndpointsTests(PostgresCollection postgres)
         Assert.NotNull(page.QuerySelector(".vote-parties-unknown"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APartialTrackedSenateListUsesWholePartyTalliesOrShowsThemUnavailable(bool withWholeTallies)
+    {
+        await using var host = await StartAsync();
+        await SeedSenateAsync(host);
+        await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+            UPDATE vote_revisions SET total_yea = 52, total_nay = 47, total_present = 0, total_not_voting = 1
+             WHERE record_id = '{Senate.RecordId}';
+            """);
+        if (withWholeTallies)
+            await ViewsSeed.ExecuteAsync(host.OperationalDatabase, $"""
+                UPDATE vote_revisions SET party_tally_count = 2 WHERE record_id = '{Senate.RecordId}';
+                INSERT INTO vote_revision_party_tallies (record_id, revision_number, party, yea, nay, present, not_voting, other)
+                VALUES ('{Senate.RecordId}', 1, 'Democrat', 0, 47, 0, 0, 0), ('{Senate.RecordId}', 1, 'Republican', 52, 0, 0, 1, 0);
+                """);
+
+        var page = await GetPageAsync(host, $"/records/{Senate.RecordId}.html");
+
+        if (withWholeTallies)
+        {
+            Assert.Equal(["Senate Democrats: Yes 0, No 47, Not voting 0", "Senate Republicans: Yes 52, No 0, Not voting 1"],
+                page.QuerySelectorAll(".vote-parties svg.party-bar-chart").Select(bar => bar.GetAttribute("aria-label")));
+            Assert.Null(page.QuerySelector(".vote-parties-unknown"));
+        }
+        else
+        {
+            Assert.Null(page.QuerySelector(".vote-parties"));
+            Assert.NotNull(page.QuerySelector(".vote-parties-unknown"));
+        }
+    }
+
     private static async Task SeedSenateAsync(ApiHost host)
     {
         await ViewsSeed.AddVotesAsync(host.OperationalDatabase, Senate);

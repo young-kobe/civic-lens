@@ -14,12 +14,16 @@ namespace CivicLens.Application.Publication;
 public sealed record VoteStoredColumns(string RecordId, int RevisionNumber, PublishedVoteAlignment? Alignment, string? DemocratMajority,
     string? RepublicanMajority, ImmutableArray<string> MemberParties)
 {
+    public PublishedVoteTotals? Totals { get; init; }
+    public bool TotalsKnown { get; init; }
     /// <summary>Default means the exact published vote does not have complete tallies. A nondefault array retains its complete party groups and counts.</summary>
     public ImmutableArray<PublishedPartyTally> PartyTallies { get; init; }
 
     public static VoteStoredColumns From(PublishedVote vote) => new(vote.RecordId, vote.RevisionNumber, vote.AlignmentOfParties(),
         vote.MajorityOf(PublishedPartyMajority.Democrat), vote.MajorityOf(PublishedPartyMajority.Republican), [.. vote.Members.Select(member => member.Party)])
     {
-        PartyTallies = vote.PartyTallies is null ? default : [.. vote.PartyTallies]
+        PartyTallies = vote.PartyTallies is null ? default : [.. vote.PartyTallies],
+        Totals = vote.Totals,
+        TotalsKnown = true
     };
 }
