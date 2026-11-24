@@ -1,17 +1,25 @@
 @using CivicLens.Publication.Contracts
 
 <ul class="choices detail-cited" role="list">
-    @foreach (var citation in Citations)
+    @for (var index = 0; index < Citations.Length; index++)
     {
+        var citation = Citations[index];
         <li id="@PublishedBriefView.CitationAnchor(citation.Id)">
             <span class="choice-label">@citation.Id</span>
             <a href="@(RootPath + PublicationProtocol.RecordPagePath(citation.RecordId))">@citation.Headline</a>
+            @if (index < CitationTextOrigins.Length && CitationTextOrigins[index] == PublishedTextOrigin.Model)
+            {
+                @AiText.RenderControls(Use, citation.Headline)
+            }
             <span class="muted small">@PublishedBriefView.CitedRecordNote(citation)</span>
         </li>
     }
 </ul>
 
 @code {
+    [CascadingParameter] private GlossaryPageUse Use { get; set; } = default!;
+
     [Parameter, EditorRequired] public PublishedBriefCitation[] Citations { get; set; } = [];
+    [Parameter] public PublishedTextOrigin?[] CitationTextOrigins { get; set; } = [];
     [Parameter, EditorRequired] public string RootPath { get; set; } = default!;
 }

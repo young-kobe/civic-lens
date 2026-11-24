@@ -19,7 +19,8 @@ public sealed class BriefPageReader(BriefStore briefs, CorrectionHistoryStore co
         return new(detail.Release, row.RecordId, row.RevisionNumber, row.WeekStart, row.Headline, row.TextOrigin, row.Label, detail.Paragraphs, detail.Citations,
             row.CutoffReleaseNumber, new() { Considered = row.CoverageConsidered, SentToModel = row.CoverageSentToModel, Cited = detail.Citations.Length }, row.ApprovedAtUtc, row.FirstPublishedAtUtc)
         {
-            Corrections = corrected
+            Corrections = corrected,
+            CitationTextOrigins = detail.CitationTextOrigins
         };
     }
 }

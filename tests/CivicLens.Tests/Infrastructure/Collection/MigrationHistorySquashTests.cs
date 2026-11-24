@@ -12,7 +12,14 @@ public sealed class MigrationHistorySquashTests(PostgresCollection postgres) : I
 {
     private const string Newest = "20261116171634_ReleaseOfficialRecordCounts";
     private const string Current = "20261117143000_StatementLinkedVoteCast";
-    private static readonly string[] CurrentIds = [MigrationHistorySquash.BaselineId, Current, "20261117225018_PublishedSenateClass", "20261124120000_WholeVoteTotals"];
+    private static readonly string[] CurrentIds =
+    [
+        MigrationHistorySquash.BaselineId,
+        Current,
+        "20261117225018_PublishedSenateClass",
+        "20261124120000_WholeVoteTotals",
+        "20261124121000_BriefCitationOrigins"
+    ];
     private string? connectionString;
 
     public async Task InitializeAsync() => connectionString = await postgres.CreateMigratedDatabaseAsync();
