@@ -20,7 +20,7 @@ Status note: the owner accepted Mosaic v2 on 2026-11-06 and reaffirmed it on 202
 
 Three outstanding visual acceptance items move to the next UI phase under the [R-68 closure scope](../roadmap.md#active-r-68-redesign). They cover the flat header and native Menu, Bills and Votes placement in primary navigation, and the featured-vote presentation on Home. The descriptions of these surfaces record the deployed behavior. Functional, accessibility, privacy, evidence, and release verification still apply.
 
-The November 24 closeout scope is recorded in [R-68](../roadmap.md#active-r-68-redesign). Typed Search term context and its accepted count, progress, and retry decisions moved to Evidence Paths. The fixed AI sample, its accepted provenance decision, and further President helper work also moved there. R-68 retains the whole-vote-total fix, approved Brief/caption/glossary corrections, one real report flow, changed-output acceptance, final rollout, rollback/restore and final health. Existing evidence is reused; G12 keeps the full rollback checks.
+The remaining closeout work is recorded in [R-68](../roadmap.md#active-r-68-redesign): one real report flow, then final transport, privacy, health and funded model-stage recovery with `check-live` last. The whole-vote-total fix and approved Brief/caption/glossary changes are implemented and deployed; changed-output acceptance and the full rollback and restore check passed. Typed Search term context and its accepted count, progress, and retry decisions moved to Evidence Paths. The fixed AI sample, its accepted provenance decision, and further President helper work also moved there. Reuse unchanged evidence and check any outputs changed by a remaining fix.
 
 ## Decisions
 
