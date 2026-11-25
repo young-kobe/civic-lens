@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using CivicLens.Publication.Contracts;
 
 namespace CivicLens.Tests.PublicApi;
 
@@ -10,6 +11,7 @@ internal sealed class FakeTurnstile : HttpMessageHandler
 
     public bool Success { get; set; } = true;
     public string ReplyHostname { get; set; } = Hostname;
+    public string ReplyAction { get; set; } = ReaderReportProtocol.TurnstileAction;
     public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
     public string ErrorCodes { get; set; } = "";
     public string? RawBody { get; set; }
@@ -23,7 +25,7 @@ internal sealed class FakeTurnstile : HttpMessageHandler
         return new HttpResponseMessage(Status)
         {
             Content = new StringContent(
-                RawBody ?? $$"""{"success":{{(Success ? "true" : "false")}},"hostname":"{{ReplyHostname}}","error-codes":[{{ErrorCodes}}]}""",
+                RawBody ?? $$"""{"success":{{(Success ? "true" : "false")}},"hostname":"{{ReplyHostname}}","action":"{{ReplyAction}}","error-codes":[{{ErrorCodes}}]}""",
                 Encoding.UTF8, "application/json")
         };
     }

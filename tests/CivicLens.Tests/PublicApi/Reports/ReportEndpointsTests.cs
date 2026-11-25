@@ -169,6 +169,17 @@ public sealed class ReportEndpointsTests(PostgresCollection postgres)
         Assert.Equal(0, await CountAsync(host));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("another-form")]
+    public async Task APassedTokenMustHaveTheReaderReportAction(string action)
+    {
+        await using var host = await StartAsync(new FakeTurnstile { ReplyAction = action });
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(host)).StatusCode);
+        Assert.Equal(0, await CountAsync(host));
+    }
+
     [Fact]
     public async Task ABotCheckTimeoutFailsClosedWith503AndNoRow()
     {

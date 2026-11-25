@@ -66,6 +66,14 @@
             text.required = required;
             text.setCustomValidity(required && text.value.trim() === "" ? "Add details to explain what is wrong." : "");
         };
+        const widget = form.querySelector(".cf-turnstile");
+        const widgetScript = document.querySelector("[data-public-external-script]");
+        let widgetId = null;
+        const renderWidget = () => window.turnstile.ready(() => {
+            widgetId = window.turnstile.render(widget, { sitekey: widget.dataset.sitekey, action: widget.dataset.action });
+        });
+        if (widgetScript && window.turnstile) renderWidget();
+        else widgetScript?.addEventListener("load", renderWidget, { once: true });
         categories.addEventListener("change", checkText);
         text.addEventListener("input", checkText);
         form.addEventListener("submit", async event => {
@@ -84,7 +92,10 @@
             } catch {}
             show(...outcome);
             if (outcome[0] === "ok") panel.hidden = true;
-            else { window.turnstile?.reset(); submit.disabled = false; }
+            else {
+                if (widgetId !== null) window.turnstile.reset(widgetId);
+                submit.disabled = false;
+            }
         });
         panel.hidden = false;
     };

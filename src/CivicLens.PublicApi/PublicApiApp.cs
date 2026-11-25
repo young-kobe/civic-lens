@@ -114,8 +114,9 @@ public static class PublicApiApp
         builder.Services.AddSingleton(new OfficialRecordPageReader(views));
         builder.Services.AddSingleton(new ReportStore(writer, options));
         if (options.Turnstile is { } turnstile)
-            builder.Services.AddSingleton(new TurnstileVerifier(
-                new HttpClient(turnstileHandler ?? new SocketsHttpHandler()) { Timeout = TurnstileVerifier.Timeout }, turnstile));
+            builder.Services.AddSingleton(provider => new TurnstileVerifier(
+                new HttpClient(turnstileHandler ?? new SocketsHttpHandler()) { Timeout = TurnstileVerifier.Timeout },
+                turnstile, provider.GetRequiredService<ILogger<TurnstileVerifier>>()));
         builder.Services.AddHostedService<SchemaStartup>();
         builder.Services.AddHostedService<IngestWorker>();
         var clients = new ClientAddress(options.TrustedProxyRanges);
