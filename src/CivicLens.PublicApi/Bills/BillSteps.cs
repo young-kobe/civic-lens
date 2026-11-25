@@ -72,10 +72,19 @@ public static partial class BillSteps
     private static bool AgreementHolds(string text) =>
         text.Contains("greed to", StringComparison.Ordinal) && !text.Contains("isagree", StringComparison.Ordinal) && !text.Contains("ot agreed", StringComparison.Ordinal);
 
-    private static string Detail(BillActionRow action) =>
-        VoteCount().Match(action.Text) is { Success: true } count
-            ? $"{Moment.Day(action.ActionDate)}, vote of {count.Groups["yes"].Value} to {count.Groups["no"].Value}"
-            : Moment.Day(action.ActionDate);
+    private static string Detail(BillActionRow action)
+    {
+        var day = Moment.Day(action.ActionDate);
+        if (VoteCount().Match(action.Text) is { Success: true } count)
+            return $"{day}, vote of {count.Groups["yes"].Value} to {count.Groups["no"].Value}";
+        if (VoiceVote().IsMatch(action.Text))
+            return $"{day}, voice vote (no recorded member votes)";
+        if (UnanimousConsent().IsMatch(action.Text))
+            return $"{day}, unanimous consent (no recorded member votes)";
+        if (WithoutObjection().IsMatch(action.Text))
+            return $"{day}, without objection (no recorded member votes)";
+        return day;
+    }
 
     [GeneratedRegex(@"^(?:Passed/agreed to in (?<chamber>House|Senate): On (?:passage|motion to suspend the rules and pass)|Passed (?<chamber>House|Senate)\b)",
         RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
@@ -91,6 +100,15 @@ public static partial class BillSteps
     [GeneratedRegex(@"\AVetoed by President\.?\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex VetoedText();
 
-    [GeneratedRegex(@"(?<![\d,])(?<yes>\d{1,3}) - (?<no>\d{1,3})(?![\d,])", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"(?<![\d,])(?<yes>\d{1,3}) - (?<no>\d{1,3})(?!\d|,\d)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex VoteCount();
+
+    [GeneratedRegex(@"\bby voice vote\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex VoiceVote();
+
+    [GeneratedRegex(@"\bby unanimous consent\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex UnanimousConsent();
+
+    [GeneratedRegex(@"\bwithout objection\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex WithoutObjection();
 }
