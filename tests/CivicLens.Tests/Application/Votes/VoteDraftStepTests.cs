@@ -41,7 +41,9 @@ public sealed class VoteDraftStepTests
     [Theory]
     [InlineData("On Passage", VoteKind.Passage)]
     [InlineData("On Motion to Recommit", VoteKind.MotionToRecommit)]
-    [InlineData("On Motion to Table", VoteKind.Other)]
+    [InlineData("On Motion to Table", VoteKind.MotionToTable)]
+    [InlineData("On Motion to Discharge", VoteKind.MotionToDischarge)]
+    [InlineData("On Motion to Adjourn", VoteKind.Other)]
     [InlineData("On Motion to Concur in the Senate Amendment", VoteKind.Passage)]
     public async Task TheRevisionStoresTheKindOfTheQuestionAndCitesTheQuestionLineSoPublishNeverDerivesItAgain(string question, VoteKind kind)
     {
