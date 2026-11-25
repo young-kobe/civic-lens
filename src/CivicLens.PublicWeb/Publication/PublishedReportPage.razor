@@ -40,7 +40,7 @@
                        Hint="@($"Say where in the record the problem is. Details are required for \"{PublishedRecordLabels.ReportCategory(ReaderReportProtocol.OtherCategory)}\". Use at most {PublishedWording.Count(ReaderReportProtocol.MaximumTextCharacters)} characters. Do not add your name or contact details.")">
                     <textarea id="report-text" name="@ReaderReportProtocol.TextField" rows="5" maxlength="@ReaderReportProtocol.MaximumTextCharacters" aria-describedby="report-text-hint"></textarea>
                 </Field>
-                <div class="cf-turnstile" data-sitekey="@TurnstileSiteKey"></div>
+                <div class="cf-turnstile" data-sitekey="@TurnstileSiteKey" data-action="@ReaderReportProtocol.TurnstileAction"></div>
                 <div class="row"><Button Type="submit" Variant="ButtonVariant.Primary">Send report</Button></div>
             </form>
         </div>
@@ -74,7 +74,7 @@
 
 @code {
 
-    private const string TurnstileScript = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    private const string TurnstileScript = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     private static PublicSections.RecordList VotesList => PublicSections.ListOf(PublishedRecordKind.Vote);
 
     /// <summary>The public site root of the server page.</summary>

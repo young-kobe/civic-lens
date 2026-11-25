@@ -12,6 +12,7 @@ public static class ReaderReportProtocol
     public const string CategoryField = "category";
     public const string TextField = "text";
     public const string TurnstileField = "cf-turnstile-response";
+    public const string TurnstileAction = "reader-report";
     public const string AfterParameter = "after";
     public const string LimitParameter = "limit";
     public const string WrongQuoteCategory = "wrong-quote";
