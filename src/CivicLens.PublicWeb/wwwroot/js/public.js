@@ -69,11 +69,9 @@
         const widget = form.querySelector(".cf-turnstile");
         const widgetScript = document.querySelector("[data-public-external-script]");
         let widgetId = null;
-        const renderWidget = () => window.turnstile.ready(() => {
+        const renderWidget = () => {
             widgetId = window.turnstile.render(widget, { sitekey: widget.dataset.sitekey, action: widget.dataset.action });
-        });
-        if (widgetScript && window.turnstile) renderWidget();
-        else widgetScript?.addEventListener("load", renderWidget, { once: true });
+        };
         categories.addEventListener("change", checkText);
         text.addEventListener("input", checkText);
         form.addEventListener("submit", async event => {
@@ -98,6 +96,8 @@
             }
         });
         panel.hidden = false;
+        if (widgetScript && window.turnstile) renderWidget();
+        else widgetScript?.addEventListener("load", renderWidget, { once: true });
     };
 
     const memberZipKey = "civic-lens-members-zip";
