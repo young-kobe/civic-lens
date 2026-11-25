@@ -351,9 +351,12 @@ try
             new PostgresStatementDraftStore(contexts),
             new PostgresAnalysisStatusStore(contexts, StatementDraftTask.Task));
         var statements = new StatementCommand(gateCommands, draftCommands, new RegateStatementCandidates(gates),
+            new RecheckStatementCodeApprovals(new PostgresStatementCodeApprovalRecheckStore(contexts)),
             new ExportGateLabels(new PostgresGateLabelStore(contexts)),
             new BackfillRevisions(backfillStore), new VerifyRevisions(backfillStore), owner,
-            args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null, GateLabelExport.DefaultRuntimeDirectory());
+            args is ["statements", "regate", ..] ? StatementIssueRubric.FromEnvironment()?.Id : null,
+            () => (ConfigurationFile.ReadCollectionFromEnvironment(), ConfigurationFile.ReadIssuesFromEnvironment()),
+            GateLabelExport.DefaultRuntimeDirectory());
         executing = true;
         return await statements.ExecuteAsync(args, cancellation.Token);
     }

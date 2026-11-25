@@ -136,6 +136,26 @@ internal sealed class ReviewRecords<TDraftRow, TRevisionRow, TDecisionRow, TRevi
         RecordDecision(db, draft, cycle, decision);
     }
 
+    /// <summary>Re-evaluates code approval for an untouched AwaitingReview draft whose current revision is already stored.
+    /// Never approves a draft with open concerns or person-written text. Updates the held reason when the check still fails.</summary>
+    public bool TryCodeApproveCurrent(CollectionAttemptDbContext db, TDraftRow draft, TRevision revision,
+        ImmutableArray<ReviewDecision> cycle, ApprovalCheck check, DateTimeOffset decidedAtUtc)
+    {
+        if (draft.ReviewStatus != ReviewStatus.AwaitingReview || draft.CurrentRevisionNumber != revision.RevisionNumber ||
+            !ReviewPolicy.GetUnresolvedConcerns(cycle).IsEmpty || revision is IHeadlineSummaryRevision { TextOrigin: ReviewTextOrigin.Person })
+            return false;
+        if (!check.Passed)
+        {
+            SetHeldReason(draft, check.Failure);
+            return false;
+        }
+        var decision = new ReviewDecision(Guid.NewGuid().ToString("N"), draft.RecordId, revision.RevisionNumber, draft.ReviewStateVersion + 1,
+            ReviewDecisionKind.Approve, ReviewAuthor.CodeSubject, null, [], decidedAtUtc, null);
+        ReviewPolicy.ValidateDecision(draft.RecordId, draft.CurrentRevisionNumber, draft.ReviewStateVersion, cycle, decision);
+        RecordDecision(db, draft, cycle, decision);
+        return true;
+    }
+
     /// <summary>Runs the after-decision hooks for a code approval that this transaction tracked. The hooks save the context, so the
     /// caller must call this after it adds the rows that the revision row refers to.</summary>
     public async Task AfterCodeApprovalAsync(CollectionAttemptDbContext db, string recordId, int revisionNumber,

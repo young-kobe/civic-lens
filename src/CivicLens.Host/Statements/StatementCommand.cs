@@ -1,4 +1,6 @@
 using System.Globalization;
+using CivicLens.Application.Collection;
+using CivicLens.Application.Issues;
 using CivicLens.Application.Review;
 using CivicLens.Application.Statements;
 using CivicLens.Core.Review;
@@ -8,14 +10,15 @@ namespace CivicLens.Host.Statements;
 
 internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, StatementGateView, StatementGateListItem> gates,
     AnalysisQueueCommands<StatementDraftRun, StatementDraftView, StatementDraftListItem> drafts, RegateStatementCandidates regate,
-    ExportGateLabels exportLabels, BackfillRevisions backfill, VerifyRevisions verify, ReviewActor owner, string? currentIssueRevisionId,
+    RecheckStatementCodeApprovals recheckApprovals, ExportGateLabels exportLabels, BackfillRevisions backfill, VerifyRevisions verify,
+    ReviewActor owner, string? currentIssueRevisionId, Func<(CollectionConfiguration? Collection, IssueConfiguration? Issues)> readRecheckConfigs,
     string runtimeDirectory)
 {
     private const string Usage = "Use statements status, statements list [passed|skipped|failed-open|over-cap|pending|failed] [limit], " +
         "statements run <run-id>, statements requeue <candidate-id|--all>, statements regate [--since yyyy-MM-dd], " +
         "statements draft status, statements draft list [drafted|over-cap|existing|pending|failed] [limit], " +
-        "statements draft run <run-id>, statements draft requeue <candidate-id|--all>, statements labels export <path>, " +
-        "where the path is inside .runtime, statements revisions backfill <limit>, or statements revisions verify.";
+        "statements draft run <run-id>, statements draft requeue <candidate-id|--all>, statements draft recheck <limit>, " +
+        "statements labels export <path>, where the path is inside .runtime, statements revisions backfill <limit>, or statements revisions verify.";
     private const int DefaultListLimit = 100;
 
     public static bool Matches(string[] args) => args is ["statements", ..];
@@ -75,6 +78,8 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
                 case ["statements", "draft", "requeue", var candidateId]:
                     CommandOutput.Write(new { requeued = await drafts.Requeue.ExecuteAsync(owner, candidateId, cancellationToken) });
                     return 0;
+                case ["statements", "draft", "recheck", var limit]:
+                    return await RecheckApprovalsAsync(OwnerCommand.ParseLimit(limit, Usage), cancellationToken);
                 case ["statements", "labels", "export", var path]:
                     return await ExportLabelsAsync(path, cancellationToken);
                 case ["statements", "revisions", "backfill", var limit]:
@@ -100,6 +105,18 @@ internal sealed class StatementCommand(AnalysisQueueCommands<StatementGateRun, S
         regate.ExecuteAsync(owner, currentIssueRevisionId
             ?? throw new ArgumentException("Regating needs CIVIC_LENS_ISSUES_CONFIG to name the current issue configuration."),
             since, cancellationToken);
+
+    private async Task<int> RecheckApprovalsAsync(int limit, CancellationToken cancellationToken)
+    {
+        var (collection, issues) = readRecheckConfigs();
+        if (collection is null)
+            throw new ArgumentException("Rechecking statement approvals needs CIVIC_LENS_COLLECTION_CONFIG to name the current collection configuration.");
+        if (issues is null)
+            throw new ArgumentException("Rechecking statement approvals needs CIVIC_LENS_ISSUES_CONFIG to name the current issue configuration.");
+        var result = await recheckApprovals.ExecuteAsync(owner, CollectionConfigurationRevision.Create(collection), issues, limit, cancellationToken);
+        CommandOutput.Write(result);
+        return 0;
+    }
 
     private static StatementGateView ParseView(string text) => text switch
     {
