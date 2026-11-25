@@ -60,7 +60,7 @@ The [SQLite example](experiments/reuse-issue-facts.sql) builds one activity view
 Run it with `sqlite3` or Python's built-in `sqlite3` module:
 
 ```sh
-python3 -c "import sqlite3, pathlib; c = sqlite3.connect(':memory:'); c.executescript(pathlib.Path('docs/evidence-paths/experiments/reuse-issue-facts.sql').read_text())"
+python3 -c "import sqlite3, pathlib; c = sqlite3.connect(':memory:'); c.executescript(pathlib.Path('docs/connected-records/experiments/reuse-issue-facts.sql').read_text())"
 ```
 
 This small check verifies query reuse on fixed inputs. Classifier accuracy, `LATERAL` production query plans, and monotonic withdrawal-tombstone lifecycle behavior belong to the setup experiments and private pilot.

@@ -66,21 +66,38 @@
             text.required = required;
             text.setCustomValidity(required && text.value.trim() === "" ? "Add details to explain what is wrong." : "");
         };
+        const widget = form.querySelector(".cf-turnstile");
+        const widgetScript = document.querySelector("[data-public-external-script]");
+        let widgetId = null;
+        const renderWidget = () => {
+            widgetId = window.turnstile.render(widget, { sitekey: widget.dataset.sitekey, action: widget.dataset.action });
+        };
         categories.addEventListener("change", checkText);
         text.addEventListener("input", checkText);
         form.addEventListener("submit", async event => {
             event.preventDefault();
+            const data = new URLSearchParams(new FormData(form));
+            const tokens = data.getAll("cf-turnstile-response");
+            if (tokens.length !== 1 || !tokens[0]) {
+                show("bad", "Complete the check that you are not a robot, then send the report again.");
+                return;
+            }
             submit.disabled = true;
             let outcome = ["bad", "The report did not reach the service. Check your connection and send the report again."];
             try {
-                const response = await fetch(form.dataset.reportApi, { method: "POST", body: new URLSearchParams(new FormData(form)) });
+                const response = await fetch(form.dataset.reportApi, { method: "POST", body: data });
                 outcome = reportMessages[response.status] ?? ["bad", `The service answered with the unexpected status ${response.status}. Try again later.`];
             } catch {}
             show(...outcome);
             if (outcome[0] === "ok") panel.hidden = true;
-            else { window.turnstile?.reset(); submit.disabled = false; }
+            else {
+                if (widgetId !== null) window.turnstile.reset(widgetId);
+                submit.disabled = false;
+            }
         });
         panel.hidden = false;
+        if (widgetScript && window.turnstile) renderWidget();
+        else widgetScript?.addEventListener("load", renderWidget, { once: true });
     };
 
     const memberZipKey = "civic-lens-members-zip";

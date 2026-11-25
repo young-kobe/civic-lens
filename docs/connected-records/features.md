@@ -1,6 +1,6 @@
 # Candidate features
 
-**Status.** Candidates. None is accepted or implemented. Each one waits for an investigation of its data, solo-maintainer review cost, and risk. Remove a feature when its investigation shows that it will not work, and record the reason in the feature reference that owns the data. Move an accepted feature into the [work queue](../evidence-paths.md#work-queue).
+**Status.** Candidates. None is accepted or implemented. Each one waits for an investigation of its data, solo-maintainer review cost, and risk. Remove a feature when its investigation shows that it will not work, and record the reason in the feature reference that owns the data. Move an accepted feature into the [work queue](../roadmap.md#work-queue).
 
 The list combines the product direction, the PR #634 council review of 2026-11-20, and the 2026-11-24 solo-maintainer architecture review. Every feature follows the [pipeline rules](pipeline.md#rules-for-every-connection): it shows what the records say and never states a conclusion.
 

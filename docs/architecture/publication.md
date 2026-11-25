@@ -63,7 +63,7 @@ The publication feature turns approved revisions into immutable, cumulative rele
 
 ### Approved public data extensions
 
-R-68 in the [plan](../evidence-paths.md#active-r-68-redesign) owns the remaining approved extensions and completion gates.
+The [roadmap](../roadmap.md#work-queue) owns pending publication work and open extensions.
 
 - Each release binds its exact record revisions to immutable correction histories. Equal ordered histories share one verified content-addressed body.
 
@@ -774,7 +774,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-rel
 - A returned record counts against the cap of 20 notes. A record with 20 notes cannot return yet.
 - The worker or the CLI returns a record. The CLI and Take off site on the record editor withdraw.
 - A relationship or a brief that cited a withdrawn record stays withdrawn when the record returns. A person must publish it again.
-- A withdrawn record still answers with its notice page and status 200. A 410 status needs a Cloudflare rule, which comes with [R-24](../evidence-paths.md#later). The search service has the same limit; see [search](search.md). The notice page has `noindex`, so search engines drop it.
+- A withdrawn record still answers with its notice page and status 200. A 410 status needs a Cloudflare rule, which comes with [R-24](../roadmap.md#later). The search service has the same limit; see [search](search.md). The notice page has `noindex`, so search engines drop it.
 - The withdrawal check of citations reads every carried brief file when the request withdraws a statement, a document change, or an action. The cost grows with the number of briefs.
 - Kept release directories keep the withdrawn content until a prune removes them. A pinned search release can still find the record; see [search](search.md).
 - The privacy table of the about page says "Nothing" for a page read. Its search row says "Nothing" too. Both stay true only while the deploy keeps no access logs for page reads or search requests. The deploy configuration sets that; see [Web server](../operations.md#web-server).
@@ -804,7 +804,7 @@ Release and rollback commands are in [operations](../operations.md#publish-a-rel
 - Postgres and capture files need coordinated backups and a tested restore. Production backup rules are in [host](host.md#limits-and-planned-work).
 - Retention must keep the evidence that published releases reference. Disposable captures follow an explicit policy, which is not agreed yet.
 - Monitoring must cover freshness, skipped and deferred work, source failures, storage, and spend.
-- See the [plan](../evidence-paths.md) for order.
+- See [roadmap](../roadmap.md) for order.
 
 Public MCP acceptance (after the first deploy, R-25):
 

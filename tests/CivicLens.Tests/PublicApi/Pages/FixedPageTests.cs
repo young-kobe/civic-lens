@@ -138,7 +138,9 @@ public sealed class FixedPageTests(PostgresCollection postgres)
         Assert.All(page.QuerySelectorAll("[data-report-kind-option]"), option => Assert.Empty(option.TextContent));
         Assert.Empty(reportForm.QuerySelectorAll($"[name='{ReaderReportProtocol.KindParameter}']"));
         Assert.Equal(SiteKey, page.QuerySelector(".cf-turnstile")!.GetAttribute("data-sitekey"));
-        Assert.Single(page.QuerySelectorAll("script[src^='https://challenges.cloudflare.com/turnstile/']"));
+        Assert.Equal(ReaderReportProtocol.TurnstileAction, page.QuerySelector(".cf-turnstile")!.GetAttribute("data-action"));
+        var script = Assert.Single(page.QuerySelectorAll("script[data-public-external-script]"));
+        Assert.Equal("https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit", script.GetAttribute("src"));
         Assert.DoesNotContain("Reporting is not available", page.QuerySelector("main")!.TextContent);
     }
 

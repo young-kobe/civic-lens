@@ -57,7 +57,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-folder = Path("docs/evidence-paths/experiments")
+folder = Path("docs/connected-records/experiments")
 old = json.loads((folder / "issue-cases.json").read_text())
 new = json.loads((folder / "cluster-cases.json").read_text())
 sources = {key: old["inputs"][key] for key in old["bills"]}
@@ -68,7 +68,7 @@ PYTHON
 uv run --no-project --python 3.10 \
   --with scikit-learn==1.7.2 --with numpy==2.2.6 --with scipy==1.15.3 \
   --with threadpoolctl==3.6.0 --with joblib==1.5.3 \
-  python docs/evidence-paths/experiments/cluster-sections.py "$cluster_inputs"
+  python docs/connected-records/experiments/cluster-sections.py "$cluster_inputs"
 ```
 
 The [runner](cluster-sections.py) prints all metrics and the cluster settings for each probe. The [probe and source manifest](cluster-cases.json) identifies the exact pair direction and four additional file digests.

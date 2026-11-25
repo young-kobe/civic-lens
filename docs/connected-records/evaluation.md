@@ -36,7 +36,7 @@ For each run save the dataset and rubric versions, model identifier, task, promp
 
 ## Pilot decision and feedback
 
-Under accepted decision [D-18](../evidence-paths.md#pending-decisions), the pilot targets are fixed before tuning:
+Under accepted decision [D-18](../roadmap.md#pending-decisions), the pilot targets are fixed before tuning:
 
 | Target | Accepted value | Notes |
 |---|---|---|

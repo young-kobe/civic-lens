@@ -1379,16 +1379,15 @@ Check it with `curl 'http://127.0.0.1:8100/v1/release'` and `curl 'http://127.0.
 Reader reports need three more variables. Without the Turnstile secret, `POST /v1/reports` answers 503. Without the pull token, `/internal/v1/reports` does not exist.
 
 ```sh
-export CIVIC_LENS_TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 export CIVIC_LENS_TURNSTILE_HOSTNAME=localhost
 export CIVIC_LENS_REPORT_PULL_TOKEN="$(openssl rand -hex 24)"
 ```
 
-The secret above is the always-pass test secret of Cloudflare, with the dummy token `XXXX.DUMMY.TOKEN.XXXX`. The secret `2x0000000000000000000000000000000AA` always fails. The hostname that siteverify returns for test keys needs a check against a live reply. The Cloudflare page shows `localhost` only as an example. Set `CIVIC_LENS_TURNSTILE_HOSTNAME` to the site hostname in production. Optional limits: `CIVIC_LENS_REPORTS_PER_HOUR` (default 5 for each client) and `CIVIC_LENS_REPORTS_PER_DAY` (default 200).
+Set `CIVIC_LENS_TURNSTILE_SECRET` in the service secret environment for the same widget as the public site key. Use a separate development widget for a local browser trial. Set `CIVIC_LENS_TURNSTILE_HOSTNAME` to the browser site's hostname in each deployment. Cloudflare's dummy validation response omits the action and changes the hostname, so use the focused `ReportEndpointsTests` for local API tests. Optional limits: `CIVIC_LENS_REPORTS_PER_HOUR` (default 5 for each client) and `CIVIC_LENS_REPORTS_PER_DAY` (default 200).
 
 To keep the variables between runs, put them in `.runtime/search/api.env` as `NAME=value` lines and load them with `set -a; . .runtime/search/api.env; set +a`. The `.runtime` folder is ignored by Git. Never commit a real secret or token.
 
-Test a report with `curl -d recordId=<64 hex characters> -d revision=1 -d category=wrong-date -d cf-turnstile-response=XXXX.DUMMY.TOKEN.XXXX http://127.0.0.1:8100/v1/reports`. Pull with `curl -H "Authorization: Bearer $CIVIC_LENS_REPORT_PULL_TOKEN" 'http://127.0.0.1:8100/internal/v1/reports'`.
+For a local browser trial, submit through the report page with the development widget. Pull with `curl -H "Authorization: Bearer $CIVIC_LENS_REPORT_PULL_TOKEN" 'http://127.0.0.1:8100/internal/v1/reports'`.
 
 The `/internal/*` route is not public. The [Caddyfile](#web-server) answers it with 404 on the API host.
 
@@ -1396,7 +1395,7 @@ To use the ZIP forms and the report page, set `CIVIC_LENS_PUBLIC_API_URL=http://
 
 To give each page a canonical address and to serve the pages, set `CIVIC_LENS_PUBLIC_BASE_URL` in the environment of the search service, for example `https://civic-lens.info`. The value must be a bare origin: https, or http only for `localhost` and `127.0.0.1`, with no user, path, query, or fragment. Use a host name, not an IPv6 address, and do not end the host with a dot. A trailing slash is removed. The stored value is in lower case, with a punycode host and no default port. A blank value counts as unset. Without it, the server page routes do not exist. The service reads the variable once, so restart it after a change. The host publisher, the worker, and the review workspace do not read this variable.
 
-To use the report page, also set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the search service. For a local trial use the Cloudflare test site key `1x00000000000000000000AA`, which always passes. Open a record page. Use the footer link that starts with "Report a problem with this". Send the report, then run the pull command above to see it. Without the API address or the site key, the report page says that reporting is not available.
+To use the report page, set `CIVIC_LENS_TURNSTILE_SITE_KEY` in the environment of the search service. Open a record page and use the footer link that starts with "Report a problem with this". Reload any report tab open before the action check was deployed, so its widget requests a token with the new action. Without the API address or the site key, the report page says that reporting is not available.
 
 Optional variables: `CIVIC_LENS_TRUSTED_PROXY_RANGES` (empty in development) and `CIVIC_LENS_REQUESTS_PER_MINUTE` (default 60). In production, set the ranges to `127.0.0.0/8,::1/128`. Each range needs a prefix length, and the service stops at start when one has none. The tunnel and Caddy run on the same machine, so the peer is loopback. Caddy passes the `CF-Connecting-IP` header that Cloudflare sets. The container image of the search service is in [Container images](#container-images).
 

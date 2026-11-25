@@ -31,7 +31,7 @@ Download the four workbooks above to one directory under their original filename
 
 ```sh
 uv run --no-project --with openpyxl==3.1.5 python \
-  docs/evidence-paths/experiments/va-backlog.py /path/to/workbooks
+  docs/connected-records/experiments/va-backlog.py /path/to/workbooks
 ```
 
 For a production assessment, bind each cell, workbook digest, population definition, source release date and calculation version. Confirm that VA used the same included claim categories across the comparison, and seek the cutoff and definition used by the speaker. Preserve the October and November observations as separate results. Deduplicate reports that repeat the agency figure. This is one worked case with no model calls or measured classifier accuracy.

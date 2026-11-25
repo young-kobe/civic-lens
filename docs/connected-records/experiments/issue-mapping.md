@@ -67,12 +67,12 @@ from pathlib import Path
 import subprocess
 import sys
 
-manifest = Path("docs/evidence-paths/experiments/issue-cases.json")
+manifest = Path("docs/connected-records/experiments/issue-cases.json")
 for key, source in json.loads(manifest.read_text())["inputs"].items():
     path = Path(sys.argv[1]) / f"{key}.xml"
     subprocess.run(["curl", "-fsSL", "--max-time", "30", "-o", path, source["url"]], check=True)
 PYTHON
-python3 docs/evidence-paths/experiments/map-issues.py "$issue_inputs"
+python3 docs/connected-records/experiments/map-issues.py "$issue_inputs"
 ```
 
 The small reference set was selected and labeled for this design discussion. The manifest freezes analyst paraphrases and links to six office releases. It does not freeze those pages or quotation offsets. Replay reproduces retrieval for the saved questions. Testing speaker attribution and extraction would require dated original captures and exact spans. The vote files independently establish the casts. This run does not validate the statutory equivalence of a voted amendment and the later enrolled edition, estimate classification accuracy on unseen issues, or benchmark an LLM. A production link would require an exact version and passage, date-appropriate evidence, and review of any claimed policy alignment. The [multi-issue trial](../claims.md#how-to-add-an-issue) defines the next test.

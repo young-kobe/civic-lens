@@ -4,7 +4,7 @@ R-68 already separates release publication from HTML generation. `PublicApi` ser
 
 ## One route before a stack decision
 
-Under accepted decision [D-24](../evidence-paths.md#pending-decisions), **an independently deployed frontend shell is no longer the proposed destination.** A second runtime adds a deployment, a versioned read contract, cache invalidation ownership, and solo-maintainer operational drag with no measured failure of the current stack.
+Under accepted decision [D-24](../roadmap.md#pending-decisions), **an independently deployed frontend shell is no longer the proposed destination.** A second runtime adds a deployment, a versioned read contract, cache invalidation ownership, and solo-maintainer operational drag with no measured failure of the current stack.
 
 Build the Phase 4 trial directly on the existing `PublicApi` + `PublicWeb` Razor SSR stack, enhanced with progressive JSON-backed interactive panels from existing read routes. Choose one issue with an eligible reviewed finding (selected by the published deterministic rule, not hand-picked) and use the three-layer progressive disclosure layout ([reader](reader.md#three-layer-progressive-disclosure)).
 

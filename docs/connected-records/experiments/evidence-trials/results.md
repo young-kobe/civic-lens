@@ -73,7 +73,7 @@ Use Python 3.10 with HTTPS access, Poppler's pdftotext for the two source PDFs, 
 
 ```bash
 set -e
-study=docs/evidence-paths/experiments/evidence-trials
+study=docs/connected-records/experiments/evidence-trials
 inputs=$(mktemp -d)
 python3 "$study/inputs.py" "$inputs"
 export OPENBLAS_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false

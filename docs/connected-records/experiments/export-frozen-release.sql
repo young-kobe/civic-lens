@@ -2,7 +2,7 @@
 -- Run with a published-view connection (role civic_lens_public) and save output outside Git with SHA256SUMS.
 -- Example:
 --   psql -X -qAt -v ON_ERROR_STOP=1 --dbname=service=civic_published \
---     -f docs/evidence-paths/experiments/export-frozen-release.sql > /tmp/civic-release-export.json
+--     -f docs/connected-records/experiments/export-frozen-release.sql > /tmp/civic-release-export.json
 
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '15s';

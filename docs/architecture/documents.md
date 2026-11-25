@@ -149,7 +149,7 @@ A malformed link returns 400, and missing evidence returns 404. A storage or rec
 ## Limits and planned work
 
 - Automatic navigation filtering is planned.
-- A page without a content profile blocks with `contentProfileUnavailable`. On 2026-10-16, 12 of 30 sampled House feeds blocked this way. In `config/federal-coverage.json`, 282 of 1,394 page, HTML, and feed sources have no profile. See [D-12](../evidence-paths.md#pending-decisions).
+- A page without a content profile blocks with `contentProfileUnavailable`. On 2026-10-16, 12 of 30 sampled House feeds blocked this way. In `config/federal-coverage.json`, 282 of 1,394 page, HTML, and feed sources have no profile. See [D-12](../roadmap.md#pending-decisions).
 - Staged migration: switch the existing operational readers from `result_json` to verified detail rows, then remove `result_json` and temporary JSON verification. Keep the row backfill available until all rows have a non-null marker.
 - Keep document history available for investigation.
 
@@ -161,4 +161,4 @@ Document-change acceptance:
 - [x] A reviewer assesses the proposed public wording beside its sources. A change to approved content or evidence needs review of the new version.
 - [x] Approval alone does not publish. Public output stays usable during an outage of the operational application.
 - Large histories need a future pagination design.
-- Substantive-change judgments belong to the planned classifier; see the [plan](../evidence-paths.md).
+- Substantive-change judgments belong to the planned classifier; see [roadmap](../roadmap.md).

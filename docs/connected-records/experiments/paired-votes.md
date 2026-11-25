@@ -31,7 +31,7 @@ for number in 3 7; do
   curl -fsSL --max-time 30 "$senate_rolls/vote1191/vote_119_1_0000${number}.xml" \
     -o "$vote_inputs/senate-$number.xml"
 done
-python3 docs/evidence-paths/experiments/compare-senate-votes.py "$vote_inputs"
+python3 docs/connected-records/experiments/compare-senate-votes.py "$vote_inputs"
 ```
 
 The [runner](compare-senate-votes.py) reuses three digests from the [issue study](issue-cases.json) and pins the additional amendment roll call. Scope interpretation comes from the official questions. The calculation uses no stance classifier.

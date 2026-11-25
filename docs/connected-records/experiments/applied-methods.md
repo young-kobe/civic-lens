@@ -49,7 +49,7 @@ H.R. 4004, 1023 and 4016 reached the coded event after 9, 37 and 305 days respec
 Use the eight verified XML files and numerical library versions from the [clustering replay](section-clusters.md#replay). For the other two experiments, use the existing [evidence-trials inputs and environment](evidence-trials/results.md#replay), which include the pinned model and bill-status XML. Run from the repository root with those environments active. The timing runner needs SciPy 1.15.3. The agreement runner also needs pdftotext and the pinned model runtime.
 
 ```bash
-python docs/evidence-paths/experiments/cluster-sections.py "$cluster_inputs" --hierarchy
-python docs/evidence-paths/experiments/evidence-trials/text-trials.py "$inputs" agreement
-python docs/evidence-paths/experiments/evidence-trials/report-timing.py "$inputs"
+python docs/connected-records/experiments/cluster-sections.py "$cluster_inputs" --hierarchy
+python docs/connected-records/experiments/evidence-trials/text-trials.py "$inputs" agreement
+python docs/connected-records/experiments/evidence-trials/report-timing.py "$inputs"
 ```

@@ -24,7 +24,7 @@ The House passed the Major Richard Star Act on November 12. The proclamation was
 
 ## Proposed relational design
 
-Under accepted decisions [D-19 and D-20](../evidence-paths.md#pending-decisions), the private pilot extends the existing `RelationshipRevision` and `ReviewReasons` owners first instead of introducing a parallel review subsystem:
+Under accepted decisions [D-19 and D-20](../roadmap.md#pending-decisions), the private pilot extends the existing `RelationshipRevision` and `ReviewReasons` owners first instead of introducing a parallel review subsystem:
 
 - Add optional `TargetPassageSpan` (precedent: `ActionTextCitation`), required `TargetRole` (`SpecificMotion`, `WholeBillPackage`, `Procedural`, `NoIndividualCast`, `BillEditionSponsorship`), and `MatchBasis` (`ExplicitBillNumber`, `OfficialCitation`, `LexicalMatch`, `SemanticMatch`) to `RelationshipRevision` for private pilot use.
 - Add `ReviewReasonCode.InsufficientEvidence` on `Reject`, with conditional reopen in `RelationshipStaleness` when the input fingerprint or `as_of_utc` changes, and store `candidate_set_digest`, `retrieval_method_version`, and `as_of_utc` on the decision context.
