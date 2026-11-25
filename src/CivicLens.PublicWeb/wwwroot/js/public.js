@@ -70,10 +70,16 @@
         text.addEventListener("input", checkText);
         form.addEventListener("submit", async event => {
             event.preventDefault();
+            const data = new URLSearchParams(new FormData(form));
+            const tokens = data.getAll("cf-turnstile-response");
+            if (tokens.length !== 1 || !tokens[0]) {
+                show("bad", "Complete the check that you are not a robot, then send the report again.");
+                return;
+            }
             submit.disabled = true;
             let outcome = ["bad", "The report did not reach the service. Check your connection and send the report again."];
             try {
-                const response = await fetch(form.dataset.reportApi, { method: "POST", body: new URLSearchParams(new FormData(form)) });
+                const response = await fetch(form.dataset.reportApi, { method: "POST", body: data });
                 outcome = reportMessages[response.status] ?? ["bad", `The service answered with the unexpected status ${response.status}. Try again later.`];
             } catch {}
             show(...outcome);
