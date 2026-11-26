@@ -1,0 +1,28 @@
+{
+  "retrieval": [
+    ["immigration amendment", "2025-01-20", "detention.html", "Britt's office narrative", "expanded the list of criminal offenses in the bill to include assault of a law enforcement officer", ["119s5es/2", "roll3"]],
+    ["projected safety", "2025-01-20", "detention.html", "Riley family statement", "will help save innocent lives", []],
+    ["platform deadline", "2025-04-28", "digital.html", "Madeleine Dean", "Our bill requires platforms to remove these horrifying images and videos from the Internet within 48 hours", ["119s146es/3", "roll104"]],
+    ["victim experience", "2025-04-28", "digital.html", "Ted Cruz", "we are sparing victims from repeated trauma", []],
+    ["SNAP transfer, sunset", "2023-06-05", "chairs.pdf", "Stabenow, Wyden, Brown and Tester", "within 90 days of enactment through October 1, 2030", ["118hr3746eh/311", "roll146"]],
+    ["SNAP transfer, exempt groups", "2023-06-26", "fetterman.pdf", "Fetterman and cosigners", "the exemption from work requirements for veterans, homeless individuals, and former foster care youth", ["118hr3746eh/311", "roll146"]],
+    ["SNAP transfer, enrollment", "2023-06-26", "fetterman.pdf", "Fetterman and cosigners", "What will the net change in national SNAP enrollment be", []]
+  ],
+  "editions": {
+    "117hr6833eh":"2022-03-31", "118hr2eh":"2023-05-11", "118hr3746eh":"2023-05-31",
+    "118hr4060ih":"2023-06-13", "119s5es":"2025-01-20", "119s146es":"2025-02-13"
+  },
+  "votes": {"roll3":"2025-01-15","roll7":"2025-01-20","roll104":"2025-04-28","roll141":"2023-06-01","roll146":"2023-06-01"},
+  "lineage":[
+    ["117hr5376eh","139401","117hr5376enr","11406","Medicare Part D cost sharing"],
+    ["117hr5376eh","136402","117hr5376enr","13402","Previously owned vehicle credit"],
+    ["117hr5376eh","30604","117hr5376enr",null,"Private health insurance insulin cap"],
+    ["117hr5376eh","23002","117hr5376enr",null,"Universal preschool"],
+    ["119s5pcs","2","119s5es","2","Detention provision, additional offenses in Senate-passed version"],
+    ["119s5es","2","119s5enr","2","Detention provision after Senate passage"],
+    ["119s146is","3","119s146es","3","Platform notice and removal"],
+    ["119s146es","3","119s146enr","3","Platform notice and removal after Senate passage"],
+    ["118hr3746ih","311","118hr3746eh","311","Work requirement exceptions"],
+    ["118hr3746eh","311","118hr3746enr","311","Work requirement exceptions after House passage"]
+  ]
+}

@@ -465,5 +465,6 @@ This is the only navigation index.
 | Public site theme, layout rules, and standing page rules | [Public site](architecture/public-site.md#decisions) | `src/CivicLens.PublicWeb/wwwroot/css/theme.css` |
 | Reader flow matrix and component inventory | [Public site](architecture/public-site.md#behavior) | `src/CivicLens.PublicWeb/Components/` |
 | Server sitemap and robots file from the views | [Public site](architecture/public-site.md#invariants) | `src/CivicLens.PublicApi/Sitemap/SitemapEndpoints.cs` |
-| Pending work, decisions, MVP criteria | [Roadmap](roadmap.md) | none |
+| Pending work, decisions, and work queue | [Roadmap](roadmap.md) | none |
+| Connected Records plan, pipeline, and features (planned) | [Connected Records](connected-records.md), [pipeline](connected-records/pipeline.md), [features](connected-records/features.md) | none |
 | Commands and procedures | [Operations](operations.md) | `src/CivicLens.Host/Program.cs` |

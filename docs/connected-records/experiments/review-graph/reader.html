@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Evidence library · Civic Lens</title>
+        <link rel="stylesheet" href="graph.css" />
+        <noscript
+            ><style>
+                #find,
+                #nav-open,
+                .rail nav {
+                    display: none;
+                }
+            </style></noscript
+        >
+    </head>
+    <body>
+        <a class="skip" href="#top">Skip to the evidence</a>
+        <div class="frame">
+            <aside class="rail" id="rail">
+                <div class="rail-head">
+                    <a class="brand" href="#top"
+                        ><svg viewBox="0 0 38 34" fill="none" aria-hidden="true">
+                            <circle cx="15" cy="15" r="12" stroke="currentColor" stroke-width="3" />
+                            <path d="M24 24 34 32M15 7v16M7 15h16" stroke="currentColor" stroke-width="3" /></svg
+                        ><span>Civic Lens</span></a
+                    ><button id="nav-close" class="drawer-close" type="button" aria-label="Close navigation">
+                        <i data-icon="close"></i>
+                    </button>
+                </div>
+                <nav aria-label="Evidence library">
+                    <section class="nav-group">
+                        <div class="nav-parent">
+                            <a href="#top"><i data-icon="overview"></i>Overview</a
+                            ><button
+                                type="button"
+                                class="chevron"
+                                aria-label="Toggle Overview"
+                                aria-expanded="true"
+                                aria-controls="overview-nav"
+                            ></button>
+                        </div>
+                        <ul id="overview-nav">
+                            <li><a href="#top">What changed</a></li>
+                        </ul>
+                    </section>
+                    <section class="nav-group">
+                        <div class="nav-parent">
+                            <a href="#evidence"><i data-icon="bill"></i>Evidence library</a
+                            ><button
+                                type="button"
+                                class="chevron"
+                                aria-label="Toggle Evidence library"
+                                aria-expanded="true"
+                                aria-controls="library-nav"
+                            ></button>
+                        </div>
+                        <ul id="library-nav">
+                            <li>
+                                <div class="nav-parent subsection">
+                                    <a href="#reading-summary">Legislative</a
+                                    ><button
+                                        type="button"
+                                        class="chevron"
+                                        aria-label="Toggle Legislative"
+                                        aria-controls="legislative-nav"
+                                        aria-expanded="true"
+                                    ></button>
+                                </div>
+                                <ul class="subtree" id="legislative-nav">
+                                    <li><a href="#record=bill" data-record="bill">Bill edition</a></li>
+                                    <li>
+                                        <a href="#record=provision" data-record="provision">Removal requirement</a>
+                                    </li>
+                                    <li><a href="#record=vote" data-record="vote">House vote</a></li>
+                                    <li><a href="#record=cast" data-record="cast">Member cast</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </section>
+                    <section class="nav-group">
+                        <div class="nav-parent">
+                            <a href="#sources"><i data-icon="sources"></i>Methods and coverage</a
+                            ><button
+                                type="button"
+                                class="chevron"
+                                aria-label="Toggle Methods and coverage"
+                                aria-expanded="true"
+                                aria-controls="methods-nav"
+                            ></button>
+                        </div>
+                        <ul id="methods-nav">
+                            <li><a href="#sources">Source detail</a></li>
+                            <li><a href="#export">Obsidian export</a></li>
+                        </ul>
+                    </section>
+                </nav>
+                <div class="rail-foot">Local reader prototype</div>
+            </aside>
+            <dialog id="drawer" aria-label="Navigation"></dialog>
+            <div class="content">
+                <header class="topbar">
+                    <button
+                        id="nav-open"
+                        class="tool"
+                        type="button"
+                        aria-label="Open navigation"
+                        aria-haspopup="dialog"
+                    >
+                        <i data-icon="menu"></i>
+                    </button>
+                    <div class="trail">
+                        <strong>Evidence library</strong><span class="crumb-leaf" aria-hidden="true">/</span
+                        ><span class="crumb-leaf">Legislative</span>
+                    </div>
+                    <button id="find" class="finder-open" type="button" aria-haspopup="dialog">
+                        <i data-icon="search"></i>Find a record <kbd>/</kbd>
+                    </button>
+                </header>
+                <main id="top" tabindex="-1">
+                    <div class="heading">
+                        <div>
+                            <h1>House passes the TAKE IT DOWN Act</h1>
+                            <p class="summary">
+                                The House voted to require covered platforms to remove qualifying intimate images
+                                within 48 hours of a valid request.
+                            </p>
+                            <p class="context">
+                                <span>S. 146</span><span>119th Congress</span
+                                ><time datetime="2025-04-28">As of April 28, 2025</time>
+                            </p>
+                        </div>
+                    </div>
+                    <div id="workspace"></div>
+                    <template id="reading"
+                        ><article class="reading" id="reading-summary" tabindex="-1">
+                            <h2>What the vote decided</h2>
+                            <p>
+                                Representatives voted on passage of the whole bill. A member’s vote tells you where
+                                they stood on that motion. After both chambers passed S. 146, the next step was
+                                presentation to the president.
+                            </p>
+                            <ol class="timeline">
+                                <li>
+                                    <time datetime="2025-02-13">Feb 13, 2025</time
+                                    ><strong>Senate passes S. 146</strong>
+                                </li>
+                                <li>
+                                    <time datetime="2025-04-28">Apr 28, 2025</time
+                                    ><strong>House passes the bill</strong>
+                                </li>
+                            </ol>
+                            <a class="primary" href="#record=provision">Read the removal requirement</a>
+                            <button type="button" id="export" class="tool">
+                                <i data-icon="export"></i>Export to Obsidian
+                            </button>
+                        </article></template
+                    ><noscript
+                        ><p>
+                            The House passed S. 146 on April 28, 2025.
+                            <a href="https://clerk.house.gov/Votes/2025104">Read the roll call</a>. Enable
+                            JavaScript for the interactive evidence.
+                        </p></noscript
+                    >
+                </main>
+            </div>
+        </div>
+        <dialog id="finder" aria-labelledby="find-heading">
+            <div class="find-head">
+                <h2 id="find-heading">Find a record</h2>
+                <button type="button" class="tool" data-close>Close</button>
+            </div>
+            <label class="query"
+                ><i data-icon="search"></i><span class="sr">Search this evidence</span
+                ><input type="search" placeholder="Search by title, person or record type" autocomplete="off"
+            /></label>
+            <p class="result-count" role="status"></p>
+            <div class="hits"></div>
+        </dialog>
+        <script src="facts.js"></script>
+        <script src="shell.js"></script>
+        <script src="graph.js"></script>
+        <script src="reader.js"></script>
+    </body>
+</html>

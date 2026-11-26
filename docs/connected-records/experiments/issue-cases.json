@@ -1,0 +1,196 @@
+{
+  "inputs": {
+    "117hr5376enr": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-117hr5376enr/xml/BILLS-117hr5376enr.xml",
+      "sha256": "0d0585b6b72d7601aa52a1a98b6bf0fc86be0463486847fa3e454dfa25698a24"
+    },
+    "119s5enr": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-119s5enr/xml/BILLS-119s5enr.xml",
+      "sha256": "df4b19ff99c27f8f6dcc5098fe82c726e33666c78d65126d1622f611bf8b94c9"
+    },
+    "119s146enr": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-119s146enr/xml/BILLS-119s146enr.xml",
+      "sha256": "c87edf8cd4cf57138c0aaeed49a6c4990a64ed6d3ba203141105b5343ceb09dd"
+    },
+    "119hr9600rh": {
+      "url": "https://www.govinfo.gov/content/pkg/BILLS-119hr9600rh/xml/BILLS-119hr9600rh.xml",
+      "sha256": "3ca6e300893b90d94dbad26479fcfee80e1caf1c344d82a7182ac66a7d1993e5"
+    },
+    "senate-314": {
+      "url": "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1172/vote_117_2_00314.xml",
+      "sha256": "9a457e97168e0a984d4227aa5cdde3f6d7072f726b306b2b1b1d8d49237bcad7"
+    },
+    "senate-325": {
+      "url": "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1172/vote_117_2_00325.xml",
+      "sha256": "44dee3f3e151b51cee91bf03c66214126dcc5bda819a12e54c9d03da754d0fa1"
+    },
+    "senate-7": {
+      "url": "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00007.xml",
+      "sha256": "75569bb8cc84e5f08771697375f15cd4b0e7f930f6face533ae46f22e76e29cc"
+    },
+    "house-104": {
+      "url": "https://clerk.house.gov/evs/2025/roll104.xml",
+      "sha256": "7e3474ac0c18abefed41bdae758f7ef99d59cfde98d26a52ad169023cdf4da27"
+    }
+  },
+  "bills": [
+    "117hr5376enr",
+    "119s5enr",
+    "119s146enr",
+    "119hr9600rh"
+  ],
+  "statements": {
+    "wyden": "https://www.finance.senate.gov/chairmans-news/wyden-statement-on-republicans-stripping-insulin-provision-from-ira",
+    "heinrich": "https://www.heinrich.senate.gov/newsroom/press-releases/heinrich-votes-for-historic-inflation-reduction-act-to-lower-costs-for-americans-invest-in-health-care-and-climate-action",
+    "britt": "https://www.britt.senate.gov/news/press-releases/u-s-senators-katie-britt-ted-budds-landmark-immigration-enforcement-bill-passes-senate/",
+    "dean-and-cruz": "https://www.klobuchar.senate.gov/public/index.cfm/2025/4/bipartisan-klobuchar-bill-to-protect-online-privacy-and-combat-explicit-deepfakes-passes-congress",
+    "raskin": "https://raskin.house.gov/2026/11/raskin-spartz-legislation-finalizing-details-for-national-memorial-honoring-indispensable-american-patriot-thomas-paine-passes-house",
+    "collins": "https://www.collins.senate.gov/newsroom/diabetes-caucus-co-chairs-collins-shaheen-release-bipartisan-legislation-to-lower-insulin-costs"
+  },
+  "cases": [
+    {
+      "name": "Medicare insulin cost sharing",
+      "issue": "health-coverage",
+      "source": "wyden",
+      "question": "Cap monthly insulin copays under Medicare Parts B and D",
+      "bill": "117hr5376enr",
+      "sections": [
+        "11406",
+        "11407"
+      ]
+    },
+    {
+      "name": "New and used vehicles",
+      "issue": "energy-and-climate",
+      "source": "heinrich",
+      "question": "Incentives for Americans to purchase new and used electric vehicles",
+      "bill": "117hr5376enr",
+      "sections": [
+        "13401",
+        "13402"
+      ]
+    },
+    {
+      "name": "Detention",
+      "issue": "immigration-enforcement",
+      "source": "britt",
+      "question": "Immigration detention for certain people arrested for theft, burglary, larceny or shoplifting",
+      "bill": "119s5enr",
+      "sections": [
+        "2"
+      ]
+    },
+    {
+      "name": "State enforcement",
+      "issue": "immigration-enforcement",
+      "source": "britt",
+      "question": "States can bring civil actions against federal officials over immigration enforcement",
+      "bill": "119s5enr",
+      "sections": [
+        "3"
+      ]
+    },
+    {
+      "name": "Platform removal",
+      "issue": "artificial-intelligence",
+      "source": "dean-and-cruz",
+      "question": "Removal of intimate images including deepfakes by platforms within 48 hours of a valid request",
+      "bill": "119s146enr",
+      "sections": [
+        "2",
+        "3",
+        "4"
+      ]
+    },
+    {
+      "name": "Memorial location",
+      "issue": null,
+      "source": "raskin",
+      "question": "Approval of the location of a memorial to Thomas Paine",
+      "bill": "119hr9600rh",
+      "sections": [
+        "2"
+      ]
+    },
+    {
+      "name": "Private insurance",
+      "issue": "health-coverage",
+      "source": "wyden",
+      "question": "A federal monthly insulin copay cap for privately insured Americans",
+      "bill": null,
+      "sections": []
+    },
+    {
+      "name": "Historical prices",
+      "issue": "health-coverage",
+      "source": "collins",
+      "question": "Did the average list price of insulin nearly double between 2012 and 2016?",
+      "bill": null,
+      "sections": []
+    },
+    {
+      "name": "Victim outcome",
+      "issue": "artificial-intelligence",
+      "source": "dean-and-cruz",
+      "question": "Did platform removal spare victims repeated trauma?",
+      "bill": null,
+      "sections": []
+    }
+  ],
+  "votes": {
+    "senate-314": {
+      "question": "On the Motion (Motion to Waive All Applicable Budgetary Discipline Re: Amendment No. 5194, Insulin)",
+      "members": {
+        "S252": "Yea",
+        "S247": "Yea"
+      }
+    },
+    "senate-325": {
+      "question": "On Passage of the Bill H.R. 5376",
+      "members": {
+        "S252": "Nay",
+        "S247": "Yea",
+        "S359": "Yea"
+      }
+    },
+    "senate-7": {
+      "question": "On Passage of the Bill S. 5",
+      "members": {
+        "S416": "Yea"
+      }
+    },
+    "house-104": {
+      "question": "On Motion to Suspend the Rules and Pass",
+      "members": {
+        "D000631": "Yea"
+      }
+    }
+  },
+  "catalog_sha256": "c96ed34911538a188d76377fc786e6531ff4aa1c4e2c4159798bb3f26a8f8531",
+  "section_labels": {
+    "117hr5376enr/11406": [
+      "health-coverage"
+    ],
+    "117hr5376enr/11407": [
+      "health-coverage"
+    ],
+    "117hr5376enr/13401": [
+      "energy-and-climate",
+      "federal-taxes"
+    ],
+    "117hr5376enr/13402": [
+      "energy-and-climate",
+      "federal-taxes"
+    ],
+    "119s5enr/2": [
+      "immigration-enforcement"
+    ],
+    "119s5enr/3": [
+      "immigration-enforcement"
+    ],
+    "119s146enr/2": [
+      "artificial-intelligence"
+    ],
+    "119hr9600rh/2": []
+  }
+}

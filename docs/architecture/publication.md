@@ -63,7 +63,7 @@ The publication feature turns approved revisions into immutable, cumulative rele
 
 ### Approved public data extensions
 
-R-68 in the [roadmap](../roadmap.md#active-r-68-redesign) owns the remaining approved extensions and completion gates.
+The [roadmap](../roadmap.md#work-queue) owns pending publication work and open extensions.
 
 - Each release binds its exact record revisions to immutable correction histories. Equal ordered histories share one verified content-addressed body.
 

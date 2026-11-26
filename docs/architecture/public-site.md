@@ -14,13 +14,13 @@ Every page and component must pass seven owner tests:
 6. Easy to understand: each term, number, and date has its context.
 7. Professional look: one consistent system, with no leftover placeholder.
 
-This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-r-68-redesign) step R-68 owns the order of the work.
+This page holds the design rules and the plan for the reader flows. [Publication](publication.md) owns the release data, the page text rules, and the `public_api` views. [Host](host.md) owns the component library rules. The [roadmap](../roadmap.md#active-initiative-connected-records) owns the order of pending work.
 
-Status note: the owner accepted Mosaic v2 on 2026-11-06 and reaffirmed it on 2026-11-15. The palette, type foundation, focus colors, and reduced-motion behavior are implemented. PublicApi serves every reader page at its public path since cutover. Home shows the featured vote, recent votes, optional brief, issue counts, executive actions, and chamber freshness. Its data bento includes the vote map, party bars, and break board. The publisher writes data only. Each row below says what is implemented and what is planned. Final reader-flow and live verification remain open.
+Status note: the owner accepted Mosaic v2 on 2026-11-06 and reaffirmed it on 2026-11-15. The palette, type foundation, focus colors, and reduced-motion behavior are implemented. PublicApi serves every reader page at its public path since cutover. Home shows the featured vote, recent votes, optional brief, issue counts, executive actions, and chamber freshness. Its data bento includes the vote map, party bars, and break board. The publisher writes data only. R-68 closeout is complete.
 
-Three outstanding visual acceptance items move to the next UI phase under the [R-68 closure scope](../roadmap.md#active-r-68-redesign). They cover the flat header and native Menu, Bills and Votes placement in primary navigation, and the featured-vote presentation on Home. The descriptions of these surfaces record the deployed behavior. Functional, accessibility, privacy, evidence, and release verification still apply.
+Three visual acceptance items moved to the next UI phase in [Connected Records](../connected-records/reader.md). They cover the flat header and native Menu, Bills and Votes placement in primary navigation, and the featured-vote presentation on Home. The descriptions of these surfaces record the deployed behavior. Functional, accessibility, privacy, evidence, and release verification still apply.
 
-The remaining closeout work is recorded in [R-68](../roadmap.md#active-r-68-redesign): one real report flow, then final transport, privacy, health and funded model-stage recovery with `check-live` last. The whole-vote-total fix and approved Brief/caption/glossary changes are implemented and deployed; changed-output acceptance and the full rollback and restore check passed. Typed Search term context and its accepted count, progress, and retry decisions moved to Evidence Paths. The fixed AI sample, its accepted provenance decision, and further President helper work also moved there. Reuse unchanged evidence and check any outputs changed by a remaining fix.
+Typed Search term context and its accepted count, progress, and retry decisions moved to [Connected Records](../roadmap.md#active-initiative-connected-records). The fixed AI sample, its accepted provenance decision, and further President helper work also moved there.
 
 ## Decisions
 
@@ -514,7 +514,7 @@ Remaining planned view columns and views, in the order that R-68 builds them:
 - Other kinds: `record_correction_histories` and `record_correction_history_entries` serve the exact immutable correction history of each active record. The reader deploys only after the production bootstrap and verify pass. Document-change detail and withdrawal notices have typed public read APIs and reader pages.
 - Relationships: `public_api.relationships` serves each active relationship with two active ends. It gives the reason with its label, both cited revisions, the quote span with its cited text, and the cited fact. The fact has its label and its text origin. Its appended linked-official ID, cited vote cast, and cited vote date come from the exact cited vote revision and saved member list. Its current target headline and label remain current release metadata.
 
-Each AI text column carries its text origin and its label. The roadmap steps under [R-68](../roadmap.md#active-r-68-redesign) name each view.
+Each AI text column carries its text origin and its label. The [roadmap](../roadmap.md#work-queue) and [Connected Records](../connected-records.md) hold the remaining public site work.
 
 ## Code map
 
@@ -542,7 +542,7 @@ Each AI text column carries its text origin and its label. The roadmap steps und
 
 ## Limits and planned work
 
-The roadmap step [R-68](../roadmap.md#active-r-68-redesign) holds the plan: the views, the route moves, and the accepted design changes. This page holds no second plan.
+The [roadmap](../roadmap.md#work-queue) and [Connected Records](../connected-records/reader.md) hold the planned reader work. This page holds no second plan.
 
 House boundary assets cover the 118th and 119th Congresses. Other selections retain their tiles and table. The coarse Census shapes are simplified for web display; the existing simplifier can leave small self-intersections. They show patterns rather than address boundaries. The full reader-flow and production verification gates remain open.
 

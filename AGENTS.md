@@ -2,13 +2,13 @@
 
 ## Start here
 
-Read README.md for current capabilities and commands, then docs/architecture.md for ownership and dependency rules. Start at its lookup table and read only the feature docs in docs/architecture/ that the task needs. Read docs/roadmap.md only to select pending work, docs/operations.md for execution, and docs/agent-rules.md for how agents work here. Inspect the relevant project and tests before changing code. Do not recursively read the legacy repo or generated artifacts by default.
+Read README.md for current capabilities and commands, then docs/architecture.md for ownership and dependency rules. Start at its lookup table and read only the feature docs in docs/architecture/ that the task needs. Read docs/roadmap.md only to select pending work or check pending decisions, docs/connected-records.md and only the needed phase docs in docs/connected-records/ for the active Connected Records initiative, docs/operations.md for execution, and docs/agent-rules.md for how agents work here. Inspect the relevant project and tests before changing code. Do not recursively read the legacy repo or generated artifacts by default.
 
 Entry points: src/CivicLens.Host/Program.cs and src/CivicLens.Collector/Program.cs. Boundary tests: tests/CivicLens.Tests/Architecture/ArchitectureTests.cs. Build policy: Directory.Build.props and global.json. The solution file is the project inventory.
 
 ## Product and ownership
 
-Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published data only: the `public_api` views, the search database, and the release photos. An operational database outage stops live read routes while cached pages stay up.
+Civic Lens collects evidence for statements/actions, document changes, and weekly briefs. The Connected Records plan in docs/connected-records.md sets the direction: one relationship pipeline across four data planes that connects these records across many dimensions and shows each connection with its evidence, never a conclusion. Officials, issues, and supported sources are configuration, never per-person branches. Collection, review, and public serving all run in the cloud; the dev machine runs them only during development. Public serving reads published data only: the `public_api` views, the search database, and the release photos. An operational database outage stops live read routes while cached pages stay up.
 
 Keep these dependencies acyclic and exact (enforced by tests):
 
@@ -45,11 +45,11 @@ The application owns durable jobs and aggregate budgets. The collector accepts b
 
 ## Documentation and repository hygiene
 
-The core prose reference set is README.md, AGENTS.md, docs/architecture.md (system overview and the only lookup table), one doc for each feature in docs/architecture/, docs/operations.md, docs/agent-rules.md, and docs/roadmap.md. Every feature doc uses the template headings: Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, and Limits and planned work. Each invariant names its rule, its enforcer, and its protecting test, or says "No test". Update these in place. Do not add session reports, changelogs, audit trails, implementation diaries, or duplicate plans. Git records history.
+The core prose reference set is README.md, AGENTS.md, docs/architecture.md (system overview and the only lookup table), one doc for each feature in docs/architecture/, docs/operations.md, docs/agent-rules.md, docs/roadmap.md, and the active initiative plan in docs/connected-records.md with its phase docs in docs/connected-records/. Every feature doc uses the template headings: Purpose, Decisions, Invariants, Behavior, Storage and contracts, Code map, and Limits and planned work. Each invariant names its rule, its enforcer, and its protecting test, or says "No test". Update these in place. Do not add session reports, changelogs, audit trails, implementation diaries, or duplicate plans. Git records history.
 
 Architecture diagrams and the generated HTML explorer share definitions in tools/render-architecture.py. When boundaries change, update the diagram definitions and run the renderer. Generated HTML lives in ignored artifacts/.
 
-Distinguish implemented behavior from planned behavior. Remove completed roadmap work and document its actual behavior in the appropriate reference. Do not scaffold unused folders or packages. Keep only deliberate, small corpus fixtures with provenance; no bulk captures, live databases, downloaded model weights, or generated evaluation outputs in Git. Never import legacy credentials or operational files.
+Distinguish implemented behavior from planned behavior. Remove completed plan work and document its actual behavior in the appropriate reference. Do not scaffold unused folders or packages. Keep only deliberate, small corpus fixtures with provenance; no bulk captures, live databases, downloaded model weights, or generated evaluation outputs in Git. Never import legacy credentials or operational files.
 
 ## Verification
 
