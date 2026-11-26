@@ -90,7 +90,8 @@ public static class VotePageView
     {
         PublishedVoteKind.Suspension or PublishedVoteKind.VetoOverride => VoteThreshold.TwoThirds,
         PublishedVoteKind.Passage => vote.WordingSource.PossibleConstitutionalPurpose ? VoteThreshold.None : VoteThreshold.Half,
-        PublishedVoteKind.Rule or PublishedVoteKind.PreviousQuestion or PublishedVoteKind.MotionToRecommit or PublishedVoteKind.Amendment
+        PublishedVoteKind.Rule or PublishedVoteKind.PreviousQuestion or PublishedVoteKind.MotionToRecommit
+            or PublishedVoteKind.MotionToTable or PublishedVoteKind.MotionToDischarge or PublishedVoteKind.Amendment
             or PublishedVoteKind.ConferenceReport or PublishedVoteKind.Nomination or PublishedVoteKind.MotionToProceed => VoteThreshold.Half,
         _ => VoteThreshold.None
     };

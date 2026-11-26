@@ -28,7 +28,9 @@ public sealed class VoteKindTableTests
     [InlineData("Election of the Speaker", VoteKind.Other)]
     [InlineData("Call of the House", VoteKind.Other)]
     [InlineData("On Motion to Adjourn", VoteKind.Other)]
-    [InlineData("On Motion to Table", VoteKind.Other)]
+    [InlineData("On Motion to Table", VoteKind.MotionToTable)]
+    [InlineData("On Motion to Table the Motion to Discharge Committee", VoteKind.MotionToTable)]
+    [InlineData("On Motion to Discharge", VoteKind.MotionToDischarge)]
     [InlineData("A question that no table row knows", VoteKind.Other)]
     public void EachQuestionLineMapsToTheKindThatNamesItsStageSoTheReviewerCanGroupVotesByWhatTheyDecided(string question, VoteKind expected)
     {

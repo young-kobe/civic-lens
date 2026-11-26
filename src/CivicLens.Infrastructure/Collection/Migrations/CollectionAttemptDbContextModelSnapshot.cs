@@ -10069,7 +10069,7 @@ namespace CivicLens.Infrastructure.Collection.Migrations
 
                             t.HasCheckConstraint("ck_vote_revisions_issue_revision", "issue_revision_id ~ '^[0-9a-f]{64}$'");
 
-                            t.HasCheckConstraint("ck_vote_revisions_kind", "kind IN ('Rule', 'PreviousQuestion', 'MotionToRecommit', 'Amendment', 'Suspension', 'Passage', 'ConferenceReport', 'VetoOverride', 'Nomination', 'Cloture', 'MotionToProceed', 'Other')");
+                            t.HasCheckConstraint("ck_vote_revisions_kind", "kind IN ('Rule', 'PreviousQuestion', 'MotionToRecommit', 'MotionToTable', 'MotionToDischarge', 'Amendment', 'Suspension', 'Passage', 'ConferenceReport', 'VetoOverride', 'Nomination', 'Cloture', 'MotionToProceed', 'Other')");
 
                             t.HasCheckConstraint("ck_vote_revisions_kind_citation", "(kind_citation_extraction_id IS NULL) = (kind_citation_start IS NULL) AND (kind_citation_extraction_id IS NULL) = (kind_citation_length IS NULL) AND kind_citation_start >= 0 AND kind_citation_length > 0");
 

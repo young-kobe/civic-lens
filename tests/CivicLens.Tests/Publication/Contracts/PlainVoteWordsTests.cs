@@ -37,13 +37,15 @@ public sealed class PlainVoteWordsTests
     public void RecordTermsCoverEveryNamedKindAndOtherHasNoSingleTerm()
     {
         Assert.Equal(
-            ["Rule", "Previous question", "Motion to recommit", "Amendment", "Suspension of the rules", "Passage or agreement", "Conference report", "Veto override", "Nomination", "Cloture", "Motion to proceed"],
+            ["Rule", "Previous question", "Motion to recommit", "Motion to table", "Motion to discharge", "Amendment", "Suspension of the rules", "Passage or agreement", "Conference report", "Veto override", "Nomination", "Cloture", "Motion to proceed"],
             Enum.GetValues<PublishedVoteKind>().Where(kind => kind != PublishedVoteKind.Other).Select(PlainVoteWords.RecordTerm));
         Assert.Null(PlainVoteWords.RecordTerm(PublishedVoteKind.Other));
     }
 
     [Theory]
     [InlineData(PublishedVoteKind.Passage, "Vote to pass or agree to")]
+    [InlineData(PublishedVoteKind.MotionToTable, "Vote to set aside and reject")]
+    [InlineData(PublishedVoteKind.MotionToDischarge, "Vote to pull from committee")]
     [InlineData(PublishedVoteKind.Cloture, "Vote to end debate")]
     [InlineData(PublishedVoteKind.Nomination, "Vote to confirm")]
     [InlineData(PublishedVoteKind.Other, "Other question")]
@@ -52,9 +54,11 @@ public sealed class PlainVoteWordsTests
     [Theory]
     [InlineData(PublishedVoteKind.Passage, "On Passage", "Vote to pass or agree to (On Passage)")]
     [InlineData(PublishedVoteKind.Passage, "On Motion to Concur in the Senate Amendment", "Vote to pass or agree to (On Motion to Concur in the Senate Amendment)")]
+    [InlineData(PublishedVoteKind.MotionToTable, "On Motion to Table", "Vote to set aside and reject (On Motion to Table)")]
+    [InlineData(PublishedVoteKind.MotionToDischarge, "On Motion to Discharge", "Vote to pull from committee (On Motion to Discharge)")]
     [InlineData(PublishedVoteKind.Cloture, "On the Cloture Motion", "Vote to end debate (On the Cloture Motion)")]
     [InlineData(PublishedVoteKind.Nomination, "On the Nomination", "Vote to confirm (On the Nomination)")]
-    [InlineData(PublishedVoteKind.Other, "On the Motion to Table", "On the Motion to Table")]
+    [InlineData(PublishedVoteKind.Other, "On Motion to Adjourn", "On Motion to Adjourn")]
     public void AQuestionShowsThePlainKindNameFirstAndTheSourceQuestionInBracketsAndKindOtherShowsTheSourceAlone(PublishedVoteKind kind, string source, string expected) =>
         Assert.Equal(expected, PlainVoteWords.Question(kind, source));
 

@@ -14,6 +14,8 @@ public static class VoteKindTable
         ("On Ordering the Previous Question", VoteKind.PreviousQuestion),
         ("On Motion to Recommit", VoteKind.MotionToRecommit),
         ("On Motion to Commit", VoteKind.MotionToRecommit),
+        ("On Motion to Table", VoteKind.MotionToTable),
+        ("On Motion to Discharge", VoteKind.MotionToDischarge),
         ("On Motion to Concur in the Senate Amendment", VoteKind.Passage),
         ("On Agreeing to the Amendment", VoteKind.Amendment),
         ("On Agreeing to the Conference Report", VoteKind.ConferenceReport),

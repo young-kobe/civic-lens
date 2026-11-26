@@ -12,6 +12,11 @@ public static class NextStep
     private const string PreviousQuestionFailed = "This motion does not close debate or changes. Further proceedings follow the House rules.";
     private const string RecommitPassed = "The measure is sent to committee under the terms of the motion. This record does not show the committee's next action.";
     private const string RecommitFailed = "This motion did not send the measure to committee. The House can continue proceedings on the matter.";
+    private const string RecommitFailedSenate = "This motion did not send the measure to committee. The Senate can continue proceedings on the matter.";
+    private const string TablePassed = "The pending question is set aside and rejected. This record does not show a later attempt.";
+    private const string TableFailed = "The pending question stays before the chamber. This record does not show which vote comes next.";
+    private const string DischargePassed = "The committee is discharged from the matter so the full chamber can take it up. This vote does not decide the matter itself.";
+    private const string DischargeFailed = "The matter stays in committee. This record does not show a later committee action.";
     private const string AmendmentPassed = "The approved change becomes part of the pending text. This vote does not by itself pass the underlying measure.";
     private const string AmendmentFailed = "The pending text does not get this proposed change. The chamber can continue work on the underlying matter.";
     private const string SuspensionFailed = "The House can take up the matter by another allowed procedure. This record does not schedule a new vote.";
@@ -41,7 +46,9 @@ public static class NextStep
         {
             PublishedVoteKind.Rule => Result(input, RulePassed, RuleFailed),
             PublishedVoteKind.PreviousQuestion => Result(input, PreviousQuestionPassed, PreviousQuestionFailed),
-            PublishedVoteKind.MotionToRecommit => Result(input, RecommitPassed, RecommitFailed),
+            PublishedVoteKind.MotionToRecommit => Result(input, RecommitPassed, chamber == PublishedChamber.Senate ? RecommitFailedSenate : RecommitFailed),
+            PublishedVoteKind.MotionToTable => Result(input, TablePassed, TableFailed),
+            PublishedVoteKind.MotionToDischarge => Result(input, DischargePassed, DischargeFailed),
             PublishedVoteKind.Amendment => Result(input, AmendmentPassed, AmendmentFailed),
             PublishedVoteKind.Suspension when input.Result == "Failed" => SuspensionFailed,
             PublishedVoteKind.Suspension when input.Result == "Passed" => SuspensionPassedFor(chamber, input),
